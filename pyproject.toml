@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "blocklyGPT"
+version = "0.0.2"
+description = "Pharmaceutical Robotic and AI System for End"
+authors = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
+maintainers = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
+readme = "README.md"
+homepage = "http://localhost:3000/"
+repository = "https://github.com/luigigargioni/blocklyGPT"
+documentation = "https://github.com/luigigargioni/blocklyGPT#readme"
+packages = [
+    { include="poetry_scripts", from="./backend" },
+]
+
+[tool.poetry.scripts]
+start = "backend.poetry_scripts.server:start"
+collectstatic = "backend.poetry_scripts.server:collectstatic"
+poetryup = "backend.poetry_scripts.server:poetryup"
+migrate = "backend.poetry_scripts.server:migrate"
+makemigrations = "backend.poetry_scripts.server:makemigrations"
+
+[tool.poetry.dependencies]
+django = "^5.2.2"
+django-cors-headers = "^4.7.0"
+django-mysql = "^4.17.0"
+numpy = "^2.3.0"
+openai = "^1.84.0"
+opencv-python = "^4.11.0.86"
+pillow = "^11.2.1"
+python = ">=3.11,<3.12"
+python-dotenv = "^1.1.0"
+pytz = "^2025.2"
+pywin32 = "^310"
+rapidfuzz = "^3.13.0"
+
+[tool.poetry.dev-dependencies]
+black = "^25.1.0"
+flake8 = "^7.2.0"
+poetry-plugin-up = "^0.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

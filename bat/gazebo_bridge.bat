@@ -1,0 +1,1 @@
+wsl.exe bash -ic cd /mnt/c/repos/blocklyGPT/ros2_ws/cobotta; ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=../Cobotta/map.yaml

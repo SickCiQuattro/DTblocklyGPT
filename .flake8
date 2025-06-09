@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 230
+ignore = 
+    E203 # Whitespace before ':'
+    W503 # line break before binary operator
+exclude =
+    .venv/**/*.py
+    backend/pybcapclient/*.py

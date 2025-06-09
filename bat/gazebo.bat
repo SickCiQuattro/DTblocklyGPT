@@ -1,0 +1,1 @@
+wsl.exe cd /mnt/c/repos/blocklyGPT/ros2_ws/cobotta; ign gazebo -r -v 4 worldCobotta.sdf

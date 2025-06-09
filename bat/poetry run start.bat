@@ -1,0 +1,1 @@
+cd C:\repos\blocklyGPT && poetry run start

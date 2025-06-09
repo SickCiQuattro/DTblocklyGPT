@@ -1,0 +1,41 @@
+#blocklyDiv {
+    height: 100%;
+    width: 100%;
+}
+
+.blocklySvg {
+    height: 100%;
+    width: 100%;
+}
+
+/* ToolBox */
+.blocklyTreeLabel {
+    color: white;
+    font-weight: bolder;
+}
+
+.blocklyToolboxDiv {
+    background-color: white;
+    border-right: 1px solid #ccc;
+}
+
+.blocklyTreeRowContentContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+/* Adds padding around the group of categories and separators. */
+.blocklyToolboxCategoryGroup {
+    padding: 0.5em;
+}
+
+/* Adds space between the categories, rounds the corners and adds space around the label. */
+.blocklyToolboxCategory  {
+    padding: 3px;
+    margin-bottom: 0.5em;
+    border-radius: 4px;
+    height: 4rem;
+    width: 8rem;
+}

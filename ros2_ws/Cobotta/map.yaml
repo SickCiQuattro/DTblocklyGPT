@@ -1,0 +1,80 @@
+# Set each topic name explicitly
+- ros_topic_name: "/joint1_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint1/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint2_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint2/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint3_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint3/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint4_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint4/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint5_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint5/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint6_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint6/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint_left_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint_left/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint_right_cmd"
+  gz_topic_name: "/model/Cobotta/joint/joint_right/0/cmd_pos"
+  ros_type_name: "std_msgs/msg/Float64"
+  gz_type_name: "ignition.msgs.Double"
+
+- ros_topic_name: "/joint1"
+  gz_topic_name: "/joint1"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint2"
+  gz_topic_name: "/joint2"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint3"
+  gz_topic_name: "/joint3"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint4"
+  gz_topic_name: "/joint4"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint5"
+  gz_topic_name: "/joint5"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint6"
+  gz_topic_name: "/joint6"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint_right"
+  gz_topic_name: "/joint_right"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"
+
+- ros_topic_name: "/joint_left"
+  gz_topic_name: "/joint_left"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "ignition.msgs.Model"

@@ -1,0 +1,15 @@
+# backend
+.venv
+__pycache__/
+staticfiles
+# db.sqlite3
+
+# frontend
+node_modules
+dist
+
+# general
+.env
+build
+install
+log
