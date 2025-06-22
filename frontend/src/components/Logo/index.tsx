@@ -14,7 +14,7 @@ export const LogoSection = () => {
       component={Link}
       to={defaultPath}
       title="Go to the Homepage"
-      style={{ marginTop: '1rem' }}
+      // style={{ marginTop: '1rem' }}
     >
       <Logo />
       <Typography

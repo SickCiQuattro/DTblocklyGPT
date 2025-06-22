@@ -23,18 +23,39 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
         paddingLeft: theme.spacing(open ? 3 : 0),
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        style={{ marginTop: '0.5rem' }}
+      >
         <LogoSection />
-        <Chip
-          label={packageInfo.version}
-          size="small"
-          title="BlocklyGPT version"
-          sx={{
-            height: 16,
-            '& .MuiChip-label': { fontSize: '0.625rem', py: 0.25 },
-          }}
-          component="div"
-        />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Chip
+            label={`${packageInfo.version}`}
+            size="small"
+            title={`Client version ${packageInfo.version}`}
+            sx={{
+              height: 16,
+              marginBottom: '0.2rem',
+              '& .MuiChip-label': {
+                fontSize: '0.625rem',
+                py: 0.25,
+              },
+            }}
+            component="div"
+          />
+          {/*           <Chip
+            label={`S-${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
+            title={`Server version ${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
+            size="small"
+            sx={{
+              height: 16,
+              '& .MuiChip-label': { fontSize: '0.625rem', py: 0.25 },
+            }}
+            component="div"
+          /> */}
+        </div>
       </Stack>
     </Box>
   )
