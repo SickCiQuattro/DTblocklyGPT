@@ -28,6 +28,7 @@ export interface UserLoginInterface {
   id: string
   username: string
   group: USER_GROUP
+  versionServer: string
 }
 
 interface LoginFormProps {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { JSX, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 
@@ -37,6 +37,7 @@ export const ProtectedRoute = ({
           id: res.id,
           username: res.username,
           group: res.group as USER_GROUP,
+          versionServer: res.versionServer,
         }
         setToLocalStorage(LocalStorageKey.USER, userInfo)
         setIsAuthenticated(true)

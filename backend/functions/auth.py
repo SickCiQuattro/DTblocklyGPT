@@ -1,5 +1,6 @@
 from django.http import HttpResponse, HttpRequest
 from json import loads
+import tomllib
 from backend.utils.response import (
     HttpMethod,
     invalid_request_method,
@@ -29,11 +30,16 @@ def login_func(request: HttpRequest) -> HttpResponse:
                 authError = False
                 user = User.objects.get(id=user.id)
                 group = Group.objects.filter(user=user).first()
+                toml_data = None
+                with open("pyproject.toml", "rb") as f:
+                    toml_data = tomllib.load(f)
+
                 data = {
                     "authError": authError,
                     "username": username,
                     "id": user.id,
                     "group": group.name,
+                    "versionServer": data["tool.poetry"]["version"],
                 }
 
             return success_response(data)
@@ -73,6 +79,8 @@ def verify_token(request: HttpRequest) -> HttpResponse:
                         "username": user.username,
                         "id": user.id,
                         "group": group.name,
+                        # Version from pyproject.toml
+                        "versionServer": "1.0.0",  # Replace with actual version retrieval
                     }
 
             return success_response(response)

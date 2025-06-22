@@ -32,7 +32,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
         <LogoSection />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Chip
-            label={`${packageInfo.version}`}
+            label={`C-${packageInfo.version}`}
             size="small"
             title={`Client version ${packageInfo.version}`}
             sx={{
@@ -45,7 +45,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
             }}
             component="div"
           />
-          {/*           <Chip
+          <Chip
             label={`S-${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
             title={`Server version ${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
             size="small"
@@ -54,7 +54,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
               '& .MuiChip-label': { fontSize: '0.625rem', py: 0.25 },
             }}
             component="div"
-          /> */}
+          />
         </div>
       </Stack>
     </Box>
