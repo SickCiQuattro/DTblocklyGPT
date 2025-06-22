@@ -39,11 +39,23 @@ class ObjectOption(admin.ModelAdmin):
         "force",
         "height",
         "keywords",
+        "obj_length",
+        "obj_width",
+        "weight",
     )
 
 
 class RobotOption(admin.ModelAdmin):
-    list_display = ("id", "name", "ip", "model", "port", "cameraip")
+    list_display = (
+        "id",
+        "name",
+        "ip",
+        "model",
+        "port",
+        "cameraip",
+        "max_load",
+        "max_open_tool",
+    )
 
 
 class UserRobotOption(admin.ModelAdmin):

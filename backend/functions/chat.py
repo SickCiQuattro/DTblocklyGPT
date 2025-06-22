@@ -24,8 +24,8 @@ if not api_key:
     raise ValueError("The OPENAI_API_KEY environment variable is not set.")
 client = OpenAI(api_key=api_key)
 
-CHATGPT_MODEL = "gpt-4o"
-CHATGPT_TEMPERATURE = 0.2
+CHATGPT_MODEL = "gpt-4.1-mini"
+CHATGPT_TEMPERATURE = 0
 
 CHATGPT_INSTRUCTIONS = """
 You are an assistant designed to extract intent from text. You must drive the user to define a Pick-and-Place task for a collaborative robot providing to him/her the details to be defined before he/she asks for them.

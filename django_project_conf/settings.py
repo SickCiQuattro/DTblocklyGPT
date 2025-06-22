@@ -1,8 +1,8 @@
 from os import path, getenv
 from dotenv import load_dotenv
 
-dotenv_path = "./frontend/.env"
-load_dotenv(dotenv_path)
+load_dotenv("./frontend/.env")
+load_dotenv("./backend/.env")
 
 FRONTEND = (
     getenv("VITE_FRONTEND_PROTOCOL", "")

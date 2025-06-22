@@ -5,6 +5,8 @@ export interface RobotType {
   port: number
   model: string
   cameraip: string
+  max_load: number
+  max_open_tool: number
 }
 
 export enum RobotModel {

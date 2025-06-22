@@ -16,4 +16,7 @@ export interface ObjectDetailType {
   contour: string
   shape: string
   force: number
+  weight: number
+  obj_length: number
+  obj_width: number
 }

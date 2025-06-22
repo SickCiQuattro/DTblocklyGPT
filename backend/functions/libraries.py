@@ -166,6 +166,9 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                         "shape",
                         "keywords",
                         "force",
+                        "weight",
+                        "obj_width",
+                        "obj_length",
                     ]
                 )
                 return success_response(object_fields)
@@ -185,6 +188,9 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                 object_shape = data.get("shape")
                 object_force = data.get("force")
                 object_keywords = data.get("keywords")
+                object_weight = data.get("weight")
+                object_length = data.get("obj_length")
+                object_width = data.get("obj_width")
                 object_owner = User.objects.get(id=request.user.id)
                 # check if the name already exists
                 if object_shared is True:
@@ -240,6 +246,9 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                     shape=object_shape,
                     force=object_force,
                     keywords=object_keywords,
+                    weight=object_weight,
+                    obj_length=object_length,
+                    obj_width=object_width,
                 )
                 return success_response()
             if request.method == HttpMethod.PUT.value:
@@ -253,6 +262,9 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                 object_shape = data.get("shape")
                 object_force = data.get("force")
                 object_keywords = data.get("keywords")
+                object_weight = data.get("weight")
+                object_length = data.get("obj_length")
+                object_width = data.get("obj_width")
                 object_owner = User.objects.get(id=request.user.id)
                 # check if the name already exists
                 if object_shared is True:
@@ -311,6 +323,9 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                     shape=object_shape,
                     force=object_force,
                     keywords=object_keywords,
+                    weight=object_weight,
+                    obj_length=object_length,
+                    obj_width=object_width,
                 )
                 return success_response()
             else:

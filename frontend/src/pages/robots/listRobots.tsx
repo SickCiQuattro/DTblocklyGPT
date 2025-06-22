@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   Popconfirm,
   TableColumnsType,
@@ -28,7 +28,7 @@ import {
   defaultPageSizeSelection,
   defaultPaginationConfig,
 } from 'utils/constants'
-import QRCode from 'qrcode.react'
+import { QRCodeCanvas } from 'qrcode.react'
 import { RobotModel, RobotType } from './types'
 
 const ListRobots = () => {
@@ -40,6 +40,7 @@ const ListRobots = () => {
     url: endpoints.home.management.robots,
   })
   const [qrCodeText, setQrCodeText] = useState('')
+  const canvasRef = useRef<HTMLDivElement>(null)
 
   const handleDetail = (id: number) => {
     dispatch(activeItem(''))
@@ -63,8 +64,9 @@ const ListRobots = () => {
   }
 
   const downloadQRCode = (id: number) => {
+    /*
     setQrCodeText(id.toString())
-
+    console.log(document.getElementById('qrCodeEl') as any)
     const qrCodeURL = (document.getElementById('qrCodeEl') as any)
       .toDataURL('image/png')
       .replace('image/png', 'image/octet-stream')
@@ -74,6 +76,20 @@ const ListRobots = () => {
     document.body.appendChild(aEl)
     aEl.click()
     document.body.removeChild(aEl)
+    */
+
+    if (!canvasRef.current) return
+    setQrCodeText(id.toString())
+    const canvas = canvasRef.current.querySelector('canvas')
+    if (!canvas) return
+    const pngUrl = canvas
+      .toDataURL('image/png')
+      .replace('image/png', 'image/octet-stream')
+
+    const downloadLink = document.createElement('a')
+    downloadLink.href = pngUrl
+    downloadLink.download = `robot-${id}-qrcode.png`
+    downloadLink.click()
   }
 
   const columns: TableColumnsType<RobotType> = [
@@ -201,12 +217,9 @@ const ListRobots = () => {
         rowKey="id"
         style={{ overflowX: 'auto' }}
       />
-      <QRCode
-        id="qrCodeEl"
-        size={150}
-        value={qrCodeText}
-        style={{ display: 'none' }}
-      />
+      <div ref={canvasRef} style={{ display: 'none' }}>
+        <QRCodeCanvas size={150} value={qrCodeText} />
+      </div>
     </MainCard>
   )
 }

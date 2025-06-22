@@ -154,7 +154,16 @@ def robot_detail(request: HttpRequest) -> HttpResponse:
                 if robot is None:
                     return success_response()
                 robot_fields = robot.to_dict(
-                    ["id", "name", "ip", "model", "port", "cameraip"]
+                    [
+                        "id",
+                        "name",
+                        "ip",
+                        "model",
+                        "port",
+                        "cameraip",
+                        "max_load",
+                        "max_open_tool",
+                    ]
                 )
                 return success_response(robot_fields)
             if request.method == HttpMethod.DELETE.value:
@@ -170,6 +179,8 @@ def robot_detail(request: HttpRequest) -> HttpResponse:
                 robot_model = data.get("model")
                 robot_port = data.get("port")
                 robot_cameraip = data.get("cameraip")
+                robot_max_load = data.get("max_load")
+                robot_max_open_tool = data.get("max_open_tool")
                 # check if the name already exists
                 if Robot.objects.filter(name=robot_name).exists():
                     data_result = {"nameAlreadyExists": True}
@@ -180,6 +191,8 @@ def robot_detail(request: HttpRequest) -> HttpResponse:
                     model=robot_model,
                     port=robot_port,
                     cameraip=robot_cameraip,
+                    max_load=robot_max_load,
+                    max_open_tool=robot_max_open_tool,
                 )
                 return success_response()
             if request.method == HttpMethod.PUT.value:
@@ -190,6 +203,8 @@ def robot_detail(request: HttpRequest) -> HttpResponse:
                 robot_model = data.get("model")
                 robot_port = data.get("port")
                 robot_cameraip = data.get("cameraip")
+                robot_max_load = data.get("max_load")
+                robot_max_open_tool = data.get("max_open_tool")
                 # check if the name already exists
                 if Robot.objects.filter(name=robot_name).exclude(id=robot_id).exists():
                     data_result = {"nameAlreadyExists": True}
@@ -201,6 +216,8 @@ def robot_detail(request: HttpRequest) -> HttpResponse:
                     model=robot_model,
                     port=robot_port,
                     cameraip=robot_cameraip,
+                    max_load=robot_max_load,
+                    max_open_tool=robot_max_open_tool,
                 )
                 return success_response()
             else:

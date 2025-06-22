@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Button,
+  Divider,
   FormControl,
   FormHelperText,
   Grid,
@@ -94,6 +95,8 @@ export const FormRobot = ({
         port: data?.port || 0,
         model: data?.model || '',
         cameraip: data?.cameraip || '',
+        max_load: data?.max_load || 0,
+        max_open_tool: data?.max_open_tool || 0,
       }}
       validationSchema={YupObject().shape({
         name: YupString()
@@ -177,6 +180,9 @@ export const FormRobot = ({
                 </FormControl>
               </Stack>
             </Grid>
+            <Grid size={12}>
+              <Divider textAlign="left">Connection</Divider>
+            </Grid>
             <Grid size={2}>
               <Stack spacing={1}>
                 <TextField
@@ -256,6 +262,63 @@ export const FormRobot = ({
                 {touched.cameraip && errors.cameraip && (
                   <FormHelperText error id="helper-text-cameraip">
                     {errors.cameraip}
+                  </FormHelperText>
+                )}
+              </Stack>
+            </Grid>
+            <Grid size={12}>
+              <Divider textAlign="left">Techical details</Divider>
+            </Grid>
+            <Grid size={2}>
+              <Stack spacing={1}>
+                <TextField
+                  id="max_load"
+                  value={values.max_load || 0}
+                  name="max_load"
+                  label="Max load (grams)"
+                  type="number"
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
+                  onBlur={handleBlur}
+                  onChange={handleChange}
+                  error={Boolean(touched.max_load && errors.max_load)}
+                  title="Maximum load the robot can handle in grams"
+                />
+                {touched.max_load && errors.max_load && (
+                  <FormHelperText error id="helper-text-max_load">
+                    {errors.max_load}
+                  </FormHelperText>
+                )}
+              </Stack>
+            </Grid>
+            <Grid size={2}>
+              <Stack spacing={1}>
+                <TextField
+                  id="max_open_tool"
+                  value={values.max_open_tool || 0}
+                  name="max_open_tool"
+                  label="Max open tool (mm)"
+                  type="number"
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
+                  onBlur={handleBlur}
+                  onChange={handleChange}
+                  error={Boolean(touched.max_open_tool && errors.max_open_tool)}
+                  title="Maximum opening of the robot tool in millimeters"
+                />
+                {touched.max_open_tool && errors.max_open_tool && (
+                  <FormHelperText error id="helper-text-max_open_tool">
+                    {errors.max_open_tool}
                   </FormHelperText>
                 )}
               </Stack>

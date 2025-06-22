@@ -83,6 +83,9 @@ class Object(models.Model):
         null=True,
         blank=True,
     )
+    obj_length = models.IntegerField(default=None, null=True, blank=True)
+    obj_width = models.IntegerField(default=None, null=True, blank=True)
+    weight = models.IntegerField(default=None, null=True, blank=True)
 
     def to_dict(self, keys):
         response_data = {}
@@ -107,6 +110,12 @@ class Object(models.Model):
                 response_data[key] = self.force
             elif key == "keywords":
                 response_data[key] = self.keywords
+            elif key == "obj_length":
+                response_data[key] = self.obj_length
+            elif key == "obj_width":
+                response_data[key] = self.obj_width
+            elif key == "weight":
+                response_data[key] = self.weight
         return response_data
 
 
@@ -179,6 +188,8 @@ class Robot(models.Model):
     model = models.CharField(max_length=1, choices=(("C", "Cobotta"), ("V", "VS-060")))
     port = models.IntegerField(default=0)
     cameraip = models.GenericIPAddressField(default=0)
+    max_load = models.IntegerField(default=None, null=True, blank=True)
+    max_open_tool = models.IntegerField(default=None, null=True, blank=True)
 
     class Meta:
         verbose_name_plural = "Robots"
@@ -201,6 +212,10 @@ class Robot(models.Model):
                 response_data[key] = self.port
             elif key == "cameraip":
                 response_data[key] = self.cameraip
+            elif key == "max_load":
+                response_data[key] = self.max_load
+            elif key == "max_open_tool":
+                response_data[key] = self.max_open_tool
         return response_data
 
 

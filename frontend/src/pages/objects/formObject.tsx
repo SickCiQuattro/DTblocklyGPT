@@ -156,6 +156,9 @@ export const FormObject = ({
         contour: dataObject?.contour || '',
         shape: dataObject?.shape || '',
         force: dataObject?.force || 1,
+        weight: dataObject?.weight || 0,
+        obj_length: dataObject?.obj_length || 0,
+        obj_width: dataObject?.obj_width || 0,
       }}
       validationSchema={YupObject().shape({
         name: YupString()
@@ -370,7 +373,88 @@ export const FormObject = ({
             </Grid>
             <Grid size={2}>
               <Stack spacing={1}>
-                <Typography id="slider-label">Force</Typography>
+                <TextField
+                  id="weight"
+                  value={values.weight || 0}
+                  name="weight"
+                  label="Weight (grams)"
+                  type="number"
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
+                  onBlur={handleBlur}
+                  onChange={handleChange}
+                  error={Boolean(touched.weight && errors.weight)}
+                  title="Weight of the object in grams"
+                />
+                {touched.weight && errors.weight && (
+                  <FormHelperText error id="helper-text-weight">
+                    {errors.weight}
+                  </FormHelperText>
+                )}
+              </Stack>
+            </Grid>
+            <Grid size={2}>
+              <Stack spacing={1}>
+                <TextField
+                  id="obj_length"
+                  value={values.obj_length || 0}
+                  name="obj_length"
+                  label="Object length (mm)"
+                  type="number"
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
+                  onBlur={handleBlur}
+                  onChange={handleChange}
+                  error={Boolean(touched.obj_length && errors.obj_length)}
+                  title="Length of the object in millimeters"
+                />
+                {touched.obj_length && errors.obj_length && (
+                  <FormHelperText error id="helper-text-obj_length">
+                    {errors.obj_length}
+                  </FormHelperText>
+                )}
+              </Stack>
+            </Grid>
+            <Grid size={2}>
+              <Stack spacing={1}>
+                <TextField
+                  id="obj_width"
+                  value={values.obj_width || 0}
+                  name="obj_width"
+                  label="Object width (mm)"
+                  type="number"
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
+                  onBlur={handleBlur}
+                  onChange={handleChange}
+                  error={Boolean(touched.obj_width && errors.obj_width)}
+                  title="Width of the object in millimeters"
+                />
+                {touched.obj_width && errors.obj_width && (
+                  <FormHelperText error id="helper-text-obj_width">
+                    {errors.obj_width}
+                  </FormHelperText>
+                )}
+              </Stack>
+            </Grid>
+            <Grid size={2}>
+              <Stack spacing={1}>
+                <Typography id="slider-label">Gripping Force</Typography>
                 <Slider
                   id="force"
                   name="force"
