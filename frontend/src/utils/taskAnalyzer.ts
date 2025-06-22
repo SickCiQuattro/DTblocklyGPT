@@ -4,7 +4,6 @@ import {
   AbstractObject,
   AbstractLocation,
   AbstractAction,
-  AbstractRobot,
 } from '../pages/tasks/types'
 
 export type AnalyzerIssue = {

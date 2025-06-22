@@ -407,7 +407,9 @@ export const FormAction = ({
             {values.points &&
               JSON.parse(values.points).points.map(
                 (point: CartesianPositionType, index: number) => (
-                  <React.Fragment key={`${index}-${JSON.stringify(point)}`}>
+                  <React.Fragment
+                    key={`${Math.random()}-${JSON.stringify(point)}`}
+                  >
                     <Grid size={10}>
                       <Stack spacing={1}>
                         <TextField

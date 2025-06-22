@@ -5,8 +5,6 @@ import {
   TablePaginationConfig,
   Space,
   Table,
-  Spin,
-  Modal,
 } from 'antd'
 import { useDispatch } from 'react-redux'
 import { Button, IconButton, Stack } from '@mui/material'
@@ -142,7 +140,7 @@ const ListTasks = () => {
       setAnalyzeResults(results)
       setAnalyzingTask(task)
       setAnalyzeModalVisible(true)
-    } catch (e) {
+    } catch {
       toast.error('Failed to analyze task')
     }
   }

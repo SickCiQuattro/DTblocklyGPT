@@ -15,7 +15,6 @@ import {
   SyncOutlined,
 } from '@ant-design/icons'
 import { toggleEditMode } from 'store/reducers/task'
-// eslint-disable-next-line import/no-unresolved
 import { State } from 'blockly/core/serialization/blocks'
 
 import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'

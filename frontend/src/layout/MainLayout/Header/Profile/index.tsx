@@ -30,7 +30,7 @@ interface TabPanelProps {
   dir: Direction
 }
 
-const TabPanel = ({ children, value, index, dir }: TabPanelProps) => (
+const TabPanel = ({ children = null, value, index, dir }: TabPanelProps) => (
   <div
     role="tabpanel"
     hidden={value !== index}
@@ -41,8 +41,6 @@ const TabPanel = ({ children, value, index, dir }: TabPanelProps) => (
     {value === index && children}
   </div>
 )
-
-TabPanel.defaultProps = { children: null }
 
 export const Profile = () => {
   const theme = useTheme()

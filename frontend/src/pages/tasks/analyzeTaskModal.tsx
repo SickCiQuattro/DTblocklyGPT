@@ -27,9 +27,9 @@ export const AnalyzeTaskModal = ({
           <p style={{ color: 'green' }}>No issues found. Task is valid!</p>
         ) : (
           <ul>
-            {analyzeResults.map((issue, idx) => (
+            {analyzeResults.map((issue) => (
               <li
-                key={idx}
+                key={issue.message}
                 style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
               >
                 {issue.message} (at step {issue.stepPath.join(' > ')})

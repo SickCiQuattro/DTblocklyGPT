@@ -1,8 +1,6 @@
-import React from 'react'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-// eslint-disable-next-line import/no-unresolved
 import { State } from 'blockly/core/serialization/blocks'
 import BlocklyComponent, { Block, Field, Category } from './Blockly'
 

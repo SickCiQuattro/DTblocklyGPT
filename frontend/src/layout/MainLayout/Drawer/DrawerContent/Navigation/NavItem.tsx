@@ -1,4 +1,4 @@
-import React, { forwardRef, RefObject, useEffect } from 'react'
+import { RefObject, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { useTheme } from '@mui/material/styles'
@@ -18,23 +18,22 @@ import { MenuItem } from 'menu-items/types'
 const getListItemProps = (
   external: boolean | undefined,
   url: string | undefined,
-  target: '_blank' | '_self'
+  target: '_blank' | '_self',
 ) => {
   if (external) {
     return { component: 'a', href: url, target }
   }
 
   const result = {
-    component: forwardRef((props, ref) => (
+    component: (props: any) => (
       <Link
-        ref={ref as RefObject<HTMLAnchorElement>}
+        ref={props.ref as RefObject<HTMLAnchorElement>}
         to={url || defaultPath}
         target={target}
         {...props}
       />
-    )),
+    ),
   }
-  result.component.displayName = 'Link'
 
   return result
 }

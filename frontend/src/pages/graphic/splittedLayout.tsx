@@ -1,9 +1,7 @@
-import React from 'react'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
 import { useMediaQuery } from '@mui/material'
-// eslint-disable-next-line import/no-unresolved
 import { State } from 'blockly/core/serialization/blocks'
 import { RightPanel } from './rightPanel'
 import { CustomDragDrop } from './CustomDragDrop'

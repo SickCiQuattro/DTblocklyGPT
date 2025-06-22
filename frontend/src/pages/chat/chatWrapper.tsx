@@ -199,6 +199,7 @@ export const ChatWrapper = ({
             title={msg.user === UserChatEnum.ROBOT ? 'Robot' : username}
             type={msg.type}
             text={msg.text}
+            key={msg.id}
             {...(msg.uri && msg.type === MessageTypeEnum.PHOTO
               ? {
                   data: {
@@ -215,7 +216,6 @@ export const ChatWrapper = ({
             date={new Date()}
             dateString={msg.timestamp || ''}
             id={msg.id}
-            key={msg.id}
             focus={false}
             titleColor={
               msg.user === UserChatEnum.ROBOT

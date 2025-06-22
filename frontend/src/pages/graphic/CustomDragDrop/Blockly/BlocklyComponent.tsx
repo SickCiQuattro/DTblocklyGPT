@@ -3,7 +3,6 @@ import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
 import { useAppSelector } from 'store/reducers'
-// eslint-disable-next-line import/no-unresolved
 import { State } from 'blockly/core/serialization/blocks'
 import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'

@@ -4,15 +4,7 @@ import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
-import { MyRobotType } from 'pages/myrobots/types'
-import {
-  Checkbox,
-  FormControl,
-  FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
-} from '@mui/material'
+import { Checkbox, FormControlLabel } from '@mui/material'
 import { TaskType } from './types'
 
 interface SimulateTaskModalProps {
