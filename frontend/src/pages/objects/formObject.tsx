@@ -247,27 +247,30 @@ export const FormObject = ({
                       }
                     }
                   }}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => {
-                            if (addKeyword) {
-                              const newKeywords = [...values.keywords]
-                              newKeywords.push(addKeyword)
-                              setFieldValue('keywords', newKeywords)
-                              setAddKeyword('')
+                  slotProps={{
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => {
+                              if (addKeyword) {
+                                const newKeywords = [...values.keywords]
+                                newKeywords.push(addKeyword)
+                                setFieldValue('keywords', newKeywords)
+                                setAddKeyword('')
+                              }
+                            }}
+                            disabled={
+                              !addKeyword ||
+                              values.keywords.includes(addKeyword)
                             }
-                          }}
-                          disabled={
-                            !addKeyword || values.keywords.includes(addKeyword)
-                          }
-                          edge="end"
-                        >
-                          <PlusOutlined />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
+                            edge="end"
+                          >
+                            <PlusOutlined />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    },
                   }}
                 />
               </Stack>

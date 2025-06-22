@@ -193,7 +193,11 @@ export const FormRobot = ({
                   onBlur={handleBlur}
                   onChange={handleChange}
                   title="IP address of the robot"
-                  inputProps={{ maxLength: 15 }}
+                  slotProps={{
+                    htmlInput: {
+                      maxLength: 15,
+                    },
+                  }}
                   error={Boolean(touched.ip && errors.ip)}
                 />
                 {touched.ip && errors.ip && (
@@ -212,7 +216,13 @@ export const FormRobot = ({
                   name="port"
                   label="Port"
                   type="number"
-                  inputProps={{ min: 0, max: 65535, step: 1 }}
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  }}
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.port && errors.port)}
@@ -255,7 +265,11 @@ export const FormRobot = ({
                   label="Camera IP"
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  inputProps={{ maxLength: 15 }}
+                  slotProps={{
+                    htmlInput: {
+                      maxLength: 15,
+                    },
+                  }}
                   error={Boolean(touched.cameraip && errors.cameraip)}
                   title="IP address of the camera of the robot"
                 />
