@@ -45,7 +45,7 @@ from .functions.graphic import (
     get_object_graphic_list,
 )
 
-from .functions.task import run_task
+from .functions.task import run_task, analyze_task
 from .functions.simulate import simulate_task
 
 
@@ -129,6 +129,7 @@ urlpatterns = [
     # TASK
     path(TASK + "run/", run_task, name="run_task"),
     path(TASK + "simulate/", simulate_task, name="simulate_task"),
+    path(TASK + "analyze/", analyze_task, name="analyze_task"),
     # Views
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
     re_path(r"^.*$", TemplateView.as_view(template_name="base.html")),

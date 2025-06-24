@@ -19,6 +19,7 @@ import { State } from 'blockly/core/serialization/blocks'
 
 import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
 import { RootState } from 'store/reducers'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 interface RightPanelProps {
   backFunction: () => void
@@ -34,11 +35,12 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
 
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
+    const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
 
     fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
-      body: { taskStructure: blocklyTaskStructure, id },
+      body: { taskStructure: abstractTask, id },
     }).then(() => {
       toast.success(MessageText.success)
       dispatch(toggleEditMode())
@@ -118,7 +120,13 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
             label: 'Task JSON',
             key: 'task-json',
             children: actualTask ? (
-              <pre>{JSON.stringify(actualTask, null, 2)}</pre>
+              <pre>
+                {JSON.stringify(
+                  blocklyToAbstract(actualTask as CustomBlock),
+                  null,
+                  2,
+                )}
+              </pre>
             ) : (
               <i>None</i>
             ),

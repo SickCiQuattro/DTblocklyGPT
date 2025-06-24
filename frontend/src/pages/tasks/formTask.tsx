@@ -13,7 +13,7 @@ import { Formik } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { BranchesOutlined } from '@ant-design/icons'
+import { BuildOutlined } from '@ant-design/icons'
 import { useDispatch } from 'react-redux'
 
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -120,7 +120,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                     aria-label="detail"
                     size="medium"
                     title="Go to graphic interface"
-                    startIcon={<BranchesOutlined style={{ fontSize: '2em' }} />}
+                    startIcon={<BuildOutlined style={{ fontSize: '2em' }} />}
                   >
                     Graphic
                   </Button>

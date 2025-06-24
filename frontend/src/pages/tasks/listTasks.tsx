@@ -16,6 +16,8 @@ import {
   PlayCircleOutlined,
   PlusCircleOutlined,
   IssuesCloseOutlined,
+  BuildOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons'
 
 import { MainCard } from 'components/MainCard'
@@ -35,11 +37,6 @@ import { MyRobotType } from 'pages/myrobots/types'
 import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
 import { SimulateTaskModal } from './simulateTaskModal'
-import { analyzeAbstractTask, AnalyzerIssue } from 'utils/taskAnalyzer'
-import { blocklyToAbstract } from 'utils/blocklyParser'
-import { ObjectListType } from 'pages/objects/types'
-import { LocationListType } from 'pages/locations/types'
-import { ActionListType } from 'pages/actions/types'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
 
 const ListTasks = () => {
@@ -62,19 +59,7 @@ const ListTasks = () => {
     useState(false)
   const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
-  const [analyzeResults, setAnalyzeResults] = useState<AnalyzerIssue[] | null>(
-    null,
-  )
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
-  const { data: allObjects } = useSWR<ObjectListType[]>({
-    url: endpoints.home.libraries.objects,
-  })
-  const { data: allLocations } = useSWR<LocationListType[]>({
-    url: endpoints.home.libraries.locations,
-  })
-  const { data: allActions } = useSWR<ActionListType[]>({
-    url: endpoints.home.libraries.actions,
-  })
 
   const handleDetail = (id: number) => {
     dispatch(activeItem(''))
@@ -99,50 +84,6 @@ const ListTasks = () => {
         setTableCurrentPage(tableCurrentPage - 1)
       }
     })
-  }
-
-  const handleAnalyze = async (task: TaskType) => {
-    // Always fetch the task detail to get the code property
-    try {
-      const detail = await fetchApi({
-        url: endpoints.home.libraries.task + `?id=${task.id}`,
-        method: MethodHTTP.GET,
-      })
-      const code = detail?.code
-      if (!code) {
-        toast.error('No task code found for analysis')
-        return
-      }
-      const blockly = typeof code === 'string' ? JSON.parse(code) : code
-      const abstract: any = blocklyToAbstract(blockly)
-      // Map objects, locations, actions to analyzer types
-      abstract.objects =
-        allObjects?.map((obj) => ({
-          id: obj.id.toString(),
-          name: obj.name,
-          // @ts-expect-error: weight may exist in backend data
-          weight: obj.weight ?? undefined,
-          // @ts-expect-error: dimensions may exist in backend data
-          dimensions: obj.dimensions ?? undefined,
-        })) || []
-      abstract.locations =
-        allLocations?.map((loc) => ({
-          id: loc.id.toString(),
-          name: loc.name,
-          // @ts-expect-error: distance may exist in backend data
-          distance: loc.distance ?? undefined,
-        })) || []
-      abstract.actions =
-        allActions?.map((act) => ({ id: act.id.toString(), name: act.name })) ||
-        []
-      // Optionally, add robot info if available
-      const results = analyzeAbstractTask(abstract)
-      setAnalyzeResults(results)
-      setAnalyzingTask(task)
-      setAnalyzeModalVisible(true)
-    } catch {
-      toast.error('Failed to analyze task')
-    }
   }
 
   const columns: TableColumnsType<TaskType> = [
@@ -175,7 +116,7 @@ const ListTasks = () => {
             setRunningTask(record)
           }}
           color="primary"
-          aria-label="detail"
+          aria-label="run"
           title="Run task"
         >
           <PlayCircleOutlined style={{ fontSize: '2em' }} />
@@ -194,10 +135,46 @@ const ListTasks = () => {
             setSimulatingTask(record)
           }}
           color="primary"
-          aria-label="detail"
+          aria-label="simulate"
           title="Simulate task"
         >
+          <SafetyCertificateOutlined style={{ fontSize: '2em' }} />
+        </IconButton>
+      ),
+    },
+    {
+      key: 'analyze',
+      title: 'Analyze',
+      dataIndex: 'simulate',
+      width: 50,
+      render: (_, record) => (
+        <IconButton
+          onClick={() => {
+            setAnalyzeModalVisible(true)
+            setAnalyzingTask(record)
+          }}
+          color="primary"
+          aria-label="analyze"
+          title="Analyze task"
+        >
           <IssuesCloseOutlined style={{ fontSize: '2em' }} />
+        </IconButton>
+      ),
+    },
+    {
+      key: 'graphic',
+      title: 'Graphic',
+      dataIndex: 'graphic',
+      width: 50,
+      render: (_, record) => (
+        <IconButton
+          onClick={() => handleEdit(record.id)}
+          color="primary"
+          aria-label="graphic"
+          title="Go to graphic interface"
+          disabled={record.owner !== getFromLocalStorage('user')?.id}
+        >
+          <BuildOutlined style={{ fontSize: '2em' }} />
         </IconButton>
       ),
     },
@@ -226,19 +203,6 @@ const ListTasks = () => {
       key: 'operation',
       render: (_, record) => (
         <Space size="middle">
-          <Button
-            onClick={() => handleEdit(record.id)}
-            disabled={record.owner !== getFromLocalStorage('user')?.id}
-            title="Go to graphic interface"
-          >
-            Graphic
-          </Button>
-          <Button
-            onClick={() => handleAnalyze(record)}
-            title="Analyze this task for errors"
-          >
-            Analyze
-          </Button>
           <Popconfirm
             title="Delete?"
             onConfirm={() => handleDelete(record.id)}
@@ -316,10 +280,10 @@ const ListTasks = () => {
         handleClose={() => setSimulateTaskModalVisible(false)}
       />
       <AnalyzeTaskModal
-        analyzingTask={analyzingTask}
-        analyzeModalVisible={analyzeModalVisible}
-        setAnalyzeModalVisible={setAnalyzeModalVisible}
-        analyzeResults={analyzeResults}
+        task={analyzingTask}
+        dataMyRobots={dataMyRobots || []}
+        open={analyzeModalVisible}
+        handleClose={() => setAnalyzeModalVisible(false)}
       />
     </MainCard>
   )

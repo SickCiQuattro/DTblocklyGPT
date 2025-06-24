@@ -10,6 +10,7 @@ import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { SplittedLayout } from './splittedLayout'
+import { abstractToBlockly } from 'utils/blocklyParser'
 
 const Graphic = () => {
   const { id } = useParams()
@@ -71,7 +72,12 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataTask={JSON.parse(dataTask.code)}
+          dataTask={abstractToBlockly(
+            JSON.parse(dataTask.code),
+            dataObjects,
+            dataLocations,
+            dataActions,
+          )}
           backFunction={backFunction}
         />
       )}

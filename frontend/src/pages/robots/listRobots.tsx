@@ -64,20 +64,6 @@ const ListRobots = () => {
   }
 
   const downloadQRCode = (id: number) => {
-    /*
-    setQrCodeText(id.toString())
-    console.log(document.getElementById('qrCodeEl') as any)
-    const qrCodeURL = (document.getElementById('qrCodeEl') as any)
-      .toDataURL('image/png')
-      .replace('image/png', 'image/octet-stream')
-    const aEl = document.createElement('a')
-    aEl.href = qrCodeURL
-    aEl.download = `QR code robot with ID ${id}.png`
-    document.body.appendChild(aEl)
-    aEl.click()
-    document.body.removeChild(aEl)
-    */
-
     if (!canvasRef.current) return
     setQrCodeText(id.toString())
     const canvas = canvasRef.current.querySelector('canvas')

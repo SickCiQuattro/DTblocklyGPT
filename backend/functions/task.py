@@ -757,3 +757,36 @@ def search_object(
             if pos == 6:
                 pos = 0
     return find, pos
+
+
+def analyze_task(request: HttpRequest) -> HttpResponse:
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.POST.value:
+                data = loads(request.body)
+                task_id = data.get("id")
+                my_robot_id = data.get("robot")
+                task = Task.objects.filter(id=task_id).first()
+                if task is None:
+                    return error_response("Task not found")
+
+                robot = UserRobot.objects.get(id=my_robot_id).robot
+
+                objectsOfUser = Object.objects.filter(
+                    Q(owner=request.user.id) | Q(shared=True)
+                )
+                actionsOfUser = Action.objects.filter(
+                    Q(owner=request.user.id) | Q(shared=True)
+                )
+                locationsOfUser = Location.objects.filter(
+                    Q(owner=request.user.id) | Q(shared=True)
+                )
+                code = loads(task.code)
+
+                return success_response()
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))

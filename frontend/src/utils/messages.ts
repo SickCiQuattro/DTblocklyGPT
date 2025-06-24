@@ -21,6 +21,7 @@ export enum MessageText {
   valueNotFound = 'Value not found',
   robotIdNotFound = 'Robot ID not found',
   runningTask = 'Task successfully started',
+  analyzedTask = 'Task analysis completed',
   copiedInClipboard = 'Copied in clipboard',
 }
 

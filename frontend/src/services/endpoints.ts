@@ -61,5 +61,6 @@ export const endpoints = {
   task: {
     run: `${TASK_API}/run/`,
     simulate: `${TASK_API}/simulate/`,
+    analyze: `${TASK_API}/analyze/`,
   },
 }
