@@ -4,6 +4,9 @@ export interface ObjectListType {
   owner: number
   shared: boolean
   keywords: string[]
+  obj_length: number
+  obj_width: number
+  weight: number
 }
 
 export interface ObjectDetailType {

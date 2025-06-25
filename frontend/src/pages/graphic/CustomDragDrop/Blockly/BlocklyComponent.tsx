@@ -69,7 +69,7 @@ export const BlocklyComponent = ({
       readOnly: !editMode,
       trashcan: true,
       media: '/blocklyMedia',
-      move: { scrollbars: false, drag: false, wheel: false },
+      move: { scrollbars: false, drag: true, wheel: true },
       zoom: { startScale: 1.5 },
       sounds: false,
     })

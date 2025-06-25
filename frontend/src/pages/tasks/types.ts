@@ -6,6 +6,7 @@ export interface TaskType {
   owner: string
   owner__username: string
   shared: boolean
+  code: string
 }
 
 export type TaskDetailType = {
@@ -17,27 +18,27 @@ export type TaskDetailType = {
 }
 
 export type AbstractObject = {
-  id: string
+  id: number
   name: string
   weight?: number
-  dimensions?: number[]
+  obj_length?: number
+  obj_width?: number
 }
 
 export type AbstractLocation = {
-  id: string
+  id: number
   name: string
-  distance?: number
 }
 
 export type AbstractAction = {
-  id: string
+  id: number
   name: string
 }
 
 export type AbstractRobot = {
+  id: number
+  max_open_tool?: number
   max_load?: number
-  max_range?: number
-  max_open_arm?: number
 }
 
 export type AbstractTask = {

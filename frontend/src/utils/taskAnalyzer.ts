@@ -12,16 +12,16 @@ export type AnalyzerIssue = {
   stepPath: (number | string)[] // Path to the step in the steps tree
 }
 
-const findObject = (objects: AbstractObject[] | undefined, id: string) => {
+const findObject = (objects: AbstractObject[] | undefined, id: number) => {
   return objects?.find((obj) => obj.id === id)
 }
 const findLocation = (
   locations: AbstractLocation[] | undefined,
-  id: string,
+  id: number,
 ) => {
   return locations?.find((loc) => loc.id === id)
 }
-const findAction = (actions: AbstractAction[] | undefined, id: string) => {
+const findAction = (actions: AbstractAction[] | undefined, id: number) => {
   return actions?.find((act) => act.id === id)
 }
 
@@ -87,15 +87,16 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
 
       // Check for object existence and properties in pick (using state before update)
       if (step.type === 'pick') {
-        const obj = findObject(objects, step.object)
+        const obj = findObject(objects, step.objectId)
         if (!obj) {
           issues.push({
             type: 'error',
-            message: `Object with id '${step.object}' not found`,
+            message: `Object with id '${step.objectId}' not found`,
             stepPath: currentPath,
           })
         } else {
           // Check weight
+          console.log(robot)
           if (
             robot?.max_load !== undefined &&
             obj.weight !== undefined &&
@@ -108,16 +109,13 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
             })
           }
           // Check dimensions
-          if (
-            robot &&
-            typeof robot.max_open_arm === 'number' &&
-            obj.dimensions
-          ) {
-            const maxOpenArm = robot.max_open_arm
-            if (obj.dimensions.some((dim) => dim > maxOpenArm)) {
+          const dimensions = [obj.obj_length, obj.obj_width]
+          if (robot && typeof robot.max_open_tool === 'number' && dimensions) {
+            const maxOpenArm = robot.max_open_tool
+            if (dimensions.some((dim) => dim && dim > maxOpenArm)) {
               issues.push({
                 type: 'error',
-                message: `Object '${obj.name}' (dimensions ${obj.dimensions.join('x')}) exceeds robot max open arm (${maxOpenArm})`,
+                message: `Object '${obj.name}' (dimensions ${dimensions.join('x')}) exceeds robot max open arm (${maxOpenArm})`,
                 stepPath: currentPath,
               })
             }
@@ -126,34 +124,22 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
       }
       // Check for location existence and properties in place (using state before update)
       if (step.type === 'place') {
-        const loc = findLocation(locations, step.location)
+        const loc = findLocation(locations, step.locationId)
         if (!loc) {
           issues.push({
             type: 'error',
-            message: `Location with id '${step.location}' not found`,
+            message: `Location with id '${step.locationId}' not found`,
             stepPath: currentPath,
           })
-        } else {
-          if (
-            robot?.max_range !== undefined &&
-            loc.distance !== undefined &&
-            loc.distance > robot.max_range
-          ) {
-            issues.push({
-              type: 'warning',
-              message: `Location '${loc.name}' (distance ${loc.distance}) exceeds robot max range (${robot.max_range})`,
-              stepPath: currentPath,
-            })
-          }
         }
       }
       // Check for action existence in processing (using state before update)
       if (step.type === 'processing') {
-        const act = findAction(actions, step.action)
+        const act = findAction(actions, step.actionId)
         if (!act) {
           issues.push({
             type: 'error',
-            message: `Action with id '${step.action}' not found`,
+            message: `Action with id '${step.actionId}' not found`,
             stepPath: currentPath,
           })
         }

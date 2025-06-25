@@ -13,6 +13,7 @@ export const abstractToBlockly = (
   const stepToBlock = (step: AbstractStep) => {
     switch (step.type) {
       case 'pick': {
+        console.log(dataObjects, step)
         const object = dataObjects.find((obj) => obj.id === step.objectId)
         return {
           type: 'pick_block',

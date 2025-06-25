@@ -1,19 +1,23 @@
 import { Modal, Spin } from 'antd'
 import React from 'react'
 import { toast } from 'react-toastify'
-import { fetchApi, MethodHTTP } from 'services/api'
-import { endpoints } from 'services/endpoints'
-import { MessageText } from 'utils/messages'
-import { AnalyzerIssue } from 'utils/taskAnalyzer'
-import { TaskType } from './types'
+import { analyzeAbstractTask, AnalyzerIssue } from 'utils/taskAnalyzer'
+import { AbstractRobot, AbstractTask, TaskType } from './types'
 import { MyRobotType } from 'pages/myrobots/types'
-import { FormControl, InputLabel, MenuItem, Select } from '@mui/material'
+import { Alert, FormControl, InputLabel, MenuItem, Select } from '@mui/material'
+import { ObjectListType } from 'pages/objects/types'
+import { LocationListType } from 'pages/locations/types'
+import { ActionListType } from 'pages/actions/types'
+import { CheckOutlined } from '@ant-design/icons'
 
 interface AnalyzeTaskModalProps {
   task: TaskType | null
   dataMyRobots: MyRobotType[]
   open: boolean
   handleClose: () => void
+  dataObjects?: ObjectListType[]
+  dataLocations?: LocationListType[]
+  dataActions?: ActionListType[]
 }
 
 export const AnalyzeTaskModal = ({
@@ -21,6 +25,9 @@ export const AnalyzeTaskModal = ({
   dataMyRobots,
   open,
   handleClose,
+  dataObjects,
+  dataLocations,
+  dataActions,
 }: AnalyzeTaskModalProps) => {
   const [selectedRobot, setSelectedRobot] = React.useState<number | string>('')
   const [analyzing, setAnalyzing] = React.useState(false)
@@ -29,69 +36,67 @@ export const AnalyzeTaskModal = ({
     [],
   )
 
-  const handleOk = () => {
+  const handleOk = async () => {
     setAnalyzing(true)
+    if (!task) {
+      setAnalyzing(false)
+      return
+    }
 
-    fetchApi({
-      url: endpoints.task.analyze,
-      method: MethodHTTP.POST,
-      body: { id: task?.id, robot: selectedRobot },
-    })
-      .then((res) => {
-        setAnalyzeResults(res.issues || [])
-        toast.success(MessageText.analyzedTask)
-        setTaskAnalyzed(true)
-      })
-      .finally(() => {
-        setAnalyzing(true)
-      })
-  }
-
-  /*
-      const handleAnalyzeOld = async (task: TaskType) => {
-        // Always fetch the task detail to get the code property
-        try {
-          const detail = await fetchApi({
-            url: endpoints.home.libraries.task + `?id=${task.id}`,
-            method: MethodHTTP.GET,
-          })
-          const code = detail?.code
-          if (!code) {
-            toast.error('No task code found for analysis')
-            return
-          }
-          const blockly = typeof code === 'string' ? JSON.parse(code) : code
-          const abstract: any = blocklyToAbstract(blockly)
-          // Map objects, locations, actions to analyzer types
-          abstract.objects =
-            allObjects?.map((obj) => ({
-              id: obj.id.toString(),
-              name: obj.name,
-              // @ts-expect-error: weight may exist in backend data
-              weight: obj.weight ?? undefined,
-              // @ts-expect-error: dimensions may exist in backend data
-              dimensions: obj.dimensions ?? undefined,
-            })) || []
-          abstract.locations =
-            allLocations?.map((loc) => ({
-              id: loc.id.toString(),
-              name: loc.name,
-              // @ts-expect-error: distance may exist in backend data
-              distance: loc.distance ?? undefined,
-            })) || []
-          abstract.actions =
-            allActions?.map((act) => ({ id: act.id.toString(), name: act.name })) ||
-            []
-          // Optionally, add robot info if available
-          const results = analyzeAbstractTask(abstract)
-          // setAnalyzeResults(results)
-          setAnalyzingTask(task)
-          setAnalyzeModalVisible(true)
-        } catch {
-          toast.error('Failed to analyze task')
-        }
+    try {
+      const code = task?.code
+      if (!code) {
+        toast.error('No task code found for analysis')
+        return
       }
-        */
+      const taskCode = typeof code === 'string' ? JSON.parse(code) : code
+
+      const analyzingTask: AbstractTask = {
+        taskName: task.name,
+        description: task.description,
+        steps: taskCode,
+      }
+
+      // Map objects, locations, actions to analyzer types
+      analyzingTask.objects =
+        dataObjects?.map((obj) => ({
+          id: obj.id,
+          name: obj.name,
+          weight: obj.weight ?? undefined,
+          obj_length: obj.obj_length ?? undefined,
+          obj_width: obj.obj_width ?? undefined,
+        })) || []
+
+      analyzingTask.locations =
+        dataLocations?.map((loc) => ({
+          id: loc.id,
+          name: loc.name,
+        })) || []
+
+      analyzingTask.actions =
+        dataActions?.map((act) => ({
+          id: act.id,
+          name: act.name,
+        })) || []
+
+      analyzingTask.robot = dataMyRobots
+        .map((robot) => ({
+          id: robot.id,
+          max_load: robot.robot__max_load ?? undefined,
+          max_open_tool: robot.robot__max_open_tool ?? undefined,
+        }))
+        .find((robot) => robot.id === selectedRobot) as
+        | AbstractRobot
+        | undefined
+      // Optionally, add robot info if available
+      const results = analyzeAbstractTask(analyzingTask)
+      setTaskAnalyzed(true)
+      setAnalyzeResults(results)
+      setAnalyzing(false)
+    } catch {
+      toast.error('Failed to analyze task')
+    }
+  }
 
   return (
     <Modal
@@ -101,6 +106,8 @@ export const AnalyzeTaskModal = ({
       okText="Analyze"
       okButtonProps={{ disabled: !selectedRobot, loading: analyzing }}
       onCancel={() => {
+        setAnalyzing(false)
+        setTaskAnalyzed(false)
         handleClose()
         setSelectedRobot('')
       }}
@@ -129,6 +136,8 @@ export const AnalyzeTaskModal = ({
           name="robot"
           onChange={(e) => {
             setSelectedRobot(e.target.value)
+            setTaskAnalyzed(false)
+            setAnalyzeResults([])
           }}
           title="Robot use to run the task"
         >
@@ -140,21 +149,25 @@ export const AnalyzeTaskModal = ({
         </Select>
       </FormControl>
 
-      {taskAnalyzed &&
-        (analyzeResults.length === 0 ? (
-          <p style={{ color: 'green' }}>No issues found. Task is valid!</p>
-        ) : (
-          <ul>
-            {analyzeResults.map((issue) => (
-              <li
-                key={issue.message}
-                style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
-              >
-                {issue.message} (at step {issue.stepPath.join(' > ')})
-              </li>
-            ))}
-          </ul>
-        ))}
+      <div style={{ marginTop: '2rem', marginBottom: '2rem' }}>
+        {taskAnalyzed &&
+          (analyzeResults.length === 0 ? (
+            <Alert icon={<CheckOutlined />} severity="success">
+              No issues found. Task is valid!
+            </Alert>
+          ) : (
+            <ul>
+              {analyzeResults.map((issue) => (
+                <li
+                  key={issue.message}
+                  style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
+                >
+                  {issue.message} (at step {issue.stepPath.join(' > ')})
+                </li>
+              ))}
+            </ul>
+          ))}
+      </div>
       {analyzing && (
         <Spin
           size="large"

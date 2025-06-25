@@ -29,6 +29,7 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
                         "owner",
                         "owner__username",
                         "shared",
+                        "code",
                     )
                     .order_by("-last_modified")
                 )
@@ -136,7 +137,15 @@ def get_object_list(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.GET.value:
                 user = User.objects.get(id=request.user.id)
                 objects = Object.objects.filter(Q(owner=user) | Q(shared=True)).values(
-                    "id", "name", "shared", "owner", "owner__username", "keywords"
+                    "id",
+                    "name",
+                    "shared",
+                    "owner",
+                    "owner__username",
+                    "keywords",
+                    "obj_length",
+                    "obj_width",
+                    "weight",
                 )
                 return success_response(objects)
             else:
@@ -705,7 +714,12 @@ def get_my_robot_list(request: HttpRequest) -> HttpResponse:
                 username = request.user
                 user = User.objects.get(username=username)
                 myRobots = UserRobot.objects.filter(Q(user=user)).values(
-                    "id", "name", "robot__name", "robot"
+                    "id",
+                    "name",
+                    "robot__name",
+                    "robot",
+                    "robot__max_load",
+                    "robot__max_open_tool",
                 )
                 return success_response(myRobots)
             else:

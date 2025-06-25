@@ -39,6 +39,9 @@ import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
 import { SimulateTaskModal } from './simulateTaskModal'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
+import { ObjectListType } from 'pages/objects/types'
+import { LocationListType } from 'pages/locations/types'
+import { ActionListType } from 'pages/actions/types'
 
 const ListTasks = () => {
   const [tablePageSize, setTablePageSize] = useState(defaultPageSizeSelection)
@@ -54,6 +57,21 @@ const ListTasks = () => {
     MyRobotType[],
     Error
   >({ url: endpoints.home.libraries.myRobots })
+
+  const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
+    ObjectListType[],
+    Error
+  >({ url: endpoints.home.libraries.objects })
+
+  const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
+    LocationListType[],
+    Error
+  >({ url: endpoints.home.libraries.locations })
+
+  const { data: dataActions, isLoading: isLoadingActions } = useSWR<
+    ActionListType[],
+    Error
+  >({ url: endpoints.home.libraries.actions })
   const [runTaskModalVisible, setRunTaskModalVisible] = useState(false)
   const [runningTask, setRunningTask] = useState<TaskType | null>(null)
   const [simulateTaskModalVisible, setSimulateTaskModalVisible] =
@@ -282,7 +300,13 @@ const ListTasks = () => {
         columns={columns}
         dataSource={dataTasks || []}
         pagination={PaginationConfig}
-        loading={isLoadingTasks || isLoadingMyRobots}
+        loading={
+          isLoadingTasks ||
+          isLoadingMyRobots ||
+          isLoadingObjects ||
+          isLoadingLocations ||
+          isLoadingActions
+        }
         rowKey="id"
         style={{ overflowX: 'auto' }}
       />
@@ -302,6 +326,9 @@ const ListTasks = () => {
         dataMyRobots={dataMyRobots || []}
         open={analyzeModalVisible}
         handleClose={() => setAnalyzeModalVisible(false)}
+        dataObjects={dataObjects || []}
+        dataLocations={dataLocations || []}
+        dataActions={dataActions || []}
       />
     </MainCard>
   )
