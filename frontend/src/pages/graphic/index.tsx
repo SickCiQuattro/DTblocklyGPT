@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
 import { activeItem, openDrawer } from 'store/reducers/menu'
@@ -16,14 +16,21 @@ const Graphic = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const [searchParams] = useSearchParams()
+  const newTaskParam = searchParams.get('newTask')
+  console.log('newTaskParam', newTaskParam)
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
     { name: string; code: string },
     Error
-  >({
-    url: endpoints.graphic.getGraphicTask,
-    body: { id },
-  })
+  >(
+    newTaskParam !== 'true'
+      ? {
+          url: endpoints.graphic.getGraphicTask,
+          body: { id },
+        }
+      : null,
+  )
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
@@ -72,12 +79,16 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataTask={abstractToBlockly(
-            JSON.parse(dataTask.code),
-            dataObjects,
-            dataLocations,
-            dataActions,
-          )}
+          dataTask={
+            newTaskParam !== 'true'
+              ? abstractToBlockly(
+                  JSON.parse(dataTask.code),
+                  dataObjects,
+                  dataLocations,
+                  dataActions,
+                )
+              : {}
+          }
           backFunction={backFunction}
         />
       )}

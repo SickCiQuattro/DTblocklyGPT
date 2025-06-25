@@ -8,7 +8,7 @@ import { Alert, FormControl, InputLabel, MenuItem, Select } from '@mui/material'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { CheckOutlined } from '@ant-design/icons'
+import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 
 interface AnalyzeTaskModalProps {
   task: TaskType | null
@@ -156,16 +156,25 @@ export const AnalyzeTaskModal = ({
               No issues found. Task is valid!
             </Alert>
           ) : (
-            <ul>
-              {analyzeResults.map((issue) => (
-                <li
-                  key={issue.message}
-                  style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
-                >
-                  {issue.message} (at step {issue.stepPath.join(' > ')})
-                </li>
-              ))}
-            </ul>
+            <>
+              <Alert
+                icon={<CloseOutlined />}
+                severity="error"
+                style={{ marginBottom: '1rem' }}
+              >
+                Issues found. Please review the task before running it.
+              </Alert>
+              <ul>
+                {analyzeResults.map((issue) => (
+                  <li
+                    key={issue.message}
+                    style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
+                  >
+                    {issue.message} (at step {issue.stepPath.join(' > ')})
+                  </li>
+                ))}
+              </ul>
+            </>
           ))}
       </div>
       {analyzing && (

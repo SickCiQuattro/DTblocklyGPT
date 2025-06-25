@@ -24,8 +24,6 @@ export const SplittedLayout = ({
   const isBigScreen = useMediaQuery('(min-width: 1700px)')
   const height = isBigScreen ? '75vh' : '66vh'
 
-  console.log('SplittedLayout dataTask', dataTask)
-
   return (
     <div style={{ display: 'flex', height }}>
       <CustomDragDrop

@@ -96,7 +96,6 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
           })
         } else {
           // Check weight
-          console.log(robot)
           if (
             robot?.max_load !== undefined &&
             obj.weight !== undefined &&
