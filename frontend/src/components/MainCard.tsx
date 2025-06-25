@@ -61,9 +61,7 @@ export const MainCard = ({
           title={title}
           subheader={subtitle}
           action={
-            backFunction && (
-              <Button onClick={() => backFunction()}>Indietro</Button>
-            )
+            backFunction && <Button onClick={() => backFunction()}>Back</Button>
           }
         />
       )}

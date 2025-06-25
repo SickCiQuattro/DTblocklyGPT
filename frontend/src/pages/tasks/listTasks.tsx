@@ -18,6 +18,7 @@ import {
   IssuesCloseOutlined,
   BuildOutlined,
   SafetyCertificateOutlined,
+  MergeCellsOutlined,
 } from '@ant-design/icons'
 
 import { MainCard } from 'components/MainCard'
@@ -93,6 +94,12 @@ const ListTasks = () => {
     navigate(`/graphic/${id}`)
   }
 
+  const handleMultimodal = (id: number) => {
+    dispatch(openDrawer(false))
+    dispatch(activeItem('multimodal'))
+    navigate(`/multimodal/${id}`)
+  }
+
   const handleDelete = (id: number) => {
     fetchApi({
       url: endpoints.home.libraries.task,
@@ -139,6 +146,23 @@ const ListTasks = () => {
           disabled={record.owner !== getFromLocalStorage('user')?.id}
         >
           <BuildOutlined style={{ fontSize: '2em' }} />
+        </IconButton>
+      ),
+    },
+    {
+      key: 'multimodal',
+      title: 'Multimodal',
+      dataIndex: 'multimodal',
+      width: 50,
+      render: (_, record) => (
+        <IconButton
+          onClick={() => handleMultimodal(record.id)}
+          color="primary"
+          aria-label="multimodal"
+          title="Go to multimodal interface"
+          disabled={record.owner !== getFromLocalStorage('user')?.id}
+        >
+          <MergeCellsOutlined style={{ fontSize: '2em' }} />
         </IconButton>
       ),
     },

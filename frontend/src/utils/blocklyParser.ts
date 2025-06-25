@@ -145,8 +145,6 @@ export const abstractToBlockly = (
 
   // Root: wrap steps in a root block if needed, or just return the sequence
   return {
-    x: 300,
-    y: 20,
     ...stepsToSequence(abstractTask),
   }
 }

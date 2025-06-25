@@ -1,0 +1,26 @@
+.rce-mbox-status {
+    display: none;
+}
+
+.rce-mbox-title {
+    cursor: text;
+    user-select: auto;
+    font-size: larger;
+    &:hover {
+        text-decoration: none;
+    }
+}
+
+.rce-mbox-text {
+    font-size: larger;
+    white-space: pre-wrap;
+}
+
+.msg-is-typing {
+    font-style: italic;
+  }
+
+  .msg-is-typing .rce-smsg {
+    width: 140px;
+    align-items: flex-start;
+  }

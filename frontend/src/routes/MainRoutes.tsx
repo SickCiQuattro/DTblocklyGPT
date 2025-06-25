@@ -24,6 +24,7 @@ const DetailMyRobot = Loadable(
 )
 const Chat = Loadable(lazy(() => import('pages/chat')))
 const Graphic = Loadable(lazy(() => import('pages/graphic')))
+const Multimodal = Loadable(lazy(() => import('pages/multimodal')))
 const Homepage = Loadable(lazy(() => import('pages/homepage')))
 const Faq = Loadable(lazy(() => import('pages/faq')))
 
@@ -144,6 +145,14 @@ export const MainRoutes: RouteObject = {
       element: (
         <ProtectedRoute>
           <Graphic />
+        </ProtectedRoute>
+      ),
+    },
+    {
+      path: 'multimodal/:id',
+      element: (
+        <ProtectedRoute>
+          <Multimodal />
         </ProtectedRoute>
       ),
     },
