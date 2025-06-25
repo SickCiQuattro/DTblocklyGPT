@@ -30,6 +30,7 @@ def login_func(request: HttpRequest) -> HttpResponse:
                 authError = False
                 user = User.objects.get(id=user.id)
                 group = Group.objects.filter(user=user).first()
+
                 toml_data = None
                 with open("pyproject.toml", "rb") as f:
                     toml_data = tomllib.load(f)
@@ -39,7 +40,7 @@ def login_func(request: HttpRequest) -> HttpResponse:
                     "username": username,
                     "id": user.id,
                     "group": group.name,
-                    "versionServer": data["tool.poetry"]["version"],
+                    "versionServer": toml_data["tool"]["poetry"]["version"],
                 }
 
             return success_response(data)
@@ -74,13 +75,17 @@ def verify_token(request: HttpRequest) -> HttpResponse:
                 if user is not None:
                     authError = False
                     group = Group.objects.filter(user=user).first()
+
+                    toml_data = None
+                    with open("pyproject.toml", "rb") as f:
+                        toml_data = tomllib.load(f)
+
                     response = {
                         "authError": authError,
                         "username": user.username,
                         "id": user.id,
                         "group": group.name,
-                        # Version from pyproject.toml
-                        "versionServer": "1.0.0",  # Replace with actual version retrieval
+                        "versionServer": toml_data["tool"]["poetry"]["version"],
                     }
 
             return success_response(response)

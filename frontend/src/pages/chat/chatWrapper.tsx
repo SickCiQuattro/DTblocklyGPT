@@ -37,6 +37,7 @@ import {
   TypingSystemMessage,
   UserChatEnum,
 } from './utils'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 const { username } = getFromLocalStorage('user')
 const scrollToBottom = () => {
@@ -160,12 +161,26 @@ export const ChatWrapper = ({
                 id: Number(id),
                 taskStructure: newTaskStructure,
               },
-            }).then(() => {
-              scrollToBottom()
-              setTimeout(() => {
-                navigate(`/graphic/${id}`)
-                dispatch(activeItem('definegraphic'))
-              }, 5000)
+            }).then((res) => {
+              const { taskCode } = res
+              const abstractTaskCode = blocklyToAbstract(
+                taskCode as CustomBlock,
+              )
+
+              fetchApi({
+                url: endpoints.graphic.saveGraphicTask,
+                method: MethodHTTP.PUT,
+                body: {
+                  id: Number(id),
+                  taskStructure: abstractTaskCode,
+                },
+              }).then(() => {
+                scrollToBottom()
+                setTimeout(() => {
+                  navigate(`/graphic/${id}`)
+                  dispatch(activeItem('definegraphic'))
+                }, 5000)
+              })
             })
           }
         }

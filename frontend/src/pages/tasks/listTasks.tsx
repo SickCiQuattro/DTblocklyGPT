@@ -26,6 +26,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { iconMap } from 'utils/iconMap'
+import { Palette } from 'themes/palette'
 import {
   defaultCurrentPage,
   defaultPageSizeSelection,
@@ -60,6 +61,8 @@ const ListTasks = () => {
   const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
+
+  const themePalette = Palette('light')
 
   const handleDetail = (id: number) => {
     dispatch(activeItem(''))
@@ -105,6 +108,23 @@ const ListTasks = () => {
       ),
     },
     {
+      key: 'graphic',
+      title: 'Graphic',
+      dataIndex: 'graphic',
+      width: 50,
+      render: (_, record) => (
+        <IconButton
+          onClick={() => handleEdit(record.id)}
+          color="primary"
+          aria-label="graphic"
+          title="Go to graphic interface"
+          disabled={record.owner !== getFromLocalStorage('user')?.id}
+        >
+          <BuildOutlined style={{ fontSize: '2em' }} />
+        </IconButton>
+      ),
+    },
+    {
       key: 'run',
       title: 'Run',
       dataIndex: 'run',
@@ -119,7 +139,12 @@ const ListTasks = () => {
           aria-label="run"
           title="Run task"
         >
-          <PlayCircleOutlined style={{ fontSize: '2em' }} />
+          <PlayCircleOutlined
+            style={{
+              color: themePalette.palette.success.main,
+              fontSize: '2em',
+            }}
+          />
         </IconButton>
       ),
     },
@@ -138,7 +163,12 @@ const ListTasks = () => {
           aria-label="simulate"
           title="Simulate task"
         >
-          <SafetyCertificateOutlined style={{ fontSize: '2em' }} />
+          <SafetyCertificateOutlined
+            style={{
+              color: themePalette.palette.warning.main,
+              fontSize: '2em',
+            }}
+          />
         </IconButton>
       ),
     },
@@ -157,24 +187,12 @@ const ListTasks = () => {
           aria-label="analyze"
           title="Analyze task"
         >
-          <IssuesCloseOutlined style={{ fontSize: '2em' }} />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'graphic',
-      title: 'Graphic',
-      dataIndex: 'graphic',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => handleEdit(record.id)}
-          color="primary"
-          aria-label="graphic"
-          title="Go to graphic interface"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
-        >
-          <BuildOutlined style={{ fontSize: '2em' }} />
+          <IssuesCloseOutlined
+            style={{
+              color: themePalette.palette.warning.main,
+              fontSize: '2em',
+            }}
+          />
         </IconButton>
       ),
     },

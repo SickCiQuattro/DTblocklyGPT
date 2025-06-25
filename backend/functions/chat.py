@@ -214,9 +214,39 @@ CHATGPT_FUNCTION = {
                                     },
                                 },
                                 "required": ["control_type"],
-                            }
+                            },
+                            "pick": {
+                                "type": "object",
+                                "properties": {
+                                    "object": {
+                                        "type": "string",
+                                        "description": "The object of the pick intent.",
+                                    }
+                                },
+                                "required": ["object"],
+                            },
+                            "processing": {
+                                "type": "object",
+                                "properties": {
+                                    "action": {
+                                        "type": "string",
+                                        "description": "The action of the action intent.",
+                                    }
+                                },
+                                "required": ["action"],
+                            },
+                            "place": {
+                                "type": "object",
+                                "properties": {
+                                    "location": {
+                                        "type": "string",
+                                        "description": "The location of the place intent.",
+                                    }
+                                },
+                                "required": ["location"],
+                            },
                         },
-                        "required": ["control"],
+                        "required": ["control", "pick", "processing", "place"],
                     }
                 },
                 "required": ["program"],
@@ -1163,7 +1193,11 @@ def save_chat_task(request: HttpRequest) -> HttpResponse:
                     code=dumps(taskCode),
                     last_modified=date,
                 )
-                return success_response()
+
+                response = {
+                    "taskCode": taskCode,
+                }
+                return success_response(response)
             else:
                 return invalid_request_method()
         else:

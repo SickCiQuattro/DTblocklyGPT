@@ -18,6 +18,7 @@ import { Routes } from 'routes'
 import { antdTheme } from 'themes/theme'
 import { store } from './store'
 import 'regenerator-runtime'
+import '@ant-design/v5-patch-for-react-19'
 
 locale('en-gb')
 
