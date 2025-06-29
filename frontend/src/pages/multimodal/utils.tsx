@@ -47,8 +47,6 @@ interface ResponseChatGPT {
 export interface ChatResponse {
   chatLog: ChatLogType[]
   response: ResponseChatGPT
-  fineTunedModel: string
-  fineTuningJobId: string
 }
 
 export const InitialSystemMessage = () => {

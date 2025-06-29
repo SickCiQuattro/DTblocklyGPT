@@ -21,7 +21,6 @@ import './customStyle.css'
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { openDrawer } from 'store/reducers/menu'
-import { resetTask, updateTask } from 'store/reducers/task'
 import {
   CHATGPT_ERROR,
   ChatLogType,
@@ -33,6 +32,9 @@ import {
   UserChatEnum,
 } from './utils'
 import { AbstractStep } from 'pages/tasks/types'
+import { LocationListType } from 'pages/locations/types'
+import { ObjectListType } from 'pages/objects/types'
+import { ActionListType } from 'pages/actions/types'
 
 const { username } = getFromLocalStorage('user')
 const scrollToBottom = () => {
@@ -45,6 +47,9 @@ interface ChatWrapperProps {
   taskStructure: AbstractStep[]
   setTaskStructure: (taskStructure: AbstractStep[]) => void
   editingMode: boolean
+  dataLocations: LocationListType[]
+  dataObjects: ObjectListType[]
+  dataActions: ActionListType[]
 }
 
 export const ChatWrapper = ({
@@ -52,6 +57,9 @@ export const ChatWrapper = ({
   taskStructure,
   setTaskStructure,
   editingMode,
+  dataLocations,
+  dataObjects,
+  dataActions,
 }: ChatWrapperProps) => {
   const { id } = useParams()
   const dispatch = useDispatch()
@@ -104,6 +112,10 @@ export const ChatWrapper = ({
         id: Number(id),
         message,
         chatLog,
+        taskStructure,
+        dataLocations,
+        dataObjects,
+        dataActions,
       },
     })
       .then((res: ChatResponse) => {
@@ -125,8 +137,10 @@ export const ChatWrapper = ({
           }
           const newMessages: MessageType[] = [newMessage]
 
-          setTaskStructure(taskStructure)
-          dispatch(updateTask(taskStructure))
+          setListMessages([...messagesWithUserRequest, ...newMessages])
+          setChatLog(res.chatLog)
+
+          setTaskStructure(res.response.task)
         }
       })
       .finally(() => {
@@ -140,7 +154,6 @@ export const ChatWrapper = ({
 
   React.useEffect(() => {
     dispatch(openDrawer(false))
-    dispatch(resetTask())
   }, [])
 
   return (

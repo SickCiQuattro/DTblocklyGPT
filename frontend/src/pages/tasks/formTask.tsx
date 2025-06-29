@@ -26,6 +26,7 @@ import { TaskDetailType } from './types'
 export enum TypeNewTask {
   CHAT = 'chat',
   GRAPHIC = 'graphic',
+  MULTIMODAL = 'multimodal',
 }
 
 interface FormTaskProps {
@@ -64,6 +65,11 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
         if (type === TypeNewTask.GRAPHIC) {
           dispatch(openDrawer(false))
           navigate(`/graphic/${newTaskId}?newTask=true`)
+          return
+        }
+        if (type === TypeNewTask.MULTIMODAL) {
+          dispatch(openDrawer(false))
+          navigate(`/multimodal/${newTaskId}?newTask=true`)
           return
         }
         backFunction()

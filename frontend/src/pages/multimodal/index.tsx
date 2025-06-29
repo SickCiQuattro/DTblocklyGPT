@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
 import { activeItem, openDrawer } from 'store/reducers/menu'
@@ -15,20 +15,14 @@ const Multimodal = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const [searchParams] = useSearchParams()
-  const newTaskParam = searchParams.get('newTask')
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
     { name: string; code: string },
     Error
-  >(
-    newTaskParam !== 'true' && id
-      ? {
-          url: endpoints.graphic.getGraphicTask,
-          body: { id },
-        }
-      : null,
-  )
+  >({
+    url: endpoints.graphic.getGraphicTask,
+    body: { id },
+  })
 
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],

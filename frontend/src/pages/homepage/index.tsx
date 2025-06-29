@@ -78,6 +78,30 @@ const Homepage = () => {
             </CardContent>
           </CardActionArea>
         </Card>
+        <Card>
+          <CardActionArea
+            onClick={() => {
+              navigate('/task/add?type=multimodal')
+              dispatch(activeItem('definemultimodal'))
+            }}
+            title="Create a new task by multimodal interface"
+          >
+            <CardMedia
+              component="img"
+              image="/pages/multimodal_example.png"
+              height={300}
+              alt="multimodal"
+            />
+            <CardContent>
+              <Typography gutterBottom variant="h3" component="div">
+                Multimodal
+              </Typography>
+              <Typography variant="h5" color="text.secondary">
+                Create a new task by the multimodal interface
+              </Typography>
+            </CardContent>
+          </CardActionArea>
+        </Card>
       </div>
     </MainCard>
   )

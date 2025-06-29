@@ -21,7 +21,10 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 data = loads(request.body)
                 task_id = data.get("id")
                 taskStructure = data.get("taskStructure")
-                Task.objects.filter(id=task_id).update(code=dumps(taskStructure))
+                taskStrcutureDump = None
+                if taskStructure is not None:
+                    taskStrcutureDump = dumps(taskStructure)
+                Task.objects.filter(id=task_id).update(code=taskStrcutureDump)
                 return success_response()
             else:
                 return invalid_request_method()

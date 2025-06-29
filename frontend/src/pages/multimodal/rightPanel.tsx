@@ -49,8 +49,8 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
         style={{ marginTop: '1rem', marginRight: '1rem' }}
         items={[
           {
-            label: 'Task JSON',
-            key: 'task-json',
+            label: 'Task representation',
+            key: 'task-representation',
             children: dataTask ? (
               <pre>{JSON.stringify(dataTask, null, 2)}</pre>
             ) : (

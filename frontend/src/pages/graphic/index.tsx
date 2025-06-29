@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
 import { activeItem, openDrawer } from 'store/reducers/menu'
@@ -11,26 +11,20 @@ import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { SplittedLayout } from './splittedLayout'
 import { abstractToBlockly } from 'utils/blocklyParser'
+import { toggleEditMode } from 'store/reducers/task'
 
 const Graphic = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const [searchParams] = useSearchParams()
-  const newTaskParam = searchParams.get('newTask')
-  console.log('newTaskParam', newTaskParam)
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
     { name: string; code: string },
     Error
-  >(
-    newTaskParam !== 'true'
-      ? {
-          url: endpoints.graphic.getGraphicTask,
-          body: { id },
-        }
-      : null,
-  )
+  >({
+    url: endpoints.graphic.getGraphicTask,
+    body: { id },
+  })
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
@@ -56,6 +50,7 @@ const Graphic = () => {
 
   const backFunction = () => {
     dispatch(openDrawer(true))
+    dispatch(toggleEditMode())
     dispatch(activeItem('tasks'))
     navigate('/tasks')
   }
@@ -80,14 +75,14 @@ const Graphic = () => {
           dataLocations={dataLocations}
           dataActions={dataActions}
           dataTask={
-            newTaskParam !== 'true'
+            dataTask.code
               ? abstractToBlockly(
                   JSON.parse(dataTask.code),
                   dataObjects,
                   dataLocations,
                   dataActions,
                 )
-              : {}
+              : null
           }
           backFunction={backFunction}
         />

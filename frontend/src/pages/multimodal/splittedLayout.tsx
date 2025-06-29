@@ -29,7 +29,7 @@ import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 interface SplittedLayoutProps {
   dataLocations: LocationListType[]
@@ -50,7 +50,11 @@ export const SplittedLayout = ({
   const height = isBigScreen ? '70vh' : '60vh'
   const [taskStructure, setTaskStructure] =
     useState<AbstractStep[]>(abstractTask)
-  const [editingMode, setEditingMode] = useState<boolean>(false)
+  const [searchParams] = useSearchParams()
+  const newTaskParam = searchParams.get('newTask')
+  const [editingMode, setEditingMode] = useState<boolean>(
+    newTaskParam === 'true',
+  )
   const [speaker, setSpeaker] = React.useState(false)
   const themePalette = Palette('light')
   const dispatch = useDispatch()
@@ -120,11 +124,13 @@ export const SplittedLayout = ({
             marginRight: '1rem',
             color:
               editingMode &&
+              Blockly.getMainWorkspace() &&
               Blockly.getMainWorkspace().getUndoStack().length > 0
                 ? themePalette.palette.primary.main
                 : themePalette.palette.grey[300],
             cursor:
               editingMode &&
+              Blockly.getMainWorkspace() &&
               Blockly.getMainWorkspace().getUndoStack().length > 0
                 ? 'pointer'
                 : 'not-allowed',
@@ -132,7 +138,8 @@ export const SplittedLayout = ({
           title="Undo"
           disabled={
             !editingMode ||
-            Blockly.getMainWorkspace().getUndoStack().length === 0
+            (Blockly.getMainWorkspace() &&
+              Blockly.getMainWorkspace().getUndoStack().length === 0)
           }
           onClick={() => {
             Blockly.getMainWorkspace().undo(false)
@@ -150,11 +157,13 @@ export const SplittedLayout = ({
             marginRight: '2rem',
             color:
               editingMode &&
+              Blockly.getMainWorkspace() &&
               Blockly.getMainWorkspace().getRedoStack().length > 0
                 ? themePalette.palette.primary.main
                 : themePalette.palette.grey[300],
             cursor:
               editingMode &&
+              Blockly.getMainWorkspace() &&
               Blockly.getMainWorkspace().getRedoStack().length > 0
                 ? 'pointer'
                 : 'not-allowed',
@@ -162,7 +171,8 @@ export const SplittedLayout = ({
           title="Redo"
           disabled={
             !editingMode ||
-            Blockly.getMainWorkspace().getRedoStack().length === 0
+            (Blockly.getMainWorkspace() &&
+              Blockly.getMainWorkspace().getRedoStack().length === 0)
           }
           onClick={() => {
             Blockly.getMainWorkspace().undo(true)
@@ -198,12 +208,16 @@ export const SplittedLayout = ({
           dataObjects={dataObjects}
           dataActions={dataActions}
           editingMode={editingMode}
-          dataTask={abstractToBlockly(
-            abstractTask,
-            dataObjects,
-            dataLocations,
-            dataActions,
-          )}
+          dataTask={
+            abstractTask
+              ? abstractToBlockly(
+                  abstractTask,
+                  dataObjects,
+                  dataLocations,
+                  dataActions,
+                )
+              : null
+          }
           setTaskStructure={setTaskStructure}
         />
         {/* {editingMode && ( */}
@@ -212,6 +226,9 @@ export const SplittedLayout = ({
           taskStructure={taskStructure}
           setTaskStructure={setTaskStructure}
           editingMode={editingMode}
+          dataLocations={dataLocations}
+          dataObjects={dataObjects}
+          dataActions={dataActions}
         />
         {/* )} */}
         <RightPanel dataTask={taskStructure} />

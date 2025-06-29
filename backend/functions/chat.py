@@ -1,3 +1,4 @@
+import json
 from django.http import HttpResponse, HttpRequest
 from backend.utils.response import (
     HttpMethod,
@@ -6,9 +7,10 @@ from backend.utils.response import (
     success_response,
     unauthorized_request,
 )
-from os import path
 from json import loads, dumps
 from openai import OpenAI
+from dataclasses import dataclass
+from typing import List, Union, Optional, Literal
 
 from backend.models import Task, Object, Action, Location
 from backend.utils.date import getDateTimeNow
@@ -95,168 +97,174 @@ General instructions:
 - The 'answer' field in the JSON is your natural language response to the user. If you're unsure of an answer, you can ask the user to repeat the request.
 """
 
-CHATGPT_USE_FUNCTIONS = "Only use the functions you have been provided with."
+CHATGPT_USE_FUNCTIONS = "Only use the tool you have been provided with."
 CHATGPT_ALWAYS_REPLY = "Always reply to the user. You can't left the property 'answer' blank. If you're unsure of an answer, you can ask the user to repeat the request."
 
 CHATGPT_FUNCTION = {
-    "name": "parse_chatgpt_response",
-    "description": "Process response from chatgpt to digest information",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "answer": {"type": "string", "description": "Model response to the user"},
-            "task": {
-                "type": "object",
-                "properties": {
-                    "program": {
-                        "type": "object",
-                        "properties": {
-                            "control": {
-                                "type": "object",
-                                "properties": {
-                                    "control_type": {
-                                        "type": "string",
-                                        "enum": [
-                                            "repeat",
-                                            "loop",
-                                            "when",
-                                            "when_otherwise",
-                                            # "stop_when",
-                                            # "do_when",
-                                        ],
-                                        "description": "The control type of the control intent.",
-                                    },
-                                    "times": {
-                                        "type": "integer",
-                                        "description": "The times of repetition in the case of repeat control type.",
-                                    },
-                                    "otherwise": {
-                                        "type": "object",
-                                        "properties": {
-                                            "otherwise_pick": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "object": {
-                                                        "type": "string",
-                                                        "description": "The object of the pick intent.",
-                                                    }
-                                                },
-                                                "required": ["object"],
-                                            },
-                                            "otherwise_processing": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "action": {
-                                                        "type": "string",
-                                                        "description": "The action of the action intent.",
-                                                    }
-                                                },
-                                                "required": ["action"],
-                                            },
-                                            "otherwise_place": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "location": {
-                                                        "type": "string",
-                                                        "description": "The location of the place intent.",
-                                                    }
-                                                },
-                                                "required": ["location"],
-                                            },
-                                        },
-                                        "required": ["pick", "place"],
-                                    },
-                                    "event": {
-                                        "type": "object",
-                                        "properties": {
-                                            "event_type": {
-                                                "type": "string",
-                                                "enum": ["sensor", "find", "human"],
-                                                # "enum": ["detect", "sensor", "find", "human"],
-                                                "description": "The event type of the event intent.",
-                                            },
-                                            "find_object": {
-                                                "type": "string",
-                                                "description": "Object to find in the case of find event type.",
-                                            },
-                                        },
-                                        "required": ["event_type"],
-                                    },
-                                    "control_pick": {
-                                        "type": "object",
-                                        "properties": {
-                                            "object": {
-                                                "type": "string",
-                                                "description": "The object of the pick intent.",
-                                            }
-                                        },
-                                        "required": ["object"],
-                                    },
-                                    "control_processing": {
-                                        "type": "object",
-                                        "properties": {
-                                            "action": {
-                                                "type": "string",
-                                                "description": "The action of the action intent.",
-                                            }
-                                        },
-                                        "required": ["action"],
-                                    },
-                                    "control_place": {
-                                        "type": "object",
-                                        "properties": {
-                                            "location": {
-                                                "type": "string",
-                                                "description": "The location of the place intent.",
-                                            }
-                                        },
-                                        "required": ["location"],
-                                    },
-                                },
-                                "required": ["control_type"],
-                            },
-                            "pick": {
-                                "type": "object",
-                                "properties": {
-                                    "object": {
-                                        "type": "string",
-                                        "description": "The object of the pick intent.",
-                                    }
-                                },
-                                "required": ["object"],
-                            },
-                            "processing": {
-                                "type": "object",
-                                "properties": {
-                                    "action": {
-                                        "type": "string",
-                                        "description": "The action of the action intent.",
-                                    }
-                                },
-                                "required": ["action"],
-                            },
-                            "place": {
-                                "type": "object",
-                                "properties": {
-                                    "location": {
-                                        "type": "string",
-                                        "description": "The location of the place intent.",
-                                    }
-                                },
-                                "required": ["location"],
-                            },
-                        },
-                        "required": ["control", "pick", "processing", "place"],
-                    }
+    "type": "function",
+    "function": {
+        "name": "parse_chatgpt_response",
+        "description": "Process response from chatgpt to digest information",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "description": "Model response to the user",
                 },
-                "required": ["program"],
+                "task": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "object",
+                            "properties": {
+                                "control": {
+                                    "type": "object",
+                                    "properties": {
+                                        "control_type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "repeat",
+                                                "loop",
+                                                "when",
+                                                "when_otherwise",
+                                                # "stop_when",
+                                                # "do_when",
+                                            ],
+                                            "description": "The control type of the control intent.",
+                                        },
+                                        "times": {
+                                            "type": "integer",
+                                            "description": "The times of repetition in the case of repeat control type.",
+                                        },
+                                        "otherwise": {
+                                            "type": "object",
+                                            "properties": {
+                                                "otherwise_pick": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "object": {
+                                                            "type": "string",
+                                                            "description": "The object of the pick intent.",
+                                                        }
+                                                    },
+                                                    "required": ["object"],
+                                                },
+                                                "otherwise_processing": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "action": {
+                                                            "type": "string",
+                                                            "description": "The action of the action intent.",
+                                                        }
+                                                    },
+                                                    "required": ["action"],
+                                                },
+                                                "otherwise_place": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "location": {
+                                                            "type": "string",
+                                                            "description": "The location of the place intent.",
+                                                        }
+                                                    },
+                                                    "required": ["location"],
+                                                },
+                                            },
+                                            "required": ["pick", "place"],
+                                        },
+                                        "event": {
+                                            "type": "object",
+                                            "properties": {
+                                                "event_type": {
+                                                    "type": "string",
+                                                    "enum": ["sensor", "find", "human"],
+                                                    # "enum": ["detect", "sensor", "find", "human"],
+                                                    "description": "The event type of the event intent.",
+                                                },
+                                                "find_object": {
+                                                    "type": "string",
+                                                    "description": "Object to find in the case of find event type.",
+                                                },
+                                            },
+                                            "required": ["event_type"],
+                                        },
+                                        "control_pick": {
+                                            "type": "object",
+                                            "properties": {
+                                                "object": {
+                                                    "type": "string",
+                                                    "description": "The object of the pick intent.",
+                                                }
+                                            },
+                                            "required": ["object"],
+                                        },
+                                        "control_processing": {
+                                            "type": "object",
+                                            "properties": {
+                                                "action": {
+                                                    "type": "string",
+                                                    "description": "The action of the action intent.",
+                                                }
+                                            },
+                                            "required": ["action"],
+                                        },
+                                        "control_place": {
+                                            "type": "object",
+                                            "properties": {
+                                                "location": {
+                                                    "type": "string",
+                                                    "description": "The location of the place intent.",
+                                                }
+                                            },
+                                            "required": ["location"],
+                                        },
+                                    },
+                                    "required": ["control_type"],
+                                },
+                                "pick": {
+                                    "type": "object",
+                                    "properties": {
+                                        "object": {
+                                            "type": "string",
+                                            "description": "The object of the pick intent.",
+                                        }
+                                    },
+                                    "required": ["object"],
+                                },
+                                "processing": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action": {
+                                            "type": "string",
+                                            "description": "The action of the action intent.",
+                                        }
+                                    },
+                                    "required": ["action"],
+                                },
+                                "place": {
+                                    "type": "object",
+                                    "properties": {
+                                        "location": {
+                                            "type": "string",
+                                            "description": "The location of the place intent.",
+                                        }
+                                    },
+                                    "required": ["location"],
+                                },
+                            },
+                            "required": ["control", "pick", "processing", "place"],
+                        }
+                    },
+                    "required": ["program"],
+                },
+                "finished": {
+                    "type": "boolean",
+                    "description": "The finished intent after the user has approved the resume",
+                },
             },
-            "finished": {
-                "type": "boolean",
-                "description": "The finished intent after the user has approved the resume",
-            },
+            "required": ["answer", "task", "finished"],
         },
-        "required": ["answer", "task", "finished"],
     },
 }
 
@@ -322,11 +330,18 @@ def new_message(request: HttpRequest) -> HttpResponse:
                     model=CHATGPT_MODEL,
                     messages=chat_log,
                     temperature=CHATGPT_TEMPERATURE,
-                    functions=[CHATGPT_FUNCTION],
-                    function_call={"name": CHATGPT_FUNCTION["name"]},
+                    tools=[CHATGPT_FUNCTION],
+                    tool_choice={
+                        "type": "function",
+                        "function": {
+                            "name": CHATGPT_FUNCTION["function"]["name"],
+                        },
+                    },
                 )
 
-                response_json = response.choices[0].message.function_call.arguments
+                response_json = (
+                    response.choices[0].message.tool_calls[0].function.arguments
+                )
 
                 try:
                     response_json = loads(response_json)
@@ -1318,6 +1333,315 @@ def search_existing_libraries(
                 return None, name, None
 
 
+from dataclasses import dataclass
+from typing import List, Union, Optional, Literal
+
+
+@dataclass
+class SensorSignalCondition:
+    type: Literal["sensor_signal"]
+    sensor: str
+
+
+@dataclass
+class FindObjectCondition:
+    type: Literal["find_object"]
+    objectId: int
+    objectName: str
+
+
+@dataclass
+class HumanFeedbackCondition:
+    type: Literal["human_feedback"]
+
+
+AbstractCondition = Union[
+    SensorSignalCondition, FindObjectCondition, HumanFeedbackCondition
+]
+
+
+@dataclass
+class AbstractPickStep:
+    type: Literal["pick"]
+    objectId: int
+    objectName: str
+
+
+@dataclass
+class AbstractPlaceStep:
+    type: Literal["place"]
+    locationId: int
+    locationName: str
+
+
+@dataclass
+class AbstractProcessingStep:
+    type: Literal["processing"]
+    actionId: int
+    actionName: str
+
+
+@dataclass
+class AbstractRepeatStep:
+    type: Literal["repeat"]
+    times: int
+    steps: List["AbstractStep"]
+
+
+@dataclass
+class AbstractWhenStep:
+    type: Literal["when"]
+    condition: Optional[AbstractCondition]
+    do: List["AbstractStep"]
+    otherwise: Optional[List["AbstractStep"]] = None
+
+
+AbstractStep = Union[
+    AbstractPickStep,
+    AbstractPlaceStep,
+    AbstractProcessingStep,
+    AbstractRepeatStep,
+    AbstractWhenStep,
+]
+
+CHATGPT_INSTRUCTIONS_MULTIMODAL = """
+# OBJECTIVE #
+You are an assistant designed to extract intents from natural language to modify the structure of a collaborative robot task. Users will describe the desired task in free-form text. You must interpret their request and convert it into a structured JSON program composed of sequential and conditional steps such as "pick", "place", "processing", "repeat", and "when".
+Sometimes you have to create the task from scratch, and sometimes you have to modify an existing task structure provided by the user.
+
+You must reply with a JSON response that follows this format:
+{
+  "answer": string,
+  "task": {
+    "program": AbstractStep[]
+  },
+}
+
+Where:
+- `answer` is a **mandatory string** that provides a natural language explanation or clarification to the user.
+- `program` is an array of steps (AbstractStep), each being one of the following object types:
+  - **Pick Step**:
+    ```json
+    {
+      "type": "pick",
+      "objectId": number,
+      "objectName": string
+    }
+    ```
+  - **Place Step**:
+    ```json
+    {
+      "type": "place",
+      "locationId": number,
+      "locationName": string
+    }
+    ```
+  - **Processing Step**:
+    ```json
+    {
+      "type": "processing",
+      "actionId": number,
+      "actionName": string
+    }
+    ```
+  - **Repeat Step**:
+    ```json
+    {
+      "type": "repeat",
+      "times": number,
+      "steps": [AbstractStep]
+    }
+    ```
+  - **When Step**:
+    ```json
+    {
+      "type": "when",
+      "condition": AbstractCondition | null,
+      "do": [AbstractStep],
+      "otherwise": [AbstractStep] | null
+    }
+    ```
+
+Conditions (AbstractCondition) are defined as:
+- `{"type": "sensor_signal", "sensor": string}`
+- `{"type": "find_object", "objectId": number, "objectName": string}`
+- `{"type": "human_feedback"}`
+
+# CONTEXT #
+- The user is not an expert in robotics or programming and is trying to define a task for a collaborative robot (cobot) using natural language.
+- Tasks are composed of **pick**, **place**, **processing**, and optionally **control logic** (`repeat`, `when`).
+- The cobot needs to understand:
+  - which object to pick (`objectId`, `objectName`)
+  - where to place it (`locationId`, `locationName`)
+  - what action to perform on the object (`actionId`, `actionName`)
+- You must guide the user step by step, asking questions if necessary.
+
+# DATABASE INFO #
+You have access to a predefined list of:
+- **Objects**: {{objects}}
+- **Locations**: {{locations}}
+- **Actions**: {{actions}}
+
+Always use the exact names and IDs from this list when referencing objects, locations, or actions in the task output. If a user refers to something outside of this list, ask for clarification or suggest a valid item.
+
+Actual task: {{task}}
+"""
+
+CHATGPT_FUNCTION_MULTIMODAL = {
+    "type": "function",
+    "function": {
+        "name": "extract_robot_program",
+        "description": "Extracts and structures a collaborative robot program from natural language",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "description": "A natural language explanation or confirmation shown to the user",
+                },
+                "task": {
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "array",
+                            "description": "Sequence of robot steps",
+                            "items": {
+                                "type": "object",
+                                "oneOf": [
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "pick"},
+                                            "objectId": {"type": "integer"},
+                                            "objectName": {"type": "string"},
+                                        },
+                                        "required": ["type", "objectId", "objectName"],
+                                        "additionalProperties": False,
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "place"},
+                                            "locationId": {"type": "integer"},
+                                            "locationName": {"type": "string"},
+                                        },
+                                        "required": [
+                                            "type",
+                                            "locationId",
+                                            "locationName",
+                                        ],
+                                        "additionalProperties": False,
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "processing"},
+                                            "actionId": {"type": "integer"},
+                                            "actionName": {"type": "string"},
+                                        },
+                                        "required": ["type", "actionId", "actionName"],
+                                        "additionalProperties": False,
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "repeat"},
+                                            "times": {"type": "integer"},
+                                            "steps": {
+                                                "type": "array",
+                                                "items": {
+                                                    "$ref": "#/properties/task/properties/program/items"
+                                                },
+                                            },
+                                        },
+                                        "required": ["type", "times", "steps"],
+                                        "additionalProperties": False,
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "when"},
+                                            "condition": {
+                                                "oneOf": [
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "type": {
+                                                                "const": "sensor_signal"
+                                                            },
+                                                            "sensor": {
+                                                                "type": "string"
+                                                            },
+                                                        },
+                                                        "required": ["type", "sensor"],
+                                                        "additionalProperties": False,
+                                                    },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "type": {
+                                                                "const": "find_object"
+                                                            },
+                                                            "objectId": {
+                                                                "type": "integer"
+                                                            },
+                                                            "objectName": {
+                                                                "type": "string"
+                                                            },
+                                                        },
+                                                        "required": [
+                                                            "type",
+                                                            "objectId",
+                                                            "objectName",
+                                                        ],
+                                                        "additionalProperties": False,
+                                                    },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "type": {
+                                                                "const": "human_feedback"
+                                                            }
+                                                        },
+                                                        "required": ["type"],
+                                                        "additionalProperties": False,
+                                                    },
+                                                    {"type": "null"},
+                                                ]
+                                            },
+                                            "do": {
+                                                "type": "array",
+                                                "items": {
+                                                    "$ref": "#/properties/task/properties/program/items"
+                                                },
+                                            },
+                                            "otherwise": {
+                                                "type": "array",
+                                                "items": {
+                                                    "$ref": "#/properties/task/properties/program/items"
+                                                },
+                                                "nullable": True,
+                                            },
+                                        },
+                                        "required": ["type", "condition", "do"],
+                                        "additionalProperties": False,
+                                    },
+                                ],
+                            },
+                        }
+                    },
+                    "required": ["program"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["answer", "task"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+}
+
+
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
@@ -1325,51 +1649,28 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data = loads(request.body)
                 message = data.get("message")
                 chat_log = data.get("chatLog")
-                fine_tuned_model = data.get("fineTunedModel")
-                fine_tuning_job_id = data.get("fineTuningJobId")
+                task_structure = data.get("taskStructure")
+                data_locations = data.get("dataLocations")
+                data_objects = data.get("dataObjects")
+                data_actions = data.get("dataActions")
 
                 data_result = {}
 
+                prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
+                prompt_template.replace(
+                    "{{objects}}", json.dumps(data_objects)
+                ).replace("{{locations}}", json.dumps(data_locations)).replace(
+                    "{{actions}}", json.dumps(data_actions)
+                ).replace(
+                    "{{task}}", json.dumps(task_structure)
+                )
                 # Init the conversation
                 if chat_log is None or len(chat_log) == 0:
-                    """
-                    # Check fine-tuned model
-                    try:
-                        job = openai.FineTuningJob.retrieve(fine_tuning_job_id)
-                        fine_tuned_model = job["fine_tuned_model"]
-                    except Exception:
-                        job = None
-
-                    if job is None:
-                        file_path = path.join(
-                            path.dirname(path.dirname(path.abspath(__file__))),
-                            "functions",
-                            "fine_tuning_tasks.jsonl",
-                        )
-                        file = openai.File.create(
-                            file=open(file_path, "rb"),
-                            purpose="fine-tune",
-                        )
-
-                        job = openai.FineTuningJob.create(
-                            training_file=file["id"],
-                            model="gpt-3.5-turbo",
-                            suffix="blocklyGPT-tasks",
-                        )
-
-                        fine_tuning_job_id = job["id"]
-                        fine_tuned_model = job["fine_tuned_model"]
-                        print("NEW MODEL CREATED")
-                        print("Model ID: " + fine_tuned_model)
-                        print("Job ID: " + fine_tuning_job_id)
-                    """
                     chat_log = [
                         {
                             "role": "system",
-                            "content": CHATGPT_INSTRUCTIONS,
+                            "content": prompt_template,
                         },
-                        {"role": "system", "content": CHATGPT_USE_FUNCTIONS},
-                        {"role": "system", "content": CHATGPT_ALWAYS_REPLY},
                     ]
 
                 chat_log.append({"role": "user", "content": message})
@@ -1377,11 +1678,18 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     model=CHATGPT_MODEL,
                     messages=chat_log,
                     temperature=CHATGPT_TEMPERATURE,
-                    functions=[CHATGPT_FUNCTION],
-                    function_call={"name": CHATGPT_FUNCTION["name"]},
+                    tools=[CHATGPT_FUNCTION_MULTIMODAL],
+                    tool_choice={
+                        "type": "function",
+                        "function": {
+                            "name": CHATGPT_FUNCTION_MULTIMODAL["function"]["name"],
+                        },
+                    },
                 )
 
-                response_json = response.choices[0].message.function_call.arguments
+                response_json = (
+                    response.choices[0].message.tool_calls[0].function.arguments
+                )
 
                 try:
                     response_json = loads(response_json)
@@ -1390,47 +1698,11 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     if answer != "":
                         chat_log.append({"role": "assistant", "content": answer})
 
-                    # Response has the "answer" field blank
-                    i = 0
-                    while not answer:
-                        if (
-                            i > 2
-                        ):  # I can't use ChatGPT API more than 3 times in a minute
-                            # print("FORCE EXIT LOOP NO answer")
-                            forced_answer = "Ok! Let's go ahead."
-                            chat_log.append(
-                                {"role": "assistant", "content": forced_answer}
-                            )
-                            break
-
-                        # print("LOOP NO answer")
-                        # print(response_json)
-                        chat_log.append(
-                            {"role": "system", "content": CHATGPT_ALWAYS_REPLY}
-                        )
-                        response = client.chat.completions.create(
-                            model=CHATGPT_MODEL,
-                            messages=chat_log,
-                            temperature=CHATGPT_TEMPERATURE,
-                            functions=[CHATGPT_FUNCTION],
-                            function_call={"name": CHATGPT_FUNCTION["name"]},
-                        )
-
-                        response_json = response.choices[
-                            0
-                        ].message.function_call.arguments
-
-                        response_json = loads(response_json)
-                        answer = response_json["answer"]
-                        i += 1
-
                 except Exception:
                     data_result["answer"] = CHATGPT_ERROR
 
                 data_result["chatLog"] = chat_log
                 data_result["response"] = response_json
-                data_result["fineTunedModel"] = fine_tuned_model
-                data_result["fineTuningJobId"] = fine_tuning_job_id
                 return success_response(data_result)
             else:
                 return invalid_request_method()
