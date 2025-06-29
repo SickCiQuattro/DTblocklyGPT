@@ -22,25 +22,28 @@ const Multimodal = () => {
     { name: string; code: string },
     Error
   >(
-    newTaskParam !== 'true'
+    newTaskParam !== 'true' && id
       ? {
           url: endpoints.graphic.getGraphicTask,
           body: { id },
         }
       : null,
   )
+
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
   >({
     url: endpoints.graphic.objectsGraphic,
   })
+
   const { data: dataActions, isLoading: isLoadingActions } = useSWR<
     ActionListType[],
     Error
   >({
     url: endpoints.graphic.actionsGraphic,
   })
+
   const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
     LocationListType[],
     Error
@@ -49,7 +52,7 @@ const Multimodal = () => {
   })
 
   const title = dataTask
-    ? `Multimodal interface to edit the task: "${dataTask.name}"`
+    ? `Multimodal interface for the task: "${dataTask.name}"`
     : ''
 
   const backFunction = () => {

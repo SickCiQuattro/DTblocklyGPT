@@ -56,6 +56,7 @@ export const endpoints = {
   },
   chat: {
     newMessage: `${CHAT_API}/newMessage/`,
+    newMessageMultimodal: `${CHAT_API}/newMessageMultimodal/`,
     saveChatTask: `${CHAT_API}/saveChatTask/`,
   },
   task: {

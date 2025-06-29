@@ -7,6 +7,7 @@ import { RightPanel } from './rightPanel'
 import { CustomDragDrop } from './CustomDragDrop'
 import { ChatWrapper } from './chatWrapper'
 import { AbstractStep } from 'pages/tasks/types'
+import * as Blockly from 'blockly/core'
 import {
   abstractToBlockly,
   blocklyToAbstract,
@@ -109,36 +110,85 @@ export const SplittedLayout = ({
           title="Cancel"
           onClick={() => {
             setEditingMode(false)
+            setTaskStructure(abstractTask)
           }}
           disabled={!editingMode}
-        />
-        <RedoOutlined
-          style={{
-            fontSize: '2em',
-            marginRight: '1rem',
-            color: themePalette.palette.primary.main,
-          }}
-          title="Redo"
         />
         <UndoOutlined
           style={{
             fontSize: '2em',
-            marginRight: '2rem',
-            color: themePalette.palette.primary.main,
+            marginRight: '1rem',
+            color:
+              editingMode &&
+              Blockly.getMainWorkspace().getUndoStack().length > 0
+                ? themePalette.palette.primary.main
+                : themePalette.palette.grey[300],
+            cursor:
+              editingMode &&
+              Blockly.getMainWorkspace().getUndoStack().length > 0
+                ? 'pointer'
+                : 'not-allowed',
           }}
           title="Undo"
+          disabled={
+            !editingMode ||
+            Blockly.getMainWorkspace().getUndoStack().length === 0
+          }
+          onClick={() => {
+            Blockly.getMainWorkspace().undo(false)
+            const blocklyTaskStructure = getBlocklyStructure()
+            const abstractTask = blocklyToAbstract(
+              blocklyTaskStructure as CustomBlock,
+            )
+            if (!abstractTask) return
+            setTaskStructure(abstractTask)
+          }}
+        />
+        <RedoOutlined
+          style={{
+            fontSize: '2em',
+            marginRight: '2rem',
+            color:
+              editingMode &&
+              Blockly.getMainWorkspace().getRedoStack().length > 0
+                ? themePalette.palette.primary.main
+                : themePalette.palette.grey[300],
+            cursor:
+              editingMode &&
+              Blockly.getMainWorkspace().getRedoStack().length > 0
+                ? 'pointer'
+                : 'not-allowed',
+          }}
+          title="Redo"
+          disabled={
+            !editingMode ||
+            Blockly.getMainWorkspace().getRedoStack().length === 0
+          }
+          onClick={() => {
+            Blockly.getMainWorkspace().undo(true)
+            const blocklyTaskStructure = getBlocklyStructure()
+            const abstractTask = blocklyToAbstract(
+              blocklyTaskStructure as CustomBlock,
+            )
+            if (!abstractTask) return
+            setTaskStructure(abstractTask)
+          }}
         />
         <SoundOutlined
           style={{
             fontSize: '2em',
             marginRight: '1rem',
-            color: speaker
-              ? themePalette.palette.success.main
-              : themePalette.palette.error.main,
+            color: !editingMode
+              ? themePalette.palette.grey[300]
+              : speaker
+                ? themePalette.palette.success.main
+                : themePalette.palette.error.main,
+            cursor: editingMode ? 'pointer' : 'not-allowed',
           }}
           onClick={() => {
             setSpeaker(!speaker)
           }}
+          disabled={!editingMode}
           title="Toggle Speaker"
         />
       </div>
@@ -147,19 +197,24 @@ export const SplittedLayout = ({
           dataLocations={dataLocations}
           dataObjects={dataObjects}
           dataActions={dataActions}
+          editingMode={editingMode}
           dataTask={abstractToBlockly(
             abstractTask,
             dataObjects,
             dataLocations,
             dataActions,
           )}
+          setTaskStructure={setTaskStructure}
         />
+        {/* {editingMode && ( */}
         <ChatWrapper
           speaker={speaker}
           taskStructure={taskStructure}
           setTaskStructure={setTaskStructure}
+          editingMode={editingMode}
         />
-        <RightPanel backFunction={backFunction} dataTask={abstractTask} />
+        {/* )} */}
+        <RightPanel dataTask={taskStructure} />
       </div>
     </div>
   )

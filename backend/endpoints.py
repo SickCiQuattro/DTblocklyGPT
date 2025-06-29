@@ -34,6 +34,7 @@ from .functions.robot import (
 
 from .functions.chat import (
     new_message,
+    new_message_multimodal,
     save_chat_task,
 )
 
@@ -95,6 +96,11 @@ urlpatterns = [
     path(HOME + "groups/", get_group_list, name="get_group_list"),
     # CHAT
     path(CHAT + "newMessage/", new_message, name="new_message"),
+    path(
+        CHAT + "newMessageMultimodal/",
+        new_message_multimodal,
+        name="new_message_multimodal",
+    ),
     path(
         CHAT + "saveChatTask/",
         save_chat_task,

@@ -7,12 +7,15 @@ import BlocklyComponent, { Block, Field, Category } from './Blockly'
 import { blocksColours } from './CustomBlocks'
 import './CustomCategory'
 import './CustomDragDropStyle.css'
+import { AbstractStep } from 'pages/tasks/types'
 
 interface CustomDragDropProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataTask: State
+  setTaskStructure: (task: AbstractStep[]) => void
+  editingMode: boolean
 }
 
 export const CustomDragDrop = ({
@@ -20,9 +23,15 @@ export const CustomDragDrop = ({
   dataObjects,
   dataActions,
   dataTask,
+  setTaskStructure,
+  editingMode,
 }: CustomDragDropProps) => {
   return (
-    <BlocklyComponent dataTask={dataTask}>
+    <BlocklyComponent
+      dataTask={dataTask}
+      editingMode={editingMode}
+      setTaskStructure={setTaskStructure}
+    >
       <Category name="Logic" colour={blocksColours.logics}>
         <Block type="repeat_block" />
         <Block type="loop_block" />

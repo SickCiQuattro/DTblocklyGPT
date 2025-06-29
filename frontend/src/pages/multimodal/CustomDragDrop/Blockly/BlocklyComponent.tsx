@@ -2,12 +2,14 @@ import React, { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
-import { useAppSelector } from 'store/reducers'
 import { State } from 'blockly/core/serialization/blocks'
 import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { toggleEditMode } from 'store/reducers/task'
+import { AbstractStep } from 'pages/tasks/types'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
+// @ts-expect-error: Blockly.setLocale may not be typed in the current Blockly version
 Blockly.setLocale(locale)
 
 export const getBlocklyStructure = (): State | null => {
@@ -44,13 +46,16 @@ const disableContextMenuItems = () => {
 interface BlocklyComponentProps {
   children: React.JSX.Element[]
   dataTask: State
+  editingMode: boolean
+  setTaskStructure: (task: AbstractStep[]) => void
 }
 
 export const BlocklyComponent = ({
   children,
   dataTask,
+  editingMode,
+  setTaskStructure,
 }: BlocklyComponentProps) => {
-  const { editMode } = useAppSelector((state) => state.task)
   const blocklyDiv = useRef<HTMLDivElement | null>(null)
   const toolbox = useRef<HTMLDivElement | null>(null)
   const primaryWorkspace = useRef<Blockly.WorkspaceSvg | null>(null)
@@ -66,7 +71,7 @@ export const BlocklyComponent = ({
     const toolboxCurrent = toolbox.current as Element
     primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
       toolbox: toolboxCurrent,
-      readOnly: !editMode,
+      readOnly: !editingMode,
       trashcan: true,
       media: '/blocklyMedia',
       move: { scrollbars: false, drag: true, wheel: true },
@@ -78,6 +83,17 @@ export const BlocklyComponent = ({
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
 
+      workspace.addChangeListener((event) => {
+        if (event.type !== Blockly.Events.UI) {
+          const blocklyTaskStructure = getBlocklyStructure()
+          const abstractTask = blocklyToAbstract(
+            blocklyTaskStructure as CustomBlock,
+          )
+          if (!abstractTask) return
+          setTaskStructure(abstractTask)
+        }
+      })
+
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = dataTask?.x || 10
@@ -86,7 +102,7 @@ export const BlocklyComponent = ({
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
     }
-  }, [editMode])
+  }, [editingMode])
 
   useEffect(() => {
     if (newTaskParam) {

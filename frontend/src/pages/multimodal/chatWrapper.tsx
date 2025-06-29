@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   IconButton,
   InputAdornment,
@@ -20,24 +20,18 @@ import 'react-chat-elements/dist/main.css'
 import './customStyle.css'
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
-import { activeItem, openDrawer } from 'store/reducers/menu'
+import { openDrawer } from 'store/reducers/menu'
 import { resetTask, updateTask } from 'store/reducers/task'
 import {
   CHATGPT_ERROR,
   ChatLogType,
   ChatResponse,
-  FINE_TUNED_MODEL,
-  FINE_TUNING_JOB_ID,
   INITIAL_MESSAGE_1,
-  LastMessage,
-  MergeTaskStructure,
   MessageType,
   MessageTypeEnum,
-  TaskChatStructure,
   TypingSystemMessage,
   UserChatEnum,
 } from './utils'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 import { AbstractStep } from 'pages/tasks/types'
 
 const { username } = getFromLocalStorage('user')
@@ -50,20 +44,18 @@ interface ChatWrapperProps {
   speaker: boolean
   taskStructure: AbstractStep[]
   setTaskStructure: (taskStructure: AbstractStep[]) => void
+  editingMode: boolean
 }
 
 export const ChatWrapper = ({
   speaker,
   taskStructure,
   setTaskStructure,
+  editingMode,
 }: ChatWrapperProps) => {
   const { id } = useParams()
-  const navigate = useNavigate()
   const dispatch = useDispatch()
   const theme = useTheme()
-  const [fineTunedModel, setFineTunedModel] = React.useState(FINE_TUNED_MODEL)
-  const [fineTuningJobId, setFineTuningJobId] =
-    React.useState(FINE_TUNING_JOB_ID)
   const [listMessages, setListMessages] = React.useState<MessageType[]>([
     INITIAL_MESSAGE_1,
   ])
@@ -71,7 +63,6 @@ export const ChatWrapper = ({
   const [message, setMessage] = React.useState('')
   const [isProcessing, setIsProcessing] = React.useState(false)
   const [isRecording, setIsRecording] = React.useState(false)
-  const [isFinished, setIsFinished] = React.useState(false)
   const {
     transcript,
     resetTranscript,
@@ -107,23 +98,16 @@ export const ChatWrapper = ({
     setMessage('')
 
     fetchApi({
-      url: endpoints.chat.newMessage,
+      url: endpoints.chat.newMessageMultimodal,
       method: MethodHTTP.POST,
       body: {
         id: Number(id),
         message,
         chatLog,
-        fineTunedModel,
-        fineTuningJobId,
       },
     })
       .then((res: ChatResponse) => {
         if (res) {
-          if (res.fineTunedModel !== fineTunedModel)
-            setFineTunedModel(res.fineTunedModel)
-          if (res.fineTuningJobId !== fineTuningJobId)
-            setFineTuningJobId(res.fineTuningJobId)
-
           if (speaker) {
             const utterance = new SpeechSynthesisUtterance(res.response.answer)
             utterance.lang = 'en-GB'
@@ -141,49 +125,8 @@ export const ChatWrapper = ({
           }
           const newMessages: MessageType[] = [newMessage]
 
-          if (!res.response?.finished) {
-            setListMessages([...messagesWithUserRequest, ...newMessages])
-            setChatLog(res.chatLog)
-          }
-
-          const newTaskStructure: TaskChatStructure = MergeTaskStructure(
-            taskStructure,
-            res.response.task,
-          )
-          setTaskStructure(newTaskStructure)
-          dispatch(updateTask(newTaskStructure))
-
-          if (res.response?.finished) {
-            setIsFinished(true)
-            fetchApi({
-              url: endpoints.chat.saveChatTask,
-              method: MethodHTTP.POST,
-              body: {
-                id: Number(id),
-                taskStructure: newTaskStructure,
-              },
-            }).then((res) => {
-              const { taskCode } = res
-              const abstractTaskCode = blocklyToAbstract(
-                taskCode as CustomBlock,
-              )
-
-              fetchApi({
-                url: endpoints.graphic.saveGraphicTask,
-                method: MethodHTTP.PUT,
-                body: {
-                  id: Number(id),
-                  taskStructure: abstractTaskCode,
-                },
-              }).then(() => {
-                scrollToBottom()
-                setTimeout(() => {
-                  navigate(`/graphic/${id}`)
-                  dispatch(activeItem('definegraphic'))
-                }, 5000)
-              })
-            })
-          }
+          setTaskStructure(taskStructure)
+          dispatch(updateTask(taskStructure))
         }
       })
       .finally(() => {
@@ -271,15 +214,18 @@ export const ChatWrapper = ({
           />
         ))}
         {isProcessing && <TypingSystemMessage />}
-        {isFinished && (
-          <LastMessage id={listMessages[listMessages.length - 1].id + 1} />
-        )}
       </div>
       <OutlinedInput
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder={isRecording ? 'Listening...' : 'Type a message...'}
-        disabled={isRecording}
+        placeholder={
+          isRecording
+            ? 'Listening...'
+            : !editingMode
+              ? 'Enable editing mode'
+              : 'Type a message...'
+        }
+        disabled={isRecording || !editingMode}
         autoFocus
         fullWidth
         style={{
@@ -311,7 +257,8 @@ export const ChatWrapper = ({
                   disabled={
                     isProcessing ||
                     !browserSupportsSpeechRecognition ||
-                    !isMicrophoneAvailable
+                    !isMicrophoneAvailable ||
+                    !editingMode
                   }
                 >
                   <AudioOutlined />

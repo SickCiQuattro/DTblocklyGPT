@@ -1,54 +1,16 @@
-import React from 'react'
 import { Collapse, Divider } from 'antd'
-import { Button, useTheme } from '@mui/material'
-import { useDispatch, useSelector } from 'react-redux'
-import { MethodHTTP, fetchApi } from 'services/api'
-import { endpoints } from 'services/endpoints'
+import { useTheme } from '@mui/material'
 import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
-import { useParams } from 'react-router-dom'
-import {
-  CopyOutlined,
-  EditOutlined,
-  QuestionCircleOutlined,
-  SaveOutlined,
-} from '@ant-design/icons'
-import { toggleEditMode } from 'store/reducers/task'
-
-import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
-import { RootState } from 'store/reducers'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { AbstractStep } from 'pages/tasks/types'
 
 interface RightPanelProps {
-  backFunction: () => void
   dataTask: AbstractStep[]
 }
 
-export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
-  const { editMode } = useSelector((state: RootState) => state.task)
-  const { id } = useParams()
+export const RightPanel = ({ dataTask }: RightPanelProps) => {
   const theme = useTheme()
-  const dispatch = useDispatch()
-
-  const handleSave = () => {
-    const blocklyTaskStructure = getBlocklyStructure()
-    const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
-
-    fetchApi({
-      url: endpoints.graphic.saveGraphicTask,
-      method: MethodHTTP.PUT,
-      body: { taskStructure: abstractTask, id },
-    }).then(() => {
-      toast.success(MessageText.success)
-      dispatch(toggleEditMode())
-      backFunction()
-    })
-  }
-
-  const handleCancel = () => {
-    dispatch(toggleEditMode())
-  }
 
   return (
     <div
@@ -59,51 +21,23 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
         overflow: 'auto',
       }}
     >
-      {!editMode && (
-        <Button
-          fullWidth
-          variant="contained"
-          startIcon={<EditOutlined />}
-          onClick={() => dispatch(toggleEditMode())}
-          color="warning"
-        >
-          Edit
-        </Button>
-      )}
-      {editMode && (
-        <>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<SaveOutlined />}
-            onClick={handleSave}
-          >
-            Save
-          </Button>
-          <Button
-            fullWidth
-            onClick={handleCancel}
-            style={{ marginTop: '1rem' }}
-          >
-            Cancel
-          </Button>
-        </>
-      )}
-      <Divider />
       <h2>
         <QuestionCircleOutlined /> Instructions & FAQ
       </h2>
-      <p>In this graphic interface you can edit your task.</p>
+      <p>In this multimodal interface you can interact with your task.</p>
       <ul>
+        <li>
+          First of all, enable the <i>Editing mode</i> in the top left corner to
+          start to interact
+        </li>
         <li>
           You can drag the blocks from the panel that appears by clicking on
           each category on the right. Then drag these into the workspace.
         </li>
         <li>
-          The allowed interlocks will guide you in creating a formally correct
-          task.
+          You can interact with your task also through the chat interface
+          expressing your requests in natural language.
         </li>
-        <li>Via the right-click menu you can undo/redo your changes.</li>
         <li>
           All changes will be lost if you exit without clicking the <i>Save</i>{' '}
           button.

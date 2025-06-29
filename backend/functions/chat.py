@@ -1316,3 +1316,126 @@ def search_existing_libraries(
                 )
             else:
                 return None, name, None
+
+
+def new_message_multimodal(request: HttpRequest) -> HttpResponse:
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.POST.value:
+                data = loads(request.body)
+                message = data.get("message")
+                chat_log = data.get("chatLog")
+                fine_tuned_model = data.get("fineTunedModel")
+                fine_tuning_job_id = data.get("fineTuningJobId")
+
+                data_result = {}
+
+                # Init the conversation
+                if chat_log is None or len(chat_log) == 0:
+                    """
+                    # Check fine-tuned model
+                    try:
+                        job = openai.FineTuningJob.retrieve(fine_tuning_job_id)
+                        fine_tuned_model = job["fine_tuned_model"]
+                    except Exception:
+                        job = None
+
+                    if job is None:
+                        file_path = path.join(
+                            path.dirname(path.dirname(path.abspath(__file__))),
+                            "functions",
+                            "fine_tuning_tasks.jsonl",
+                        )
+                        file = openai.File.create(
+                            file=open(file_path, "rb"),
+                            purpose="fine-tune",
+                        )
+
+                        job = openai.FineTuningJob.create(
+                            training_file=file["id"],
+                            model="gpt-3.5-turbo",
+                            suffix="blocklyGPT-tasks",
+                        )
+
+                        fine_tuning_job_id = job["id"]
+                        fine_tuned_model = job["fine_tuned_model"]
+                        print("NEW MODEL CREATED")
+                        print("Model ID: " + fine_tuned_model)
+                        print("Job ID: " + fine_tuning_job_id)
+                    """
+                    chat_log = [
+                        {
+                            "role": "system",
+                            "content": CHATGPT_INSTRUCTIONS,
+                        },
+                        {"role": "system", "content": CHATGPT_USE_FUNCTIONS},
+                        {"role": "system", "content": CHATGPT_ALWAYS_REPLY},
+                    ]
+
+                chat_log.append({"role": "user", "content": message})
+                response = client.chat.completions.create(
+                    model=CHATGPT_MODEL,
+                    messages=chat_log,
+                    temperature=CHATGPT_TEMPERATURE,
+                    functions=[CHATGPT_FUNCTION],
+                    function_call={"name": CHATGPT_FUNCTION["name"]},
+                )
+
+                response_json = response.choices[0].message.function_call.arguments
+
+                try:
+                    response_json = loads(response_json)
+                    answer = response_json["answer"]
+
+                    if answer != "":
+                        chat_log.append({"role": "assistant", "content": answer})
+
+                    # Response has the "answer" field blank
+                    i = 0
+                    while not answer:
+                        if (
+                            i > 2
+                        ):  # I can't use ChatGPT API more than 3 times in a minute
+                            # print("FORCE EXIT LOOP NO answer")
+                            forced_answer = "Ok! Let's go ahead."
+                            chat_log.append(
+                                {"role": "assistant", "content": forced_answer}
+                            )
+                            break
+
+                        # print("LOOP NO answer")
+                        # print(response_json)
+                        chat_log.append(
+                            {"role": "system", "content": CHATGPT_ALWAYS_REPLY}
+                        )
+                        response = client.chat.completions.create(
+                            model=CHATGPT_MODEL,
+                            messages=chat_log,
+                            temperature=CHATGPT_TEMPERATURE,
+                            functions=[CHATGPT_FUNCTION],
+                            function_call={"name": CHATGPT_FUNCTION["name"]},
+                        )
+
+                        response_json = response.choices[
+                            0
+                        ].message.function_call.arguments
+
+                        response_json = loads(response_json)
+                        answer = response_json["answer"]
+                        i += 1
+
+                except Exception:
+                    data_result["answer"] = CHATGPT_ERROR
+
+                data_result["chatLog"] = chat_log
+                data_result["response"] = response_json
+                data_result["fineTunedModel"] = fine_tuned_model
+                data_result["fineTuningJobId"] = fine_tuning_job_id
+                return success_response(data_result)
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        print(e)
+        return error_response(CHATGPT_ERROR)
