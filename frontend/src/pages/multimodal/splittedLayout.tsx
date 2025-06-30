@@ -209,9 +209,9 @@ export const SplittedLayout = ({
           dataActions={dataActions}
           editingMode={editingMode}
           dataTask={
-            abstractTask
+            taskStructure
               ? abstractToBlockly(
-                  abstractTask,
+                  taskStructure,
                   dataObjects,
                   dataLocations,
                   dataActions,
@@ -220,17 +220,17 @@ export const SplittedLayout = ({
           }
           setTaskStructure={setTaskStructure}
         />
-        {/* {editingMode && ( */}
-        <ChatWrapper
-          speaker={speaker}
-          taskStructure={taskStructure}
-          setTaskStructure={setTaskStructure}
-          editingMode={editingMode}
-          dataLocations={dataLocations}
-          dataObjects={dataObjects}
-          dataActions={dataActions}
-        />
-        {/* )} */}
+        {editingMode && (
+          <ChatWrapper
+            speaker={speaker}
+            taskStructure={taskStructure}
+            setTaskStructure={setTaskStructure}
+            editingMode={editingMode}
+            dataLocations={dataLocations}
+            dataObjects={dataObjects}
+            dataActions={dataActions}
+          />
+        )}
         <RightPanel dataTask={taskStructure} />
       </div>
     </div>

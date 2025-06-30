@@ -1406,85 +1406,84 @@ AbstractStep = Union[
 
 CHATGPT_INSTRUCTIONS_MULTIMODAL = """
 # OBJECTIVE #
-You are an assistant designed to extract intents from natural language to modify the structure of a collaborative robot task. Users will describe the desired task in free-form text. You must interpret their request and convert it into a structured JSON program composed of sequential and conditional steps such as "pick", "place", "processing", "repeat", and "when".
-Sometimes you have to create the task from scratch, and sometimes you have to modify an existing task structure provided by the user.
+You are an assistant designed to extract user intents from natural language and convert them into or edit a collaborative robot task structured as a JSON program.
+The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task from scratch or modify an existing one. The current task JSON is provided below.
 
 You must reply with a JSON response that follows this format:
-{
-  "answer": string,
-  "task": {
-    "program": AbstractStep[]
-  },
-}
+{{
+  "answer": string,       // Natural language explanation or clarification to the user
+  "task": AbstractStep[]  // The updated or created task program
+}}
 
-Where:
-- `answer` is a **mandatory string** that provides a natural language explanation or clarification to the user.
-- `program` is an array of steps (AbstractStep), each being one of the following object types:
-  - **Pick Step**:
-    ```json
-    {
+Where AbstractStep is one of:
+
+  - Pick Step:
+    {{
       "type": "pick",
       "objectId": number,
       "objectName": string
-    }
-    ```
-  - **Place Step**:
-    ```json
-    {
+    }}
+
+  - Place Step:
+    {{
       "type": "place",
       "locationId": number,
       "locationName": string
-    }
-    ```
-  - **Processing Step**:
-    ```json
-    {
+    }}
+
+  - Processing Step:
+    {{
       "type": "processing",
       "actionId": number,
       "actionName": string
-    }
-    ```
-  - **Repeat Step**:
-    ```json
-    {
+    }}
+
+  - Repeat Step:
+    {{
       "type": "repeat",
       "times": number,
-      "steps": [AbstractStep]
-    }
-    ```
-  - **When Step**:
-    ```json
-    {
+      "steps": AbstractStep[]
+    }}
+
+  - When Step:
+    {{
       "type": "when",
       "condition": AbstractCondition | null,
-      "do": [AbstractStep],
-      "otherwise": [AbstractStep] | null
-    }
-    ```
+      "do": AbstractStep[],
+      "otherwise": AbstractStep[] | null
+    }}
 
-Conditions (AbstractCondition) are defined as:
-- `{"type": "sensor_signal", "sensor": string}`
-- `{"type": "find_object", "objectId": number, "objectName": string}`
-- `{"type": "human_feedback"}`
+Conditions (AbstractCondition) can be one of:
+- {{"type": "sensor_signal", "sensor": string}}
+- {{"type": "find_object", "objectId": number, "objectName": string}}
+- {{"type": "human_feedback"}}
 
 # CONTEXT #
-- The user is not an expert in robotics or programming and is trying to define a task for a collaborative robot (cobot) using natural language.
-- Tasks are composed of **pick**, **place**, **processing**, and optionally **control logic** (`repeat`, `when`).
-- The cobot needs to understand:
-  - which object to pick (`objectId`, `objectName`)
-  - where to place it (`locationId`, `locationName`)
-  - what action to perform on the object (`actionId`, `actionName`)
-- You must guide the user step by step, asking questions if necessary.
+- The user is not an expert in robotics or programming.
+- The user defines tasks via natural language.
+- You must interpret their requests accurately using only the provided database.
+- Always use the exact "objectId"/"objectName", "locationId"/"locationName", and "actionId"/"actionName" from the database.
+- If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification, and do not modify the task.
 
-# DATABASE INFO #
-You have access to a predefined list of:
-- **Objects**: {{objects}}
-- **Locations**: {{locations}}
-- **Actions**: {{actions}}
+# DATABASE #
+You have access to the following lists (always use exact IDs and names):
+- Objects: {objects}
+- Locations: {locations}
+- Actions: {actions}
 
-Always use the exact names and IDs from this list when referencing objects, locations, or actions in the task output. If a user refers to something outside of this list, ask for clarification or suggest a valid item.
+# CURRENT TASK #
+{task}
 
-Actual task: {{task}}
+# EXAMPLES #
+User says: "Pick the widget and place it in the bin A."
+Response:
+{{
+  "answer": "I created a task to pick the object 'widget' and place it at 'bin A'.",
+  "task": [
+      {{"type": "pick", "objectId": 3, "objectName": "widget"}},
+      {{"type": "place", "locationId": 2, "locationName": "bin A"}}
+    ]
+}}
 """
 
 CHATGPT_FUNCTION_MULTIMODAL = {
@@ -1497,23 +1496,85 @@ CHATGPT_FUNCTION_MULTIMODAL = {
             "properties": {
                 "answer": {
                     "type": "string",
-                    "description": "A natural language explanation or confirmation shown to the user",
+                    "description": "Natural language explanation shown to the user",
                 },
                 "task": {
-                    "type": "object",
-                    "properties": {
-                        "program": {
-                            "type": "array",
-                            "description": "Sequence of robot steps",
-                            "items": {
-                                "type": "object",
+                    "type": "array",
+                    "description": "Sequence of robot steps",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "pick",
+                                    "place",
+                                    "processing",
+                                    "repeat",
+                                    "when",
+                                ],
+                            },
+                            "objectId": {
+                                "type": "number",
+                                "description": "ID of the object to pick",
+                            },
+                            "objectName": {
+                                "type": "string",
+                                "description": "Name of the object to pick",
+                            },
+                            "locationId": {
+                                "type": "number",
+                                "description": "ID of the location to place the object",
+                            },
+                            "locationName": {
+                                "type": "string",
+                                "description": "Name of the location to place the object",
+                            },
+                            "actionId": {
+                                "type": "number",
+                                "description": "ID of the action to perform",
+                            },
+                            "actionName": {
+                                "type": "string",
+                                "description": "Name of the action to perform",
+                            },
+                            "times": {
+                                "type": "number",
+                                "description": "Number of times to repeat the steps",
+                            },
+                            "steps": {
+                                "type": "array",
+                                "description": "Steps to repeat",
+                                "items": {
+                                    "$ref": "#/function/parameters/properties/task/items",
+                                },
+                            },
+                            "condition": {
                                 "oneOf": [
                                     {
                                         "type": "object",
                                         "properties": {
-                                            "type": {"const": "pick"},
-                                            "objectId": {"type": "integer"},
-                                            "objectName": {"type": "string"},
+                                            "type": {"const": "sensor_signal"},
+                                            "sensor": {
+                                                "type": "string",
+                                                "description": "Sensor signal to check",
+                                            },
+                                        },
+                                        "required": ["type", "sensor"],
+                                        "additionalProperties": False,
+                                    },
+                                    {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"const": "find_object"},
+                                            "objectId": {
+                                                "type": "number",
+                                                "description": "ID of the object to find",
+                                            },
+                                            "objectName": {
+                                                "type": "string",
+                                                "description": "Name of the object to find",
+                                            },
                                         },
                                         "required": ["type", "objectId", "objectName"],
                                         "additionalProperties": False,
@@ -1521,117 +1582,31 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                                     {
                                         "type": "object",
                                         "properties": {
-                                            "type": {"const": "place"},
-                                            "locationId": {"type": "integer"},
-                                            "locationName": {"type": "string"},
+                                            "type": {"const": "human_feedback"},
                                         },
-                                        "required": [
-                                            "type",
-                                            "locationId",
-                                            "locationName",
-                                        ],
+                                        "required": ["type"],
                                         "additionalProperties": False,
                                     },
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "processing"},
-                                            "actionId": {"type": "integer"},
-                                            "actionName": {"type": "string"},
-                                        },
-                                        "required": ["type", "actionId", "actionName"],
-                                        "additionalProperties": False,
-                                    },
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "repeat"},
-                                            "times": {"type": "integer"},
-                                            "steps": {
-                                                "type": "array",
-                                                "items": {
-                                                    "$ref": "#/properties/task/properties/program/items"
-                                                },
-                                            },
-                                        },
-                                        "required": ["type", "times", "steps"],
-                                        "additionalProperties": False,
-                                    },
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "when"},
-                                            "condition": {
-                                                "oneOf": [
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "type": {
-                                                                "const": "sensor_signal"
-                                                            },
-                                                            "sensor": {
-                                                                "type": "string"
-                                                            },
-                                                        },
-                                                        "required": ["type", "sensor"],
-                                                        "additionalProperties": False,
-                                                    },
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "type": {
-                                                                "const": "find_object"
-                                                            },
-                                                            "objectId": {
-                                                                "type": "integer"
-                                                            },
-                                                            "objectName": {
-                                                                "type": "string"
-                                                            },
-                                                        },
-                                                        "required": [
-                                                            "type",
-                                                            "objectId",
-                                                            "objectName",
-                                                        ],
-                                                        "additionalProperties": False,
-                                                    },
-                                                    {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "type": {
-                                                                "const": "human_feedback"
-                                                            }
-                                                        },
-                                                        "required": ["type"],
-                                                        "additionalProperties": False,
-                                                    },
-                                                    {"type": "null"},
-                                                ]
-                                            },
-                                            "do": {
-                                                "type": "array",
-                                                "items": {
-                                                    "$ref": "#/properties/task/properties/program/items"
-                                                },
-                                            },
-                                            "otherwise": {
-                                                "type": "array",
-                                                "items": {
-                                                    "$ref": "#/properties/task/properties/program/items"
-                                                },
-                                                "nullable": True,
-                                            },
-                                        },
-                                        "required": ["type", "condition", "do"],
-                                        "additionalProperties": False,
-                                    },
-                                ],
+                                ]
                             },
-                        }
+                            "do": {
+                                "type": "array",
+                                "description": "Steps to execute when the condition is met",
+                                "items": {
+                                    "$ref": "#/function/parameters/properties/task/items",
+                                },
+                            },
+                            "otherwise": {
+                                "type": "array",
+                                "description": "Steps to execute when the condition is not met",
+                                "items": {
+                                    "$ref": "#/function/parameters/properties/task/items",
+                                },
+                            },
+                        },
+                        "required": ["type"],
+                        "additionalProperties": False,
                     },
-                    "required": ["program"],
-                    "additionalProperties": False,
                 },
             },
             "required": ["answer", "task"],
@@ -1656,14 +1631,13 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                 data_result = {}
 
-                prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
-                prompt_template.replace(
-                    "{{objects}}", json.dumps(data_objects)
-                ).replace("{{locations}}", json.dumps(data_locations)).replace(
-                    "{{actions}}", json.dumps(data_actions)
-                ).replace(
-                    "{{task}}", json.dumps(task_structure)
+                prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL.format(
+                    objects=data_objects,
+                    locations=data_locations,
+                    actions=data_actions,
+                    task=json.dumps(task_structure),
                 )
+
                 # Init the conversation
                 if chat_log is None or len(chat_log) == 0:
                     chat_log = [
