@@ -45,7 +45,7 @@ const scrollToBottom = () => {
 interface ChatWrapperProps {
   speaker: boolean
   taskStructure: AbstractStep[] | null
-  setTaskStructure: (taskStructure: AbstractStep[]) => void
+  setTaskStructure: (taskStructure: AbstractStep[] | null) => void
   editingMode: boolean
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
@@ -142,7 +142,11 @@ export const ChatWrapper = ({
           setListMessages([...messagesWithUserRequest, ...newMessages])
           setChatLog(res.chatLog)
 
-          setTaskStructure(res.response.task)
+          setTaskStructure(
+            Array.isArray(res.response.task) && res.response.task.length === 0
+              ? null
+              : res.response.task,
+          )
           setNewChatResponse(true)
         }
       })

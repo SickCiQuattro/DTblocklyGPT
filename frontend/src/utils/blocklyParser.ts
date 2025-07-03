@@ -113,7 +113,32 @@ export const abstractToBlockly = (
     if (!condition) return null
     switch (condition.type) {
       case 'sensor_signal':
-        return { type: 'sensor_signal_block' }
+        if (!condition.sensor) return null
+        switch (condition.sensor) {
+          case 'camera':
+            return {
+              type: 'sensor_signal_block',
+              fields: { sensor: 'Camera sensor signal' },
+              data: JSON.stringify({
+                sensor: condition.sensor,
+              }),
+            }
+          case 'ir':
+            return {
+              type: 'sensor_signal_block',
+              fields: { sensor: 'IR sensor signal' },
+              data: JSON.stringify({
+                sensor: condition.sensor,
+              }),
+            }
+        }
+        return {
+          type: 'sensor_signal_block',
+          fields: { sensor: condition.sensor },
+          data: JSON.stringify({
+            sensor: condition.sensor,
+          }),
+        }
       case 'find_object': {
         const object = dataObjects.find((obj) => obj.id === condition.objectId)
         return {
