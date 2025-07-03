@@ -52,6 +52,9 @@ interface BlocklyComponentProps {
   setNewChatResponse: (response: boolean) => void
 }
 
+const DEFAULT_X_AXIS = 50
+const DEFAULT_Y_AXIS = 50
+
 export const BlocklyComponent = ({
   children,
   dataTask,
@@ -68,11 +71,11 @@ export const BlocklyComponent = ({
   const dispatch = useDispatch()
 
   useEffect(() => {
-    const blocklyTaskStructure = blocklyDiv.current
+    const blocklyTaskStructure = primaryWorkspace.current
       ? getBlocklyStructure()
       : {
-          x: 50,
-          y: 50,
+          x: DEFAULT_X_AXIS,
+          y: DEFAULT_Y_AXIS,
         }
     const x_axis = blocklyTaskStructure?.x
     const y_axis = blocklyTaskStructure?.y
@@ -126,15 +129,18 @@ export const BlocklyComponent = ({
     if (primaryWorkspace.current && newChatResponse) {
       const workspace = primaryWorkspace.current
       const blocklyTaskStructure = getBlocklyStructure()
+      const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
+      const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
+
       workspace.clear()
 
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
 
-        defaultDataTask.x = blocklyTaskStructure?.x || 50
-        defaultDataTask.y = blocklyTaskStructure?.y || 50
+        defaultDataTask.x = x_axis
+        defaultDataTask.y = y_axis
 
-        Blockly.serialization.blocks.append(dataTask, workspace)
+        Blockly.serialization.blocks.append(defaultDataTask, workspace)
         setNewChatResponse(false)
       }
     }

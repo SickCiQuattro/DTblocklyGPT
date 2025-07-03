@@ -251,7 +251,10 @@ export const ChatWrapper = ({
           marginTop: '1rem',
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !isProcessing) onMessageSend()
+          if (e.key === 'Enter' && !isProcessing) {
+            e.preventDefault()
+            onMessageSend()
+          }
         }}
         endAdornment={
           <>
