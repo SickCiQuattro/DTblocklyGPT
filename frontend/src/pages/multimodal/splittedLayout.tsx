@@ -55,6 +55,7 @@ export const SplittedLayout = ({
   const [editingMode, setEditingMode] = useState<boolean>(
     newTaskParam === 'true',
   )
+  const [newChatResponse, setNewChatResponse] = useState<boolean>(false)
   const [speaker, setSpeaker] = React.useState(false)
   const themePalette = Palette('light')
   const dispatch = useDispatch()
@@ -208,6 +209,8 @@ export const SplittedLayout = ({
           dataObjects={dataObjects}
           dataActions={dataActions}
           editingMode={editingMode}
+          newChatResponse={newChatResponse}
+          setNewChatResponse={setNewChatResponse}
           dataTask={
             taskStructure
               ? abstractToBlockly(
@@ -229,6 +232,7 @@ export const SplittedLayout = ({
             dataLocations={dataLocations}
             dataObjects={dataObjects}
             dataActions={dataActions}
+            setNewChatResponse={setNewChatResponse}
           />
         )}
         <RightPanel dataTask={taskStructure} />

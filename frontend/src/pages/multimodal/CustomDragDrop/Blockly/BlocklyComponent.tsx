@@ -48,6 +48,8 @@ interface BlocklyComponentProps {
   dataTask: State
   editingMode: boolean
   setTaskStructure: (task: AbstractStep[]) => void
+  newChatResponse: boolean
+  setNewChatResponse: (response: boolean) => void
 }
 
 export const BlocklyComponent = ({
@@ -55,6 +57,8 @@ export const BlocklyComponent = ({
   dataTask,
   editingMode,
   setTaskStructure,
+  newChatResponse,
+  setNewChatResponse,
 }: BlocklyComponentProps) => {
   const blocklyDiv = useRef<HTMLDivElement | null>(null)
   const toolbox = useRef<HTMLDivElement | null>(null)
@@ -64,6 +68,15 @@ export const BlocklyComponent = ({
   const dispatch = useDispatch()
 
   useEffect(() => {
+    const blocklyTaskStructure = blocklyDiv.current
+      ? getBlocklyStructure()
+      : {
+          x: 50,
+          y: 50,
+        }
+    const x_axis = blocklyTaskStructure?.x
+    const y_axis = blocklyTaskStructure?.y
+
     document.getElementById('blocklyDiv')!.innerHTML = ''
 
     // https://developers.google.com/blockly/guides/configure/web/configuration_struct?hl=en
@@ -86,23 +99,46 @@ export const BlocklyComponent = ({
       workspace.addChangeListener((event) => {
         if (event.type !== Blockly.Events.UI) {
           const blocklyTaskStructure = getBlocklyStructure()
+
+          if (!blocklyTaskStructure) return
+
           const abstractTask = blocklyToAbstract(
             blocklyTaskStructure as CustomBlock,
           )
+
           if (!abstractTask) return
+
           setTaskStructure(abstractTask)
         }
       })
 
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
-        defaultDataTask.x = dataTask?.x || 10
-        defaultDataTask.y = dataTask?.y || 10
+        defaultDataTask.x = x_axis
+        defaultDataTask.y = y_axis
 
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
     }
   }, [editingMode])
+
+  useEffect(() => {
+    if (primaryWorkspace.current && newChatResponse) {
+      const workspace = primaryWorkspace.current
+      const blocklyTaskStructure = getBlocklyStructure()
+      workspace.clear()
+
+      if (dataTask) {
+        const defaultDataTask = { ...dataTask }
+
+        defaultDataTask.x = blocklyTaskStructure?.x || 50
+        defaultDataTask.y = blocklyTaskStructure?.y || 50
+
+        Blockly.serialization.blocks.append(dataTask, workspace)
+        setNewChatResponse(false)
+      }
+    }
+  }, [newChatResponse])
 
   useEffect(() => {
     if (newTaskParam) {

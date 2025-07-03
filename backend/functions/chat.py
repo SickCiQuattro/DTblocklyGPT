@@ -1407,7 +1407,8 @@ AbstractStep = Union[
 CHATGPT_INSTRUCTIONS_MULTIMODAL = """
 # OBJECTIVE #
 You are an assistant designed to extract user intents from natural language and convert them into or edit a collaborative robot task structured as a JSON program.
-The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task from scratch or modify an existing one. The current task JSON is provided below.
+The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task or modify an existing one. 
+Steps can be nested inside "steps", "do", or "otherwise" arrays to represent loops and conditions.
 
 You must reply with a JSON response that follows this format:
 {{
@@ -1513,106 +1514,114 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                                     "repeat",
                                     "when",
                                 ],
+                                "description": "Step type",
                             },
                             "objectId": {
-                                "type": "number",
-                                "description": "ID of the object to pick",
+                                "type": "integer",
+                                "description": "Object ID (for step pick)",
                             },
                             "objectName": {
                                 "type": "string",
-                                "description": "Name of the object to pick",
+                                "description": "Object name (for step pick)",
                             },
                             "locationId": {
-                                "type": "number",
-                                "description": "ID of the location to place the object",
+                                "type": "integer",
+                                "description": "Location ID (for step place)",
                             },
                             "locationName": {
                                 "type": "string",
-                                "description": "Name of the location to place the object",
+                                "description": "Location name (for step place)",
                             },
                             "actionId": {
-                                "type": "number",
-                                "description": "ID of the action to perform",
+                                "type": "integer",
+                                "description": "Action ID (for step processing)",
                             },
                             "actionName": {
                                 "type": "string",
-                                "description": "Name of the action to perform",
+                                "description": "Action name (for step processing)",
                             },
                             "times": {
-                                "type": "number",
-                                "description": "Number of times to repeat the steps",
-                            },
-                            "steps": {
-                                "type": "array",
-                                "description": "Steps to repeat",
-                                "items": {
-                                    "$ref": "#/function/parameters/properties/task/items",
-                                },
+                                "type": "integer",
+                                "description": "Number of repetitions (for step repeat)",
                             },
                             "condition": {
-                                "oneOf": [
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "sensor_signal"},
-                                            "sensor": {
-                                                "type": "string",
-                                                "description": "Sensor signal to check",
-                                            },
-                                        },
-                                        "required": ["type", "sensor"],
-                                        "additionalProperties": False,
+                                "type": "object",
+                                "description": "Condition for step when",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "sensor_signal",
+                                            "find_object",
+                                            "human_feedback",
+                                        ],
+                                        "description": "Condition type",
                                     },
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "find_object"},
-                                            "objectId": {
-                                                "type": "number",
-                                                "description": "ID of the object to find",
-                                            },
-                                            "objectName": {
-                                                "type": "string",
-                                                "description": "Name of the object to find",
-                                            },
-                                        },
-                                        "required": ["type", "objectId", "objectName"],
-                                        "additionalProperties": False,
+                                    "sensor": {
+                                        "type": "string",
+                                        "description": "Sensor name (for sensor_signal condition)",
                                     },
-                                    {
-                                        "type": "object",
-                                        "properties": {
-                                            "type": {"const": "human_feedback"},
-                                        },
-                                        "required": ["type"],
-                                        "additionalProperties": False,
+                                    "objectId": {
+                                        "type": "integer",
+                                        "description": "Object ID (for find_object condition)",
                                     },
-                                ]
+                                    "objectName": {
+                                        "type": "string",
+                                        "description": "Object name (for find_object condition)",
+                                    },
+                                },
                             },
                             "do": {
                                 "type": "array",
-                                "description": "Steps to execute when the condition is met",
+                                "description": "Steps to execute when condition is met (for step when)",
                                 "items": {
-                                    "$ref": "#/function/parameters/properties/task/items",
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "pick",
+                                                "place",
+                                                "processing",
+                                                "repeat",
+                                                "when",
+                                            ],
+                                            "description": "Step type",
+                                        },
+                                    },
+                                    "required": ["type"],
                                 },
                             },
                             "otherwise": {
                                 "type": "array",
-                                "description": "Steps to execute when the condition is not met",
+                                "description": "Steps to execute when condition is not met (for step when)",
                                 "items": {
-                                    "$ref": "#/function/parameters/properties/task/items",
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "pick",
+                                                "place",
+                                                "processing",
+                                                "repeat",
+                                                "when",
+                                            ],
+                                            "description": "Step type",
+                                        },
+                                    },
+                                    "required": ["type"],
                                 },
                             },
                         },
                         "required": ["type"],
-                        "additionalProperties": False,
                     },
                 },
             },
-            "required": ["answer", "task"],
             "additionalProperties": False,
+            "required": ["answer", "task"],
+            "strict": True,
         },
-        "strict": True,
     },
 }
 

@@ -16,6 +16,8 @@ interface CustomDragDropProps {
   dataTask: State
   setTaskStructure: (task: AbstractStep[]) => void
   editingMode: boolean
+  newChatResponse: boolean
+  setNewChatResponse: (response: boolean) => void
 }
 
 export const CustomDragDrop = ({
@@ -25,12 +27,16 @@ export const CustomDragDrop = ({
   dataTask,
   setTaskStructure,
   editingMode,
+  newChatResponse,
+  setNewChatResponse,
 }: CustomDragDropProps) => {
   return (
     <BlocklyComponent
       dataTask={dataTask}
       editingMode={editingMode}
       setTaskStructure={setTaskStructure}
+      newChatResponse={newChatResponse}
+      setNewChatResponse={setNewChatResponse}
     >
       <Category name="Logic" colour={blocksColours.logics}>
         <Block type="repeat_block" />

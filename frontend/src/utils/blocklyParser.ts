@@ -21,8 +21,8 @@ export const abstractToBlockly = (
               block: {
                 type: 'object_block',
                 data: JSON.stringify({
-                  blocklyId: step.objectId,
-                  blocklyName: step.objectName,
+                  blocklyId: step?.objectId || '',
+                  blocklyName: step?.objectName || '',
                   id: object?.id,
                   name: object?.name,
                   keywords: object?.keywords.join(',') || '',
@@ -42,8 +42,8 @@ export const abstractToBlockly = (
               block: {
                 type: 'location_block',
                 data: JSON.stringify({
-                  blocklyId: step.locationId,
-                  blocklyName: step.locationName,
+                  blocklyId: step?.locationId || '',
+                  blocklyName: step?.locationName || '',
                   id: location?.id,
                   name: location?.name,
                   keywords: location?.keywords.join(',') || '',
@@ -63,8 +63,8 @@ export const abstractToBlockly = (
               block: {
                 type: 'action_block',
                 data: JSON.stringify({
-                  blocklyId: step.actionId,
-                  blocklyName: step.actionName,
+                  blocklyId: step?.actionId || '',
+                  blocklyName: step?.actionName || '',
                   id: action?.id,
                   name: action?.name,
                   keywords: action?.keywords.join(',') || '',
@@ -123,8 +123,8 @@ export const abstractToBlockly = (
               block: {
                 type: 'object_block',
                 data: JSON.stringify({
-                  blocklyId: condition.objectId,
-                  blocklyName: condition.objectName,
+                  blocklyId: condition?.objectId || '',
+                  blocklyName: condition?.objectName || '',
                   id: object?.id,
                   name: object?.name,
                   keywords: object?.keywords.join(',') || '',
@@ -200,8 +200,8 @@ export const blocklyToAbstract = (
       case 'processing_block':
         return {
           type: 'processing',
-          actionId: getIdFromBlock(block.inputs?.ACTION?.block),
-          actionName: getNameFromBlock(block.inputs?.ACTION?.block),
+          actionId: getIdFromBlock(block.inputs?.ACTION?.block) || '',
+          actionName: getNameFromBlock(block.inputs?.ACTION?.block) || '',
         }
       case 'repeat_block':
         return {

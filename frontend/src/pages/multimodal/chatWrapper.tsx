@@ -50,6 +50,7 @@ interface ChatWrapperProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
+  setNewChatResponse: (response: boolean) => void
 }
 
 export const ChatWrapper = ({
@@ -60,6 +61,7 @@ export const ChatWrapper = ({
   dataLocations,
   dataObjects,
   dataActions,
+  setNewChatResponse,
 }: ChatWrapperProps) => {
   const { id } = useParams()
   const dispatch = useDispatch()
@@ -141,6 +143,7 @@ export const ChatWrapper = ({
           setChatLog(res.chatLog)
 
           setTaskStructure(res.response.task)
+          setNewChatResponse(true)
         }
       })
       .finally(() => {
@@ -240,6 +243,7 @@ export const ChatWrapper = ({
         }
         disabled={isRecording || !editingMode}
         autoFocus
+        multiline
         fullWidth
         style={{
           position: 'absolute',
