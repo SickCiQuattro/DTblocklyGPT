@@ -20,7 +20,7 @@ import platform
 
 class LogicItems(Enum):
     REPEAT = "repeat_block"
-    LOOP = "loop_block"
+    # LOOP = "loop_block"
     WHEN_OTHERWISE = "when_otherwise_block"
     WHEN = "when_block"
     # STOP_WHEN = "stop_when_block"
@@ -304,27 +304,27 @@ def simulation_recursive_blockly_parser(
                 )
                 launch_wsl_ros_command(delete_location_command)
 
-        elif code["type"] == LogicItems.LOOP.value:
-            times = 10  # inf
-            for i in range(0, times):
-                simulation_recursive_blockly_parser(
-                    code["inputs"]["DO"]["block"],
-                    objectsOfUser,
-                    actionsOfUser,
-                    locationsOfUser,
-                    simulate_event,
-                )
-            launch_wsl_ros_command(delete_location_command)
+        # elif code["type"] == LogicItems.LOOP.value:
+        #     times = 10  # inf
+        #     for i in range(0, times):
+        #         simulation_recursive_blockly_parser(
+        #             code["inputs"]["DO"]["block"],
+        #             objectsOfUser,
+        #             actionsOfUser,
+        #             locationsOfUser,
+        #             simulate_event,
+        #         )
+        #     launch_wsl_ros_command(delete_location_command)
 
-            if code.get("next") is not None:
-                simulation_recursive_blockly_parser(
-                    code["next"]["block"],
-                    objectsOfUser,
-                    actionsOfUser,
-                    locationsOfUser,
-                    simulate_event,
-                )
-                launch_wsl_ros_command(delete_location_command)
+        #     if code.get("next") is not None:
+        #         simulation_recursive_blockly_parser(
+        #             code["next"]["block"],
+        #             objectsOfUser,
+        #             actionsOfUser,
+        #             locationsOfUser,
+        #             simulate_event,
+        #         )
+        #         launch_wsl_ros_command(delete_location_command)
 
         elif code["type"] == LogicItems.WHEN.value:
             condition_type = (

@@ -49,7 +49,7 @@ from typing import Tuple
 
 class LogicItems(Enum):
     REPEAT = "repeat_block"
-    LOOP = "loop_block"
+    # LOOP = "loop_block"
     WHEN_OTHERWISE = "when_otherwise_block"
     WHEN = "when_block"
     # STOP_WHEN = "stop_when_block"

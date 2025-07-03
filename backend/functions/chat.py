@@ -1446,7 +1446,14 @@ Where AbstractStep is one of:
       "steps": AbstractStep[]
     }}
 
-  - When Step:
+  - When-Do Step:
+    {{
+      "type": "when",
+      "condition": AbstractCondition | null,
+      "do": AbstractStep[],
+    }}
+
+  - When-Do-Otherwise Step:
     {{
       "type": "when",
       "condition": AbstractCondition | null,
@@ -1455,7 +1462,7 @@ Where AbstractStep is one of:
     }}
 
 Conditions (AbstractCondition) can be one of:
-- {{"type": "sensor_signal", "sensor": string}}
+- {{"type": "sensor_signal", "sensor": "Camera"}}
 - {{"type": "find_object", "objectId": number, "objectName": string}}
 - {{"type": "human_feedback"}}
 

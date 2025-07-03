@@ -85,7 +85,7 @@ Blockly.Blocks.action_block = {
 
 Blockly.Blocks.sensor_signal_block = {
   init() {
-    this.appendDummyInput().appendField('Camera sensor signal is true')
+    this.appendDummyInput().appendField('Camera Sensor Signal')
     this.setOutput(true, 'sensor_signal_block')
     this.setColour(blocksColours.events)
   },
@@ -150,6 +150,7 @@ Blockly.Blocks.processing_block = {
   },
 }
 
+/*
 Blockly.Blocks.loop_block = {
   init() {
     this.appendDummyInput().appendField('Loop')
@@ -162,6 +163,7 @@ Blockly.Blocks.loop_block = {
     this.setColour(blocksColours.logics)
   },
 }
+  */
 
 Blockly.Blocks.when_otherwise_block = {
   init() {

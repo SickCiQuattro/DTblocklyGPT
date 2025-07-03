@@ -40,7 +40,7 @@ export const CustomDragDrop = ({
     >
       <Category name="Logic" colour={blocksColours.logics}>
         <Block type="repeat_block" />
-        <Block type="loop_block" />
+        {/* <Block type="loop_block" /> */}
         <Block type="when_block" />
         <Block type="when_otherwise_block" />
         {/* <Block type="stop_when_block" />
