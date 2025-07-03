@@ -1462,7 +1462,7 @@ Where AbstractStep is one of:
     }}
 
 Conditions (AbstractCondition) can be one of:
-- {{"type": "sensor_signal", "sensor": "Camera"}}
+- {{"type": "sensor_signal", "sensor":  "camera" | "ir"}}
 - {{"type": "find_object", "objectId": number, "objectName": string}}
 - {{"type": "human_feedback"}}
 

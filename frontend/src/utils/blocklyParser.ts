@@ -273,8 +273,11 @@ export const blocklyToAbstract = (
   ): AbstractCondition | null => {
     if (!block) return null
     switch (block.type) {
-      case 'sensor_signal_block':
-        return { type: 'sensor_signal', sensor: 'camera' }
+      case 'sensor_signal_block': {
+        if (!block.data) return null
+        const data = JSON.parse(block.data)
+        return { type: 'sensor_signal', sensor: data.sensor }
+      }
       case 'find_object_block':
         return {
           type: 'find_object',

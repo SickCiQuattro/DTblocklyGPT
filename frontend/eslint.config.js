@@ -33,5 +33,6 @@ export default tseslint.config({
         "@typescript-eslint/no-explicit-any": "off", // Allow 'any' type
         "@eslint-react/hooks-extra/no-direct-set-state-in-use-effect": "off", // Allow direct setState in useEffect
         "@typescript-eslint/no-unused-vars": "warn", // Warn on unused variables
+        "@eslint-react/web-api/no-leaked-timeout": "off", // Allow leaked timeouts
     },
 });

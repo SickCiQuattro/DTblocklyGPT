@@ -48,7 +48,22 @@ export const CustomDragDrop = ({
       </Category>
       <Category name="Events" colour={blocksColours.events}>
         {/* <Block type="detect_block" /> */}
-        <Block type="sensor_signal_block" />
+        <Block type="sensor_signal_block">
+          <Field name="sensor">Camera sensor signal</Field>
+          <data>
+            {JSON.stringify({
+              sensor: 'camera',
+            })}
+          </data>
+        </Block>
+        <Block type="sensor_signal_block">
+          <Field name="sensor">IR sensor signal</Field>
+          <data>
+            {JSON.stringify({
+              sensor: 'ir',
+            })}
+          </data>
+        </Block>
         <Block type="find_object_block" />
         <Block type="human_feedback_block" />
       </Category>

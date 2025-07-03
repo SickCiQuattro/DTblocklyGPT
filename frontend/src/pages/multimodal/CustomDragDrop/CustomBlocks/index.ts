@@ -85,7 +85,10 @@ Blockly.Blocks.action_block = {
 
 Blockly.Blocks.sensor_signal_block = {
   init() {
-    this.appendDummyInput().appendField('Camera Sensor Signal')
+    this.appendDummyInput().appendField(
+      new Blockly.FieldLabelSerializable(''),
+      'sensor',
+    )
     this.setOutput(true, 'sensor_signal_block')
     this.setColour(blocksColours.events)
   },

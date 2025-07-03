@@ -99,11 +99,14 @@ export const BlocklyComponent = ({
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
 
+      // Update the abstractTaskStructure when the workspace changes
       workspace.addChangeListener((event) => {
         if (event.type !== Blockly.Events.UI) {
           const blocklyTaskStructure = getBlocklyStructure()
 
           if (!blocklyTaskStructure) return
+
+          console.log(blocklyTaskStructure)
 
           const abstractTask = blocklyToAbstract(
             blocklyTaskStructure as CustomBlock,
