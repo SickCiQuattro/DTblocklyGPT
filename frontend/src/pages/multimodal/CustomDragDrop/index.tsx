@@ -14,7 +14,7 @@ interface CustomDragDropProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataTask: State
-  setTaskStructure: (task: AbstractStep[]) => void
+  setTaskStructure: (task: AbstractStep[] | null) => void
   editingMode: boolean
   newChatResponse: boolean
   setNewChatResponse: (response: boolean) => void

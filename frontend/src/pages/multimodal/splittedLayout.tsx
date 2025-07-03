@@ -29,7 +29,7 @@ import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams /* useSearchParams */ } from 'react-router-dom'
 
 interface SplittedLayoutProps {
   dataLocations: LocationListType[]
@@ -48,12 +48,13 @@ export const SplittedLayout = ({
 }: SplittedLayoutProps) => {
   const isBigScreen = useMediaQuery('(min-width: 1700px)')
   const height = isBigScreen ? '70vh' : '60vh'
-  const [taskStructure, setTaskStructure] =
-    useState<AbstractStep[]>(abstractTask)
-  const [searchParams] = useSearchParams()
-  const newTaskParam = searchParams.get('newTask')
+  const [taskStructure, setTaskStructure] = useState<AbstractStep[] | null>(
+    abstractTask,
+  )
+  // const [searchParams] = useSearchParams()
+  // const newTaskParam = searchParams.get('newTask')
   const [editingMode, setEditingMode] = useState<boolean>(
-    newTaskParam === 'true',
+    true, // newTaskParam === 'true',
   )
   const [newChatResponse, setNewChatResponse] = useState<boolean>(false)
   const [speaker, setSpeaker] = React.useState(false)

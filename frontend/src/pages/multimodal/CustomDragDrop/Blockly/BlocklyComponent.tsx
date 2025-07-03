@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
+// import { Backpack } from '@blockly/workspace-backpack'
 import 'blockly/blocks'
 import { State } from 'blockly/core/serialization/blocks'
 import { useSearchParams } from 'react-router-dom'
@@ -47,7 +48,7 @@ interface BlocklyComponentProps {
   children: React.JSX.Element[]
   dataTask: State
   editingMode: boolean
-  setTaskStructure: (task: AbstractStep[]) => void
+  setTaskStructure: (task: AbstractStep[] | null) => void
   newChatResponse: boolean
   setNewChatResponse: (response: boolean) => void
 }
@@ -99,22 +100,43 @@ export const BlocklyComponent = ({
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
 
+      // const backpack = new Backpack(workspace)
+      // backpack.init()
+
       // Update the abstractTaskStructure when the workspace changes
       workspace.addChangeListener((event) => {
         if (event.type !== Blockly.Events.UI) {
           const blocklyTaskStructure = getBlocklyStructure()
 
-          if (!blocklyTaskStructure) return
-
-          console.log(blocklyTaskStructure)
-
           const abstractTask = blocklyToAbstract(
             blocklyTaskStructure as CustomBlock,
           )
 
-          if (!abstractTask) return
-
           setTaskStructure(abstractTask)
+        }
+      })
+
+      // Prevent adding more than one top-level block
+      workspace.addChangeListener((e) => {
+        if (e.type === Blockly.Events.BLOCK_MOVE) {
+          setTimeout(() => {
+            const workspace = primaryWorkspace.current
+            if (!workspace) return
+            const topBlocks = workspace.getTopBlocks(false)
+            if (topBlocks.length > 1) {
+              const event = e as Blockly.Events.BlockMove
+              const movedBlock = workspace.getBlockById((event as any).blockId)
+              if (
+                movedBlock &&
+                !movedBlock.getParent() &&
+                event.reason &&
+                event.reason[0] === 'drag'
+              ) {
+                alert('Only one top-level block is allowed.')
+                Blockly.getMainWorkspace().undo(false)
+              }
+            }
+          }, 0)
         }
       })
 

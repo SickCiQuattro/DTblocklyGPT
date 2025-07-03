@@ -44,7 +44,7 @@ const scrollToBottom = () => {
 
 interface ChatWrapperProps {
   speaker: boolean
-  taskStructure: AbstractStep[]
+  taskStructure: AbstractStep[] | null
   setTaskStructure: (taskStructure: AbstractStep[]) => void
   editingMode: boolean
   dataLocations: LocationListType[]

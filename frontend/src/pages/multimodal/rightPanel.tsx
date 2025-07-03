@@ -6,7 +6,7 @@ import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { AbstractStep } from 'pages/tasks/types'
 
 interface RightPanelProps {
-  dataTask: AbstractStep[]
+  dataTask: AbstractStep[] | null
 }
 
 export const RightPanel = ({ dataTask }: RightPanelProps) => {
@@ -47,6 +47,7 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
       <Collapse
         key="task-collapse-debug"
         style={{ marginTop: '1rem', marginRight: '1rem' }}
+        defaultActiveKey={['task-representation']}
         items={[
           {
             label: 'Task representation',
