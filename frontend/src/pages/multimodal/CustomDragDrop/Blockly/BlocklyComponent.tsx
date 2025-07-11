@@ -9,6 +9,7 @@ import { useDispatch } from 'react-redux'
 import { toggleEditMode } from 'store/reducers/task'
 import { AbstractStep } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { updateStructureAndFireFakeChangeEvent } from './utils'
 
 // @ts-expect-error: Blockly.setLocale may not be typed in the current Blockly version
 Blockly.setLocale(locale)
@@ -91,8 +92,8 @@ export const BlocklyComponent = ({
       readOnly: !editingMode,
       trashcan: true,
       media: '/blocklyMedia',
-      move: { scrollbars: false, drag: true, wheel: true },
-      zoom: { startScale: 1.5 },
+      move: { scrollbars: true, drag: true, wheel: false },
+      zoom: { wheel: true, startScale: 1.5 },
       sounds: false,
     })
 
@@ -117,6 +118,7 @@ export const BlocklyComponent = ({
       })
 
       // Prevent adding more than one top-level block
+      /*
       workspace.addChangeListener((e) => {
         if (e.type === Blockly.Events.BLOCK_MOVE) {
           setTimeout(() => {
@@ -139,6 +141,7 @@ export const BlocklyComponent = ({
           }, 0)
         }
       })
+      */
 
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
@@ -165,7 +168,9 @@ export const BlocklyComponent = ({
         defaultDataTask.x = x_axis
         defaultDataTask.y = y_axis
 
-        Blockly.serialization.blocks.append(defaultDataTask, workspace)
+        // Trigger change event to update the task structure and insert the block in the history for undo/redo
+        updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
+
         setNewChatResponse(false)
       }
     }

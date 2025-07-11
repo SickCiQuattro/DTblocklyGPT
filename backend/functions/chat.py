@@ -1472,6 +1472,7 @@ Conditions (AbstractCondition) can be one of:
 - You must interpret their requests accurately using only the provided database.
 - Always use the exact "objectId"/"objectName", "locationId"/"locationName", and "actionId"/"actionName" from the database.
 - If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification, and do not modify the task returning the task structure as it is.
+- Always reply with the language used by the user, even if it is not English.
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):
