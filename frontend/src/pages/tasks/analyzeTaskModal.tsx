@@ -170,7 +170,15 @@ export const AnalyzeTaskModal = ({
                     key={issue.message}
                     style={{ color: issue.type === 'error' ? 'red' : 'orange' }}
                   >
-                    {issue.message} (at step {issue.stepPath.join(' > ')})
+                    <b>{issue.message}</b>
+                    <br />
+                    (at step{' '}
+                    {issue.stepPath
+                      .map((step) =>
+                        typeof step === 'number' ? step + 1 : step,
+                      )
+                      .join(' > ')}
+                    )
                   </li>
                 ))}
               </ul>
