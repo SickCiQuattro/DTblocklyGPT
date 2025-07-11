@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 // import { Backpack } from '@blockly/workspace-backpack'
+import Theme from '@blockly/theme-modern'
 import { ZoomToFitControl } from '@blockly/zoom-to-fit'
 import 'blockly/blocks'
 import { State } from 'blockly/core/serialization/blocks'
@@ -98,6 +99,8 @@ export const BlocklyComponent = ({
       move: { scrollbars: true, drag: true, wheel: false },
       zoom: { wheel: true, startScale: 1.5 },
       sounds: false,
+      theme: Theme,
+      grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
     })
 
     if (primaryWorkspace.current) {
