@@ -72,6 +72,8 @@ export const BlocklyComponent = ({
   const newTaskParam = searchParams.get('newTask')
   const dispatch = useDispatch()
 
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+
   useEffect(() => {
     const blocklyTaskStructure = primaryWorkspace.current
       ? getBlocklyStructure()
@@ -143,12 +145,26 @@ export const BlocklyComponent = ({
       })
       */
 
+      // Create and store the ResizeObserver in a ref
+      resizeObserverRef.current = new ResizeObserver(() => {
+        Blockly.svgResize(workspace)
+      })
+      resizeObserverRef.current.observe(blocklyDiv.current as Element)
+
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = x_axis
         defaultDataTask.y = y_axis
 
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
+      }
+    }
+
+    // Cleanup function to disconnect ResizeObserver
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect()
+        resizeObserverRef.current = null
       }
     }
   }, [editingMode])

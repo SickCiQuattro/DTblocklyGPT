@@ -96,7 +96,7 @@ export const ChatWrapper = ({
     const messagesWithUserRequest = [
       ...listMessages,
       {
-        text: message,
+        text: message.trim(),
         id: listMessages[listMessages.length - 1].id + 1,
         user: UserChatEnum.USER,
         timestamp: formatTimeFrontend(dayjs().toString()),
@@ -112,7 +112,7 @@ export const ChatWrapper = ({
       method: MethodHTTP.POST,
       body: {
         id: Number(id),
-        message,
+        message: message.trim(),
         chatLog,
         taskStructure,
         dataLocations,

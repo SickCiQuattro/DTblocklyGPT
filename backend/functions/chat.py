@@ -1407,7 +1407,7 @@ AbstractStep = Union[
 CHATGPT_INSTRUCTIONS_MULTIMODAL = """
 # OBJECTIVE #
 You are an assistant designed to extract user intents from natural language and convert them into or edit a collaborative robot task structured as a JSON program.
-The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task or modify an existing one. 
+The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task or modify an existing one.
 Steps can be nested inside "steps", "do", or "otherwise" arrays to represent loops and conditions.
 
 You must reply with a JSON response that follows this format:
@@ -1471,17 +1471,17 @@ Conditions (AbstractCondition) can be one of:
 - The user defines tasks via natural language.
 - You must interpret their requests accurately using only the provided database.
 - Always use the exact "objectId"/"objectName", "locationId"/"locationName", and "actionId"/"actionName" from the database.
-- If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification, and do not modify the task returning the task structure as it is.
+- If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification and do not modify the task returning the task structure as it is.
 - Always reply with the language used by the user, even if it is not English.
+
+# IMPORTANT #
+- If no modifications are needed, return the existing task structure as it is.
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):
 - Objects: {objects}
 - Locations: {locations}
 - Actions: {actions}
-
-# CURRENT TASK #
-{task}
 
 # EXAMPLES #
 User says: "Pick the widget and place it in the bin A."
@@ -1633,6 +1633,14 @@ CHATGPT_FUNCTION_MULTIMODAL = {
     },
 }
 
+CHATGPT_NEW_MESSAGE_MULTIMODAL = """
+# User Request #
+{message}
+
+# Actual Task Structure #
+{task}
+"""
+
 
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
@@ -1664,7 +1672,12 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         },
                     ]
 
-                chat_log.append({"role": "user", "content": message})
+                new_message_template = CHATGPT_NEW_MESSAGE_MULTIMODAL.format(
+                    message=message,
+                    task=json.dumps(task_structure),
+                )
+
+                chat_log.append({"role": "user", "content": new_message_template})
                 response = client.chat.completions.create(
                     model=CHATGPT_MODEL,
                     messages=chat_log,
