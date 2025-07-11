@@ -1476,6 +1476,7 @@ Conditions (AbstractCondition) can be one of:
 
 # IMPORTANT #
 - If no modifications are needed, return the existing task structure as it is.
+- Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):

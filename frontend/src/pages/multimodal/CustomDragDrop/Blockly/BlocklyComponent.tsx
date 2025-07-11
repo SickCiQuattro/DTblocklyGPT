@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 // import { Backpack } from '@blockly/workspace-backpack'
+import { ZoomToFitControl } from '@blockly/zoom-to-fit'
 import 'blockly/blocks'
 import { State } from 'blockly/core/serialization/blocks'
 import { useSearchParams } from 'react-router-dom'
@@ -102,6 +103,9 @@ export const BlocklyComponent = ({
     if (primaryWorkspace.current) {
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
+
+      const zoomToFit = new ZoomToFitControl(workspace)
+      zoomToFit.init()
 
       // const backpack = new Backpack(workspace)
       // backpack.init()
