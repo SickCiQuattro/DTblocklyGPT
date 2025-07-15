@@ -1469,15 +1469,15 @@ Conditions (AbstractCondition) can be one of:
 # CONNECTION RULES #
 These are the rules by which different Blockly blocks can be connected:
 
-Blockly.Blocks.pick_block = {
-  init() {
+Blockly.Blocks.pick_block = {{
+  init() {{
     this.setPreviousStatement(true, ['logic_pick_rel', 'place_pick_rel'])
     this.setNextStatement(true, ['pick_place_rel', 'pick_processing_rel'])
-  },
-}
+  }},
+}}
 
-Blockly.Blocks.place_block = {
-  init() {
+Blockly.Blocks.place_block = {{
+  init() {{
     this.setPreviousStatement(true, [
       'pick_place_rel',
       'processing_place_rel',
@@ -1489,11 +1489,11 @@ Blockly.Blocks.place_block = {
       'place_when_otherwise_rel',
       'place_pick_rel',
     ])
-  },
-}
+  }},
+}}
 
-Blockly.Blocks.processing_block = {
-  init() {
+Blockly.Blocks.processing_block = {{
+  init() {{
     this.setNextStatement(true, [
       'processing_place_rel',
       'processing_processing_rel',
@@ -1503,11 +1503,11 @@ Blockly.Blocks.processing_block = {
       'pick_processing_rel',
       'processing_processing_rel',
     ])
-  },
-}
+  }},
+}}
 
-Blockly.Blocks.when_otherwise_block = {
-  init() {
+Blockly.Blocks.when_otherwise_block = {{
+  init() {{
     this.appendStatementInput('DO')
         .setCheck([
         'logic_pick_rel',
@@ -1526,26 +1526,26 @@ Blockly.Blocks.when_otherwise_block = {
       'place_when_otherwise_rel',
     ])
     this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
-  },
-}
+  }},
+}}
 
-Blockly.Blocks.when_block = {
-  init() {
+Blockly.Blocks.when_block = {{
+  init() {{
     this.appendStatementInput('DO')
         .setCheck(['logic_pick_rel', 'logic_logic_rel'])
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
     this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
-  },
-}
+  }},
+}}
 
-Blockly.Blocks.repeat_block = {
-  init() {
+Blockly.Blocks.repeat_block = {{
+  init() {{
     this.appendStatementInput('DO')
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
     this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
-  },
-}
+  }},
+}}
 
 
 # CONTEXT #
