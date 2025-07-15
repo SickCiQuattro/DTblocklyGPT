@@ -30,7 +30,11 @@ const Homepage = () => {
           justifyContent: 'space-around',
         }}
       >
-        <Card>
+        <Card
+          style={{
+            marginRight: '1rem',
+          }}
+        >
           <CardActionArea
             onClick={() => {
               navigate('/task/add?type=chat')
@@ -54,7 +58,11 @@ const Homepage = () => {
             </CardContent>
           </CardActionArea>
         </Card>
-        <Card>
+        <Card
+          style={{
+            marginRight: '1rem',
+          }}
+        >
           <CardActionArea
             onClick={() => {
               navigate('/task/add?type=graphic')

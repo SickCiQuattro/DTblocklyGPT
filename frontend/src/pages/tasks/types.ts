@@ -73,7 +73,7 @@ export type AbstractPlaceStep = {
 export type AbstractProcessingStep = {
   type: 'processing'
   actionId: number
-  actionName: number
+  actionName: string
 }
 
 export type AbstractRepeatStep = {

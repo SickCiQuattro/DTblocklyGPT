@@ -115,7 +115,7 @@ Blockly.Blocks.pick_block = {
     this.appendDummyInput().appendField('Pick')
     this.appendValueInput('OBJECT').setCheck('object_block')
     this.appendDummyInput()
-    this.setPreviousStatement(true, 'logic_pick_rel')
+    this.setPreviousStatement(true, ['logic_pick_rel', 'place_pick_rel'])
     this.setNextStatement(true, ['pick_place_rel', 'pick_processing_rel'])
     this.setColour(blocksColours.steps)
   },
@@ -130,6 +130,12 @@ Blockly.Blocks.place_block = {
       'pick_place_rel',
       'processing_place_rel',
       'when_otherwise_place_rel',
+    ])
+    this.setNextStatement(true, [
+      'place_repeat_rel',
+      'place_when_rel',
+      'place_when_otherwise_rel',
+      'place_pick_rel',
     ])
     this.setColour(blocksColours.steps)
   },
@@ -195,8 +201,9 @@ Blockly.Blocks.when_otherwise_block = {
     this.setPreviousStatement(true, [
       'logic_logic_rel',
       'processing_when_otherwise_rel',
+      'place_when_otherwise_rel',
     ])
-    this.setNextStatement(true, 'logic_logic_rel')
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
     this.setColour(blocksColours.logics)
   },
 }
@@ -213,8 +220,8 @@ Blockly.Blocks.when_block = {
     this.appendStatementInput('DO')
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
       .appendField('Do')
-    this.setPreviousStatement(true, 'logic_logic_rel')
-    this.setNextStatement(true, 'logic_logic_rel')
+    this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
     this.setColour(blocksColours.logics)
   },
 }
@@ -264,8 +271,8 @@ Blockly.Blocks.repeat_block = {
     this.appendStatementInput('DO')
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
       .appendField('Do')
-    this.setPreviousStatement(true, 'logic_logic_rel')
-    this.setNextStatement(true, 'logic_logic_rel')
+    this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
     this.setColour(blocksColours.logics)
   },
 }

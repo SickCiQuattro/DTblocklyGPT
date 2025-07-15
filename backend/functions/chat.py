@@ -1466,6 +1466,88 @@ Conditions (AbstractCondition) can be one of:
 - {{"type": "find_object", "objectId": number, "objectName": string}}
 - {{"type": "human_feedback"}}
 
+# CONNECTION RULES #
+These are the rules by which different Blockly blocks can be connected:
+
+Blockly.Blocks.pick_block = {
+  init() {
+    this.setPreviousStatement(true, ['logic_pick_rel', 'place_pick_rel'])
+    this.setNextStatement(true, ['pick_place_rel', 'pick_processing_rel'])
+  },
+}
+
+Blockly.Blocks.place_block = {
+  init() {
+    this.setPreviousStatement(true, [
+      'pick_place_rel',
+      'processing_place_rel',
+      'when_otherwise_place_rel',
+    ])
+    this.setNextStatement(true, [
+      'place_repeat_rel',
+      'place_when_rel',
+      'place_when_otherwise_rel',
+      'place_pick_rel',
+    ])
+  },
+}
+
+Blockly.Blocks.processing_block = {
+  init() {
+    this.setNextStatement(true, [
+      'processing_place_rel',
+      'processing_processing_rel',
+      'processing_when_otherwise_rel',
+    ])
+    this.setPreviousStatement(true, [
+      'pick_processing_rel',
+      'processing_processing_rel',
+    ])
+  },
+}
+
+Blockly.Blocks.when_otherwise_block = {
+  init() {
+    this.appendStatementInput('DO')
+        .setCheck([
+        'logic_pick_rel',
+        'logic_logic_rel',
+        'when_otherwise_place_rel',
+        ])
+    this.appendStatementInput('OTHERWISE')
+        .setCheck([
+        'logic_pick_rel',
+        'logic_logic_rel',
+        'when_otherwise_place_rel',
+        ])
+    this.setPreviousStatement(true, [
+      'logic_logic_rel',
+      'processing_when_otherwise_rel',
+      'place_when_otherwise_rel',
+    ])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+  },
+}
+
+Blockly.Blocks.when_block = {
+  init() {
+    this.appendStatementInput('DO')
+        .setCheck(['logic_pick_rel', 'logic_logic_rel'])
+    this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+  },
+}
+
+Blockly.Blocks.repeat_block = {
+  init() {
+    this.appendStatementInput('DO')
+      .setCheck(['logic_pick_rel', 'logic_logic_rel'])
+    this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+  },
+}
+
+
 # CONTEXT #
 - The user is not an expert in robotics or programming.
 - The user defines tasks via natural language.
