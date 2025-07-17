@@ -154,6 +154,7 @@ Blockly.Blocks.processing_block = {
     this.setPreviousStatement(true, [
       'pick_processing_rel',
       'processing_processing_rel',
+      'logic_processing_rel',
     ])
     this.setColour(blocksColours.steps)
   },
@@ -202,8 +203,13 @@ Blockly.Blocks.when_otherwise_block = {
       'logic_logic_rel',
       'processing_when_otherwise_rel',
       'place_when_otherwise_rel',
+      'logic_processing_rel',
     ])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, [
+      'logic_logic_rel',
+      'logic_pick_rel',
+      'logic_processing_rel',
+    ])
     this.setColour(blocksColours.logics)
   },
 }
@@ -221,7 +227,11 @@ Blockly.Blocks.when_block = {
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
       .appendField('Do')
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, [
+      'logic_logic_rel',
+      'logic_pick_rel',
+      'logic_processing_rel',
+    ])
     this.setColour(blocksColours.logics)
   },
 }
@@ -272,7 +282,11 @@ Blockly.Blocks.repeat_block = {
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
       .appendField('Do')
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, [
+      'logic_logic_rel',
+      'logic_pick_rel',
+      'logic_processing_rel',
+    ])
     this.setColour(blocksColours.logics)
   },
 }

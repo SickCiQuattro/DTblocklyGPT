@@ -1467,7 +1467,7 @@ Conditions (AbstractCondition) can be one of:
 - {{"type": "human_feedback"}}
 
 # CONNECTION RULES #
-These are the rules by which different Blockly blocks can be connected:
+These are the rules by which Blockly blocks can be connected:
 
 Blockly.Blocks.pick_block = {{
   init() {{
@@ -1502,6 +1502,7 @@ Blockly.Blocks.processing_block = {{
     this.setPreviousStatement(true, [
       'pick_processing_rel',
       'processing_processing_rel',
+      'logic_processing_rel',
     ])
   }},
 }}
@@ -1525,7 +1526,7 @@ Blockly.Blocks.when_otherwise_block = {{
       'processing_when_otherwise_rel',
       'place_when_otherwise_rel',
     ])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
   }},
 }}
 
@@ -1534,7 +1535,7 @@ Blockly.Blocks.when_block = {{
     this.appendStatementInput('DO')
         .setCheck(['logic_pick_rel', 'logic_logic_rel'])
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
   }},
 }}
 
@@ -1543,7 +1544,7 @@ Blockly.Blocks.repeat_block = {{
     this.appendStatementInput('DO')
       .setCheck(['logic_pick_rel', 'logic_logic_rel'])
     this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel'])
+    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
   }},
 }}
 
@@ -1556,9 +1557,11 @@ Blockly.Blocks.repeat_block = {{
 - If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification and do not modify the task returning the task structure as it is.
 - Always reply with the language used by the user, even if it is not English.
 
-# IMPORTANT #
+# IMPORTANT INSTRUCTIONS #
 - If no modifications are needed, return the existing task structure as it is.
 - Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
+- Always create a task compatible with the rules defined in the Blockly CONNECTION RULES section.
+- By default, if the user asks for a request, modify the existing task. Only if the user explicitly asks for a new task, create a new one from scratch.
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):

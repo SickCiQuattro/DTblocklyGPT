@@ -144,8 +144,10 @@ export const SplittedLayout = ({
               Blockly.getMainWorkspace().getUndoStack().length === 0)
           }
           onClick={() => {
+            console.log(getBlocklyStructure())
             Blockly.getMainWorkspace().undo(false)
             const blocklyTaskStructure = getBlocklyStructure()
+            console.log(getBlocklyStructure())
             const abstractTask = blocklyToAbstract(
               blocklyTaskStructure as CustomBlock,
             )

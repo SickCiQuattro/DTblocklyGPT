@@ -183,8 +183,6 @@ export const BlocklyComponent = ({
       const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
       const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
 
-      workspace.clear()
-
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
 

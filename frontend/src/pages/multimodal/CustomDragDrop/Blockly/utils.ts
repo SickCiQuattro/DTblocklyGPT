@@ -5,14 +5,11 @@ export const updateStructureAndFireFakeChangeEvent = (
   workspace: Blockly.WorkspaceSvg,
   defaultDataTask: State,
 ) => {
-  const tempBlock = Blockly.serialization.blocks.append(
-    defaultDataTask,
-    workspace,
-  )
+  Blockly.Events.setGroup('update_task_import')
 
-  const xml = Blockly.Xml.blockToDom(tempBlock) as Element
-
-  Blockly.Events.setGroup('chat_response_import')
-  Blockly.Xml.domToWorkspace(xml, workspace)
+  workspace.clear()
+  Blockly.serialization.blocks.appendInternal(defaultDataTask, workspace, {
+    recordUndo: true,
+  })
   Blockly.Events.setGroup(false)
 }
