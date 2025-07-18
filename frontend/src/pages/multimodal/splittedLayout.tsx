@@ -29,7 +29,7 @@ import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
-import { useParams /* useSearchParams */ } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 interface SplittedLayoutProps {
   dataLocations: LocationListType[]
@@ -51,10 +51,10 @@ export const SplittedLayout = ({
   const [taskStructure, setTaskStructure] = useState<AbstractStep[] | null>(
     abstractTask,
   )
-  // const [searchParams] = useSearchParams()
-  // const newTaskParam = searchParams.get('newTask')
+  const [searchParams] = useSearchParams()
+  const newTaskParam = searchParams.get('newTask')
   const [editingMode, setEditingMode] = useState<boolean>(
-    true, // newTaskParam === 'true',
+    newTaskParam === 'true',
   )
   const [newChatResponse, setNewChatResponse] = useState<boolean>(false)
   const [speaker, setSpeaker] = React.useState(false)
@@ -144,10 +144,8 @@ export const SplittedLayout = ({
               Blockly.getMainWorkspace().getUndoStack().length === 0)
           }
           onClick={() => {
-            console.log(getBlocklyStructure())
             Blockly.getMainWorkspace().undo(false)
             const blocklyTaskStructure = getBlocklyStructure()
-            console.log(getBlocklyStructure())
             const abstractTask = blocklyToAbstract(
               blocklyTaskStructure as CustomBlock,
             )

@@ -47,7 +47,11 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
       <Collapse
         key="task-collapse-debug"
         style={{ marginTop: '1rem', marginRight: '1rem' }}
-        defaultActiveKey={['task-representation']}
+        defaultActiveKey={
+          [
+            /* 'task-representation' */
+          ]
+        }
         items={[
           {
             label: 'Task representation',
