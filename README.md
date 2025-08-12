@@ -126,3 +126,16 @@ Type: `Administrator`/`Manager`
 ```bash
 ign gazebo -v 4 worldCobotta.sdf
 ```
+
+## :rocket: Gazebo Workflow
+
+### :play_arrow: Startup Sequence
+
+To start the complete Gazebo simulation environment, run the following batch files in order:
+
+1. `cobotta_node.bat` - Initialize Cobotta robot node
+2. `flask_node.bat` - Start Flask backend service
+3. `gazebo_bridge.bat` - Launch Gazebo communication bridge
+4. `gazebo.bat` - Start Gazebo simulation environment
+5. `npm start.bat` - Launch frontend development server
+6. `poetry run start.bat` - Start Python backend server
