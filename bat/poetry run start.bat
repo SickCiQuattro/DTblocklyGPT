@@ -1,1 +1,1 @@
-cd C:\repos\blocklyGPT && poetry run start
+cd C:\repos\DTblocklyGPT && poetry run start

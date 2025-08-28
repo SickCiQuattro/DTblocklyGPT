@@ -1,1 +1,1 @@
-cd C:\repos\blocklyGPT && npm start
+cd C:\repos\DTblocklyGPT && npm start
