@@ -35,7 +35,8 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
 
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
-    const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
+    // const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
+    const abstractTask = blocklyTaskStructure
 
     fetchApi({
       url: endpoints.graphic.saveGraphicTask,
@@ -122,7 +123,8 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
             children: actualTask ? (
               <pre>
                 {JSON.stringify(
-                  blocklyToAbstract(actualTask as CustomBlock),
+                  // blocklyToAbstract(actualTask as CustomBlock),
+                  actualTask,
                   null,
                   2,
                 )}

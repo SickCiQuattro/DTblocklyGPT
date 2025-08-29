@@ -138,7 +138,9 @@ def simulate_ros_move(
             "hand": hand,
             "joint_abs": joint_abs,
         }
+        print("chiamata")
         requests.get(ros_url, params=ros_params)
+        print("dopo chiamata")
 
     except Exception as e:
         print(str(e))

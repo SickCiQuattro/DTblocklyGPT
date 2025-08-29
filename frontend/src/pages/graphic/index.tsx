@@ -75,7 +75,8 @@ const Graphic = () => {
           dataLocations={dataLocations}
           dataActions={dataActions}
           dataTask={
-            dataTask.code
+            JSON.parse(dataTask.code) as any
+            /*
               ? abstractToBlockly(
                   JSON.parse(dataTask.code),
                   dataObjects,
@@ -83,6 +84,7 @@ const Graphic = () => {
                   dataActions,
                 )
               : null
+              */
           }
           backFunction={backFunction}
         />

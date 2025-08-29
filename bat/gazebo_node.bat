@@ -1,0 +1,1 @@
+wsl.exe cd /mnt/c/repos/DTblocklyGPT/ros2_ws; source install/setup.bash; ros2 run cobotta_rest_api gazebo_node
