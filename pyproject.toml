@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "blocklyGPT"
+name = "DTblocklyGPT"
 version = "1.0.0"
 description = "Pharmaceutical Robotic and AI System for End"
 authors = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
 maintainers = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
 readme = "README.md"
 homepage = "http://localhost:3000/"
-repository = "https://github.com/luigigargioni/blocklyGPT"
-documentation = "https://github.com/luigigargioni/blocklyGPT#readme"
+repository = "https://github.com/luigigargioni/DTblocklyGPT"
+documentation = "https://github.com/luigigargioni/DTblocklyGPT#readme"
 packages = [
     { include="poetry_scripts", from="./backend" },
 ]

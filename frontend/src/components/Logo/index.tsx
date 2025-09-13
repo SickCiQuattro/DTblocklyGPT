@@ -25,7 +25,7 @@ export const LogoSection = () => {
           fontSize: '1rem',
         }}
       >
-        BlocklyGPT
+        DTblocklyGPT
       </Typography>
     </ButtonBase>
   )

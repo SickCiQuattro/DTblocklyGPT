@@ -307,7 +307,7 @@ def new_message(request: HttpRequest) -> HttpResponse:
                         job = openai.FineTuningJob.create(
                             training_file=file["id"],
                             model="gpt-3.5-turbo",
-                            suffix="blocklyGPT-tasks",
+                            suffix="DTblocklyGPT-tasks",
                         )
 
                         fine_tuning_job_id = job["id"]

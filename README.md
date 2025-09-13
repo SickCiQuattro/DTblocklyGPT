@@ -1,4 +1,4 @@
-# :robot: blocklyGPT
+# :robot: DTblocklyGPT
 
 This repository contains the prototype implementation of the project described in the [paper](https://dl.acm.org/doi/abs/10.1145/3610978.3640653).
 
@@ -139,3 +139,24 @@ To start the complete Gazebo simulation environment, run the following batch fil
 4. `gazebo.bat` - Start Gazebo simulation environment
 5. `npm start.bat` - Launch frontend development server
 6. `poetry run start.bat` - Start Python backend server
+
+# Ubuntu commands (change path):
+```bash
+cd /mnt/c/repos/DTblocklyGPT/ros2_ws; source install/setup.bash; ros2 run cobotta_rest_api cobotta_node
+```
+
+```bash
+cd /mnt/c/repos/DTblocklyGPT/ros2_ws; source install/setup.bash; ros2 run cobotta_rest_api flask_node
+```
+
+```bash
+cd /mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta; source install/setup.bash; ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=map.yaml
+```
+
+```bash
+cd /mnt/c/repos/DTblocklyGPT/ros2_ws; source install/setup.bash; ros2 run cobotta_rest_api gazebo_node
+```
+
+```bash
+cd /mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta; gz sim -r -v 4 worldCobotta.sdf
+```

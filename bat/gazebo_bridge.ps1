@@ -1,8 +1,8 @@
 # RunCobottaBridge.ps1
 # Questo script esegue il nodo ros_gz_bridge del robot Cobotta dentro WSL
 
-# Percorso del setup ROS2 (modifica se la tua distro è diversa da humble)
-$rosSetup = "/opt/ros/humble/setup.bash"
+# Percorso del setup ROS2 (modifica se la tua distro è diversa da jazzy)
+$rosSetup = "/opt/ros/jazzy/setup.bash"
 
 # Percorso del workspace Cobotta dentro WSL
 $workspacePath = "/mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta"

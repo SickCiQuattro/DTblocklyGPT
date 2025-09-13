@@ -51,7 +51,7 @@ def launch_wsl_ros_command(command: str):
         # print(platform.system())
         if platform.system() == "Windows":
             subprocess.run(
-                ["wsl", "bash", "-c", command],
+                ["wsl", "-d", "Ubuntu-24.04", "bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -74,7 +74,7 @@ def start_ros_architecture():
                 "wsl",
                 "bash",
                 "-c",
-                "cd /mnt/c/repos/blocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api flask_node",
+                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api flask_node",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -84,18 +84,7 @@ def start_ros_architecture():
                 "wsl",
                 "bash",
                 "-c",
-                "cd /mnt/c/repos/blocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api cobotta_node",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-c",
-                "cd /mnt/c/repos/blocklyGPT/ros2_ws/Cobotta && ign gazebo -v 4 worldCobottaDensoLimitsOptimised2.sdf",
+                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api cobotta_node",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -106,7 +95,18 @@ def start_ros_architecture():
                 "wsl",
                 "bash",
                 "-c",
-                "cd /mnt/c/repos/blocklyGPT/ros2_ws/Cobotta && ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=../Cobotta/map.yaml",
+                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws/Cobotta && ign gazebo -v 4 worldCobottaDensoLimitsOptimised2.sdf",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        subprocess.run(
+            [
+                "wsl",
+                "bash",
+                "-c",
+                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws/Cobotta && ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=../Cobotta/map.yaml",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -138,9 +138,7 @@ def simulate_ros_move(
             "hand": hand,
             "joint_abs": joint_abs,
         }
-        print("chiamata")
         requests.get(ros_url, params=ros_params)
-        print("dopo chiamata")
 
     except Exception as e:
         print(str(e))
@@ -280,9 +278,9 @@ def simulation_recursive_blockly_parser(
     simulate_event: bool,
 ):
     try:
-        delete_object_pick_command = """ign service -s /world/worldCobotta/remove --reqtype ignition.msgs.Entity --reptype ignition.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-        delete_object_place_command = f"""ign service -s /world/worldCobotta/remove --reqtype ignition.msgs.Entity --reptype ignition.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
-        delete_location_command = """ign service -s /world/worldCobotta/remove --reqtype ignition.msgs.Entity --reptype ignition.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
+        delete_object_pick_command = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
+        delete_object_place_command = f"""gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
+        delete_location_command = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
         if code["type"] == LogicItems.REPEAT.value:
             times = int(code["fields"]["times"])
@@ -450,7 +448,7 @@ def simulation_recursive_blockly_parser(
             object_data = loads(code["inputs"]["OBJECT"]["block"]["data"])
             object = objectsOfUser.filter(id=object_data["id"]).first()
             object_sdf_filename = object.name
-            create_object_pick_command = f"""ign service -s /world/worldCobotta/create --reqtype ignition.msgs.EntityFactory --reptype ignition.msgs.Boolean --timeout 5000 --req 'name: "object"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.35, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0, w: 0}}}}'"""
+            create_object_pick_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.35, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
             launch_wsl_ros_command(create_object_pick_command)
             actions_points_array = []
 
@@ -481,7 +479,7 @@ def simulation_recursive_blockly_parser(
                             id=location_data["id"]
                         ).first()
                         location_sdf_filename = location.name
-                        create_location_command = f"""ign service -s /world/worldCobotta/create --reqtype ignition.msgs.EntityFactory --reptype ignition.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
+                        create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
                         launch_wsl_ros_command(create_location_command)
                         location_block_found = True
 
@@ -491,13 +489,13 @@ def simulation_recursive_blockly_parser(
                 )
                 location = locationsOfUser.filter(id=location_data["id"]).first()
                 location_sdf_filename = location.name
-                create_location_command = f"""ign service -s /world/worldCobotta/create --reqtype ignition.msgs.EntityFactory --reptype ignition.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
+                create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
                 launch_wsl_ros_command(create_location_command)
 
             simulate_ros_pick(delete_object_pick_command)
             for action_points in actions_points_array:
                 simulate_ros_action(action_points)
-            create_object_place_command = f"""ign service -s /world/worldCobotta/create --reqtype ignition.msgs.EntityFactory --reptype ignition.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 0}}}}'"""
+            create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
             simulate_ros_place(create_object_place_command)
             time.sleep(1)
             launch_wsl_ros_command(delete_object_place_command)

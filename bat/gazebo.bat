@@ -1,1 +1,1 @@
-wsl.exe cd /mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta; ign gazebo -r -v 4 worldCobotta.sdf
+wsl.exe cd /mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta; gz sim -r -v 4 worldCobotta.sdf

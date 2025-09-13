@@ -37,7 +37,7 @@ class HardwareControl(Node):
         self.subscriber_gazebo_joint_left = self.create_subscription(
             JointState, "/joint_left", self.get_joint_left_gazebo, 10
         )
-        self.publisher = self.create_publisher(JointState, '/gazebo_position', 10)
+        self.publisher = self.create_publisher(JointState, "/gazebo_position", 10)
         timer_period = 0.5
         self.timer = self.create_timer(timer_period, self.current_pos_gazebo)
 
@@ -90,8 +90,8 @@ class HardwareControl(Node):
         joint_state = JointState()
         joint_state.header.stamp = self.get_clock().now().to_msg()
         joint_state.header.frame_id = "true"
-        joint_state.name = [f'joint_{i}' for i in range(1, 7)]
-        joint_state.name.append('hand')
+        joint_state.name = [f"joint_{i}" for i in range(1, 7)]
+        joint_state.name.append("hand")
         joint_state.position = self.joint_position[0:7]
         joint_state.velocity = []
         joint_state.effort = []
@@ -105,8 +105,12 @@ class HardwareControl(Node):
             self.publisher.publish(msg)
             self.get_logger().info('Publishing: "%s"' % self.current_pos)
 
-    def isPositionChanged(self, new_joint_position, epsilon=sys.float_info.epsilon,
-                          epsilon_hand=sys.float_info.epsilon):
+    def isPositionChanged(
+        self,
+        new_joint_position,
+        epsilon=sys.float_info.epsilon,
+        epsilon_hand=sys.float_info.epsilon,
+    ):
         for new_joint, old_joint in zip(new_joint_position[:6], self.current_pos[:6]):
             if abs(new_joint - old_joint) > epsilon:
                 return True
@@ -119,7 +123,7 @@ def main(args=None):
     rclpy.init(args=args)
 
     joint_state_sub = HardwareControl()
-
+    print("gazebo_node started")
     rclpy.spin(joint_state_sub)
 
     joint_state_sub.destroy_node()
