@@ -14,16 +14,15 @@
             </collision>
             <visual name="visual">
                 <geometry>
-                    <box>
+                    <mesh>
                         <scale>0.6 0.6 0.6</scale>
-                        <size>3.98944 2.58857 1.73261</size>
-                    </box>
+                        <uri>meshes/Table.dae</uri>
+                    </mesh>
                 </geometry>
                 <material>
                     <diffuse>1.0 1.0 1.0</diffuse>
-                    <ambient>0.5 0.5 0.5 1.0</ambient>
-                    <!-- ? semplificazione rendering tavolo -->
-                    <!-- <pbr>
+                    <specular>1.0 1.0 1.0</specular>
+                    <pbr>
                         <metal>
                             <albedo_map>materials/textures/Table_Table_BaseColor.png</albedo_map>
                             <normal_map>materials/textures/Table_Table_Normal.png</normal_map>
@@ -31,7 +30,7 @@
                             <environment_map>materials/textures/DepotEnvMap.dds</environment_map>
                             <metalness>0.1</metalness>
                         </metal>
-                    </pbr> -->
+                    </pbr>
                 </material>
             </visual>
         </link>
