@@ -1,105 +1,85 @@
 <?xml version="1.0" ?>
 <sdf version="1.7">
   <world name="worldCobotta">
-    <scene>
+    <!-- <scene>
       <grid>false</grid>
-    </scene>
-    <physics name="1ms" type="ignored">
+    </scene> -->
+    <physics name="1ms" type="ode">
       <max_step_size>0.005</max_step_size>
       <!-- <real_time_factor>1.0</real_time_factor> -->
     </physics>
-    <!-- ? new version plugin: ignition-gz migration -->
-    <!-- todo: verify testing -->
-    <!-- <plugin
+    <plugin
       filename="gz-sim-physics-system"
       name="gz::sim::systems::Physics">
-    </plugin> -->
-    <!-- <plugin
+    </plugin>
+    <plugin
       filename="gz-sim-sensors-system"
       name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
-    </plugin> -->
-    <!-- <plugin
+    </plugin>
+    <plugin
       filename="gz-sim-user-commands-system"
       name="gz::sim::systems::UserCommands">
-    </plugin> -->
-    <!-- <plugin
+    </plugin>
+    <plugin
       filename="gz-sim-scene-broadcaster-system"
       name="gz::sim::systems::SceneBroadcaster">
-    </plugin> -->
-    <plugin
-      filename="ignition-gazebo-physics-system"
-      name="ignition::gazebo::systems::Physics">
     </plugin>
-    <plugin
-      filename="ignition-gazebo-sensors-system"
-      name="ignition::gazebo::systems::Sensors">
-      <render_engine>ogre2</render_engine>
-    </plugin>
-    <plugin
-      filename="ignition-gazebo-user-commands-system"
-      name="ignition::gazebo::systems::UserCommands">
-    </plugin>
-    <plugin
-      filename="ignition-gazebo-scene-broadcaster-system"
-      name="ignition::gazebo::systems::SceneBroadcaster">
-    </plugin>
+
+
     <gui>
-      <!-- 3D scene -->
+        <!-- 3D Scene -->
       <plugin filename="GzScene3D" name="3D View">
-      <!-- todo : migrazion gz-gui -->
-      <ignition-gui>
-        <title>3D View</title>
-        <property type="bool" key="showTitleBar">false</property>
-        <property type="string" key="state">docked</property>
-        <!-- <property key="resizable" type="bool">false</property>
-        <property key="width" type="double">72</property>
-        <property key="height" type="double">121</property> -->
-      </ignition-gui> 
-
-      <engine>ogre2</engine>
-      <scene>scene</scene>
-      <camera_pose> -9.5 -2 1.5 0 0 1</camera_pose>
-    </plugin>
-
-      <!-- Play / pause / step -->
-    <plugin filename="WorldControl" name="World control">
-    <!-- todo: gz-gui migration -->
-      <ignition-gui>
-          <title>World control</title>
+        <!-- todo : migrazion gz-gui -->
+        <ignition-gui>
+          <title>3D View</title>
           <property type="bool" key="showTitleBar">false</property>
-          <property type="bool" key="resizable">false</property>
-          <!-- <property type="double" key="height">72</property>
-          <property type="double" key="width">121</property> -->
-          <property type="double" key="z">1</property>
-          <property type="string" key="state">floating</property>
-          <anchors target="3D View">
-          <line own="left" target="left"/>
-          <line own="bottom" target="bottom"/>
-          </anchors>
-      </ignition-gui>
-      <play_pause>true</play_pause>
-      <step>false</step>
-      <start_paused>false</start_paused>
-    </plugin>
+          <property type="string" key="state">docked</property>
+        </ignition-gui> 
 
-    <plugin filename="JointPositionController" name="JointPositionController">
-    <!-- todo: gz-gui migration -->
-      <ignition-gui>
-        <property type="double" key="height">600</property>
-        <property type="double" key="width">400</property>
-
-              <property type="string" key="state">floating</property>
-              <property type="bool" key="collapsed">true</property>
-              <anchors target="3D View">
-                  <line own="right" target="right"/>
-                  <line own="top" target="top"/>
-              </anchors>
-          </ignition-gui>
-          <model_name>Cobotta</model_name>
+        <engine>ogre2</engine>
+        <!-- <fsaa>0</fsaa> -->
+        <!-- <scene>scene</scene> -->
+        <camera_pose> -9.5 -2 1.5 0 0 1</camera_pose>
       </plugin>
 
+      <!-- Play / pause / step -->
+      <plugin filename="WorldControl" name="World control">
+      <!-- todo: gz-gui migration -->
+        <ignition-gui>
+            <title>World control</title>
+            <property type="bool" key="showTitleBar">false</property>
+            <property type="bool" key="resizable">false</property>
+            <property type="double" key="z">1</property>
+            <property type="string" key="state">floating</property>
+            <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+            </anchors>
+        </ignition-gui>
+        <play_pause>true</play_pause>
+        <step>false</step>
+        <start_paused>false</start_paused>
+      </plugin>
+
+      <!-- Joint Position Controller -->
+      <plugin filename="JointPositionController" name="JointPositionController">
+      <!-- todo: gz-gui migration -->
+        <ignition-gui>
+          <property type="double" key="height">600</property>
+          <property type="double" key="width">400</property>
+
+                <property type="string" key="state">floating</property>
+                <property type="bool" key="collapsed">true</property>
+                <anchors target="3D View">
+                    <line own="right" target="right"/>
+                    <line own="top" target="top"/>
+                </anchors>
+            </ignition-gui>
+            <model_name>Cobotta</model_name>
+        </plugin>
     </gui>
+
 
     <light type="directional" name="sun">
       <cast_shadows>false</cast_shadows>
@@ -108,6 +88,7 @@
       <specular>0.1 0.1 0.1 1</specular>
       <direction>-0.5 0.5 -1</direction>
     </light>
+
 
     <include>
       <name>Cobotta</name>
