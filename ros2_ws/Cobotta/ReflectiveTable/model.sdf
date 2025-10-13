@@ -6,23 +6,23 @@
             <pose>0 0 0 0 3.14 0</pose>
             <collision name="collision">
                 <geometry>
+                    <!-- table dimensions already scaled (0.6 0.6 0.6) -->
+                    <box>
+                        <size>2.393664 1.553142 1.039566</size>
+                    </box>
+                </geometry>
+            </collision>
+            <visual name="visual">
+                <geometry>
                     <mesh>
                         <scale>0.6 0.6 0.6</scale>
                         <uri>meshes/Table.dae</uri>
                     </mesh>
                 </geometry>
-            </collision>
-            <visual name="visual">
-                <geometry>
-                    <box>
-                        <scale>0.6 0.6 0.6</scale>
-                        <size>3.98944 2.58857 1.73261</size>
-                    </box>
-                </geometry>
                 <material>
                     <diffuse>1.0 1.0 1.0</diffuse>
                     <ambient>0.5 0.5 0.5 1.0</ambient>
-                    <!-- ? semplificazione rendering tavolo -->
+                    <!-- ? simplify table rendering -->
                     <!-- <pbr>
                         <metal>
                             <albedo_map>materials/textures/Table_Table_BaseColor.png</albedo_map>
