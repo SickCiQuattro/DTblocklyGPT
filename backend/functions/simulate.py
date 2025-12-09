@@ -145,25 +145,28 @@ def simulate_ros_move(
 
 
 ROS_OPEN_GRIPPER = 30
-ROS_CLOSE_GRIPPER_WITH_OBJECT = 15
+ROS_GRIPPER_GENTLE_CLOSE = 10 
+ROS_CLOSE_GRIPPER_WITH_OBJECT = 0
 
 
-def simulate_ros_pick(delete_object_command: str = ""):
+
+def simulate_ros_pick():
     try:
-        J1_PICK_APPROACH = 75.58923962550608
-        J2_PICK_APPROACH = -0.3536589170994134
-        J3_PICK_APPROACH = 89.31830840410409
-        J4_PICK_APPROACH = 4.145723768974888
-        J5_PICK_APPROACH = 87.22575914827912
-        J6_PICK_APPROACH = 1.8681746932240402
+        J1_PICK_APPROACH = 0.0
+        J2_PICK_APPROACH = 45.836623610465856701438523851284
+        J3_PICK_APPROACH = 80.214091318315249227517416739747
+        J4_PICK_APPROACH = 0.0
+        J5_PICK_APPROACH = 0.0
+        J6_PICK_APPROACH = 0.0
 
-        J1_PICK = 69.96086633350203
-        J2_PICK = 61.01426999431012
-        J3_PICK = 89.11969276224667
-        J4_PICK = 1.0908547191248126
-        J5_PICK = 28.352809413907178
-        J6_PICK = 160.70398691618865
+        J1_PICK = 0.0
+        J2_PICK = 51.566201561774088789118339332695
+        J3_PICK = 96.538036196585829446716955443274
+        J4_PICK = 0.0
+        J5_PICK = 0.0
+        J6_PICK = 0.0
 
+        # Approach position
         simulate_ros_move(
             J1_PICK_APPROACH,
             J2_PICK_APPROACH,
@@ -173,6 +176,34 @@ def simulate_ros_pick(delete_object_command: str = ""):
             J6_PICK_APPROACH,
             ROS_OPEN_GRIPPER,
         )
+        time.sleep(3)
+        
+        # Pick position - close to the object
+        simulate_ros_move(
+            J1_PICK,
+            J2_PICK,
+            J3_PICK,
+            J4_PICK,
+            J5_PICK,
+            J6_PICK,
+            ROS_OPEN_GRIPPER,
+        )
+        time.sleep(4)
+
+        # Gradual closing for stable contact
+        # First partial closure
+        # simulate_ros_move(
+        #     J1_PICK,
+        #     J2_PICK,
+        #     J3_PICK,
+        #     J4_PICK,
+        #     J5_PICK,
+        #     J6_PICK,
+        #     ROS_GRIPPER_GENTLE_CLOSE,
+        # )
+        # time.sleep(1.5)
+
+        # Complete closure
         simulate_ros_move(
             J1_PICK,
             J2_PICK,
@@ -183,7 +214,7 @@ def simulate_ros_pick(delete_object_command: str = ""):
             ROS_CLOSE_GRIPPER_WITH_OBJECT,
         )
         time.sleep(1)
-        launch_wsl_ros_command(delete_object_command)
+
         simulate_ros_initial_position(False)
 
     except Exception as e:
@@ -192,12 +223,12 @@ def simulate_ros_pick(delete_object_command: str = ""):
 
 def simulate_ros_initial_position(gripper_open: bool = True):
     try:
-        J1_INITIAL_POSITION = 0.0135501012145749
-        J2_INITIAL_POSITION = -0.009626818660299219
-        J3_INITIAL_POSITION = 90.01453097663652
-        J4_INITIAL_POSITION = -0.011895907514992504
-        J5_INITIAL_POSITION = 89.99512641776937
-        J6_INITIAL_POSITION = 0.017378369239293395
+        J1_INITIAL_POSITION = 0
+        J2_INITIAL_POSITION = 0
+        J3_INITIAL_POSITION = 90
+        J4_INITIAL_POSITION = 0
+        J5_INITIAL_POSITION = 0
+        J6_INITIAL_POSITION = 0
 
         if gripper_open:
             simulate_ros_move(
@@ -226,13 +257,66 @@ def simulate_ros_initial_position(gripper_open: bool = True):
 
 def simulate_ros_place(create_object_place_command):
     try:
-        J1_PLACE = -77.54722925101215
-        J2_PLACE = -0.36987250642202263
-        J3_PLACE = 89.32364753426154
-        J4_PLACE = 4.1421549967203894
-        J5_PLACE = 87.277894255997
-        J6_PLACE = 1.870657317401082
 
+        J1_PLACE = 51.566201561774088789118339332695
+        J2_PLACE = 53.285074947166558415422283977118
+        J3_PLACE = 80.214091318315249227517416739747
+        J4_PLACE = 0.0
+        J5_PLACE = 20.053522829578812306879354184937
+        J6_PLACE = 0.0
+        
+        J1_NEAR = 51.566201561774088789118339332695
+        J2_NEAR = 20.053522829578812306879354184937
+        J3_NEAR = 87.08958485988512773273319531744
+        J4_NEAR = 0.0
+        J5_NEAR = 48.701412586119972745278431591989
+        J6_NEAR = 0.0
+
+        # sollevamento intermedio prima del place
+        J1_UP = 0.0
+        J2_UP = 20.053522829578812306879354184937
+        J3_UP = 68.754935415698785052157785776926
+        J4_UP = 0.0
+        J5_UP = 22.918311805232928350719261925642
+        J6_UP = 0.0
+
+        # sollevamento
+        simulate_ros_move(
+            J1_UP,
+            J2_UP,
+            J3_UP,
+            J4_UP,
+            J5_UP,
+            J6_UP,
+            ROS_CLOSE_GRIPPER_WITH_OBJECT,
+        )
+        time.sleep(2)
+
+        # rotazione
+        simulate_ros_move(
+            J1_NEAR,
+            J2_UP,
+            J3_UP,
+            J4_UP,
+            J5_UP,
+            J6_UP,
+            ROS_CLOSE_GRIPPER_WITH_OBJECT,
+        )
+        time.sleep(1)
+
+        # abbassamento 1
+        simulate_ros_move(
+            J1_NEAR,
+            J2_NEAR,
+            J3_NEAR,
+            J4_NEAR,
+            J5_NEAR,
+            J6_NEAR,
+            ROS_CLOSE_GRIPPER_WITH_OBJECT,
+        )
+        time.sleep(1)
+
+        # abbassamento 2
         simulate_ros_move(
             J1_PLACE,
             J2_PLACE,
@@ -242,11 +326,17 @@ def simulate_ros_place(create_object_place_command):
             J6_PLACE,
             ROS_CLOSE_GRIPPER_WITH_OBJECT,
         )
+        time.sleep(2)
+        
+        # Open gripper to release
         simulate_ros_move(
             J1_PLACE, J2_PLACE, J3_PLACE, J4_PLACE, J5_PLACE, J6_PLACE, ROS_OPEN_GRIPPER
         )
         time.sleep(0.5)
-        launch_wsl_ros_command(create_object_place_command)
+        # launch_wsl_ros_command(create_object_place_command)
+        time.sleep(0.5)
+        simulate_ros_initial_position(gripper_open=True)
+        
 
     except Exception as e:
         print(str(e))
@@ -270,18 +360,48 @@ def simulate_ros_action(action_points: list[int] = []):
         print(str(e))
 
 
+def reset_simulation_world():
+    try:
+        delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
+        # delete_object_place = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
+        delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
+        
+        launch_wsl_ros_command(delete_object)
+        time.sleep(0.3)
+        # launch_wsl_ros_command(delete_object_place)
+        # time.sleep(0.3)
+        launch_wsl_ros_command(delete_location)
+        
+        time.sleep(1.0)
+        simulate_ros_initial_position(gripper_open=True)
+        time.sleep(3.0)
+    except Exception as e:
+        print(str(e))
+
+
+def delete_spawned_object_and_place():
+    """Rimuove gli oggetti temporanei creati durante PICK/PLACE per permettere
+    di ripetere la sequenza senza resettare l'intero mondo."""
+    try:
+        delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
+        delete_object_place = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
+        launch_wsl_ros_command(delete_object)
+        time.sleep(0.2)
+        launch_wsl_ros_command(delete_object_place)
+    except Exception as e:
+        print(str(e))
+
+
 def simulation_recursive_blockly_parser(
     code: dict,
     objectsOfUser: List[Object],
     actionsOfUser: List[Action],
     locationsOfUser: List[Location],
     simulate_event: bool,
+    inside_conditional: bool = False,  # Flag per sapere se siamo dentro un WHEN
 ):
     try:
-        delete_object_pick_command = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-        delete_object_place_command = f"""gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
-        delete_location_command = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
-
+        
         if code["type"] == LogicItems.REPEAT.value:
             times = int(code["fields"]["times"])
             for i in range(0, times):
@@ -291,8 +411,11 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional,
                 )
-            launch_wsl_ros_command(delete_location_command)
+                delete_spawned_object_and_place()
+            time.sleep(3)
+            
 
             if code.get("next") is not None:
                 simulation_recursive_blockly_parser(
@@ -301,8 +424,10 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional,
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
 
         # elif code["type"] == LogicItems.LOOP.value:
         #     times = 10  # inf
@@ -314,7 +439,7 @@ def simulation_recursive_blockly_parser(
         #             locationsOfUser,
         #             simulate_event,
         #         )
-        #     launch_wsl_ros_command(delete_location_command)
+        #     
 
         #     if code.get("next") is not None:
         #         simulation_recursive_blockly_parser(
@@ -324,7 +449,7 @@ def simulation_recursive_blockly_parser(
         #             locationsOfUser,
         #             simulate_event,
         #         )
-        #         launch_wsl_ros_command(delete_location_command)
+        #         
 
         elif code["type"] == LogicItems.WHEN.value:
             condition_type = (
@@ -353,8 +478,10 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional=True,  # Entriamo in un blocco condizionale
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
             else:
                 if code["inputs"]["WHEN"]["block"]["type"] == EventsItems.FIND.value:
                     object_find = loads(
@@ -378,8 +505,10 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional,
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
 
         elif code["type"] == LogicItems.WHEN_OTHERWISE.value:
             condition_type = (
@@ -408,8 +537,10 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional=True,  # Entriamo in un blocco condizionale
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
             else:
                 if code["inputs"]["WHEN"]["block"]["type"] == EventsItems.FIND.value:
                     object_find = loads(
@@ -431,8 +562,10 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional=True,  # Entriamo in un blocco condizionale
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
 
             if code.get("next") is not None:
                 simulation_recursive_blockly_parser(
@@ -441,18 +574,64 @@ def simulation_recursive_blockly_parser(
                     actionsOfUser,
                     locationsOfUser,
                     simulate_event,
+                    inside_conditional,
                 )
-                launch_wsl_ros_command(delete_location_command)
+                time.sleep(3)
+                
 
         elif code["type"] == StepsItems.PICK.value:
             object_data = loads(code["inputs"]["OBJECT"]["block"]["data"])
             object = objectsOfUser.filter(id=object_data["id"]).first()
             object_sdf_filename = object.name
-            create_object_pick_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.35, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
+            
+            create_object_pick_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.05, y: -1.48, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
             launch_wsl_ros_command(create_object_pick_command)
+            time.sleep(1)
+            
             actions_points_array = []
+            location_sdf_filename = None
+            create_location_command = None
 
-            if code["next"]["block"]["type"] == StepsItems.PROCESSING.value:
+            # Se siamo dentro un blocco condizionale (WHEN/OTHERWISE),
+            # gestiamo PICK → [PROCESSING(s)] → PLACE in modo semplice
+            if inside_conditional and code.get("next") is not None:
+                next_block = code["next"]["block"]
+                
+                # Raccoglie tutti i PROCESSING consecutivi
+                while next_block is not None and next_block["type"] == StepsItems.PROCESSING.value:
+                    action_data = loads(next_block["inputs"]["ACTION"]["block"]["data"])
+                    action = actionsOfUser.filter(id=action_data["id"]).first()
+                    action_points = loads(action.points)["points"]
+                    actions_points_array.append(action_points)
+                    
+                    if next_block.get("next") is not None:
+                        next_block = next_block["next"]["block"]
+                    else:
+                        next_block = None
+                
+                # Se troviamo un PLACE, prepara la location
+                if next_block is not None and next_block["type"] == StepsItems.PLACE.value:
+                    location_data = loads(next_block["inputs"]["LOCATION"]["block"]["data"])
+                    location = locationsOfUser.filter(id=location_data["id"]).first()
+                    location_sdf_filename = location.name
+                    create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0, w: 0.7071}}}}'"""
+                    if create_location_command:
+                        launch_wsl_ros_command(create_location_command)
+                
+                # Esegue la sequenza fisica
+                simulate_ros_pick()
+                for action_points in actions_points_array:
+                    simulate_ros_action(action_points)
+                create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
+                simulate_ros_place(create_object_place_command)
+                time.sleep(1)
+                
+                # NON facciamo la chiamata ricorsiva per next perché l'abbiamo già gestito sopra
+                # (altrimenti il PLACE verrebbe eseguito due volte)
+                return
+
+            # Modalità normale (vecchio comportamento): lookahead automatico
+            if code.get("next") is not None and code["next"]["block"]["type"] == StepsItems.PROCESSING.value:
                 action_data = loads(
                     code["next"]["block"]["inputs"]["ACTION"]["block"]["data"]
                 )
@@ -479,29 +658,25 @@ def simulation_recursive_blockly_parser(
                             id=location_data["id"]
                         ).first()
                         location_sdf_filename = location.name
-                        create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
+                        create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
                         launch_wsl_ros_command(create_location_command)
                         location_block_found = True
 
-            if code["next"]["block"]["type"] == StepsItems.PLACE.value:
+            if code.get("next") is not None and code["next"]["block"]["type"] == StepsItems.PLACE.value:
                 location_data = loads(
                     code["next"]["block"]["inputs"]["LOCATION"]["block"]["data"]
                 )
                 location = locationsOfUser.filter(id=location_data["id"]).first()
                 location_sdf_filename = location.name
-                create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.05}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
+                create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
                 launch_wsl_ros_command(create_location_command)
 
-            simulate_ros_pick(delete_object_pick_command)
+            simulate_ros_pick()
             for action_points in actions_points_array:
                 simulate_ros_action(action_points)
             create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
             simulate_ros_place(create_object_place_command)
             time.sleep(1)
-            launch_wsl_ros_command(delete_object_place_command)
-
-            # launch_wsl_ros_command(delete_location_command)
-
         else:
             return error_response("Invalid task structure")
 
@@ -531,8 +706,10 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 )
                 code = loads(task.code)
 
+                reset_simulation_world()
+
                 simulation_recursive_blockly_parser(
-                    code, objectsOfUser, actionsOfUser, locationsOfUser, simulate_event
+                    code, objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional=False
                 )
 
                 return success_response()

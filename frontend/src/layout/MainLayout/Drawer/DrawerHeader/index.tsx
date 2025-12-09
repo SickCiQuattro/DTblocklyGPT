@@ -30,7 +30,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
         style={{ marginTop: '0.5rem' }}
       >
         <LogoSection />
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/*         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <Chip
             label={`C-${packageInfo.version}`}
             size="small"
@@ -55,7 +55,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
             }}
             component="div"
           />
-        </div>
+        </div> */}
       </Stack>
     </Box>
   )

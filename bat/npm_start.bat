@@ -1,0 +1,1 @@
+cd C:\Users\kinno\git\DTblocklyGPT-jazzy-harmonic && npm start

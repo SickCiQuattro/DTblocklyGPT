@@ -1,31 +1,43 @@
 <?xml version="1.0" ?>
-<sdf version='1.7'>
+<sdf version='1.11'>
 <model name='Cobotta'>
+    <!-- * la base è stata fissata al mondo in modo che non possa muoversi -->
+    <joint name="base_fixed" type="fixed">
+    <parent>world</parent>
+    <child>link_root</child>
+    </joint>
     <!--========================================================-->
     <!-- link_root -->
     <link name='link_root'>
         <inertial>
             <pose>0.00056 0.0223 0.04527 0 -0 0</pose>
-            <!-- Massa necessaria per impedire movimento della base -->
-            <mass>10000</mass>
+            <mass>1.5781582461079724</mass> 
             <inertia>
-                <ixx>0.01955</ixx>
-                <ixy>-0.0037</ixy>
-                <ixz>0.00097</ixz>
-                <iyy>0.00572002</iyy>
-                <iyz>0.00387999</iyz>
-                <izz>0.02018</izz>
+                <ixx>0.002994</ixx>
+                <ixy>2e-06</ixy>
+                <ixz>-0.000325</ixz>
+                <iyy>0.004044</iyy>
+                <iyz>1e-06</iyz>
+                <izz>0.00462</izz>
             </inertia>
         </inertial>
         <collision name='link_root_fixed_joint_lump__base_collision_collision'>
             <pose>0 0 0 1.5708 -0 0</pose>
             <geometry>
             <mesh>
-                <scale>1 1 1</scale>
                 <uri>file://meshes/coll/base.dae</uri>
+                <scale>1 1 1</scale>
             </mesh> 
             </geometry>
             <surface>
+                <contact>
+                    <ode>
+                        <kp>1000000.0</kp>
+                        <kd>100.0</kd>
+                        <max_vel>1.0</max_vel>
+                        <min_depth>0.001</min_depth>
+                    </ode>
+                </contact>
                 <friction>
                     <ode>
                         <mu>0.2</mu>
@@ -61,8 +73,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>6.0</damping>
+            <friction>20.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -72,14 +84,14 @@
     <pose relative_to='joint1'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>0.00668 0 0.04965 0 -0 0</pose>
-        <mass>1</mass>
+        <mass>0.7006266882863252</mass> 
         <inertia>
-            <ixx>0.00068</ixx>
-            <ixy>0</ixy>
-            <ixz>-9e-05</ixz>
-            <iyy>0.00078</iyy>
-            <iyz>0</iyz>
-            <izz>0.00057</izz>
+            <ixx>0.001062</ixx>
+            <ixy>-0.0</ixy>
+            <ixz>-0.0</ixz>
+            <iyy>0.000935</iyy>
+            <iyz>-0.000116</iyz>
+            <izz>0.000791</izz>
         </inertia>
     </inertial>
     <collision name='link_j1_fixed_joint_lump__j2_collision_collision'>
@@ -91,6 +103,14 @@
         </mesh> 
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
                     <mu>0.2</mu>
@@ -126,8 +146,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>7.0</damping>
+            <friction>20.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -137,14 +157,14 @@
     <pose relative_to='joint2'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>-0.07592 0.02475 0.03838 0 -0 0</pose>
-        <mass>1</mass>
+        <mass>0.7962111154190773</mass> 
         <inertia>
-            <ixx>0.00482</ixx>
-            <ixy>-8e-05</ixy>
-            <ixz>-3e-05</ixz>
-            <iyy>0.00462</iyy>
-            <iyz>-3e-05</iyz>
-            <izz>0.00075</izz>
+            <ixx>0.003728</ixx>
+            <ixy>5.6e-05</ixy>
+            <ixz>5.4e-05</ixz>
+            <iyy>0.003891</iyy>
+            <iyz>-3.2e-05</iyz>
+            <izz>0.000591</izz>
         </inertia>
     </inertial>
     <collision name='link_j2_fixed_joint_lump__j1Starm_collision_collision'>
@@ -156,6 +176,14 @@
         </mesh> 
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
                     <mu>0.2</mu>
@@ -178,7 +206,6 @@
     <!-- joint3 -->
     <joint name='joint3' type='revolute'>
     <pose relative_to='link_j2'>-0.165 0 0 3.14159 -0 3.14159</pose>
-<!--     <pose relative_to='link_j2'>-0.165 0 0 3.14159 -0 1.570795</pose> -->
     <parent>link_j2</parent>
     <child>link_j3</child>
     <axis>
@@ -192,8 +219,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>5.0</damping>
+            <friction>15.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -203,14 +230,14 @@
     <pose relative_to='joint3'>0 0 0 0 0 1.57</pose>
     <inertial>
         <pose>0.00526 -0.02675 0.03861 0 -0 0</pose>
-        <mass>1</mass>
+        <mass>0.40840408613020135</mass> 
         <inertia>
-            <ixx>0.0004</ixx>
-            <ixy>-3e-05</ixy>
-            <ixz>1e-05</ixz>
-            <iyy>0.00018</iyy>
-            <iyz>4e-05</iyz>
-            <izz>0.00041</izz>
+            <ixx>0.00025</ixx>
+            <ixy>4.1e-05</ixy>
+            <ixz>-5.9e-05</ixz>
+            <iyy>0.00054</iyy>
+            <iyz>8e-06</iyz>
+            <izz>0.000553</izz>
         </inertia>
     </inertial>
     <collision name='link_j3_fixed_joint_lump__j34_collision_collision'>
@@ -222,6 +249,14 @@
         </mesh> 
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
                     <mu>0.2</mu>
@@ -257,8 +292,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>2.0</damping>
+            <friction>10.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -268,14 +303,14 @@
     <pose relative_to='joint4'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>-0.00143 0 0.05394 0 -0 0</pose>
-        <mass>0.3</mass>
+        <mass>0.30235423023011887</mass> 
         <inertia>
-            <ixx>0.038</ixx>
-            <ixy>-2e-05</ixy>
-            <ixz>0</ixz>
-            <iyy>0.013</iyy>
-            <iyz>0</iyz>
-            <izz>0.039</izz>
+            <ixx>0.00013</ixx>
+            <ixy>1.8e-05</ixy>
+            <ixz>0.0</ixz>
+            <iyy>0.00038</iyy>
+            <iyz>0.0</iyz>
+            <izz>0.000385</izz>
         </inertia>
     </inertial>
     <collision name='link_j4_fixed_joint_lump__j2ndarm_collision_collision'>
@@ -286,6 +321,22 @@
             <uri>file://meshes/coll/j2ndarm.dae</uri>
         </mesh>
         </geometry>
+        <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
+            <friction>
+                <ode>
+                    <mu>0.8</mu>
+                    <mu2>0.8</mu2>
+                </ode>
+            </friction>
+        </surface>
     </collision>
     <visual name='link_j4_fixed_joint_lump__j2ndarm_visual'>
         <pose>-0.02 -0.357 -0.088 0 -0 0</pose>
@@ -314,8 +365,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>3.0</damping>
+            <friction>4.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -325,14 +376,14 @@
     <pose relative_to='joint5'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>-0.0001 -0.0084 0.01804 0 -0 0</pose>
-        <mass>0.1</mass>
+        <mass>0.17118402548820483</mass> 
         <inertia>
-            <ixx>9e-03</ixx>
-            <ixy>-1e-05</ixy>
-            <ixz>1e-05</ixz>
-            <iyy>9e-03</iyy>
-            <iyz>1e-03</iyz>
-            <izz>7e-03</izz>
+            <ixx>9.5e-05</ixx>
+            <ixy>-0.0</ixy>
+            <ixz>-0.0</ixz>
+            <iyy>8.2e-05</iyy>
+            <iyz>-8e-06</iyz>
+            <izz>8e-05</izz>
         </inertia>
     </inertial>
     <collision name='link_j5_fixed_joint_lump__j6_collision_collision'>
@@ -344,6 +395,14 @@
         </mesh>
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
                     <mu>0.2</mu>
@@ -369,6 +428,22 @@
             <uri>file://meshes/coll/CAMERA_SET2_ASM.dae</uri>
         </mesh>
         </geometry>
+        <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
+            <friction>
+                <ode>
+                    <mu>0.5</mu>
+                    <mu2>0.5</mu2>
+                </ode>
+            </friction>
+        </surface>
     </collision>
     <visual name='link_j5_fixed_joint_lump__CAMERA_SET2_ASM_visual_1'>
         <pose>-0.357 0.177 -0.021999 1.5708 1.5708 0</pose>
@@ -380,8 +455,9 @@
         </geometry>
     </visual>
 
-    <!-- Questa parte di codice puo' essere utilizzata per visualizzare la posizione del sensore.
-    <visual name="visual">
+    <!-- Questa parte di codice puo' essere utilizzata per visualizzare la posizione del sensore. -->
+    
+    <!-- <visual name="visual">
         <pose>0.056 -0.056 0.021 -1.5708 0 -1.5708</pose>
         <geometry>
         <box>
@@ -392,7 +468,7 @@
 
     <!--========================================================-->
     <!-- sensore camera -->
-<!--     <sensor name="camera" type="camera">
+    <!-- <sensor name="camera" type="camera">
         <pose>0.056 -0.056 0.021 -1.5708 0 -1.5708</pose>
         <camera>
         <horizontal_fov>0.666716</horizontal_fov>
@@ -430,8 +506,8 @@
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
-            <damping>0</damping>
-            <friction>20</friction>
+            <damping>3.0</damping>
+            <friction>5.0</friction>
         </dynamics>
     </axis>
     </joint>
@@ -441,14 +517,14 @@
     <pose relative_to='joint6'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>-0.0005 0 0.02106 0 -0 0</pose>
-        <mass>0.08</mass>
+        <mass>0.0873043297858215</mass> 
         <inertia>
-            <ixx>3e-01</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>4e-01</iyy>
-            <iyz>0</iyz>
-            <izz>3e-01</izz>
+            <ixx>2.9e-05</ixx>
+            <ixy>-0.0</ixy>
+            <ixz>0.0</ixz>
+            <iyy>2.5e-05</iyy>
+            <iyz>0.0</iyz>
+            <izz>3.8e-05</izz>
         </inertia>
     </inertial>
     <collision name='link_j6_fixed_joint_lump__hand_collision_collision'>
@@ -460,6 +536,14 @@
         </mesh>
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>1000000.0</kp>
+                    <kd>100.0</kd>
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.001</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
                     <mu>0.2</mu>
@@ -489,12 +573,13 @@
         <limit>
             <lower>-0.015</lower>
             <upper>0</upper>
-            <effort>100</effort>
-            <velocity>1</velocity>
+            <effort>500</effort>
+            <velocity>0.5</velocity>
         </limit>
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
+            <damping>1.0</damping> 
             <friction>0.4</friction>
         </dynamics>
     </axis>
@@ -505,14 +590,14 @@
     <pose relative_to='joint_left'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>0 0.01369 0.00538 0 -0 0</pose>
-        <mass>0.005</mass>
+        <mass>0.00661512964737902</mass> 
         <inertia>
-            <ixx>1</ixx>
+            <ixx>0.001</ixx>
             <ixy>0</ixy>
             <ixz>0</ixz>
-            <iyy>1</iyy>
+            <iyy>0.001</iyy>
             <iyz>0</iyz>
-            <izz>1</izz>
+            <izz>0.001</izz>
         </inertia>
     </inertial>
     <collision name='link_gripper_r_fixed_joint_lump__hand_f_collision_collision'>
@@ -524,10 +609,18 @@
         </mesh>
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>10000000.0</kp> 
+                    <kd>10000.0</kd> 
+                    <max_vel>1.0</max_vel>
+                    <min_depth>0.002</min_depth>
+                </ode>
+            </contact>
             <friction>
                 <ode>
-                    <mu>0.2</mu>
-                    <mu2>0.2</mu2>
+                    <mu>0.8</mu>
+                    <mu2>0.8</mu2>
                 </ode>
             </friction>
         </surface>
@@ -553,13 +646,14 @@
         <xyz>0 0 1</xyz>
         <limit>
             <lower>-0.015</lower>
-            <upper>0</upper>
-            <effort>100</effort>
-            <velocity>1</velocity>
+            <upper>-0.0</upper>
+            <effort>500</effort>  <!-- Aumentato da 100 per grip molto più forte -->
+            <velocity>0.5</velocity>
         </limit>
         <dynamics>
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
+            <damping>1.0</damping> 
             <friction>0.4</friction>
         </dynamics>
     </axis>
@@ -570,14 +664,14 @@
     <pose relative_to='joint_right'>0 0 0 0 -0 0</pose>
     <inertial>
         <pose>0 0.01319 0.00538 0 -0 0</pose>
-        <mass>0.005</mass>
+        <mass>0.00661512964737902</mass> 
         <inertia>
-            <ixx>1</ixx>
+            <ixx>0.001</ixx>
             <ixy>0</ixy>
             <ixz>0</ixz>
-            <iyy>1</iyy>
+            <iyy>0.001</iyy>
             <iyz>0</iyz>
-            <izz>1</izz>
+            <izz>0.001</izz>
         </inertia>
     </inertial>
     <collision name='link_gripper_l_fixed_joint_lump__hand_f2_collision_collision'>
@@ -589,10 +683,18 @@
         </mesh>
         </geometry>
             <surface>
+            <contact>
+                <ode>
+                    <kp>10000000.0</kp>  <!-- Aumentato per contatto più rigido -->
+                    <kd>10000.0</kd>  <!-- Aumentato per stabilità -->
+                    <max_vel>1.0</max_vel>  <!-- Aumentato per risposta veloce -->
+                    <min_depth>0.002</min_depth>  <!-- Aumentato per contatto profondo -->
+                </ode>
+            </contact>
             <friction>
                 <ode>
-                    <mu>2</mu>
-                    <mu2>2</mu2>
+                    <mu>0.8</mu>
+                    <mu2>0.8</mu2>
                 </ode>
             </friction>
         </surface>
@@ -610,55 +712,55 @@
     </link>
     <!--========================================================-->
     <!-- Applicazione plugin a ogni joint per permettere il funzionamento del controller-->
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint1</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>650</p_gain>
+            <d_gain>15</d_gain>
+            <i_gain>100</i_gain>
+            <i_min>-70</i_min>
+            <i_max>70</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint2</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>600</p_gain>
+            <d_gain>20</d_gain>
+            <i_gain>80</i_gain>
+            <i_min>-60</i_min>
+            <i_max>60</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint3</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>600</p_gain>
+            <d_gain>20</d_gain>
+            <i_gain>110</i_gain>
+            <i_min>-80</i_min>
+            <i_max>80</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint4</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>550</p_gain>
+            <d_gain>12</d_gain>
+            <i_gain>110</i_gain>
+            <i_min>-80</i_min>
+            <i_max>80</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint5</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>550</p_gain>
+            <d_gain>12</d_gain>
+            <i_gain>140</i_gain>
+            <i_min>-80</i_min>
+            <i_max>80</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint6</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>550</p_gain>
+            <d_gain>10</d_gain>
+            <i_gain>110</i_gain>
+            <i_min>-80</i_min>
+            <i_max>80</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_left</joint_name>
             <p_gain>500</p_gain>
             <d_gain>0</d_gain>
@@ -666,7 +768,7 @@
             <i_min>-1</i_min>
             <i_max>1</i_max>
         </plugin>
-        <plugin filename="ignition-gazebo-joint-position-controller-system" name="ignition::gazebo::systems::JointPositionController">
+        <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_right</joint_name>
             <p_gain>500</p_gain>
             <d_gain>0</d_gain>

@@ -1,1 +1,1 @@
-ign gazebo -v 4 worldCobotta.sdf
+gz sim worldCobotta.sdf -v 4

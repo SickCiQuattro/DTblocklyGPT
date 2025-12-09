@@ -1,0 +1,2 @@
+@echo off
+wsl.exe -d Ubuntu-24.04 -e bash -c "source /opt/ros/jazzy/setup.bash && cd /mnt/c/Users/kinno/git/DTblocklyGPT-jazzy-harmonic/ros2_ws && source .venv/bin/activate && source install/setup.bash && ros2 run cobotta_rest_api polling_socket_node"

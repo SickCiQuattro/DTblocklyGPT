@@ -5,7 +5,7 @@
 $rosSetup = "/opt/ros/jazzy/setup.bash"
 
 # Percorso del workspace Cobotta dentro WSL
-$workspacePath = "/mnt/c/repos/DTblocklyGPT/ros2_ws/cobotta"
+$workspacePath = "/mnt/c/repos/DTblocklyGPT-jazzy-harmonic/ros2_ws/cobotta"
 
 # Percorso del file di configurazione
 $configFile = "../Cobotta/map.yaml"
