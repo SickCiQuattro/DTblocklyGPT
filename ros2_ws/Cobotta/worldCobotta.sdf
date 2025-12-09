@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <sdf version="1.11">
   <world name="worldCobotta">
-    <scene>
+    <!-- <scene>
       <grid>false</grid>
     </scene>
     <gravity>0 0 -9.81</gravity>
