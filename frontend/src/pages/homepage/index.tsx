@@ -86,7 +86,7 @@ const Homepage = () => {
             </CardContent>
           </CardActionArea>
         </Card>
-        {/*         <Card>
+        <Card>
           <CardActionArea
             onClick={() => {
               navigate('/task/add?type=multimodal')
@@ -109,7 +109,7 @@ const Homepage = () => {
               </Typography>
             </CardContent>
           </CardActionArea>
-        </Card> */}
+        </Card>
       </div>
     </MainCard>
   )

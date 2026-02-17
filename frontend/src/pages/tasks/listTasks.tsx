@@ -149,7 +149,7 @@ const ListTasks = () => {
         </IconButton>
       ),
     },
-/*     {
+    {
       key: 'multimodal',
       title: 'Multimodal',
       dataIndex: 'multimodal',
@@ -165,7 +165,7 @@ const ListTasks = () => {
           <MergeCellsOutlined style={{ fontSize: '2em' }} />
         </IconButton>
       ),
-    }, */
+    },
     {
       key: 'run',
       title: 'Run',
@@ -214,7 +214,7 @@ const ListTasks = () => {
         </IconButton>
       ),
     },
-/*     {
+    {
       key: 'analyze',
       title: 'Analyze',
       dataIndex: 'simulate',
@@ -237,7 +237,7 @@ const ListTasks = () => {
           />
         </IconButton>
       ),
-    }, */
+    },
     { key: 'name', title: 'Name', dataIndex: 'name' },
     { key: 'description', title: 'Description', dataIndex: 'description' },
     { key: 'owner__username', title: 'Owner', dataIndex: 'owner__username' },

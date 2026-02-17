@@ -1558,6 +1558,7 @@ Blockly.Blocks.repeat_block = {{
 - Always reply with the language used by the user, even if it is not English.
 
 # IMPORTANT INSTRUCTIONS #
+- Between a user request and the next one, the use may change the existing task structure using the Blockly interface. Always consider the latest task structure provided.
 - If no modifications are needed, return the existing task structure as it is.
 - Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
 - Always create a task compatible with the rules defined in the Blockly CONNECTION RULES section.

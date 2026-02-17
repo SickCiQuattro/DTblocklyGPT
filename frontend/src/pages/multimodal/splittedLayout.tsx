@@ -54,7 +54,8 @@ export const SplittedLayout = ({
   const [searchParams] = useSearchParams()
   const newTaskParam = searchParams.get('newTask')
   const [editingMode, setEditingMode] = useState<boolean>(
-    newTaskParam === 'true',
+    // newTaskParam === 'true',
+    true,
   )
   const [newChatResponse, setNewChatResponse] = useState<boolean>(false)
   const [speaker, setSpeaker] = React.useState(false)
