@@ -23,7 +23,7 @@ import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { RobotType } from 'pages/robots/types'
-import { QrReader } from 'react-qr-reader'
+import { Scanner } from '@yudiel/react-qr-scanner'
 import { MyRobotDetailType } from './types'
 
 interface FormMyRobotProps {
@@ -173,17 +173,17 @@ export const FormMyRobot = ({
                 <Grid size={4} />
                 <Grid size={4}>
                   <Stack spacing={1}>
-                    <QrReader
-                      onResult={async (result) => {
-                        if (result) {
+                    <Scanner
+                      onScan={async (result) => {
+                        if (result && result.length > 0) {
                           setScanning(false)
-                          const code = result.getText()
+                          const code = result[0].rawValue
                           if (
                             dataRobots.find(
                               (robot) => robot.id.toString() === code,
                             )
                           ) {
-                            setFieldValue('robot', result.getText())
+                            setFieldValue('robot', code)
                           } else {
                             await setFieldTouched('robot', true)
                             await setFieldError(
