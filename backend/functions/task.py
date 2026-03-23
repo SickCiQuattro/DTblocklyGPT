@@ -12,7 +12,12 @@ from json import loads
 from django.db.models import Q
 from enum import Enum
 
-from pythoncom import CoInitialize
+import sys
+if sys.platform == 'win32':
+    from pythoncom import CoInitialize
+else:
+    CoInitialize = None
+
 from backend.functions.robot import (
     connect,
     disconnect,
@@ -40,7 +45,12 @@ from backend.functions.robot import (
     CALIBRATION_HEIGHT,
 )
 
-from win32com.client import Dispatch
+import sys
+if sys.platform == 'win32':
+    from win32com.client import Dispatch
+else:
+    Dispatch = None
+
 from ..pybcapclient.bcapclient import BCAPClient
 import cv2
 from numpy import zeros

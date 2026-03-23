@@ -13,3 +13,5 @@ dist
 build
 install
 log
+.vscode/settings.json
+db.sqlite3

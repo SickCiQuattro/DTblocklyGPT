@@ -30,7 +30,7 @@ pillow = "^11.2.1"
 python = ">=3.11,<3.15"
 python-dotenv = "^1.1.0"
 pytz = "^2025.2"
-pywin32 = "^311"
+pywin32 = {version = "^311", markers = "sys_platform == 'win32'"}
 rapidfuzz = "^3.13.0"
 
 [tool.poetry.group.dev.dependencies]

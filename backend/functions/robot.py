@@ -4,12 +4,18 @@ from numpy import pi, absolute, array
 from math import cos, sin, radians, ceil, sqrt, atan2, degrees, asin
 from ..pybcapclient.bcapclient import BCAPClient
 
-from win32com.client import Dispatch
+import sys
+if sys.platform == 'win32':
+    from win32com.client import Dispatch
+    from pythoncom import CoInitialize
+else:
+    Dispatch = None
+    CoInitialize = None
+
 from PIL import Image
 from io import BytesIO
 import cv2
 
-from pythoncom import CoInitialize
 from enum import Enum
 from backend.utils.response import (
     HttpMethod,
