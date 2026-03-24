@@ -78,7 +78,7 @@ export const FormRobot = ({
     fetchApi({
       url: endpoints.home.libraries.pingIp,
       method: MethodHTTP.POST,
-      body: { ip },
+      body: { ip, port },
     }).then((response) => {
       if (response) {
         toast.success('IP available')

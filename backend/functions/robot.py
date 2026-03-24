@@ -445,7 +445,8 @@ def ping_ip(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.POST.value:
                 data = loads(request.body)
                 ip = data.get("ip")
-                if check_ip_response(ip):
+                port = data.get("port", 80)
+                if check_ip_response(ip, int(port)):
                     return success_response()
                 else:
                     return error_response(str("Robot not connected"))

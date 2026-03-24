@@ -177,7 +177,8 @@ CHATGPT_FUNCTION = {
                                                     "required": ["location"],
                                                 },
                                             },
-                                            "required": ["pick", "place"],
+                                            # "required": ["pick", "place"],
+                                            "required": ["otherwise_pick", "otherwise_place"],
                                         },
                                         "event": {
                                             "type": "object",
@@ -345,32 +346,33 @@ def new_message(request: HttpRequest) -> HttpResponse:
                     },
                 )
 
-                response_json = (
-                    response.choices[0].message.tool_calls[0].function.arguments
-                )
+                # Extract response: Gemini may return tool_calls or plain content
+                msg = response.choices[0].message
+                if msg.tool_calls and len(msg.tool_calls) > 0:
+                    response_json = msg.tool_calls[0].function.arguments
+                elif msg.content:
+                    response_json = msg.content
+                else:
+                    print("Unexpected response structure:", response)
+                    raise ValueError("No tool_calls and no content in response")
 
                 try:
                     response_json = loads(response_json)
-                    answer = response_json["answer"]
+                    answer = response_json.get("answer", "")
 
-                    if answer != "":
+                    if answer:
                         chat_log.append({"role": "assistant", "content": answer})
 
                     # Response has the "answer" field blank
                     i = 0
                     while not answer:
-                        if (
-                            i > 2
-                        ):  # I can't use ChatGPT API more than 3 times in a minute
-                            # print("FORCE EXIT LOOP NO answer")
+                        if i > 2:
                             forced_answer = "Ok! Let's go ahead."
                             chat_log.append(
                                 {"role": "assistant", "content": forced_answer}
                             )
                             break
 
-                        # print("LOOP NO answer")
-                        # print(response_json)
                         chat_log.append(
                             {"role": "system", "content": CHATGPT_ALWAYS_REPLY}
                         )
@@ -378,19 +380,27 @@ def new_message(request: HttpRequest) -> HttpResponse:
                             model=CHATGPT_MODEL,
                             messages=chat_log,
                             temperature=CHATGPT_TEMPERATURE,
-                            functions=[CHATGPT_FUNCTION],
-                            function_call={"name": CHATGPT_FUNCTION["name"]},
+                            tools=[CHATGPT_FUNCTION],
+                            tool_choice={
+                                "type": "function",
+                                "function": {
+                                    "name": CHATGPT_FUNCTION["function"]["name"],
+                                },
+                            },
                         )
 
-                        response_json = response.choices[
-                            0
-                        ].message.function_call.arguments
+                        retry_msg = response.choices[0].message
+                        if retry_msg.tool_calls and len(retry_msg.tool_calls) > 0:
+                            response_json = retry_msg.tool_calls[0].function.arguments
+                        else:
+                            response_json = retry_msg.content or "{}"
 
                         response_json = loads(response_json)
-                        answer = response_json["answer"]
+                        answer = response_json.get("answer", "")
                         i += 1
 
-                except Exception:
+                except Exception as inner_e:
+                    print("Inner chat parse error:", inner_e)
                     data_result["answer"] = CHATGPT_ERROR
 
                 data_result["chatLog"] = chat_log
@@ -457,17 +467,11 @@ def save_chat_task(request: HttpRequest) -> HttpResponse:
                         }
 
                     object_name_to_search = None
-                    if (
-                        taskStructure["program"]["control"]["control_pick"]["object"]
-                        is not None
-                    ):
-                        object_name_to_search = taskStructure["program"]["control"][
-                            "control_pick"
-                        ]["object"]
+                    _ctrl_pick = taskStructure["program"]["control"].get("control_pick") or {}
+                    if _ctrl_pick.get("object"):
+                        object_name_to_search = _ctrl_pick["object"]
                     else:
-                        object_name_to_search = taskStructure["program"]["pick"][
-                            "object"
-                        ]
+                        object_name_to_search = (taskStructure["program"].get("pick") or {}).get("object")
 
                     object_id, object_name, object_keywords = search_existing_libraries(
                         user,
@@ -476,17 +480,11 @@ def save_chat_task(request: HttpRequest) -> HttpResponse:
                     )
 
                     location_name_to_search = None
-                    if (
-                        taskStructure["program"]["control"]["control_place"]["location"]
-                        is not None
-                    ):
-                        location_name_to_search = taskStructure["program"]["control"][
-                            "control_place"
-                        ]["location"]
+                    _ctrl_place = taskStructure["program"]["control"].get("control_place") or {}
+                    if _ctrl_place.get("location"):
+                        location_name_to_search = _ctrl_place["location"]
                     else:
-                        location_name_to_search = taskStructure["program"]["place"][
-                            "location"
-                        ]
+                        location_name_to_search = (taskStructure["program"].get("place") or {}).get("location")
                     (
                         location_id,
                         location_name,
@@ -495,27 +493,12 @@ def save_chat_task(request: HttpRequest) -> HttpResponse:
                         user, Location, location_name_to_search
                     )
 
-                    if (
-                        taskStructure["program"]["control"]["control_processing"][
-                            "action"
-                        ]
-                        is not None
-                        or taskStructure["program"]["processing"]["action"] is not None
-                    ):
-                        action_name_to_search = None
-                        if (
-                            taskStructure["program"]["control"]["control_processing"][
-                                "action"
-                            ]
-                            is not None
-                        ):
-                            action_name_to_search = taskStructure["program"]["control"][
-                                "control_processing"
-                            ]["action"]
-                        else:
-                            action_name_to_search = taskStructure["program"][
-                                "processing"
-                            ]["action"]
+                    _ctrl_proc = taskStructure["program"]["control"].get("control_processing") or {}
+                    _proc = taskStructure["program"].get("processing") or {}
+                    _ctrl_action = _ctrl_proc.get("action")
+                    _proc_action = _proc.get("action")
+                    if _ctrl_action or _proc_action:
+                        action_name_to_search = _ctrl_action or _proc_action
                         (
                             action_id,
                             action_name,
