@@ -236,6 +236,8 @@ def robot_getvar(client, hRobot, name):
 
 
 def acquire_photo(CVconv=True, wb=False, oneshotfocus=False, cameraip=0):
+    if Dispatch is None:
+        raise RuntimeError("acquire_photo: CAO/DENSO drivers only available on Windows")
     eng = Dispatch(CaoParams.ENGINE.value)
     ctrl = eng.Workspaces(0).AddController(
         "",
@@ -270,6 +272,8 @@ def get_photo(request: HttpRequest) -> HttpResponse:
                 user_robot = UserRobot.objects.get(id=robot_id)
                 robot = Robot.objects.get(id=user_robot.robot.id)
                 if check_ip_response(robot.ip, robot.port):
+                    if CoInitialize is None or Dispatch is None:
+                        return error_response("Robot hardware control requires Windows with CAO/DENSO drivers (not available on Linux/Mac)")
                     CoInitialize()
                     handles = connect(robot.ip, robot.port, DEFAULT_TIMEOUT)
                     client = handles[0]

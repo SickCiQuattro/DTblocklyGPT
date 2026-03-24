@@ -126,6 +126,8 @@ def run_task(request: HttpRequest) -> HttpResponse:
                 robot = UserRobot.objects.get(id=my_robot_id).robot
 
                 if check_ip_response(robot.ip, robot.port):
+                    if CoInitialize is None or Dispatch is None:
+                        return error_response("Robot hardware control requires Windows with CAO/DENSO drivers (not available on Linux/Mac)")
                     CoInitialize()
                     eng = Dispatch(CaoParams.ENGINE.value)
                     ctrl = eng.Workspaces(0).AddController(

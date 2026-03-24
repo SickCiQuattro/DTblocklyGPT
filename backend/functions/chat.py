@@ -21,12 +21,18 @@ from typing import Tuple
 from backend.functions.task import EventsItems, LibrariesItems, LogicItems, StepsItems
 import os
 
-api_key = os.getenv("OPENAI_API_KEY")
+# api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
-    raise ValueError("The OPENAI_API_KEY environment variable is not set.")
-client = OpenAI(api_key=api_key)
+    raise ValueError("The GEMINI_API_KEY environment variable is not set.")
+# client = OpenAI(api_key=api_key)
 
-CHATGPT_MODEL = "gpt-4.1-mini"
+client = OpenAI(
+    api_key=api_key,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+# CHATGPT_MODEL = "gpt-4.1-mini"
+CHATGPT_MODEL = "gemini-2.5-flash"
 CHATGPT_TEMPERATURE = 0
 
 CHATGPT_INSTRUCTIONS = """
