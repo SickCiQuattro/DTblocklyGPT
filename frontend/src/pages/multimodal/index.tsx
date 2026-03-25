@@ -10,6 +10,7 @@ import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { SplittedLayout } from './splittedLayout'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 const Multimodal = () => {
   const { id } = useParams()
@@ -74,7 +75,11 @@ const Multimodal = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          abstractTask={JSON.parse(dataTask.code)}
+          abstractTask={
+            Array.isArray(JSON.parse(dataTask.code))
+              ? JSON.parse(dataTask.code)
+              : blocklyToAbstract(JSON.parse(dataTask.code) as CustomBlock)
+          }
           backFunction={backFunction}
         />
       )}
