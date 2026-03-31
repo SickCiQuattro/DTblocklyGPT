@@ -9,8 +9,7 @@ export const abstractToBlockly = (
   dataLocations: LocationListType[],
   dataActions: ActionListType[],
 ) => {
-  // Helper to recursively convert steps
-  const stepToBlock = (step: AbstractStep) => {
+  const stepToBlock = (step: AbstractStep): any => {
     switch (step.type) {
       case 'pick': {
         const object = dataObjects.find((obj) => obj.id === step.objectId)
@@ -92,23 +91,32 @@ export const abstractToBlockly = (
               : {}),
           },
         }
+      case 'wait_for_human':
+        return {
+          type: 'wait_for_human_block',
+          fields: {
+            TASK_DESCRIPTION: step.description || 'insert component',
+          },
+        }
       default:
         return null
     }
   }
 
-  // Helper to convert a sequence of steps into a linked block list
   const stepsToSequence = (steps: AbstractStep[]) => {
     if (!steps.length) return null
     const [first, ...rest] = steps
     const block = stepToBlock(first)
+    if (!block) return null
     if (rest.length) {
-      block.next = { block: stepsToSequence(rest) }
+      const nextBlock = stepsToSequence(rest)
+      if (nextBlock) {
+        block.next = { block: nextBlock }
+      }
     }
     return block
   }
 
-  // Helper to convert condition
   const conditionToBlock = (condition: AbstractCondition | null) => {
     if (!condition) return null
     switch (condition.type) {
@@ -119,25 +127,19 @@ export const abstractToBlockly = (
             return {
               type: 'sensor_signal_block',
               fields: { sensor: 'Camera sensor signal' },
-              data: JSON.stringify({
-                sensor: condition.sensor,
-              }),
+              data: JSON.stringify({ sensor: condition.sensor }),
             }
           case 'ir':
             return {
               type: 'sensor_signal_block',
               fields: { sensor: 'IR sensor signal' },
-              data: JSON.stringify({
-                sensor: condition.sensor,
-              }),
+              data: JSON.stringify({ sensor: condition.sensor }),
             }
         }
         return {
           type: 'sensor_signal_block',
           fields: { sensor: condition.sensor },
-          data: JSON.stringify({
-            sensor: condition.sensor,
-          }),
+          data: JSON.stringify({ sensor: condition.sensor }),
         }
       case 'find_object': {
         const object = dataObjects.find((obj) => obj.id === condition.objectId)
@@ -167,15 +169,20 @@ export const abstractToBlockly = (
     }
   }
 
-  // Root: wrap steps in a root block if needed, or just return the sequence
   return {
     ...stepsToSequence(abstractTask),
   }
 }
 
+// ---------------------------------------------
+// EXTENDED CUSTOM BLOCK INTERFACE
+// ---------------------------------------------
 export interface CustomBlock {
-  id: string
+  id?: string
   type:
+    | 'object_block'
+    | 'location_block'
+    | 'action_block'
     | 'pick_block'
     | 'place_block'
     | 'processing_block'
@@ -185,6 +192,7 @@ export interface CustomBlock {
     | 'sensor_signal_block'
     | 'find_object_block'
     | 'human_feedback_block'
+    | 'wait_for_human_block'
   inputs?: {
     OBJECT?: { block: CustomBlock }
     LOCATION?: { block: CustomBlock }
@@ -198,6 +206,7 @@ export interface CustomBlock {
   fields?: {
     times?: number
     name?: string
+    TASK_DESCRIPTION?: string
   }
   next?: { block: CustomBlock }
 }
@@ -207,7 +216,6 @@ export const blocklyToAbstract = (
 ): AbstractStep[] | null => {
   if (!blocklyRoot) return null
 
-  // Helper to recursively convert blocks to steps
   const blockToStep = (block: CustomBlock): AbstractStep | null => {
     switch (block.type) {
       case 'pick_block':
@@ -247,12 +255,17 @@ export const blocklyToAbstract = (
           do: sequenceToSteps(block.inputs?.DO?.block),
           otherwise: sequenceToSteps(block.inputs?.OTHERWISE?.block),
         }
+      case 'wait_for_human_block':
+        return {
+          type: 'wait_for_human',
+          description: block.fields?.TASK_DESCRIPTION || '',
+        }
+
       default:
         return null
     }
   }
 
-  // Helper to convert a linked block list to an array of steps
   const sequenceToSteps = (block: CustomBlock | undefined): AbstractStep[] => {
     const steps: AbstractStep[] = []
     let current = block
@@ -264,7 +277,6 @@ export const blocklyToAbstract = (
     return steps
   }
 
-  // Helper to extract object/action/location ID from block
   const getIdFromBlock = (block: CustomBlock | undefined) => {
     if (!block) return ''
     try {
@@ -278,7 +290,6 @@ export const blocklyToAbstract = (
     }
   }
 
-  // Helper to extract object/action/location name from block
   const getNameFromBlock = (block: CustomBlock | undefined) => {
     if (!block) return ''
     try {
@@ -292,7 +303,6 @@ export const blocklyToAbstract = (
     }
   }
 
-  // Helper to convert condition block
   const blockToCondition = (
     block: CustomBlock | undefined,
   ): AbstractCondition | null => {
@@ -316,6 +326,5 @@ export const blocklyToAbstract = (
     }
   }
 
-  // Compose the AbstractTask
   return sequenceToSteps(blocklyRoot)
 }

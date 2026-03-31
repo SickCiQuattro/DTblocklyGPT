@@ -1,12 +1,16 @@
 import * as Blockly from 'blockly/core'
 
 export const blocksColours = {
-  logics: 210,
-  objects: 150,
-  locations: 270,
-  actions: 340,
-  events: 30,
-  steps: 70,
+  // Mockup palette
+  logics: '#988473',
+  steps: '#2955D9',
+  human: '#FF8500',
+  events: '#F24E1F',
+  predefined: '#0098FB',
+  // Backward-compatible aliases used by existing categories/blocks
+  objects: '#0098FB',
+  locations: '#0098FB',
+  actions: '#0098FB',
 }
 
 // Google Groups thread: https://groups.google.com/g/blockly/c/0Xg9_Jlrey4
@@ -18,7 +22,7 @@ Blockly.Blocks.object_block = {
       'name',
     )
     this.setOutput(true, 'object_block')
-    this.setColour(blocksColours.objects)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
@@ -40,7 +44,7 @@ Blockly.Blocks.location_block = {
       'name',
     )
     this.setOutput(true, 'location_block')
-    this.setColour(blocksColours.locations)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
@@ -61,7 +65,7 @@ Blockly.Blocks.action_block = {
       'name',
     )
     this.setOutput(true, 'action_block')
-    this.setColour(blocksColours.actions)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
@@ -98,7 +102,7 @@ Blockly.Blocks.human_feedback_block = {
   init() {
     this.appendDummyInput().appendField('Human feedback')
     this.setOutput(true, 'human_feedback_block')
-    this.setColour(blocksColours.events)
+    this.setColour(blocksColours.human)
   },
 }
 

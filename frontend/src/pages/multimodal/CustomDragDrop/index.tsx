@@ -72,7 +72,7 @@ export const CustomDragDrop = ({
         <Block type="place_block" />
         <Block type="processing_block" />
       </Category>
-      <Category name="Objects" colour={blocksColours.objects}>
+      <Category name="Objects" colour={blocksColours.predefined}>
         {dataObjects.map((object) => (
           <Block type="object_block" key={object.id}>
             <Field name="name">{object.name}</Field>
@@ -86,7 +86,7 @@ export const CustomDragDrop = ({
           </Block>
         ))}
       </Category>
-      <Category name="Actions" colour={blocksColours.actions}>
+      <Category name="Actions" colour={blocksColours.predefined}>
         {dataActions.map((action) => (
           <Block type="action_block" key={action.id}>
             <Field name="name">{action.name}</Field>
@@ -100,7 +100,7 @@ export const CustomDragDrop = ({
           </Block>
         ))}
       </Category>
-      <Category name="Locations" colour={blocksColours.locations}>
+      <Category name="Locations" colour={blocksColours.predefined}>
         {dataLocations.map((location) => (
           <Block type="location_block" key={location.id} test="test">
             <Field name="name">{location.name}</Field>

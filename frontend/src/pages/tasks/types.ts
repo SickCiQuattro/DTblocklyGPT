@@ -57,6 +57,7 @@ export type AbstractStep =
   | AbstractProcessingStep
   | AbstractRepeatStep
   | AbstractWhenStep
+  | AbstractWaitForHumanStep
 
 export type AbstractPickStep = {
   type: 'pick'
@@ -87,6 +88,11 @@ export type AbstractWhenStep = {
   condition: AbstractCondition | null
   do: AbstractStep[]
   otherwise?: AbstractStep[]
+}
+
+export type AbstractWaitForHumanStep = {
+  type: 'wait_for_human'
+  description?: string
 }
 
 export type AbstractCondition =

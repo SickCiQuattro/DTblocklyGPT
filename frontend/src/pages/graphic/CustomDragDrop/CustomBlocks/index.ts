@@ -1,12 +1,16 @@
 import * as Blockly from 'blockly/core'
 
 export const blocksColours = {
-  logics: 210,
-  objects: 150,
-  locations: 270,
-  actions: 340,
-  events: 30,
-  steps: 70,
+  // Mockup palette
+  logics: '#988473',
+  steps: '#2955D9',
+  human: '#FF8500',
+  events: '#F24E1F',
+  predefined: '#0098FB',
+  // Backward-compatible aliases used by existing categories/blocks
+  objects: '#0098FB',
+  locations: '#0098FB',
+  actions: '#0098FB',
 }
 
 // Google Groups thread: https://groups.google.com/g/blockly/c/0Xg9_Jlrey4
@@ -18,11 +22,10 @@ Blockly.Blocks.object_block = {
       'name',
     )
     this.setOutput(true, 'object_block')
-    this.setColour(blocksColours.objects)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
-  // Mutators: https://developers.google.com/blockly/guides/create-custom-blocks/extensions#serialization_hooks
   mutationToDom() {
     const data = JSON.parse(this.data)
     this.setTooltip(
@@ -40,7 +43,7 @@ Blockly.Blocks.location_block = {
       'name',
     )
     this.setOutput(true, 'location_block')
-    this.setColour(blocksColours.locations)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
@@ -61,7 +64,7 @@ Blockly.Blocks.action_block = {
       'name',
     )
     this.setOutput(true, 'action_block')
-    this.setColour(blocksColours.actions)
+    this.setColour(blocksColours.predefined)
     this.setWarningText('defaultWarningText')
   },
 
@@ -75,14 +78,6 @@ Blockly.Blocks.action_block = {
   saveExtraState() {},
 }
 
-/* Blockly.Blocks.detect_block = {
-  init() {
-    this.appendDummyInput().appendField('Detect other object')
-    this.setOutput(true, 'detect_block')
-    this.setColour(blocksColours.events)
-  },
-} */
-
 Blockly.Blocks.sensor_signal_block = {
   init() {
     this.appendDummyInput().appendField('Camera sensor signal is true')
@@ -95,7 +90,7 @@ Blockly.Blocks.human_feedback_block = {
   init() {
     this.appendDummyInput().appendField('Human feedback')
     this.setOutput(true, 'human_feedback_block')
-    this.setColour(blocksColours.events)
+    this.setColour(blocksColours.human)
   },
 }
 
@@ -168,7 +163,6 @@ Blockly.Blocks.when_otherwise_block = {
     this.appendDummyInput().appendField('When')
     this.appendValueInput('WHEN').setCheck([
       'find_object_block',
-      // 'detect_block',
       'sensor_signal_block',
       'human_feedback_block',
     ])
@@ -201,7 +195,6 @@ Blockly.Blocks.when_block = {
     this.appendDummyInput().appendField('When')
     this.appendValueInput('WHEN').setCheck([
       'find_object_block',
-      // 'detect_block',
       'sensor_signal_block',
       'human_feedback_block',
     ])
@@ -213,42 +206,6 @@ Blockly.Blocks.when_block = {
     this.setColour(blocksColours.logics)
   },
 }
-
-/* Blockly.Blocks.stop_when_block = {
-  init() {
-    this.appendDummyInput().appendField('Stop when')
-    this.appendValueInput('STOP_WHEN').setCheck([
-      'find_object_block',
-      // 'detect_block',
-      'sensor_signal_block',
-      'human_feedback_block',
-    ])
-    this.appendStatementInput('DO')
-      .setCheck(['logic_pick_rel', 'logic_logic_rel'])
-      .appendField('Do')
-    this.setPreviousStatement(true, 'logic_logic_rel')
-    this.setNextStatement(true, 'logic_logic_rel')
-    this.setColour(blocksColours.logics)
-  },
-} */
-
-/* Blockly.Blocks.do_when_block = {
-  init() {
-    this.appendStatementInput('DO')
-      .setCheck(['logic_pick_rel', 'logic_logic_rel'])
-      .appendField('Do')
-    this.appendDummyInput().appendField('When')
-    this.appendValueInput('WHEN').setCheck([
-      'find_object_block',
-      // 'detect_block',
-      'sensor_signal_block',
-      'human_feedback_block',
-    ])
-    this.setPreviousStatement(true, 'logic_logic_rel')
-    this.setNextStatement(true, 'logic_logic_rel')
-    this.setColour(blocksColours.logics)
-  },
-} */
 
 Blockly.Blocks.repeat_block = {
   init() {
@@ -264,3 +221,26 @@ Blockly.Blocks.repeat_block = {
     this.setColour(blocksColours.logics)
   },
 }
+
+// ---------------------------------------------------------
+// Human interaction blocks
+// ---------------------------------------------------------
+
+Blockly.defineBlocksWithJsonArray([
+  {
+    type: 'wait_for_human_block',
+    message0: 'Wait for human to %1',
+    args0: [
+      {
+        type: 'field_input',
+        name: 'TASK_DESCRIPTION',
+        text: 'insert component',
+      },
+    ],
+    previousStatement: null,
+    nextStatement: null,
+    colour: blocksColours.human,
+    tooltip: 'Pauses the robot sequence until human confirmation.',
+    helpUrl: '',
+  },
+])

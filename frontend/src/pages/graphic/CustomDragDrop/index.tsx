@@ -28,21 +28,27 @@ export const CustomDragDrop = ({
         <Block type="loop_block" />
         <Block type="when_block" />
         <Block type="when_otherwise_block" />
-        {/* <Block type="stop_when_block" />
-        <Block type="do_when_block" /> */}
       </Category>
-      <Category name="Events" colour={blocksColours.events}>
-        {/* <Block type="detect_block" /> */}
-        <Block type="sensor_signal_block" />
-        <Block type="find_object_block" />
+
+      <Category name="Human-Robot" colour={blocksColours.human}>
+        <Block type="wait_for_human_block">
+          <Field name="TASK_DESCRIPTION">insert component</Field>
+        </Block>
         <Block type="human_feedback_block" />
       </Category>
+
+      <Category name="Events" colour={blocksColours.events}>
+        <Block type="sensor_signal_block" />
+        <Block type="find_object_block" />
+      </Category>
+
       <Category name="Steps" colour={blocksColours.steps}>
         <Block type="pick_block" />
         <Block type="place_block" />
         <Block type="processing_block" />
       </Category>
-      <Category name="Objects" colour={blocksColours.objects}>
+
+      <Category name="Objects" colour={blocksColours.predefined}>
         {dataObjects.map((object) => (
           <Block type="object_block" key={object.id}>
             <Field name="name">{object.name}</Field>
@@ -56,7 +62,8 @@ export const CustomDragDrop = ({
           </Block>
         ))}
       </Category>
-      <Category name="Actions" colour={blocksColours.actions}>
+
+      <Category name="Actions" colour={blocksColours.predefined}>
         {dataActions.map((action) => (
           <Block type="action_block" key={action.id}>
             <Field name="name">{action.name}</Field>
@@ -70,7 +77,8 @@ export const CustomDragDrop = ({
           </Block>
         ))}
       </Category>
-      <Category name="Locations" colour={blocksColours.locations}>
+
+      <Category name="Locations" colour={blocksColours.predefined}>
         {dataLocations.map((location) => (
           <Block type="location_block" key={location.id} test="test">
             <Field name="name">{location.name}</Field>
