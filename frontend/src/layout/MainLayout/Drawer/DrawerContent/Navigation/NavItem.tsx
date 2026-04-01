@@ -1,4 +1,4 @@
-import { RefObject, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { useTheme } from '@mui/material/styles'
@@ -25,14 +25,9 @@ const getListItemProps = (
   }
 
   const result = {
-    component: (props: any) => (
-      <Link
-        ref={props.ref as RefObject<HTMLAnchorElement>}
-        to={url || defaultPath}
-        target={target}
-        {...props}
-      />
-    ),
+    component: Link,
+    to: url || defaultPath,
+    target,
   }
 
   return result

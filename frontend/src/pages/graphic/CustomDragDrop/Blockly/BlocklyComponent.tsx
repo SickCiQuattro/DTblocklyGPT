@@ -9,7 +9,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { toggleEditMode } from 'store/reducers/task'
 
-Blockly.setLocale(locale)
+Blockly.setLocale(locale as unknown as { [key: string]: string })
 
 export const getBlocklyStructure = (): State | null => {
   const workspace = Blockly.getMainWorkspace()
@@ -53,11 +53,19 @@ export const BlocklyComponent = ({
 
     primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
       toolbox: toolboxCurrent,
+      renderer: 'thrasos',
+      // renderer: 'zelos', // alternative
       readOnly: !editMode,
       trashcan: true,
       media: '/blocklyMedia',
       move: { scrollbars: true, drag: true, wheel: true },
-      zoom: { startScale: 1.5, controls: true },
+      zoom: { startScale: 1.5, controls: true, wheel: true, pinch: true },
+      grid: {
+        spacing: 15,
+        length: 2,
+        colour: '#94A3B8',
+        snap: true,
+      },
       sounds: false,
       collapse: true,
       comments: true,
