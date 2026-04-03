@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
@@ -22,39 +22,33 @@ export const getBlocklyStructure = (): State | null => {
 const disableContextMenuItems = () => {
   if (Blockly.ContextMenuRegistry.registry.getItem('blockHelp'))
     Blockly.ContextMenuRegistry.registry.unregister('blockHelp')
-
-  // Optionally re-enable blockDisable to prevent temporary block disabling.
-  // if (Blockly.ContextMenuRegistry.registry.getItem('blockDisable'))
-  //   Blockly.ContextMenuRegistry.registry.unregister('blockDisable')
 }
 
 interface BlocklyComponentProps {
-  children: React.JSX.Element[]
   dataTask: State
+  onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
 }
 
 export const BlocklyComponent = ({
-  children,
   dataTask,
+  onWorkspaceReady,
 }: BlocklyComponentProps) => {
   const { editMode } = useAppSelector((state) => state.task)
   const blocklyDiv = useRef<HTMLDivElement | null>(null)
-  const toolbox = useRef<HTMLDivElement | null>(null)
   const primaryWorkspace = useRef<Blockly.WorkspaceSvg | null>(null)
   const [searchParams] = useSearchParams()
   const newTaskParam = searchParams.get('newTask')
   const dispatch = useDispatch()
 
   useEffect(() => {
+    console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
     document.getElementById('blocklyDiv')!.innerHTML = ''
 
     const blocklyDivCurrent = blocklyDiv.current as Element
-    const toolboxCurrent = toolbox.current as Element
 
+    // Inject Blockly WITHOUT a toolbox — the custom React toolbox is a sibling component.
     primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
-      toolbox: toolboxCurrent,
       renderer: 'thrasos',
-      // renderer: 'zelos', // alternative
       readOnly: !editMode,
       trashcan: true,
       media: '/blocklyMedia',
@@ -75,6 +69,7 @@ export const BlocklyComponent = ({
     if (primaryWorkspace.current) {
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
+      onWorkspaceReady?.(workspace)
 
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
@@ -84,24 +79,26 @@ export const BlocklyComponent = ({
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
     }
+
+    return () => {
+      if (primaryWorkspace.current) {
+        onWorkspaceReady?.(null)
+      }
+    }
   }, [editMode])
 
   useEffect(() => {
+    console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
     if (newTaskParam) {
       dispatch(toggleEditMode())
     }
   }, [])
 
   return (
-    <>
-      <div
-        ref={blocklyDiv}
-        id="blocklyDiv"
-        style={{ width: '100%', height: '100%' }}
-      />
-      <div style={{ display: 'none' }} ref={toolbox}>
-        {children}
-      </div>
-    </>
+    <div
+      ref={blocklyDiv}
+      id="blocklyDiv"
+      style={{ width: '100%', height: '100%' }}
+    />
   )
 }

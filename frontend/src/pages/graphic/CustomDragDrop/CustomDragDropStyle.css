@@ -1,93 +1,41 @@
-#blocklyDiv {
-    height: 100%;
+/* ─── Layout ──────────────────────────────────────────────────────────────── */
+
+.custom-dragdrop-layout {
+    display: flex;
+    flex-direction: row;
     width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #E2E8F0;
+    height: 100%;
+    overflow: hidden;
     border-radius: 8px;
-    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    background-color: #FFFFFF;
+}
+
+.custom-dragdrop-workspace-wrapper {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+}
+
+/* ─── Blockly Workspace ───────────────────────────────────────────────────── */
+
+#blocklyDiv {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     overflow: hidden;
 }
 
 .blocklySvg {
     height: 100%;
     width: 100%;
-    /* Neutral warm background — current choice */
+    /* Neutral warm background */
     background-color: #FAFAFA !important;
-
-    /* --- Alternative backgrounds (uncomment to try) ---
-     * Blueprint dark blue:   background-color: #1E293B !important;
-     * Slate grey:            background-color: #334155 !important;
-     * Light cool grey:       background-color: #F1F5F9 !important;
-     * Warm paper:            background-color: #FAF9F6 !important;
-     */
 }
 
-/* ToolBox */
-.blocklyToolboxCategoryLabel {
-    color: #334155;
-    font-weight: 600;
-    font-size: 0.85rem;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    text-transform: none;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    line-height: 1.5;
-    text-align: left;
-    margin-left: 8px;
-}
-
-.blocklyToolboxDiv {
-    background-color: #FFFFFF;
-    border-right: 1px solid #E2E8F0;
-    padding-top: 12px;
-}
-
-.blocklyTreeRowContentContainer {
-    display: flex;
-    justify-content: flex-start; /* Spinge il contenuto a sinistra */
-    align-items: center;
-    flex-direction: row; /* Dispone colore e testo sulla stessa riga, non in colonna */
-    width: 100%;
-    padding: 0.4rem 0.5rem;
-}
-
-/* Adds padding around the group of categories and separators. */
-.blocklyToolboxCategoryGroup {
-    padding: 0.5em 0;
-}
-
-/* Adds space between the categories, rounds the corners and adds space around the label. */
-.blocklyToolboxCategory {
-    box-sizing: border-box;
-    margin: 0.2rem 0.5rem;
-    border-radius: 6px;
-    min-height: 2.5rem; /* Molto più sottile dei vecchi "bottoni giganti" */
-    height: auto;
-    width: auto;
-    transition: background-color 0.2s ease;
-}
-
-.blocklyTreeRow:hover {
-    background-color: #F1F5F9; /* Grigio chiarissimo al passaggio del mouse */
-    border-radius: 6px;
-    cursor: pointer;
-}
-.blocklyTreeRow[aria-selected="true"] {
-    background-color: #E2E8F0 !important; /* Sfondo evidenziato quando la categoria è aperta */
-    border-radius: 6px;
-}
-
-.blocklyFlyoutBackground {
-    fill: #F8FAFC; 
-    fill-opacity: 0.98;
-}
-
-.blocklyFlyoutLabelText {
-    fill: #475569;
-    font-weight: 600;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
+/* ─── Workspace UI elements ───────────────────────────────────────────────── */
 
 .blocklyZoom,
 .blocklyTrash {

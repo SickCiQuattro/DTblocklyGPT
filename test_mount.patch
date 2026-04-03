@@ -1,0 +1,13 @@
+--- a/frontend/src/pages/graphic/CustomDragDrop/Blockly/BlocklyComponent.tsx
++++ b/frontend/src/pages/graphic/CustomDragDrop/Blockly/BlocklyComponent.tsx
+@@ -43,6 +43,14 @@
+   const isInitialized = useRef<boolean>(false)
+ 
++  useEffect(() => {
++    console.log("--> BlocklyComponent MOUNTED");
++    return () => {
++      console.log("<-- BlocklyComponent UNMOUNTED");
++    }
++  }, []);
++
+   useEffect(() => {
