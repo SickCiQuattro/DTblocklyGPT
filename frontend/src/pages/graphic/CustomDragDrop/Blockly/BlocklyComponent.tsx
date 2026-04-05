@@ -24,6 +24,53 @@ const disableContextMenuItems = () => {
     Blockly.ContextMenuRegistry.registry.unregister('blockHelp')
 }
 
+// Enables "chain selection"
+const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
+  let syncingSelection = false
+
+  const listener = (event: Blockly.Events.Abstract) => {
+    // selection events
+    if (event.type !== Blockly.Events.SELECTED) return
+    if (syncingSelection) return
+
+    const selectedEvent = event as Blockly.Events.Selected
+
+    syncingSelection = true
+    try {
+      // 1. deselection
+      if (selectedEvent.oldElementId) {
+        const oldBlock = workspace.getBlockById(selectedEvent.oldElementId)
+        if (oldBlock && oldBlock instanceof Blockly.BlockSvg) {
+          const oldChain = oldBlock.getDescendants(true)
+          oldChain.forEach((child) => {
+            if (child.id !== oldBlock.id && child instanceof Blockly.BlockSvg) {
+              child.removeSelect()
+            }
+          })
+        }
+      }
+
+      // 2. new selection
+      if (selectedEvent.newElementId) {
+        const newBlock = workspace.getBlockById(selectedEvent.newElementId)
+        if (newBlock && newBlock instanceof Blockly.BlockSvg) {
+          const newChain = newBlock.getDescendants(true)
+          newChain.forEach((child) => {
+            if (child.id !== newBlock.id && child instanceof Blockly.BlockSvg) {
+              child.addSelect()
+            }
+          })
+        }
+      }
+    } finally {
+      syncingSelection = false
+    }
+  }
+
+  workspace.addChangeListener(listener)
+  return () => workspace.removeChangeListener(listener)
+}
+
 interface BlocklyComponentProps {
   dataTask: State
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
@@ -42,7 +89,11 @@ export const BlocklyComponent = ({
 
   useEffect(() => {
     console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
-    document.getElementById('blocklyDiv')!.innerHTML = ''
+
+    // cleanup workspace div before injection
+    if (blocklyDiv.current) {
+      blocklyDiv.current.innerHTML = ''
+    }
 
     const blocklyDivCurrent = blocklyDiv.current as Element
 
@@ -50,14 +101,14 @@ export const BlocklyComponent = ({
     primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
       renderer: 'thrasos',
       readOnly: !editMode,
-      trashcan: true,
+      trashcan: false,
       media: '/blocklyMedia',
       move: { scrollbars: true, drag: true, wheel: true },
-      zoom: { startScale: 1.5, controls: true, wheel: true, pinch: true },
+      zoom: { startScale: 1.5, controls: false, wheel: true, pinch: true },
       grid: {
-        spacing: 15,
+        spacing: 18,
         length: 2,
-        colour: '#94A3B8',
+        colour: '#CBD5E1',
         snap: true,
       },
       sounds: false,
@@ -66,9 +117,14 @@ export const BlocklyComponent = ({
       theme: ModernTheme,
     })
 
+    // observer variables
+    let resizeObserver: ResizeObserver | null = null
+    let detachChainSelection: (() => void) | null = null
+
     if (primaryWorkspace.current) {
       disableContextMenuItems()
       const workspace = primaryWorkspace.current
+      detachChainSelection = enableChainSelection(workspace)
       onWorkspaceReady?.(workspace)
 
       if (dataTask) {
@@ -78,27 +134,48 @@ export const BlocklyComponent = ({
 
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
-    }
 
-    return () => {
-      if (primaryWorkspace.current) {
-        onWorkspaceReady?.(null)
+      if (blocklyDivCurrent) {
+        resizeObserver = new ResizeObserver(() => {
+          if (primaryWorkspace.current) {
+            Blockly.svgResize(primaryWorkspace.current)
+          }
+        })
+        resizeObserver.observe(blocklyDivCurrent)
       }
     }
-  }, [editMode])
+
+    // Cleanup phase
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
+
+      if (detachChainSelection) {
+        detachChainSelection()
+        detachChainSelection = null
+      }
+
+      onWorkspaceReady?.(null)
+
+      if (primaryWorkspace.current) {
+        primaryWorkspace.current.dispose()
+        primaryWorkspace.current = null
+      }
+    }
+  }, [editMode, dataTask, onWorkspaceReady])
 
   useEffect(() => {
-    console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
     if (newTaskParam) {
       dispatch(toggleEditMode())
     }
-  }, [])
+  }, [newTaskParam, dispatch])
 
   return (
     <div
       ref={blocklyDiv}
       id="blocklyDiv"
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
     />
   )
 }

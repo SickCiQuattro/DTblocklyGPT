@@ -19,6 +19,12 @@ export interface ToolboxBlockItem {
   label: string
   /** Pill background colour — defaults to the parent category colour. */
   colour: string
+  /** Optional contextual help shown in the rich tooltip card. */
+  description?: string
+  /** Optional textual summary of accepted inputs shown in the rich tooltip card. */
+  inputs?: string
+  /** Optional textual summary of produced outputs shown in the rich tooltip card. */
+  outputs?: string
   /**
    * If true, this block is "dynamic" — its instances are generated at runtime
    * from external data (objects, locations, actions). The toolbox will render
@@ -55,6 +61,10 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'repeat_block',
         label: 'Repeat N times',
         colour: blocksColours.logicControl,
+        description:
+          'Ripete un blocco di azioni per un numero definito di volte.',
+        inputs: 'Numero di ripetizioni | Azioni da ripetere',
+        outputs: 'Nessuno',
       },
       {
         type: 'loop_block',
@@ -70,6 +80,10 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'when_otherwise_block',
         label: 'When … Do … Otherwise',
         colour: blocksColours.logicControl,
+        description:
+          'Valuta una condizione e sceglie automaticamente il ramo alternativo.',
+        inputs: 'Condizione | Azione se vera | Azione se falsa',
+        outputs: 'Nessuno',
       },
     ],
   },
@@ -82,6 +96,10 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'pick_block',
         label: 'Pick',
         colour: blocksColours.robotActions,
+        description:
+          'Attiva la presa del robot per afferrare l’oggetto selezionato.',
+        inputs: 'Oggetto target',
+        outputs: 'Oggetto afferrato',
       },
       {
         type: 'place_block',

@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Tooltip from '@mui/material/Tooltip'
+import PanToolAltOutlinedIcon from '@mui/icons-material/PanToolAltOutlined'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import ModernTheme from '@blockly/theme-modern'
@@ -9,6 +10,7 @@ import { ToolboxBlockItem } from './toolboxRegistry'
 
 interface BlockPreviewTooltipProps {
   item: ToolboxBlockItem
+  categoryName?: string
   children: JSX.Element
 }
 
@@ -76,8 +78,8 @@ const ensureWorkspace = () => {
       wheel: false,
       pinch: false,
       startScale: 1,
-      maxScale: 1,
-      minScale: 1,
+      maxScale: 2,
+      minScale: 0.3,
       scaleSpeed: 1,
     },
     grid: {
@@ -120,7 +122,7 @@ const createPreviewState = (item: ToolboxBlockItem): State => ({
   data: item.data,
 })
 
-const centerTopBlock = (
+const fitAndCenterTopBlock = (
   workspace: Blockly.WorkspaceSvg,
   container: HTMLElement,
 ) => {
@@ -128,13 +130,30 @@ const centerTopBlock = (
   if (!topBlock) return
 
   const blockSize = topBlock.getHeightWidth()
-  const bounds = container.getBoundingClientRect()
+  const containerW = container.clientWidth
+  const containerH = container.clientHeight
 
-  const targetX = Math.max(12, (bounds.width - blockSize.width) / 2)
-  const targetY = Math.max(12, (bounds.height - blockSize.height) / 2)
+  if (!blockSize.width || !blockSize.height || !containerW || !containerH)
+    return
+
+  const padding = 20
+  const scaleX = (containerW - padding * 2) / blockSize.width
+  const scaleY = (containerH - padding * 2) / blockSize.height
+  const targetScale = Math.min(scaleX, scaleY, 1)
+
+  if (!Number.isFinite(targetScale) || targetScale <= 0) return
+
+  workspace.setScale(targetScale)
+
+  const targetPixelX = (containerW - blockSize.width * targetScale) / 2
+  const targetPixelY = (containerH - blockSize.height * targetScale) / 2
+
+  const targetWsX = targetPixelX / targetScale
+  const targetWsY = targetPixelY / targetScale
 
   const current = topBlock.getRelativeToSurfaceXY()
-  topBlock.moveBy(targetX - current.x, targetY - current.y)
+  topBlock.moveBy(targetWsX - current.x, targetWsY - current.y)
+  workspace.resizeContents()
 }
 
 const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
@@ -154,10 +173,15 @@ const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
     )
   }
 
-  // Force SVG recalculation after moving the singleton host into the new tooltip DOM.
   Blockly.svgResize(workspace)
-  centerTopBlock(workspace, container)
-  Blockly.svgResize(workspace)
+
+  singletonRenderRaf = window.requestAnimationFrame(() => {
+    singletonRenderRaf = window.requestAnimationFrame(() => {
+      singletonRenderRaf = null
+      Blockly.svgResize(workspace)
+      fitAndCenterTopBlock(workspace, container)
+    })
+  })
 }
 
 const cancelSingletonRender = () => {
@@ -215,12 +239,23 @@ const scheduleSingletonRender = (
 
 export const BlockPreviewTooltip = ({
   item,
+  categoryName,
   children,
 }: BlockPreviewTooltipProps) => {
   const previewMountRef = useRef<HTMLDivElement | null>(null)
   const ownerRef = useRef(Symbol('block-preview-tooltip-owner'))
 
+  // STATO MANUALE DEL TOOLTIP
+  const [isOpen, setIsOpen] = useState(false)
+
+  const descriptionText =
+    item.description ??
+    'Blocco disponibile nella toolbox per comporre il programma in modo visuale.'
+  const inputText = item.inputs ?? 'Nessuno'
+  const outputText = item.outputs ?? 'Nessuno'
+
   const handleOpen = () => {
+    setIsOpen(true)
     activeTooltipOwner = ownerRef.current
     scheduleSingletonRender(
       ownerRef.current,
@@ -230,6 +265,7 @@ export const BlockPreviewTooltip = ({
   }
 
   const handleClose = () => {
+    setIsOpen(false)
     if (activeTooltipOwner !== ownerRef.current) {
       return
     }
@@ -239,6 +275,24 @@ export const BlockPreviewTooltip = ({
     parkPreviewHost()
   }
 
+  // EVENT LISTENER INTELLIGENTE: Ascolta solo l'evento di VERO trascinamento
+  useEffect(() => {
+    const handleDragStart = () => {
+      setIsOpen(false)
+      if (activeTooltipOwner === ownerRef.current) {
+        cancelSingletonRender()
+        activeTooltipOwner = null
+        parkPreviewHost()
+      }
+    }
+
+    window.addEventListener('toolboxDragStart', handleDragStart)
+    return () => {
+      window.removeEventListener('toolboxDragStart', handleDragStart)
+    }
+  }, [])
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (activeTooltipOwner === ownerRef.current) {
@@ -251,9 +305,43 @@ export const BlockPreviewTooltip = ({
 
   return (
     <Tooltip
+      open={isOpen} // Controllo di stato react
       title={
-        <div className="toolbox-preview">
-          <div className="toolbox-preview__mount" ref={previewMountRef} />
+        <div className="toolbox-preview-card">
+          <div className="toolbox-preview-card__header">
+            <span className="toolbox-preview-card__category">
+              [{categoryName ?? 'Toolbox'}]
+            </span>
+            <p className="toolbox-preview-card__title">{item.label}</p>
+          </div>
+
+          <div className="toolbox-preview-card__preview">
+            <div className="toolbox-preview__mount" ref={previewMountRef} />
+          </div>
+
+          <div className="toolbox-preview-card__body">
+            <p className="toolbox-preview-card__description">
+              {descriptionText}
+            </p>
+            <div className="toolbox-preview-card__io">
+              <span className="toolbox-preview-card__io-line">
+                📥 Input: {inputText}
+              </span>
+              <span className="toolbox-preview-card__io-line">
+                📤 Output: {outputText}
+              </span>
+            </div>
+          </div>
+
+          <div className="toolbox-preview-card__footer">
+            <PanToolAltOutlinedIcon
+              className="toolbox-preview-card__footer-icon"
+              aria-hidden="true"
+            />
+            <span className="toolbox-preview-card__footer-text">
+              Trascina per aggiungere al programma
+            </span>
+          </div>
         </div>
       }
       arrow
@@ -265,9 +353,8 @@ export const BlockPreviewTooltip = ({
       disableFocusListener
       disableTouchListener
       slotProps={{
-        tooltip: {
-          className: 'toolbox-preview-tooltip',
-        },
+        popper: { className: 'toolbox-preview-popper' },
+        tooltip: { className: 'toolbox-preview-tooltip' },
       }}
     >
       {children}
