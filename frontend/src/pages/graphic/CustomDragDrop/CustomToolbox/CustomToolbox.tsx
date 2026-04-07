@@ -1,14 +1,3 @@
-/**
- * CustomToolbox.tsx
- *
- * A fully custom React toolbox that replaces the native Blockly SVG toolbox.
- * Renders an MUI Accordion sidebar with coloured pill-shaped block items.
- *
- * Phase 1: Static visual scaffold (no tooltips, no drag-and-drop).
- * Phase 2: Will add headless Blockly workspace tooltips on hover.
- * Phase 3: Will add HTML Drag & Drop → Blockly workspace bridge.
- */
-
 import React, { useState } from 'react'
 import {
   Accordion,
@@ -16,14 +5,19 @@ import {
   AccordionDetails,
   Typography,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import TuneIcon from '@mui/icons-material/Tune'
-import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
-import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined'
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
-import SensorsOutlinedIcon from '@mui/icons-material/SensorsOutlined'
-import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined'
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+
+import {
+  ChevronDown,
+  SlidersHorizontal,
+  Bot,
+  User,
+  Shapes,
+  Radar,
+  LayoutGrid,
+  Trash2,
+  FlaskConical,
+  MapPin,
+} from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
@@ -53,10 +47,6 @@ interface CustomToolboxProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Resolves dynamic block templates into concrete pill items using live data.
- * Static blocks pass through unchanged.
- */
 const resolveDynamicBlocks = (
   blocks: ToolboxBlockItem[],
   dataObjects: ObjectListType[],
@@ -99,14 +89,11 @@ const resolveDynamicBlocks = (
       case 'object_block':
         dataObjects.forEach((obj) => {
           const displayName = obj.name?.trim() || `Object ${obj.id}`
-
           resolved.push({
             type: 'object_block',
             label: displayName,
             colour: block.colour,
-            // object_block uses a serializable label field named "name".
             fields: { name: displayName },
-            // Mutator metadata is read from block.data (id is required for warning state).
             data: buildEntityData(obj.id, displayName, obj.keywords),
           })
         })
@@ -115,12 +102,10 @@ const resolveDynamicBlocks = (
       case 'location_block':
         dataLocations.forEach((loc) => {
           const displayName = loc.name?.trim() || `Location ${loc.id}`
-
           resolved.push({
             type: 'location_block',
             label: displayName,
             colour: block.colour,
-            // location_block uses a serializable label field named "name".
             fields: { name: displayName },
             data: buildEntityData(loc.id, displayName, loc.keywords),
           })
@@ -130,12 +115,10 @@ const resolveDynamicBlocks = (
       case 'action_block':
         dataActions.forEach((act) => {
           const displayName = act.name?.trim() || `Action ${act.id}`
-
           resolved.push({
             type: 'action_block',
             label: displayName,
             colour: block.colour,
-            // action_block uses a serializable label field named "name".
             fields: { name: displayName },
             data: buildEntityData(act.id, displayName, act.keywords),
           })
@@ -151,32 +134,29 @@ const resolveDynamicBlocks = (
 }
 
 const getCategoryIcon = (key: string, colour: string) => {
-  const iconSx = {
-    color: colour,
-    fontSize: '1rem',
-  }
+  // Lucide (16px = 1rem)
+  const size = 16
 
   switch (key) {
     case 'logic-control':
-      return <TuneIcon sx={iconSx} />
+      return <SlidersHorizontal color={colour} size={size} />
     case 'robot-actions':
-      return <SmartToyOutlinedIcon sx={iconSx} />
+      return <Bot color={colour} size={size} />
     case 'human-actions':
-      return <PersonOutlineOutlinedIcon sx={iconSx} />
+      return <User color={colour} size={size} />
     case 'objects-positions':
-      return <CategoryOutlinedIcon sx={iconSx} />
+      return <Shapes color={colour} size={size} />
     case 'events-conditions':
-      return <SensorsOutlinedIcon sx={iconSx} />
+      return <Radar color={colour} size={size} />
     case 'macro-tasks':
-      return <DashboardCustomizeOutlinedIcon sx={iconSx} />
+      return <LayoutGrid color={colour} size={size} />
     default:
-      return <TuneIcon sx={iconSx} />
+      return <SlidersHorizontal color={colour} size={size} />
   }
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-/** A single pill-shaped block item inside an expanded category. */
 const BlockPill: React.FC<{
   item: ToolboxBlockItem
   categoryName: string
@@ -197,7 +177,30 @@ const BlockPill: React.FC<{
   </BlockPreviewTooltip>
 )
 
-/** A single accordion category with its child pills. */
+type CategoryTabKey = 'objects' | 'positions'
+
+interface CategoryTabDefinition {
+  key: CategoryTabKey
+  label: string
+  icon: React.ElementType
+  blockTypes: string[]
+}
+
+const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
+  {
+    key: 'objects',
+    label: 'Objects',
+    icon: FlaskConical,
+    blockTypes: ['object_block'],
+  },
+  {
+    key: 'positions',
+    label: 'Positions',
+    icon: MapPin,
+    blockTypes: ['location_block'],
+  },
+]
+
 const CategoryPanel: React.FC<{
   category: ToolboxCategory
   pills: ToolboxBlockItem[]
@@ -207,64 +210,123 @@ const CategoryPanel: React.FC<{
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ category, pills, expanded, onChange, onBlockPointerDown }) => (
-  <Accordion
-    expanded={expanded}
-    onChange={() => onChange(category.key)}
-    disableGutters
-    elevation={0}
-    className="toolbox-category"
-    sx={{
-      '&::before': { display: 'none' }, // Remove MUI default divider
-    }}
-  >
-    <AccordionSummary
-      expandIcon={<ExpandMoreIcon className="toolbox-category__chevron" />}
-      className="toolbox-category__header"
+}> = ({ category, pills, expanded, onChange, onBlockPointerDown }) => {
+  const isObjectsPositionsCategory = category.key === 'objects-positions'
+  const [activeTab, setActiveTab] = useState<'objects' | 'positions'>('objects')
+
+  const activeTabConfig = isObjectsPositionsCategory
+    ? OBJECT_POSITION_TABS.find((tab) => tab.key === activeTab)
+    : null
+
+  const visiblePills = activeTabConfig
+    ? pills.filter((pill) => activeTabConfig.blockTypes.includes(pill.type))
+    : pills
+
+  return (
+    <Accordion
+      expanded={expanded}
+      onChange={() => onChange(category.key)}
+      disableGutters
+      elevation={0}
+      className="toolbox-category"
       sx={{
-        minHeight: '42px',
-        '& .MuiAccordionSummary-content': { margin: '10px 0' },
+        '&::before': { display: 'none' },
       }}
     >
-      <div className="toolbox-category__title">
-        <span
-          className="toolbox-category__accent"
-          style={{ backgroundColor: category.colour }}
-        />
-        <span className="toolbox-category__icon" aria-hidden="true">
-          {getCategoryIcon(category.key, category.colour)}
-        </span>
-        <Typography className="toolbox-category__name" title={category.name}>
-          {category.name}
-        </Typography>
-      </div>
-    </AccordionSummary>
+      <AccordionSummary
+        expandIcon={<ChevronDown className="toolbox-category__chevron" />}
+        className="toolbox-category__header"
+        sx={{
+          minHeight: '42px',
+          '& .MuiAccordionSummary-content': { margin: '10px 0' },
+        }}
+      >
+        <div className="toolbox-category__title">
+          <span
+            className="toolbox-category__accent"
+            style={{ backgroundColor: category.colour }}
+          />
+          <span className="toolbox-category__icon" aria-hidden="true">
+            {getCategoryIcon(category.key, category.colour)}
+          </span>
+          <Typography className="toolbox-category__name" title={category.name}>
+            {category.name}
+          </Typography>
+        </div>
+      </AccordionSummary>
 
-    <AccordionDetails className="toolbox-category__body">
-      {pills.length === 0 ? (
-        <Typography
-          variant="caption"
-          sx={{ color: '#94A3B8', fontStyle: 'italic', padding: '4px 0' }}
-        >
-          No blocks available
-        </Typography>
-      ) : (
-        <>
-          {pills.map((pill, idx) => (
-            <BlockPill
-              key={`${pill.type}-${idx}`}
-              item={pill}
-              categoryName={category.name}
-              onPointerDown={onBlockPointerDown}
-            />
-          ))}
-          {/* Space */}
-          <div style={{ height: '6px', flexShrink: 0, width: '100%' }} />
-        </>
-      )}
-    </AccordionDetails>
-  </Accordion>
-)
+      <AccordionDetails className="toolbox-category__body">
+        {isObjectsPositionsCategory && (
+          <div
+            className="toolbox-category-tabs"
+            role="tablist"
+            aria-label={`${category.name} tabs`}
+          >
+            {OBJECT_POSITION_TABS.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.key
+              const stateClass = isActive
+                ? 'toolbox-category-tab--active'
+                : 'toolbox-category-tab--inactive'
+
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={[
+                    'toolbox-category-tab',
+                    `toolbox-category-tab--${tab.key}`,
+                    stateClass,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => setActiveTab(tab.key)}
+                  role="tab"
+                  aria-selected={isActive}
+                >
+                  {/* Space */}
+                  <Icon
+                    className="toolbox-category-tab__icon"
+                    size={16}
+                    style={{
+                      background: 'transparent',
+                      backgroundColor: 'transparent',
+                    }}
+                  />
+                  <span className="toolbox-category-tab__label">
+                    {tab.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {visiblePills.length === 0 ? (
+          <Typography
+            variant="caption"
+            sx={{ color: '#94A3B8', fontStyle: 'italic', padding: '4px 0' }}
+          >
+            No blocks available
+          </Typography>
+        ) : (
+          <>
+            {visiblePills.map((pill, idx) => (
+              <BlockPill
+                key={`${pill.type}-${idx}`}
+                item={pill}
+                categoryName={category.name}
+                onPointerDown={onBlockPointerDown}
+              />
+            ))}
+            {/* Space */}
+            <div style={{ height: '6px', flexShrink: 0, width: '100%' }} />
+          </>
+        )}
+      </AccordionDetails>
+    </Accordion>
+  )
+}
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -276,7 +338,6 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   onRootRefChange,
   onBlockPointerDown,
 }) => {
-  // Track which accordion panel is currently expanded (null = all collapsed).
   const [expandedKey, setExpandedKey] = useState<string | null>('logic-control')
 
   const handleAccordionChange = (key: string) => {
@@ -322,10 +383,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                   boxShadow: 'none',
                 }}
               >
-                <DeleteOutlineRoundedIcon
+                {/* Space */}
+                <Trash2
+                  color="#DC2626"
+                  size={22}
                   style={{
-                    color: '#DC2626',
-                    fontSize: '1.4rem',
                     background: 'transparent',
                     backgroundColor: 'transparent',
                   }}

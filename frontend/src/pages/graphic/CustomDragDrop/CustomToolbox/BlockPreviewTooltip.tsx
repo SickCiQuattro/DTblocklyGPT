@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import Tooltip from '@mui/material/Tooltip'
-import PanToolAltOutlinedIcon from '@mui/icons-material/PanToolAltOutlined'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import ModernTheme from '@blockly/theme-modern'
 import { State } from 'blockly/core/serialization/blocks'
 
+import {
+  Pointer,
+  SquareArrowRightEnter,
+  SquareArrowRightExit,
+} from 'lucide-react'
+
 import { ToolboxBlockItem } from './toolboxRegistry'
+import './BlockPreviewTooltip.css'
 
 interface BlockPreviewTooltipProps {
   item: ToolboxBlockItem
@@ -305,7 +311,7 @@ export const BlockPreviewTooltip = ({
 
   return (
     <Tooltip
-      open={isOpen} // Controllo di stato react
+      open={isOpen}
       title={
         <div className="toolbox-preview-card">
           <div className="toolbox-preview-card__header">
@@ -325,21 +331,20 @@ export const BlockPreviewTooltip = ({
             </p>
             <div className="toolbox-preview-card__io">
               <span className="toolbox-preview-card__io-line">
-                📥 Input: {inputText}
+                <SquareArrowRightEnter size={16} />
+                Input: {inputText}
               </span>
               <span className="toolbox-preview-card__io-line">
-                📤 Output: {outputText}
+                <SquareArrowRightExit size={16} />
+                Output: {outputText}
               </span>
             </div>
           </div>
 
           <div className="toolbox-preview-card__footer">
-            <PanToolAltOutlinedIcon
-              className="toolbox-preview-card__footer-icon"
-              aria-hidden="true"
-            />
+            <Pointer size={16} />
             <span className="toolbox-preview-card__footer-text">
-              Trascina per aggiungere al programma
+              Drag to add to program
             </span>
           </div>
         </div>

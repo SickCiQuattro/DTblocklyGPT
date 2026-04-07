@@ -5,13 +5,8 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { State } from 'blockly/core/serialization/blocks'
 import { IconButton } from '@mui/material'
-import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined'
-import RedoOutlinedIcon from '@mui/icons-material/RedoOutlined'
-import AddIcon from '@mui/icons-material/Add'
-import RemoveIcon from '@mui/icons-material/Remove'
-import CropFreeOutlinedIcon from '@mui/icons-material/CropFreeOutlined'
+import { Undo2, Redo2, Plus, Minus, Maximize } from 'lucide-react'
 import BlocklyComponent from './Blockly'
-
 import { CustomToolbox, ToolboxBlockItem } from './CustomToolbox'
 import './CustomCategory'
 import './CustomDragDropStyle.css'
@@ -186,7 +181,7 @@ export const CustomDragDrop = ({
     }
 
     try {
-      // 1. Spegni la History per nascondere i micro-spostamenti iniziali.
+      // 1. Turn off History to hide initial micro-movements.
       Blockly.Events.disable()
 
       let block: Blockly.BlockSvg | null = null
@@ -214,7 +209,7 @@ export const CustomDragDrop = ({
           ),
         )
       } finally {
-        // 2. Riaccendi la History.
+        // 2. Rekindle History.
         Blockly.Events.enable()
       }
 
@@ -222,12 +217,12 @@ export const CustomDragDrop = ({
         return
       }
 
-      // 3. Registra un singolo evento ufficiale di creazione.
+      // 3. Record a single official creation event.
       if (Blockly.Events.isEnabled()) {
         Blockly.Events.fire(new Blockly.Events.BlockCreate(block))
       }
 
-      // 4. Procedi con il Synthetic Event Routing.
+      // 4. Proceed with Synthetic Event Routing.
       if (sourceElement.hasPointerCapture(pointerEvent.pointerId)) {
         sourceElement.releasePointerCapture(pointerEvent.pointerId)
       }
@@ -246,7 +241,7 @@ export const CustomDragDrop = ({
 
       svgRoot.dispatchEvent(syntheticEvent)
     } catch (error) {
-      console.error('Errore nel proxy della Gesture Blockly:', error)
+      console.error('Blockly Gesture Proxy Error:', error)
     }
   }
 
@@ -348,7 +343,7 @@ export const CustomDragDrop = ({
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => {
-    // Solo clic primario (tasto sinistro)
+    // primary button only
     if (e.button !== 0) return
 
     const workspace = workspaceRef.current
@@ -356,13 +351,12 @@ export const CustomDragDrop = ({
 
     if (workspace.options.readOnly) return
 
-    // Previene comportamenti di default del browser (selezione testo, drag HTML nativo)
     e.preventDefault()
 
-    // Chiude eventuali menù Blockly aperti
+    // close any open tooltip
     workspace.hideChaff()
 
-    // Pulisce eventuali listener di un drag precedente incompleto.
+    // clenup listener
     pendingDragCleanupRef.current?.()
     pendingDragCleanupRef.current = null
 
@@ -400,7 +394,7 @@ export const CustomDragDrop = ({
 
     const onPointerEnd = (endEvent: PointerEvent) => {
       if (endEvent.pointerId !== pointerId) return
-      // Se arriviamo qui prima della soglia, era un semplice click: nessuna creazione.
+      // click: no creation
       cleanup()
     }
 
@@ -436,7 +430,7 @@ export const CustomDragDrop = ({
               disabled={!historyState.canUndo}
               aria-label="Undo"
             >
-              <UndoOutlinedIcon fontSize="small" />
+              <Undo2 size={18} />
             </IconButton>
 
             <IconButton
@@ -446,7 +440,7 @@ export const CustomDragDrop = ({
               disabled={!historyState.canRedo}
               aria-label="Redo"
             >
-              <RedoOutlinedIcon fontSize="small" />
+              <Redo2 size={18} />
             </IconButton>
           </div>
 
@@ -457,7 +451,7 @@ export const CustomDragDrop = ({
               onClick={handleZoomIn}
               aria-label="Zoom in"
             >
-              <AddIcon fontSize="small" />
+              <Plus size={18} />
             </IconButton>
 
             <IconButton
@@ -466,7 +460,7 @@ export const CustomDragDrop = ({
               onClick={handleZoomOut}
               aria-label="Zoom out"
             >
-              <RemoveIcon fontSize="small" />
+              <Minus size={18} />
             </IconButton>
 
             <IconButton
@@ -475,7 +469,7 @@ export const CustomDragDrop = ({
               onClick={handleZoomToFit}
               aria-label="Fit to screen"
             >
-              <CropFreeOutlinedIcon fontSize="small" />
+              <Maximize size={18} />
             </IconButton>
           </div>
         </div>

@@ -1,0 +1,10 @@
+.toolbox-preview-card__io-line {
+  display: inline-flex;
+  align-items: center; 
+  gap: 6px; 
+  line-height: 1;
+}
+
+.toolbox-preview-card__io-line svg {
+  display: block;
+}
