@@ -31,6 +31,10 @@ class StepsItems(Enum):
     PICK = "pick_block"
     PROCESSING = "processing_block"
     PLACE = "place_block"
+    HUMAN_ACTION = "human_action_block"
+    MOVE_TO = "move_to_block"
+    MOVE_RELATIVE = "move_relative_block"
+    GRIPPER = "gripper_block"
 
 
 class EventsItems(Enum):
@@ -38,6 +42,9 @@ class EventsItems(Enum):
     SENSOR = "sensor_signal_block"
     HUMAN = "human_feedback_block"
     # DETECT = "detect_block"
+    TIMER = "timer_block"
+    TOUCH = "touch_detect_block"
+    GESTURE = "gesture_block"
 
 
 class LibrariesItems(Enum):
@@ -577,108 +584,83 @@ def simulation_recursive_blockly_parser(
                     inside_conditional,
                 )
                 time.sleep(3)
-                
+
+        elif code["type"] == StepsItems.HUMAN_ACTION.value:
+            task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
+            print(f"\n[!] HUMAN ACTION REQUIRED: {task_desc}")
+            
+            confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
+            if confirm_event:
+                if confirm_event.get("type") == EventsItems.TIMER.value:
+                    seconds = int(confirm_event.get("fields", {}).get("SECONDS", 5))
+                    print(f"[!] Timer Start: The robot stops and waits for {seconds} seconds...")
+                    time.sleep(seconds)  # <--- STOP ROBOT
+                    print("[!] Timer expired, robot resumes execution!\n")
+            
+            if code.get("next") is not None:
+                simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
+
 
         elif code["type"] == StepsItems.PICK.value:
             object_data = loads(code["inputs"]["OBJECT"]["block"]["data"])
             object = objectsOfUser.filter(id=object_data["id"]).first()
             object_sdf_filename = object.name
             
+            print(f"[ROBOT] Executing PICK of the object: {object_sdf_filename}")
+            
+            # 1. Spawna l'oggetto in Gazebo
             create_object_pick_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.05, y: -1.48, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
             launch_wsl_ros_command(create_object_pick_command)
             time.sleep(1)
             
-            actions_points_array = []
-            location_sdf_filename = None
-            create_location_command = None
-
-            # Se siamo dentro un blocco condizionale (WHEN/OTHERWISE),
-            # gestiamo PICK → [PROCESSING(s)] → PLACE in modo semplice
-            if inside_conditional and code.get("next") is not None:
-                next_block = code["next"]["block"]
-                
-                # Raccoglie tutti i PROCESSING consecutivi
-                while next_block is not None and next_block["type"] == StepsItems.PROCESSING.value:
-                    action_data = loads(next_block["inputs"]["ACTION"]["block"]["data"])
-                    action = actionsOfUser.filter(id=action_data["id"]).first()
-                    action_points = loads(action.points)["points"]
-                    actions_points_array.append(action_points)
-                    
-                    if next_block.get("next") is not None:
-                        next_block = next_block["next"]["block"]
-                    else:
-                        next_block = None
-                
-                # Se troviamo un PLACE, prepara la location
-                if next_block is not None and next_block["type"] == StepsItems.PLACE.value:
-                    location_data = loads(next_block["inputs"]["LOCATION"]["block"]["data"])
-                    location = locationsOfUser.filter(id=location_data["id"]).first()
-                    location_sdf_filename = location.name
-                    create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0, w: 0.7071}}}}'"""
-                    if create_location_command:
-                        launch_wsl_ros_command(create_location_command)
-                
-                # Esegue la sequenza fisica
-                simulate_ros_pick()
-                for action_points in actions_points_array:
-                    simulate_ros_action(action_points)
-                create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
-                simulate_ros_place(create_object_place_command)
-                time.sleep(1)
-                
-                # NON facciamo la chiamata ricorsiva per next perché l'abbiamo già gestito sopra
-                # (altrimenti il PLACE verrebbe eseguito due volte)
-                return
-
-            # Modalità normale (vecchio comportamento): lookahead automatico
-            if code.get("next") is not None and code["next"]["block"]["type"] == StepsItems.PROCESSING.value:
-                action_data = loads(
-                    code["next"]["block"]["inputs"]["ACTION"]["block"]["data"]
-                )
-                action = actionsOfUser.filter(id=action_data["id"]).first()
-                action_points = loads(action.points)["points"]
-                actions_points_array.append(action_points)
-
-                next_recursion_root = code["next"]["block"]["next"]["block"]
-                location_block_found = False
-                while location_block_found is False:
-                    if next_recursion_root["type"] == StepsItems.PROCESSING.value:
-                        action_data = loads(
-                            next_recursion_root["inputs"]["ACTION"]["block"]["data"]
-                        )
-                        action = actionsOfUser.filter(id=action_data["id"]).first()
-                        action_points = loads(action.points)["points"]
-                        actions_points_array.append(action_points)
-                        next_recursion_root = next_recursion_root["next"]["block"]
-                    if next_recursion_root["type"] == StepsItems.PLACE.value:
-                        location_data = loads(
-                            next_recursion_root["inputs"]["LOCATION"]["block"]["data"]
-                        )
-                        location = locationsOfUser.filter(
-                            id=location_data["id"]
-                        ).first()
-                        location_sdf_filename = location.name
-                        create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
-                        launch_wsl_ros_command(create_location_command)
-                        location_block_found = True
-
-            if code.get("next") is not None and code["next"]["block"]["type"] == StepsItems.PLACE.value:
-                location_data = loads(
-                    code["next"]["block"]["inputs"]["LOCATION"]["block"]["data"]
-                )
-                location = locationsOfUser.filter(id=location_data["id"]).first()
-                location_sdf_filename = location.name
-                create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
-                launch_wsl_ros_command(create_location_command)
-
+            # 2. Esegue SOLO il movimento di Pick
             simulate_ros_pick()
-            for action_points in actions_points_array:
-                simulate_ros_action(action_points)
-            create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/{object_sdf_filename}/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
+            
+            # 3. Passa immediatamente la palla al blocco successivo (nessun Place forzato!)
+            if code.get("next") is not None:
+                simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
+
+
+        elif code["type"] == StepsItems.MOVE_TO.value:
+            location_data = loads(code["inputs"]["LOCATION"]["block"]["data"])
+            location_name = location_data.get("name", "Sconosciuta")
+            motion_type = code.get("fields", {}).get("MOTION_TYPE", "LINEAR")
+            
+            print(f"[ROBOT] Execution MOVE_TO ({motion_type}) towards: {location_name}")
+            
+            # NOTA CINEMATICA: Attualmente il tuo sistema non converte le stringhe in giunti.
+            # Mettiamo un movimento "intermedio" per simulare lo spostamento sul tuo Gazebo.
+            # Usa la posizione "NEAR" definita originariamente nel tuo place.
+            simulate_ros_move(51.56, 20.05, 87.08, 0.0, 48.70, 0.0, ROS_CLOSE_GRIPPER_WITH_OBJECT)
+            time.sleep(2)
+            
+            if code.get("next") is not None:
+                simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
+
+
+        elif code["type"] == StepsItems.PLACE.value:
+            location_data = loads(code["inputs"]["LOCATION"]["block"]["data"])
+            location = locationsOfUser.filter(id=location_data["id"]).first()
+            location_sdf_filename = location.name
+            
+            print(f"[ROBOT] PLACE execution in the location: {location_sdf_filename}")
+            
+            # 1. Spawna la locazione in Gazebo
+            create_location_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "location"; sdf_filename: "locations/{location_sdf_filename}/model.sdf"; pose: {{position: {{x: -8.8, y: -1.41, z: 1.065}}, orientation: {{x: 0, y: 0, z: 0.7071, w: 0.7071}}}}'"""
+            launch_wsl_ros_command(create_location_command)
+            
+            # 2. Spawna il finto "oggetto piazzato" (Ereditato dal tuo vecchio codice)
+            create_object_place_command = f"""gz service -s /world/worldCobotta/create --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 --req 'name: "object_place"; sdf_filename: "objects/flask/model.sdf"; pose: {{position: {{x: -9.16, y: -1.18, z: 1.25}}, orientation: {{x: 0, y: 0, z: 0, w: 1}}}}'"""
+            
+            # 3. Esegue SOLO il movimento di Place
             simulate_ros_place(create_object_place_command)
             time.sleep(1)
+            
+            if code.get("next") is not None:
+                simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
+
         else:
-            return error_response("Invalid task structure")
+            print(f"[WARNING] Block type unknown or ignored: {code.get('type')}")
 
     except Exception as e:
         print(str(e))
