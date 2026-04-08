@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit'
+
 import { INITIAL_TASK_STRUCTURE, TaskChatStructure } from 'pages/chat/utils'
 
 export type TaskState = {

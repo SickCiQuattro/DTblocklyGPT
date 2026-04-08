@@ -25,6 +25,7 @@ import {
   defaultPaginationConfig,
 } from 'utils/constants'
 import { getFromLocalStorage } from 'utils/localStorageUtils'
+
 import { ActionListType } from './types'
 
 const ListActions = () => {

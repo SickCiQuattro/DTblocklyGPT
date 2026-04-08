@@ -36,13 +36,14 @@ import {
 import { formatDateTimeFrontend } from 'utils/date'
 import { getFromLocalStorage } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
+import { ObjectListType } from 'pages/objects/types'
+import { LocationListType } from 'pages/locations/types'
+import { ActionListType } from 'pages/actions/types'
+
 import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
 import { SimulateTaskModal } from './simulateTaskModal'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
-import { ObjectListType } from 'pages/objects/types'
-import { LocationListType } from 'pages/locations/types'
-import { ActionListType } from 'pages/actions/types'
 
 const ListTasks = () => {
   const [tablePageSize, setTablePageSize] = useState(defaultPageSizeSelection)

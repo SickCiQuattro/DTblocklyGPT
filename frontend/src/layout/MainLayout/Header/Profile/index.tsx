@@ -21,6 +21,7 @@ import { MainCard } from 'components/MainCard'
 import { Transitions } from 'components/Transitions'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { RandomUserIcon } from 'assets/robots'
+
 import { ProfileTab } from './ProfileTab'
 
 interface TabPanelProps {

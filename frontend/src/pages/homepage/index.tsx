@@ -5,10 +5,11 @@ import {
   CardMedia,
   Typography,
 } from '@mui/material'
-import { MainCard } from 'components/MainCard'
 import React from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
+
+import { MainCard } from 'components/MainCard'
 import { activeItem } from 'store/reducers/menu'
 
 const Homepage = () => {
@@ -17,7 +18,7 @@ const Homepage = () => {
 
   React.useEffect(() => {
     dispatch(activeItem('homepage'))
-  }, [])
+  }, [dispatch])
 
   return (
     <MainCard

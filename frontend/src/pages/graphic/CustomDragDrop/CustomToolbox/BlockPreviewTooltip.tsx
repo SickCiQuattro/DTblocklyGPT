@@ -3,13 +3,13 @@ import Tooltip from '@mui/material/Tooltip'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import ModernTheme from '@blockly/theme-modern'
-import { BlockState as State } from 'utils/blocklyTypes'
-
 import {
   Pointer,
   SquareArrowRightEnter,
   SquareArrowRightExit,
 } from 'lucide-react'
+
+import { BlockState as State } from 'utils/blocklyTypes'
 
 import { ToolboxBlockItem } from './toolboxRegistry'
 import './BlockPreviewTooltip.css'
@@ -283,9 +283,11 @@ export const BlockPreviewTooltip = ({
 
   // EVENT LISTENER INTELLIGENTE: Ascolta solo l'evento di VERO trascinamento
   useEffect(() => {
+    const owner = ownerRef.current
+
     const handleDragStart = () => {
       setIsOpen(false)
-      if (activeTooltipOwner === ownerRef.current) {
+      if (activeTooltipOwner === owner) {
         cancelSingletonRender()
         activeTooltipOwner = null
         parkPreviewHost()
@@ -300,8 +302,10 @@ export const BlockPreviewTooltip = ({
 
   // Cleanup on unmount
   useEffect(() => {
+    const owner = ownerRef.current
+
     return () => {
-      if (activeTooltipOwner === ownerRef.current) {
+      if (activeTooltipOwner === owner) {
         cancelSingletonRender()
         activeTooltipOwner = null
         parkPreviewHost()

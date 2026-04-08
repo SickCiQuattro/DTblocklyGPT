@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { SystemMessage, MessageBox } from 'react-chat-elements'
-import { formatTimeFrontend } from 'utils/date'
 import { useTheme } from '@mui/material'
+
+import { formatTimeFrontend } from 'utils/date'
 
 export const FINE_TUNED_MODEL = 'AAA'
 export const FINE_TUNING_JOB_ID = 'BBB'
@@ -39,6 +40,7 @@ export const CHATGPT_ERROR =
 
 export const LastMessage = ({ id }: { id: number }) => {
   const theme = useTheme()
+  const [messageDate] = useState(() => dayjs().toDate())
 
   return (
     <MessageBox
@@ -46,7 +48,7 @@ export const LastMessage = ({ id }: { id: number }) => {
       title="Robot"
       type="text"
       text="Task defined! I will be redirect to the graphic interface."
-      date={new Date()}
+      date={messageDate}
       dateString={formatTimeFrontend(dayjs().toString()) || ''}
       id={id}
       key={id}
@@ -214,7 +216,6 @@ export const FinishedSystemMessage = () => {
 }
 
 export const TypingSystemMessage = () => {
-  const [typingText, setTypingText] = useState('Robot is typing')
   const [dotsCount, setDotsCount] = useState(0)
 
   useEffect(() => {
@@ -225,9 +226,7 @@ export const TypingSystemMessage = () => {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    setTypingText(`Robot is typing${'.'.repeat(dotsCount)}`)
-  }, [dotsCount])
+  const typingText = `Robot is typing${'.'.repeat(dotsCount)}`
 
   return (
     <SystemMessage

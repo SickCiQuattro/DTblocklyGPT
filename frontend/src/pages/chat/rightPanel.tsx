@@ -6,7 +6,9 @@ import { Divider, useTheme } from '@mui/material'
 // import { backgroundForm } from 'themes/theme'
 import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { toast } from 'react-toastify'
+
 import { MessageText } from 'utils/messages'
+
 import { TaskChatStructure } from './utils'
 
 interface RightPanelProps {

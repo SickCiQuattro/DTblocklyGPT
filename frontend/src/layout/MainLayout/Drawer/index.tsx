@@ -3,6 +3,7 @@ import { useTheme } from '@mui/material/styles'
 import { Box, Drawer, useMediaQuery } from '@mui/material'
 
 import { drawerWidth } from 'utils/constants'
+
 import { DrawerHeader } from './DrawerHeader'
 import { DrawerContent } from './DrawerContent'
 import { closedMixin, openedMixin } from './MiniDrawerStyled'

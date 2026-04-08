@@ -4,13 +4,16 @@ import * as locale from 'blockly/msg/en'
 // import { Backpack } from '@blockly/workspace-backpack'
 import Theme from '@blockly/theme-modern'
 import { ZoomToFitControl } from '@blockly/zoom-to-fit'
+
 import 'blockly/blocks'
-import { BlockState as State } from 'utils/blocklyTypes'
 import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
+
+import { BlockState as State } from 'utils/blocklyTypes'
 import { toggleEditMode } from 'store/reducers/task'
 import { AbstractStep } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+
 import { updateStructureAndFireFakeChangeEvent } from './utils'
 
 // @ts-expect-error: Blockly.setLocale may not be typed in the current Blockly version
@@ -67,9 +70,9 @@ export const BlocklyComponent = ({
   newChatResponse,
   setNewChatResponse,
 }: BlocklyComponentProps) => {
-  const blocklyDiv = useRef<HTMLDivElement | null>(null)
-  const toolbox = useRef<HTMLDivElement | null>(null)
-  const primaryWorkspace = useRef<Blockly.WorkspaceSvg | null>(null)
+  const blocklyDivRef = useRef<HTMLDivElement | null>(null)
+  const toolboxRef = useRef<HTMLDivElement | null>(null)
+  const primaryWorkspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
   const [searchParams] = useSearchParams()
   const newTaskParam = searchParams.get('newTask')
   const dispatch = useDispatch()
@@ -77,7 +80,7 @@ export const BlocklyComponent = ({
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   useEffect(() => {
-    const blocklyTaskStructure = primaryWorkspace.current
+    const blocklyTaskStructure = primaryWorkspaceRef.current
       ? getBlocklyStructure()
       : {
           x: DEFAULT_X_AXIS,
@@ -86,12 +89,14 @@ export const BlocklyComponent = ({
     const x_axis = blocklyTaskStructure?.x
     const y_axis = blocklyTaskStructure?.y
 
-    document.getElementById('blocklyDiv')!.innerHTML = ''
+    if (blocklyDivRef.current) {
+      blocklyDivRef.current.innerHTML = ''
+    }
 
     // https://developers.google.com/blockly/guides/configure/web/configuration_struct?hl=en
-    const blocklyDivCurrent = blocklyDiv.current as Element
-    const toolboxCurrent = toolbox.current as Element
-    primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
+    const blocklyDivCurrent = blocklyDivRef.current as Element
+    const toolboxCurrent = toolboxRef.current as Element
+    primaryWorkspaceRef.current = Blockly.inject(blocklyDivCurrent, {
       toolbox: toolboxCurrent,
       readOnly: !editingMode,
       trashcan: true,
@@ -103,9 +108,9 @@ export const BlocklyComponent = ({
       grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
     })
 
-    if (primaryWorkspace.current) {
+    if (primaryWorkspaceRef.current) {
       disableContextMenuItems()
-      const workspace = primaryWorkspace.current
+      const workspace = primaryWorkspaceRef.current
 
       const zoomToFit = new ZoomToFitControl(workspace)
       zoomToFit.init()
@@ -156,7 +161,7 @@ export const BlocklyComponent = ({
       resizeObserverRef.current = new ResizeObserver(() => {
         Blockly.svgResize(workspace)
       })
-      resizeObserverRef.current.observe(blocklyDiv.current as Element)
+      resizeObserverRef.current.observe(blocklyDivRef.current as Element)
 
       if (dataTask) {
         const defaultDataTask = { ...dataTask }
@@ -174,11 +179,11 @@ export const BlocklyComponent = ({
         resizeObserverRef.current = null
       }
     }
-  }, [editingMode])
+  }, [editingMode, dataTask, setTaskStructure])
 
   useEffect(() => {
-    if (primaryWorkspace.current && newChatResponse) {
-      const workspace = primaryWorkspace.current
+    if (primaryWorkspaceRef.current && newChatResponse) {
+      const workspace = primaryWorkspaceRef.current
       const blocklyTaskStructure = getBlocklyStructure()
       const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
       const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
@@ -195,18 +200,18 @@ export const BlocklyComponent = ({
         setNewChatResponse(false)
       }
     }
-  }, [newChatResponse])
+  }, [newChatResponse, dataTask, setNewChatResponse])
 
   useEffect(() => {
     if (newTaskParam) {
       dispatch(toggleEditMode())
     }
-  }, [])
+  }, [newTaskParam, dispatch])
 
   return (
     <>
-      <div ref={blocklyDiv} id="blocklyDiv" />
-      <div style={{ display: 'none' }} ref={toolbox}>
+      <div ref={blocklyDivRef} id="blocklyDiv" />
+      <div style={{ display: 'none' }} ref={toolboxRef}>
         {children}
       </div>
     </>

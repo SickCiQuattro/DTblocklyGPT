@@ -1,4 +1,5 @@
 import * as Blockly from 'blockly/core'
+
 import { BlockState as State } from 'utils/blocklyTypes'
 
 export const updateStructureAndFireFakeChangeEvent = (

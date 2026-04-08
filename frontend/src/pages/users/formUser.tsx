@@ -21,6 +21,7 @@ import {
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
+
 import { RoleType, UserDetailType } from './types'
 
 interface FormUserProps {

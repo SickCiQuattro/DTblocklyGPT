@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   VideoCameraFilled,
 } from '@ant-design/icons'
+
 import { Palette } from 'themes/palette'
 
 const themePalette = Palette('light')

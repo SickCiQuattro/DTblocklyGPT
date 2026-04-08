@@ -1,10 +1,6 @@
 import React from 'react'
 import { Modal } from 'antd'
-import { MethodHTTP, fetchApi } from 'services/api'
-import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
-import { MessageText } from 'utils/messages'
-import { MyRobotType } from 'pages/myrobots/types'
 import {
   Checkbox,
   FormControl,
@@ -13,6 +9,12 @@ import {
   MenuItem,
   Select,
 } from '@mui/material'
+
+import { MethodHTTP, fetchApi } from 'services/api'
+import { endpoints } from 'services/endpoints'
+import { MessageText } from 'utils/messages'
+import { MyRobotType } from 'pages/myrobots/types'
+
 import { TaskType } from './types'
 
 interface RunTaskModalProps {

@@ -2,10 +2,7 @@ import React from 'react'
 import { Collapse, Divider } from 'antd'
 import { Button, useTheme } from '@mui/material'
 import { useDispatch, useSelector } from 'react-redux'
-import { MethodHTTP, fetchApi } from 'services/api'
-import { endpoints } from 'services/endpoints'
 import { toast } from 'react-toastify'
-import { MessageText } from 'utils/messages'
 import { useParams } from 'react-router-dom'
 import {
   CopyOutlined,
@@ -14,12 +11,15 @@ import {
   SaveOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
+
+import { MethodHTTP, fetchApi } from 'services/api'
+import { endpoints } from 'services/endpoints'
+import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
+import { RootState } from 'store/reducers'
 
 import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
-import { RootState } from 'store/reducers'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 interface RightPanelProps {
   backFunction: () => void

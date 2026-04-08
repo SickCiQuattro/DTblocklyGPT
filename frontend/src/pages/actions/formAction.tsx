@@ -23,6 +23,7 @@ import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { AimOutlined, PlusOutlined } from '@ant-design/icons'
 import { Popconfirm } from 'antd'
+import { useSearchParams } from 'react-router-dom'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
@@ -30,7 +31,7 @@ import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { MyRobotType } from 'pages/myrobots/types'
 import { CartesianPositionType, JointPositionType } from 'pages/locations/types'
 import { iconMap } from 'utils/iconMap'
-import { useSearchParams } from 'react-router-dom'
+
 import { ActionDetailType, listPatterns } from './types'
 
 interface FormActionProps {

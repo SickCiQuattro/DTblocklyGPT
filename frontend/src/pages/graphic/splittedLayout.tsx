@@ -1,8 +1,10 @@
+import { useMediaQuery } from '@mui/material'
+
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
-import { useMediaQuery } from '@mui/material'
 import { BlockState as State } from 'utils/blocklyTypes'
+
 import { RightPanel } from './rightPanel'
 import { CustomDragDrop } from './CustomDragDrop'
 

@@ -1,10 +1,12 @@
 import React from 'react'
 import { Modal } from 'antd'
+import { toast } from 'react-toastify'
+import { Checkbox, FormControlLabel } from '@mui/material'
+
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
-import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
-import { Checkbox, FormControlLabel } from '@mui/material'
+
 import { TaskType } from './types'
 
 interface SimulateTaskModalProps {

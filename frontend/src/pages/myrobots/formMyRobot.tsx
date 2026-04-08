@@ -18,12 +18,13 @@ import {
   number as YupNumber,
 } from 'yup'
 import { QrcodeOutlined, StopOutlined } from '@ant-design/icons'
+import { Scanner } from '@yudiel/react-qr-scanner'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { RobotType } from 'pages/robots/types'
-import { Scanner } from '@yudiel/react-qr-scanner'
+
 import { MyRobotDetailType } from './types'
 
 interface FormMyRobotProps {

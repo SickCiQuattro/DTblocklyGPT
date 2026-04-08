@@ -3,6 +3,7 @@ import { Box, List, Typography } from '@mui/material'
 
 import { useAppSelector } from 'store/reducers'
 import { MenuItem } from 'menu-items/types'
+
 import { NavItem } from './NavItem'
 
 interface NavGroupProps {

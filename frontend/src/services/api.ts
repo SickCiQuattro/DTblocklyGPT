@@ -1,8 +1,9 @@
 import { BareFetcher, Key, Middleware, SWRConfiguration, SWRHook } from 'swr'
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { toast } from 'react-toastify'
-import { MessageText } from 'utils/messages'
 import Cookies from 'js-cookie'
+
+import { MessageText } from 'utils/messages'
 import { clearLocalStorage } from 'utils/localStorageUtils'
 
 export enum MethodHTTP {

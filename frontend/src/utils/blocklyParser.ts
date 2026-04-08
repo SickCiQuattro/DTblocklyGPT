@@ -133,8 +133,8 @@ export const abstractToBlockly = (
             TASK_DESC: step.description || 'insert component',
           },
           inputs: {
-             CONFIRM_EVENT: { block: conditionToBlock(step.confirmEvent) }
-          }
+            CONFIRM_EVENT: { block: conditionToBlock(step.confirmEvent) },
+          },
         }
       default:
         return null
@@ -203,14 +203,14 @@ export const abstractToBlockly = (
       case 'touch_detect':
         return { type: 'touch_detect_block' }
       case 'gesture':
-        return { 
+        return {
           type: 'gesture_block',
-          fields: { GESTURE_TYPE: condition.gestureType || 'THUMBS_UP' }
+          fields: { GESTURE_TYPE: condition.gestureType || 'THUMBS_UP' },
         }
       case 'timer':
         return {
           type: 'timer_block',
-          fields: { SECONDS: condition.seconds || 5 }
+          fields: { SECONDS: condition.seconds || 5 },
         }
       case 'human_feedback':
         return { type: 'human_feedback_block' }
@@ -340,9 +340,9 @@ export const blocklyToAbstract = (
         }
       case 'human_action_block':
         return {
-           type: 'human_action',
-           description: block.fields?.TASK_DESC || '',
-           confirmEvent: blockToCondition(block.inputs?.CONFIRM_EVENT?.block)
+          type: 'human_action',
+          description: block.fields?.TASK_DESC || '',
+          confirmEvent: blockToCondition(block.inputs?.CONFIRM_EVENT?.block),
         }
 
       default:
@@ -404,17 +404,17 @@ export const blocklyToAbstract = (
           objectName: getNameFromBlock(block.inputs?.OBJECT?.block),
         }
       case 'touch_detect_block':
-         return { type: 'touch_detect' }
+        return { type: 'touch_detect' }
       case 'gesture_block':
-         return { 
-           type: 'gesture', 
-           gestureType: block.fields?.GESTURE_TYPE || 'THUMBS_UP' 
-         }
+        return {
+          type: 'gesture',
+          gestureType: block.fields?.GESTURE_TYPE || 'THUMBS_UP',
+        }
       case 'timer_block':
-         return {
-           type: 'timer',
-           seconds: block.fields?.SECONDS ?? 5
-         }
+        return {
+          type: 'timer',
+          seconds: block.fields?.SECONDS ?? 5,
+        }
       case 'human_feedback_block':
         return { type: 'human_feedback' }
       default:

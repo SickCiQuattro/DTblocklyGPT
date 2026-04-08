@@ -1,38 +1,96 @@
 // @ts-check
-import eslintJs from "@eslint/js";
-import eslintReact from "@eslint-react/eslint-plugin";
-import tseslint from "typescript-eslint";
+import { defineConfig } from 'eslint/config'
+import eslintJs from '@eslint/js'
+import eslintReact from '@eslint-react/eslint-plugin'
+import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
+import importX from 'eslint-plugin-import-x'
+import jsxA11y from 'eslint-plugin-jsx-a11y'
+import eslintPrettier from 'eslint-plugin-prettier/recommended'
+import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
-export default tseslint.config({
-    files: ["**/*.ts", "**/*.tsx"],
-
-    // Extend recommended rule sets from:
-    // 1. ESLint JS's recommended rules
-    // 2. TypeScript ESLint recommended rules
-    // 3. ESLint React's recommended-typescript rules
-    extends: [
-        eslintJs.configs.recommended,
-        tseslint.configs.recommended,
-        eslintReact.configs["recommended-typescript"],
-    ],
-
-    // Configure language/parsing options
+export default defineConfig(
+  {
+    ignores: ['dist/**', 'node_modules/**', '**/*.css'],
+  },
+  eslintJs.configs.recommended,
+  {
     languageOptions: {
-        // Use TypeScript ESLint parser for TypeScript files
-        parser: tseslint.parser,
-        parserOptions: {
-            // Enable project service for better TypeScript integration
-            projectService: true,
-            tsconfigRootDir: import.meta.dirname,
-        },
+      globals: { ...globals.browser, ...globals.es2022 },
     },
-
-    // Custom rule overrides (modify rule levels or disable rules)
+  },
+  ...tseslint.configs.recommendedTypeChecked,
+  eslintReact.configs['recommended-typescript'],
+  jsxA11y.flatConfigs.recommended,
+  importX.flatConfigs.recommended,
+  {
+    settings: {
+      'import-x/resolver-next': [
+        createTypeScriptImportResolver({
+          alwaysTryTypes: true,
+          project: './frontend/tsconfig.json',
+        }),
+      ],
+    },
+  },
+  eslintPrettier,
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
     rules: {
-        "@eslint-react/no-missing-key": "warn",
-        "@typescript-eslint/no-explicit-any": "off", // Allow 'any' type
-        "@eslint-react/hooks-extra/no-direct-set-state-in-use-effect": "off", // Allow direct setState in useEffect
-        "@typescript-eslint/no-unused-vars": "warn", // Warn on unused variables
-        "@eslint-react/web-api/no-leaked-timeout": "off", // Allow leaked timeouts
+      '@eslint-react/no-missing-key': 'error',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@eslint-react/hooks-extra/no-direct-set-state-in-use-effect': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@eslint-react/web-api/no-leaked-timeout': 'off',
+      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/await-thenable': 'warn',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      'jsx-a11y/no-autofocus': 'warn',
+      'jsx-a11y/no-noninteractive-element-interactions': 'warn',
+      'import-x/order': [
+        'warn',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+          ],
+          'newlines-between': 'always',
+        },
+      ],
     },
-});
+  },
+  {
+    files: [
+      '**/blockly/**',
+      '**/Blockly/**',
+      '**/blocklyParser.ts',
+      '**/CustomCategory/**',
+      '**/CustomDragDrop/**',
+    ],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
+)

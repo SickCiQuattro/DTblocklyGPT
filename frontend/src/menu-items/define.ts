@@ -1,4 +1,5 @@
 import { ApartmentOutlined } from '@ant-design/icons'
+
 import { MenuItem } from 'menu-items/types'
 
 export const define: MenuItem = {

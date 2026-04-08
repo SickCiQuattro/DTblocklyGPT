@@ -1,5 +1,6 @@
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { USER_GROUP } from 'utils/constants'
+
 import { define } from './define'
 import { libraries } from './libraries'
 import { MenuItem } from './types'

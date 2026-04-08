@@ -4,6 +4,7 @@ import { RouteObject } from 'react-router-dom'
 import { Loadable } from 'components/Loadable'
 import { MainLayout } from 'layout/MainLayout'
 import { defaultPath } from 'utils/constants'
+
 import { ProtectedRoute, GroupRoute } from './ProtectedRoute'
 
 const ListUsers = Loadable(lazy(() => import('pages/users/listUsers')))

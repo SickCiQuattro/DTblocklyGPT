@@ -61,7 +61,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'repeat_block',
         label: 'Repeat N times',
         colour: blocksColours.logicControl,
-        description: 'Repeats a block of actions for a specified number of times.',
+        description:
+          'Repeats a block of actions for a specified number of times.',
         inputs: 'Number of repetitions | Actions to repeat',
         outputs: 'None',
       },
@@ -69,7 +70,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'loop_block',
         label: 'Loop',
         colour: blocksColours.logicControl,
-        description: 'Repeats actions indefinitely (useful for continuous sensory monitoring).',
+        description:
+          'Repeats actions indefinitely (useful for continuous sensory monitoring).',
         inputs: 'Actions to repeat',
         outputs: 'None',
       },
@@ -85,7 +87,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'when_otherwise_block',
         label: 'When … Do … Otherwise',
         colour: blocksColours.logicControl,
-        description: 'Evaluates a condition and automatically chooses the alternative branch (If-Else).',
+        description:
+          'Evaluates a condition and automatically chooses the alternative branch (If-Else).',
         inputs: 'Condition | Actions if true | Actions if false',
         outputs: 'None',
       },
@@ -100,7 +103,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'pick_block',
         label: 'Pick',
         colour: blocksColours.robotActions,
-        description: 'Activates the robot\'s gripper to grasp the selected object.',
+        description:
+          "Activates the robot's gripper to grasp the selected object.",
         inputs: 'Target object',
         outputs: 'None',
       },
@@ -108,7 +112,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'place_block',
         label: 'Place',
         colour: blocksColours.robotActions,
-        description: 'Places the currently held object at the specified destination.',
+        description:
+          'Places the currently held object at the specified destination.',
         inputs: 'Target location',
         outputs: 'None',
       },
@@ -116,7 +121,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'move_to_block',
         label: 'Move To',
         colour: blocksColours.robotActions,
-        description: 'Moves the robotic arm to a destination using linear or joint trajectories.',
+        description:
+          'Moves the robotic arm to a destination using linear or joint trajectories.',
         inputs: 'Motion type | Destination',
         outputs: 'None',
       },
@@ -124,7 +130,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'move_relative_block',
         label: 'Move Relative',
         colour: blocksColours.robotActions,
-        description: 'Moves the robot by a specific distance along a Cartesian axis (ideal for approaching or retreating from parts).',
+        description:
+          'Moves the robot by a specific distance along a Cartesian axis (ideal for approaching or retreating from parts).',
         inputs: 'Axis (X, Y, Z) | Distance in mm',
         outputs: 'None',
       },
@@ -132,7 +139,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'gripper_block',
         label: 'Gripper',
         colour: blocksColours.robotActions,
-        description: 'Explicitly opens or closes the Cobotta\'s gripper.',
+        description: "Explicitly opens or closes the Cobotta's gripper.",
         inputs: 'State (Open/Close)',
         outputs: 'None',
       },
@@ -147,8 +154,10 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'human_action_block',
         label: 'Human Action',
         colour: blocksColours.humanActions,
-        description: 'Pauses the cobot to allow human intervention, resuming upon activation of the chosen trigger.',
-        inputs: 'Task Description | Confirmation Method (Touch, UI, Gesture, Timer)',
+        description:
+          'Pauses the cobot to allow human intervention, resuming upon activation of the chosen trigger.',
+        inputs:
+          'Task Description | Confirmation Method (Touch, UI, Gesture, Timer)',
         outputs: 'None',
       },
     ],
@@ -189,28 +198,32 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'find_object_block',
         label: 'Find object',
         colour: blocksColours.eventsConditions,
-        description: 'Searches for a specific object using the 3D vision system.',
+        description:
+          'Searches for a specific object using the 3D vision system.',
         outputs: 'Boolean (True if found)',
       },
       {
         type: 'touch_detect_block',
         label: 'Touch Detect',
         colour: blocksColours.eventsConditions,
-        description: 'Detects a physical touch or a torque peak on the Cobot\'s joints.',
+        description:
+          "Detects a physical touch or a torque peak on the Cobot's joints.",
         outputs: 'Boolean (True if touched)',
       },
       {
         type: 'gesture_block',
         label: 'Gesture Detect',
         colour: blocksColours.eventsConditions,
-        description: 'Detects a specific hand gesture from the operator via camera.',
+        description:
+          'Detects a specific hand gesture from the operator via camera.',
         outputs: 'Boolean (True if detected)',
       },
       {
         type: 'timer_block',
         label: 'Timer',
         colour: blocksColours.eventsConditions,
-        description: 'Returns true when the specified time in seconds has elapsed.',
+        description:
+          'Returns true when the specified time in seconds has elapsed.',
         inputs: 'Seconds',
         outputs: 'Boolean (True if elapsed)',
       },
@@ -218,7 +231,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'sensor_signal_block',
         label: 'Sensor signal',
         colour: blocksColours.eventsConditions,
-        description: 'Triggers when a generic external sensor signal is received.',
+        description:
+          'Triggers when a generic external sensor signal is received.',
         outputs: 'Boolean (True if received)',
       },
     ],

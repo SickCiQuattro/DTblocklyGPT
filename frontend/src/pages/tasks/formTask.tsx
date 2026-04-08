@@ -15,12 +15,13 @@ import { string as YupString, object as YupObject } from 'yup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BuildOutlined } from '@ant-design/icons'
 import { useDispatch } from 'react-redux'
+import { Collapse } from 'antd'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { activeItem, openDrawer } from 'store/reducers/menu'
-import { Collapse } from 'antd'
+
 import { TaskDetailType } from './types'
 
 export enum TypeNewTask {

@@ -3,10 +3,11 @@ import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
 import ModernTheme from '@blockly/theme-modern'
-import { useAppSelector } from 'store/reducers'
-import { BlockState as State } from 'utils/blocklyTypes'
 import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
+
+import { useAppSelector } from 'store/reducers'
+import { BlockState as State } from 'utils/blocklyTypes'
 import { toggleEditMode } from 'store/reducers/task'
 
 Blockly.setLocale(locale as unknown as { [key: string]: string })
@@ -81,8 +82,8 @@ export const BlocklyComponent = ({
   onWorkspaceReady,
 }: BlocklyComponentProps) => {
   const { editMode } = useAppSelector((state) => state.task)
-  const blocklyDiv = useRef<HTMLDivElement | null>(null)
-  const primaryWorkspace = useRef<Blockly.WorkspaceSvg | null>(null)
+  const blocklyDivRef = useRef<HTMLDivElement | null>(null)
+  const primaryWorkspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
   const [searchParams] = useSearchParams()
   const newTaskParam = searchParams.get('newTask')
   const dispatch = useDispatch()
@@ -91,14 +92,14 @@ export const BlocklyComponent = ({
     console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
 
     // cleanup workspace div before injection
-    if (blocklyDiv.current) {
-      blocklyDiv.current.innerHTML = ''
+    if (blocklyDivRef.current) {
+      blocklyDivRef.current.innerHTML = ''
     }
 
-    const blocklyDivCurrent = blocklyDiv.current as Element
+    const blocklyDivCurrent = blocklyDivRef.current as Element
 
     // Inject Blockly WITHOUT a toolbox — the custom React toolbox is a sibling component.
-    primaryWorkspace.current = Blockly.inject(blocklyDivCurrent, {
+    primaryWorkspaceRef.current = Blockly.inject(blocklyDivCurrent, {
       renderer: 'thrasos',
       readOnly: !editMode,
       trashcan: false,
@@ -121,9 +122,9 @@ export const BlocklyComponent = ({
     let resizeObserver: ResizeObserver | null = null
     let detachChainSelection: (() => void) | null = null
 
-    if (primaryWorkspace.current) {
+    if (primaryWorkspaceRef.current) {
       disableContextMenuItems()
-      const workspace = primaryWorkspace.current
+      const workspace = primaryWorkspaceRef.current
       detachChainSelection = enableChainSelection(workspace)
       onWorkspaceReady?.(workspace)
 
@@ -137,8 +138,8 @@ export const BlocklyComponent = ({
 
       if (blocklyDivCurrent) {
         resizeObserver = new ResizeObserver(() => {
-          if (primaryWorkspace.current) {
-            Blockly.svgResize(primaryWorkspace.current)
+          if (primaryWorkspaceRef.current) {
+            Blockly.svgResize(primaryWorkspaceRef.current)
           }
         })
         resizeObserver.observe(blocklyDivCurrent)
@@ -158,9 +159,9 @@ export const BlocklyComponent = ({
 
       onWorkspaceReady?.(null)
 
-      if (primaryWorkspace.current) {
-        primaryWorkspace.current.dispose()
-        primaryWorkspace.current = null
+      if (primaryWorkspaceRef.current) {
+        primaryWorkspaceRef.current.dispose()
+        primaryWorkspaceRef.current = null
       }
     }
   }, [editMode, dataTask, onWorkspaceReady])
@@ -173,7 +174,7 @@ export const BlocklyComponent = ({
 
   return (
     <div
-      ref={blocklyDiv}
+      ref={blocklyDivRef}
       id="blocklyDiv"
       style={{ width: '100%', height: '100%', position: 'relative' }}
     />

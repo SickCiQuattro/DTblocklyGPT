@@ -21,6 +21,11 @@ import './customStyle.css'
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { openDrawer } from 'store/reducers/menu'
+import { AbstractStep } from 'pages/tasks/types'
+import { LocationListType } from 'pages/locations/types'
+import { ObjectListType } from 'pages/objects/types'
+import { ActionListType } from 'pages/actions/types'
+
 import {
   CHATGPT_ERROR,
   ChatLogType,
@@ -31,10 +36,6 @@ import {
   TypingSystemMessage,
   UserChatEnum,
 } from './utils'
-import { AbstractStep } from 'pages/tasks/types'
-import { LocationListType } from 'pages/locations/types'
-import { ObjectListType } from 'pages/objects/types'
-import { ActionListType } from 'pages/actions/types'
 
 const { username } = getFromLocalStorage('user')
 const scrollToBottom = () => {
@@ -161,7 +162,7 @@ export const ChatWrapper = ({
 
   React.useEffect(() => {
     dispatch(openDrawer(false))
-  }, [])
+  }, [dispatch])
 
   return (
     <div

@@ -3,6 +3,7 @@ import { Box, Grid } from '@mui/material'
 
 import { LogoSection } from 'components/Logo'
 import { AuthBackground } from 'assets/AuthBackground'
+
 import { LoginCard } from './LoginCard'
 
 interface AuthWrapperProps {

@@ -15,8 +15,8 @@ import {
 import { string as YupString, object as YupObject } from 'yup'
 import { Formik } from 'formik'
 import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
-
 import { useDispatch } from 'react-redux'
+
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { USER_GROUP, defaultOpenItem, defaultPath } from 'utils/constants'
 import { fetchApi, MethodHTTP } from 'services/api'

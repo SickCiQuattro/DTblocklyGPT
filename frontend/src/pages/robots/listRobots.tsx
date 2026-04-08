@@ -16,6 +16,7 @@ import {
   PlusCircleOutlined,
   QrcodeOutlined,
 } from '@ant-design/icons'
+import { QRCodeCanvas } from 'qrcode.react'
 
 import { MainCard } from 'components/MainCard'
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -28,7 +29,7 @@ import {
   defaultPageSizeSelection,
   defaultPaginationConfig,
 } from 'utils/constants'
-import { QRCodeCanvas } from 'qrcode.react'
+
 import { RobotModel, RobotType } from './types'
 
 const ListRobots = () => {

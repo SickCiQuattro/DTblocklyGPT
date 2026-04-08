@@ -1,8 +1,9 @@
 import { Collapse, Divider } from 'antd'
 import { useTheme } from '@mui/material'
 import { toast } from 'react-toastify'
-import { MessageText } from 'utils/messages'
 import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+
+import { MessageText } from 'utils/messages'
 import { AbstractStep } from 'pages/tasks/types'
 
 interface RightPanelProps {

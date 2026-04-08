@@ -1,9 +1,5 @@
 import * as Blockly from 'blockly/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActionListType } from 'pages/actions/types'
-import { LocationListType } from 'pages/locations/types'
-import { ObjectListType } from 'pages/objects/types'
-import { BlockState as State } from 'utils/blocklyTypes'
 import {
   IconButton,
   ListItemIcon,
@@ -32,6 +28,12 @@ import {
   Undo2,
   X,
 } from 'lucide-react'
+
+import { ActionListType } from 'pages/actions/types'
+import { LocationListType } from 'pages/locations/types'
+import { ObjectListType } from 'pages/objects/types'
+import { BlockState as State } from 'utils/blocklyTypes'
+
 import BlocklyComponent from './Blockly'
 import { CustomToolbox, ToolboxBlockItem } from './CustomToolbox'
 import './CustomCategory'
@@ -212,6 +214,7 @@ export const CustomDragDrop = ({
     ((event: Blockly.Events.Abstract) => void) | null
   >(null)
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
+  const contextMenuOptionIdRef = useRef(0)
   const [isDeleting, setIsDeleting] = useState(false)
   const [historyState, setHistoryState] = useState({
     canUndo: false,
@@ -465,6 +468,7 @@ export const CustomDragDrop = ({
 
           if ('scope' in actionOption && actionOption.scope) {
             return {
+              id: ++contextMenuOptionIdRef.current,
               text: label,
               enabled: actionOption.enabled,
               callback: () => {
@@ -484,6 +488,7 @@ export const CustomDragDrop = ({
           }
 
           return {
+            id: ++contextMenuOptionIdRef.current,
             text: label,
             enabled: actionOption.enabled,
             callback: () => {
@@ -506,7 +511,7 @@ export const CustomDragDrop = ({
       )
     }
 
-    Blockly.ContextMenu.show = function (menuOpenEvent, menuOptions, _rtl) {
+    Blockly.ContextMenu.show = function (menuOpenEvent, menuOptions) {
       openMuiContextMenu(menuOpenEvent, menuOptions)
     }
 
@@ -887,14 +892,14 @@ export const CustomDragDrop = ({
             },
           }}
         >
-          {(contextMenu?.options || []).map((option, index) => {
+          {(contextMenu?.options || []).map((option) => {
             const label = getMenuOptionText(option.text)
             const { Icon, color } = getMenuIconInfo(label)
             const isDisabled = option.enabled === false
 
             return (
               <MenuItem
-                key={`${label}-${index}`}
+                key={option.id}
                 disabled={isDisabled}
                 onClick={() => handleContextMenuItemClick(option)}
                 sx={{

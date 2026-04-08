@@ -25,6 +25,7 @@ import {
   defaultPaginationConfig,
 } from 'utils/constants'
 import { formatDateTimeFrontend } from 'utils/date'
+
 import { UserListType } from './types'
 
 const ListUsers = () => {

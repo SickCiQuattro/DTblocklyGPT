@@ -2,6 +2,7 @@ import React from 'react'
 import { Box, Typography } from '@mui/material'
 
 import { getMenuItems } from 'menu-items'
+
 import { NavGroup } from './NavGroup'
 
 export const Navigation = () => {

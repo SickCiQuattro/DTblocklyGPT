@@ -11,11 +11,13 @@ import 'dayjs/locale/en-gb'
 import 'antd/dist/reset.css'
 
 import { locale } from 'dayjs'
+
 import { swrParams } from 'services/api'
 import { ToastContainerStyled } from 'components/ToastContainer'
 import ThemeCustomization from 'themes'
 import { Routes } from 'routes'
 import { antdTheme } from 'themes/theme'
+
 import { store } from './store'
 import 'regenerator-runtime'
 

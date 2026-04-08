@@ -22,6 +22,8 @@ import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { resetTask, updateTask } from 'store/reducers/task'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+
 import {
   CHATGPT_ERROR,
   ChatLogType,
@@ -37,7 +39,6 @@ import {
   TypingSystemMessage,
   UserChatEnum,
 } from './utils'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 const { username } = getFromLocalStorage('user')
 const scrollToBottom = () => {
@@ -197,7 +198,7 @@ export const ChatWrapper = ({
   React.useEffect(() => {
     dispatch(openDrawer(false))
     dispatch(resetTask())
-  }, [])
+  }, [dispatch])
 
   return (
     <div

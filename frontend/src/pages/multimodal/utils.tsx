@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { SystemMessage } from 'react-chat-elements'
+
 import { formatTimeFrontend } from 'utils/date'
 import { AbstractStep } from 'pages/tasks/types'
 
@@ -71,7 +72,6 @@ export const InitialSystemMessage = () => {
 }
 
 export const TypingSystemMessage = () => {
-  const [typingText, setTypingText] = useState('Robot is typing')
   const [dotsCount, setDotsCount] = useState(0)
 
   useEffect(() => {
@@ -82,9 +82,7 @@ export const TypingSystemMessage = () => {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    setTypingText(`Robot is typing${'.'.repeat(dotsCount)}`)
-  }, [dotsCount])
+  const typingText = `Robot is typing${'.'.repeat(dotsCount)}`
 
   return (
     <SystemMessage

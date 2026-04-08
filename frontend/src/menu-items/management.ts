@@ -1,4 +1,5 @@
 import { RocketFilled, TeamOutlined, ToolOutlined } from '@ant-design/icons'
+
 import { MenuItem } from 'menu-items/types'
 
 export const managementManager: MenuItem = {

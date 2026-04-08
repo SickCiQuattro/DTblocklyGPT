@@ -1,14 +1,16 @@
 import { Modal, Spin } from 'antd'
 import React from 'react'
 import { toast } from 'react-toastify'
-import { analyzeAbstractTask, AnalyzerIssue } from 'utils/taskAnalyzer'
-import { AbstractRobot, AbstractTask, TaskType } from './types'
-import { MyRobotType } from 'pages/myrobots/types'
 import { Alert, FormControl, InputLabel, MenuItem, Select } from '@mui/material'
+import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
+
+import { analyzeAbstractTask, AnalyzerIssue } from 'utils/taskAnalyzer'
+import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
+
+import { AbstractRobot, AbstractTask, TaskType } from './types'
 
 interface AnalyzeTaskModalProps {
   task: TaskType | null

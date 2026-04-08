@@ -1,6 +1,8 @@
 import React from 'react'
-import { Navigation } from './Navigation'
+
 import { SimpleBarScroll } from '../../../../components/SimpleBar'
+
+import { Navigation } from './Navigation'
 
 export const DrawerContent = () => (
   <SimpleBarScroll

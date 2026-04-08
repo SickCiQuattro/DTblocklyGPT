@@ -3,14 +3,16 @@ import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
+
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MainCard } from 'components/MainCard'
 import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { SplittedLayout } from './splittedLayout'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+
+import { SplittedLayout } from './splittedLayout'
 
 const Multimodal = () => {
   const { id } = useParams()
@@ -62,7 +64,7 @@ const Multimodal = () => {
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))
-  }, [dataTask])
+  }, [dataTask, dispatch])
 
   return (
     <MainCard title={title} backFunction={backFunction}>

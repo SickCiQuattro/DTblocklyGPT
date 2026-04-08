@@ -23,23 +23,16 @@ export const Transitions = ({
   ...others
 }: TransitionProps) => {
   const typeProps = type || 'grow'
-  const positionProps = position || 'top-left'
-  let positionSX = {
-    transformOrigin: '0 0 0',
+  const transformOriginByPosition = {
+    'top-left': '0 0 0',
+    'top-right': '100% 0 0',
+    top: '50% 0 0',
+    'bottom-left': '0 100% 0',
+    'bottom-right': '100% 100% 0',
+    bottom: '50% 100% 0',
   }
-
-  switch (positionProps) {
-    case 'top-right':
-    case 'top':
-    case 'bottom-left':
-    case 'bottom-right':
-    case 'bottom':
-    case 'top-left':
-    default:
-      positionSX = {
-        transformOrigin: '0 0 0',
-      }
-      break
+  const positionSX = {
+    transformOrigin: transformOriginByPosition[position],
   }
 
   return (

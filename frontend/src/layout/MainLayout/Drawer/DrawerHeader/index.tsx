@@ -1,10 +1,8 @@
 import React from 'react'
 import { useTheme } from '@mui/material/styles'
-import { Stack, Chip, Box } from '@mui/material'
+import { Stack, Box } from '@mui/material'
 
 import { LogoSection } from 'components/Logo'
-import { LocalStorageKey, getFromLocalStorage } from 'utils/localStorageUtils'
-import packageInfo from '../../../../../../package.json'
 
 interface DrawerHeaderProps {
   open: boolean

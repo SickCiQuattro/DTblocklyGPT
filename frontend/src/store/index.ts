@@ -2,6 +2,7 @@
 import { configureStore } from '@reduxjs/toolkit'
 
 import { isDevelopment } from 'utils/constants'
+
 import { rootReducer } from './reducers'
 
 /* const loggerMiddleware = createLogger({

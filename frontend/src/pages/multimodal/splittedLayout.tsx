@@ -1,18 +1,6 @@
 import React, { useState } from 'react'
-import { LocationListType } from 'pages/locations/types'
-import { ObjectListType } from 'pages/objects/types'
-import { ActionListType } from 'pages/actions/types'
 import { useMediaQuery } from '@mui/material'
-import { RightPanel } from './rightPanel'
-import { CustomDragDrop } from './CustomDragDrop'
-import { ChatWrapper } from './chatWrapper'
-import { AbstractStep } from 'pages/tasks/types'
 import * as Blockly from 'blockly/core'
-import {
-  abstractToBlockly,
-  blocklyToAbstract,
-  CustomBlock,
-} from 'utils/blocklyParser'
 import {
   CloseOutlined,
   EditOutlined,
@@ -21,15 +9,29 @@ import {
   SoundOutlined,
   UndoOutlined,
 } from '@ant-design/icons'
-import { Palette } from 'themes/palette'
 import { useDispatch } from 'react-redux'
-import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
+import { toast } from 'react-toastify'
+import { useParams } from 'react-router-dom'
+
+import { LocationListType } from 'pages/locations/types'
+import { ObjectListType } from 'pages/objects/types'
+import { ActionListType } from 'pages/actions/types'
+import { AbstractStep } from 'pages/tasks/types'
+import {
+  abstractToBlockly,
+  blocklyToAbstract,
+  CustomBlock,
+} from 'utils/blocklyParser'
+import { Palette } from 'themes/palette'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
-import { toast } from 'react-toastify'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
-import { useParams, useSearchParams } from 'react-router-dom'
+
+import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
+import { ChatWrapper } from './chatWrapper'
+import { CustomDragDrop } from './CustomDragDrop'
+import { RightPanel } from './rightPanel'
 
 interface SplittedLayoutProps {
   dataLocations: LocationListType[]
@@ -51,12 +53,7 @@ export const SplittedLayout = ({
   const [taskStructure, setTaskStructure] = useState<AbstractStep[] | null>(
     abstractTask,
   )
-  const [searchParams] = useSearchParams()
-  const newTaskParam = searchParams.get('newTask')
-  const [editingMode, setEditingMode] = useState<boolean>(
-    // newTaskParam === 'true',
-    true,
-  )
+  const [editingMode, setEditingMode] = useState<boolean>(true)
   const [newChatResponse, setNewChatResponse] = useState<boolean>(false)
   const [speaker, setSpeaker] = React.useState(false)
   const themePalette = Palette('light')

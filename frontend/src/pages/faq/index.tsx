@@ -1,5 +1,6 @@
-import { MainCard } from 'components/MainCard'
 import React from 'react'
+
+import { MainCard } from 'components/MainCard'
 
 const Faq = () => {
   return (

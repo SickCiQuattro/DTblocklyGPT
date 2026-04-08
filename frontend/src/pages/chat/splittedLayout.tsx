@@ -1,5 +1,6 @@
 import React from 'react'
 import { useMediaQuery } from '@mui/material'
+
 import { ChatWrapper } from './chatWrapper'
 import { TaskChatStructure } from './utils'
 import { RightPanel } from './rightPanel'

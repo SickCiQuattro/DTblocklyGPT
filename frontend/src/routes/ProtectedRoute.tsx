@@ -1,4 +1,4 @@
-import React, { JSX, useEffect, useState } from 'react'
+import React, { JSX, useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 
@@ -22,10 +22,11 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({
   children,
 }: ProtectedRouteProps): JSX.Element => {
-  const [loading, setLoading] = useState(true)
+  const hasStoredUser = Boolean(getFromLocalStorage(LocalStorageKey.USER))
+  const [loading, setLoading] = useState(hasStoredUser)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
-  const verifyToken = async () => {
+  const verifyToken = useCallback(async () => {
     return fetchApi({
       url: endpoints.auth.verifyToken,
       method: MethodHTTP.POST,
@@ -44,15 +45,14 @@ export const ProtectedRoute = ({
       }
       setLoading(false)
     })
-  }
+  }, [])
 
   useEffect(() => {
-    if (!getFromLocalStorage(LocalStorageKey.USER)) {
-      setLoading(false)
+    if (!hasStoredUser) {
       return
     }
-    verifyToken()
-  }, [])
+    void verifyToken()
+  }, [hasStoredUser, verifyToken])
 
   if (isAuthenticated) return children
   return loading ? <LoadingSpinner /> : <Navigate to="/login" replace />

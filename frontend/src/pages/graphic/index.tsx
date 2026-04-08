@@ -3,15 +3,17 @@ import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
+
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MainCard } from 'components/MainCard'
 import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { SplittedLayout } from './splittedLayout'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
+
+import { SplittedLayout } from './splittedLayout'
 
 const Graphic = () => {
   const { id } = useParams()
@@ -61,7 +63,7 @@ const Graphic = () => {
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))
-  }, [dataTask])
+  }, [dataTask, dispatch])
 
   return (
     <MainCard title={title} backFunction={backFunction}>
@@ -75,14 +77,14 @@ const Graphic = () => {
           dataLocations={dataLocations}
           dataActions={dataActions}
           dataTask={
-            (Array.isArray(JSON.parse(dataTask.code))
+            Array.isArray(JSON.parse(dataTask.code))
               ? abstractToBlockly(
                   JSON.parse(dataTask.code),
                   dataObjects,
                   dataLocations,
                   dataActions,
                 )
-              : JSON.parse(dataTask.code)) as any
+              : JSON.parse(dataTask.code)
           }
           backFunction={backFunction}
         />

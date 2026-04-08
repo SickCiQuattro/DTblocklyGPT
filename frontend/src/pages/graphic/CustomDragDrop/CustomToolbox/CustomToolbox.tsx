@@ -5,7 +5,6 @@ import {
   AccordionDetails,
   Typography,
 } from '@mui/material'
-
 import {
   ChevronDown,
   SlidersHorizontal,
@@ -311,9 +310,9 @@ const CategoryPanel: React.FC<{
           </Typography>
         ) : (
           <>
-            {visiblePills.map((pill, idx) => (
+            {visiblePills.map((pill) => (
               <BlockPill
-                key={`${pill.type}-${idx}`}
+                key={`${category.key}-${pill.type}-${pill.label}-${pill.data ?? ''}`}
                 item={pill}
                 categoryName={category.name}
                 onPointerDown={onBlockPointerDown}

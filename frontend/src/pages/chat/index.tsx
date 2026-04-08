@@ -8,6 +8,7 @@ import { endpoints } from 'services/endpoints'
 import { MainCard } from 'components/MainCard'
 import { TaskDetailType } from 'pages/tasks/types'
 import { Palette } from 'themes/palette'
+
 import { SplittedLayout } from './splittedLayout'
 import { INITIAL_TASK_STRUCTURE, TaskChatStructure } from './utils'
 
