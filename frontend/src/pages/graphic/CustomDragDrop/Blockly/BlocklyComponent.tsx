@@ -113,7 +113,7 @@ export const BlocklyComponent = ({
       },
       sounds: false,
       collapse: true,
-      comments: true,
+      comments: false,
       theme: ModernTheme,
     })
 
