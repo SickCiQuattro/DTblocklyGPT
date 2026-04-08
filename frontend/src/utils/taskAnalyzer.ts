@@ -87,7 +87,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
 
       // Check for object existence and properties in pick (using state before update)
       if (step.type === 'pick') {
-        const obj = findObject(objects, step.objectId)
+        const obj = findObject(objects, Number(step.objectId))
         if (!obj) {
           issues.push({
             type: 'error',
@@ -123,7 +123,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
       }
       // Check for location existence and properties in place (using state before update)
       if (step.type === 'place') {
-        const loc = findLocation(locations, step.locationId)
+        const loc = findLocation(locations, Number(step.locationId))
         if (!loc) {
           issues.push({
             type: 'error',
@@ -134,7 +134,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
       }
       // Check for action existence in processing (using state before update)
       if (step.type === 'processing') {
-        const act = findAction(actions, step.actionId)
+        const act = findAction(actions, Number(step.actionId))
         if (!act) {
           issues.push({
             type: 'error',

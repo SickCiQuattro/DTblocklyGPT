@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { State } from 'blockly/core/serialization/blocks'
+import { BlockState as State } from 'utils/blocklyTypes'
 import {
   IconButton,
   ListItemIcon,
@@ -866,22 +866,24 @@ export const CustomDragDrop = ({
               : undefined
           }
           transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-          PaperProps={{
-            elevation: 0,
-            sx: {
-              mt: 0.5,
-              p: 0.5,
-              minWidth: 220,
-              borderRadius: 2,
-              border: '1px solid rgba(148, 163, 184, 0.18)',
-              boxShadow:
-                '0 10px 30px rgba(15, 23, 42, 0.08), 0 3px 8px rgba(15, 23, 42, 0.06)',
+          slotProps={{
+            paper: {
+              elevation: 0,
+              sx: {
+                mt: 0.5,
+                p: 0.5,
+                minWidth: 220,
+                borderRadius: 2,
+                border: '1px solid rgba(148, 163, 184, 0.18)',
+                boxShadow:
+                  '0 10px 30px rgba(15, 23, 42, 0.08), 0 3px 8px rgba(15, 23, 42, 0.06)',
+              },
             },
-          }}
-          MenuListProps={{
-            dense: true,
-            sx: {
-              p: 0,
+            list: {
+              dense: true,
+              sx: {
+                p: 0,
+              },
             },
           }}
         >
@@ -913,10 +915,14 @@ export const CustomDragDrop = ({
                 </ListItemIcon>
                 <ListItemText
                   primary={label}
-                  primaryTypographyProps={{
-                    fontSize: 14,
-                    fontWeight: 500,
-                    color: isDisabled ? 'text.disabled' : 'text.primary',
+                  slotProps={{
+                    primary: {
+                      sx: {
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: isDisabled ? 'text.disabled' : 'text.primary',
+                      },
+                    },
                   }}
                 />
               </MenuItem>

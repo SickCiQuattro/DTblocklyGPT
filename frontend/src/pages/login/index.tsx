@@ -26,9 +26,11 @@ const Login = () => {
         <Grid size={12}>
           <Stack
             direction="row"
-            justifyContent="space-between"
-            alignItems="baseline"
-            sx={{ mb: { xs: -0.5, sm: 0.5 } }}
+            sx={{
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              mb: { xs: -0.5, sm: 0.5 },
+            }}
           >
             <Typography variant="h3">
               {resetPassword ? 'Reset password' : 'Login'}

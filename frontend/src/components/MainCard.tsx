@@ -26,6 +26,8 @@ interface MainCardProps {
   children?: ReactNode | ReactNode[]
   contentSX?: any
   backFunction?: any
+  backTitle?: string
+  customElement?: ReactNode
   onClick?: any
 }
 
@@ -45,6 +47,8 @@ export const MainCard = ({
   children = null,
   contentSX = defaultContentSX,
   backFunction = null,
+  backTitle = 'Back',
+  customElement = null,
   onClick = null,
 }: MainCardProps) => {
   const theme = useTheme()
@@ -61,7 +65,16 @@ export const MainCard = ({
           title={title}
           subheader={subtitle}
           action={
-            backFunction && <Button onClick={() => backFunction()}>Back</Button>
+            (backFunction || customElement) && (
+              <div
+                style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+              >
+                {customElement}
+                {backFunction && (
+                  <Button onClick={() => backFunction()}>{backTitle}</Button>
+                )}
+              </div>
+            )
           }
         />
       )}

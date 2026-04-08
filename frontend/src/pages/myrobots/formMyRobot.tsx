@@ -69,6 +69,8 @@ export const FormMyRobot = ({
         id: dataMyRobot?.id || -1,
         name: dataMyRobot?.name || '',
         robot: dataMyRobot?.robot || null,
+        robot__max_load: dataMyRobot?.robot__max_load ?? null,
+        robot__max_open_tool: dataMyRobot?.robot__max_open_tool ?? null,
       }}
       validationSchema={YupObject().shape({
         name: YupString()

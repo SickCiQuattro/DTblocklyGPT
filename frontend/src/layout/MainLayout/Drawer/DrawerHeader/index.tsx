@@ -26,8 +26,7 @@ export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
       <Stack
         direction="row"
         spacing={1}
-        alignItems="center"
-        style={{ marginTop: '0.5rem' }}
+        sx={{ alignItems: 'center', mt: '0.5rem' }}
       >
         <LogoSection />
         {/*         <div style={{ display: 'flex', flexDirection: 'column' }}>

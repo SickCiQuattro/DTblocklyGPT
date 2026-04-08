@@ -15,13 +15,11 @@ import {
 // import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 
-/*
 interface ProfileTabProps {
-  setOpen: (open: boolean) => void
+  setOpen?: (open: boolean) => void
 }
-  */
 
-export const ProfileTab = (/* { setOpen }: ProfileTabProps */) => {
+export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
   const theme = useTheme()
   // const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -41,6 +39,7 @@ export const ProfileTab = (/* { setOpen }: ProfileTabProps */) => {
     setSelectedIndex(1)
     removeFromLocalStorage(LocalStorageKey.USER)
     toast.success(MessageText.logoutSuccess)
+    setOpen?.(false)
     navigate('/login')
   }
 

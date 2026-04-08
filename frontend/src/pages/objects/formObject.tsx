@@ -512,7 +512,11 @@ export const FormObject = ({
               </Stack>
             </Grid>
             {values.photo && (
-              <Grid size={4} container direction="column" alignItems="center">
+              <Grid
+                size={4}
+                container
+                sx={{ flexDirection: 'column', alignItems: 'center' }}
+              >
                 <Stack spacing={1}>
                   <CardMedia
                     component="img"
@@ -534,7 +538,11 @@ export const FormObject = ({
               </Grid>
             )}
             {values.contour && (
-              <Grid size={4} container direction="column" alignItems="center">
+              <Grid
+                size={4}
+                container
+                sx={{ flexDirection: 'column', alignItems: 'center' }}
+              >
                 <Stack spacing={1}>
                   <CardMedia
                     component="img"
@@ -556,7 +564,11 @@ export const FormObject = ({
               </Grid>
             )}
             {values.shape && (
-              <Grid size={4} container direction="column" alignItems="center">
+              <Grid
+                size={4}
+                container
+                sx={{ flexDirection: 'column', alignItems: 'center' }}
+              >
                 <Stack spacing={1}>
                   <CardMedia
                     component="img"

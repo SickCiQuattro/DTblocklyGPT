@@ -1,7 +1,7 @@
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { State } from 'blockly/core/serialization/blocks'
+import { BlockState as State } from 'utils/blocklyTypes'
 import BlocklyComponent, { Block, Field, Category } from './Blockly'
 
 import { blocksColours } from './CustomBlocks'

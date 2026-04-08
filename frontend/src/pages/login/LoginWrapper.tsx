@@ -14,9 +14,12 @@ export const LoginWrapper = ({ children }: AuthWrapperProps) => (
     <AuthBackground />
     <Grid
       container
-      direction="column"
-      justifyContent="flex-end"
-      sx={{ minHeight: '100vh' }}
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+      }}
     >
       <Grid size={12} sx={{ ml: 3, mt: 3 }}>
         <LogoSection />
@@ -25,9 +28,9 @@ export const LoginWrapper = ({ children }: AuthWrapperProps) => (
         <Grid
           size={12}
           container
-          justifyContent="center"
-          alignItems="center"
           sx={{
+            justifyContent: 'center',
+            alignItems: 'center',
             minHeight: { xs: 'calc(100vh - 134px)', md: 'calc(100vh - 112px)' },
           }}
         >

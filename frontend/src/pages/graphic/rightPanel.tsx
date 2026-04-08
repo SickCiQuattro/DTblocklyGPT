@@ -15,7 +15,7 @@ import {
   SyncOutlined,
 } from '@ant-design/icons'
 import { toggleEditMode } from 'store/reducers/task'
-import { State } from 'blockly/core/serialization/blocks'
+import { BlockState as State } from 'utils/blocklyTypes'
 
 import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
 import { RootState } from 'store/reducers'

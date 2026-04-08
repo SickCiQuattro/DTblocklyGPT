@@ -5,7 +5,8 @@ import { Formik } from 'formik'
 import { toast } from 'react-toastify'
 
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
-import { fetchApi } from 'services/api'
+import { MethodHTTP, fetchApi } from 'services/api'
+import { endpoints } from 'services/endpoints'
 
 interface ResetPasswordFormProps {
   setResetPassword: (value: boolean) => void
@@ -18,7 +19,11 @@ export const ResetPasswordForm = ({
     values: { email: string },
     { setStatus, setSubmitting },
   ) => {
-    fetchApi('aaa')
+    fetchApi({
+      url: endpoints.home.management.resetPassword,
+      method: MethodHTTP.POST,
+      body: values,
+    })
       .then((res) => {
         if (res?.bool) {
           toast.success(MessageText.success)

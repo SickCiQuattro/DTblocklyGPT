@@ -1,5 +1,5 @@
 import * as Blockly from 'blockly/core'
-import { State } from 'blockly/core/serialization/blocks'
+import { BlockState as State } from 'utils/blocklyTypes'
 
 export const updateStructureAndFireFakeChangeEvent = (
   workspace: Blockly.WorkspaceSvg,

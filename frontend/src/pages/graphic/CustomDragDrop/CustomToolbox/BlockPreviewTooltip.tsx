@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactElement, useEffect, useRef, useState } from 'react'
 import Tooltip from '@mui/material/Tooltip'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import ModernTheme from '@blockly/theme-modern'
-import { State } from 'blockly/core/serialization/blocks'
+import { BlockState as State } from 'utils/blocklyTypes'
 
 import {
   Pointer,
@@ -17,7 +17,7 @@ import './BlockPreviewTooltip.css'
 interface BlockPreviewTooltipProps {
   item: ToolboxBlockItem
   categoryName?: string
-  children: JSX.Element
+  children: ReactElement
 }
 
 const PREVIEW_WIDTH = 260

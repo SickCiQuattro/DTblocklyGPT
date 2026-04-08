@@ -84,7 +84,11 @@ export const Profile = () => {
         onClick={handleToggle}
         title="Open profile menu"
       >
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ p: 0.5 }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ p: 0.5, alignItems: 'center' }}
+        >
           <Avatar alt="user profile" sx={{ width: 32, height: 32 }}>
             <RandomUserIcon />
           </Avatar>
@@ -119,14 +123,16 @@ export const Profile = () => {
                     <CardContent sx={{ px: 2.5, pt: 3 }}>
                       <Grid
                         container
-                        justifyContent="space-between"
-                        alignItems="center"
+                        sx={{
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
                       >
                         <Grid>
                           <Stack
                             direction="row"
                             spacing={1.25}
-                            alignItems="center"
+                            sx={{ alignItems: 'center' }}
                           >
                             <Avatar
                               alt="profile user"
