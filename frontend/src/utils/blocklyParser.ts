@@ -74,6 +74,41 @@ export const abstractToBlockly = (
           },
         }
       }
+      case 'move_to': {
+        const location = dataLocations.find((loc) => loc.id === step.locationId)
+        return {
+          type: 'move_to_block',
+          fields: { MOTION_TYPE: step.motionType || 'LINEAR' },
+          inputs: {
+            LOCATION: {
+              block: {
+                type: 'location_block',
+                data: JSON.stringify({
+                  blocklyId: step?.locationId || '',
+                  blocklyName: step?.locationName || '',
+                  id: location?.id,
+                  name: location?.name,
+                  keywords: location?.keywords?.join(',') || '',
+                }),
+                fields: { name: location?.name || step.locationName },
+              },
+            },
+          },
+        }
+      }
+      case 'move_relative':
+        return {
+          type: 'move_relative_block',
+          fields: {
+            AXIS: step.axis || 'Z',
+            DISTANCE: step.distance || 50,
+          },
+        }
+      case 'gripper':
+        return {
+          type: 'gripper_block',
+          fields: { GRIPPER_STATE: step.state || 'CLOSE' },
+        }
       case 'repeat':
         return {
           type: 'repeat_block',
@@ -91,12 +126,15 @@ export const abstractToBlockly = (
               : {}),
           },
         }
-      case 'wait_for_human':
+      case 'human_action':
         return {
-          type: 'wait_for_human_block',
+          type: 'human_action_block',
           fields: {
-            TASK_DESCRIPTION: step.description || 'insert component',
+            TASK_DESC: step.description || 'insert component',
           },
+          inputs: {
+             CONFIRM_EVENT: { block: conditionToBlock(step.confirmEvent) }
+          }
         }
       default:
         return null
@@ -162,6 +200,18 @@ export const abstractToBlockly = (
           },
         }
       }
+      case 'touch_detect':
+        return { type: 'touch_detect_block' }
+      case 'gesture':
+        return { 
+          type: 'gesture_block',
+          fields: { GESTURE_TYPE: condition.gestureType || 'THUMBS_UP' }
+        }
+      case 'timer':
+        return {
+          type: 'timer_block',
+          fields: { SECONDS: condition.seconds || 5 }
+        }
       case 'human_feedback':
         return { type: 'human_feedback_block' }
       default:
@@ -186,13 +236,20 @@ export interface CustomBlock {
     | 'pick_block'
     | 'place_block'
     | 'processing_block'
+    | 'move_to_block'
+    | 'move_relative_block'
+    | 'gripper_block'
     | 'repeat_block'
     | 'when_block'
     | 'when_otherwise_block'
     | 'sensor_signal_block'
     | 'find_object_block'
+    | 'touch_detect_block'
+    | 'gesture_block'
+    | 'timer_block'
     | 'human_feedback_block'
-    | 'wait_for_human_block'
+    | 'human_action_block'
+    | 'wait_for_human_block' // kept for backwards compatibility
   inputs?: {
     OBJECT?: { block: CustomBlock }
     LOCATION?: { block: CustomBlock }
@@ -200,6 +257,7 @@ export interface CustomBlock {
     DO?: { block: CustomBlock }
     WHEN?: { block: CustomBlock }
     OTHERWISE?: { block: CustomBlock }
+    CONFIRM_EVENT?: { block: CustomBlock }
   }
   data?: string
   extraState?: string
@@ -207,6 +265,13 @@ export interface CustomBlock {
     times?: number
     name?: string
     TASK_DESCRIPTION?: string
+    TASK_DESC?: string
+    MOTION_TYPE?: 'LINEAR' | 'JOINT'
+    AXIS?: 'X' | 'Y' | 'Z'
+    DISTANCE?: number
+    GRIPPER_STATE?: 'OPEN' | 'CLOSE'
+    GESTURE_TYPE?: 'THUMBS_UP' | 'STOP'
+    SECONDS?: number
   }
   next?: { block: CustomBlock }
 }
@@ -236,6 +301,24 @@ export const blocklyToAbstract = (
           actionId: getIdFromBlock(block.inputs?.ACTION?.block) || '',
           actionName: getNameFromBlock(block.inputs?.ACTION?.block) || '',
         }
+      case 'move_to_block':
+        return {
+          type: 'move_to',
+          motionType: block.fields?.MOTION_TYPE || 'LINEAR',
+          locationId: getIdFromBlock(block.inputs?.LOCATION?.block),
+          locationName: getNameFromBlock(block.inputs?.LOCATION?.block),
+        }
+      case 'move_relative_block':
+        return {
+          type: 'move_relative',
+          axis: block.fields?.AXIS || 'Z',
+          distance: block.fields?.DISTANCE ?? 50,
+        }
+      case 'gripper_block':
+        return {
+          type: 'gripper',
+          state: block.fields?.GRIPPER_STATE || 'CLOSE',
+        }
       case 'repeat_block':
         return {
           type: 'repeat',
@@ -255,10 +338,11 @@ export const blocklyToAbstract = (
           do: sequenceToSteps(block.inputs?.DO?.block),
           otherwise: sequenceToSteps(block.inputs?.OTHERWISE?.block),
         }
-      case 'wait_for_human_block':
+      case 'human_action_block':
         return {
-          type: 'wait_for_human',
-          description: block.fields?.TASK_DESCRIPTION || '',
+           type: 'human_action',
+           description: block.fields?.TASK_DESC || '',
+           confirmEvent: blockToCondition(block.inputs?.CONFIRM_EVENT?.block)
         }
 
       default:
@@ -319,6 +403,18 @@ export const blocklyToAbstract = (
           objectId: getIdFromBlock(block.inputs?.OBJECT?.block),
           objectName: getNameFromBlock(block.inputs?.OBJECT?.block),
         }
+      case 'touch_detect_block':
+         return { type: 'touch_detect' }
+      case 'gesture_block':
+         return { 
+           type: 'gesture', 
+           gestureType: block.fields?.GESTURE_TYPE || 'THUMBS_UP' 
+         }
+      case 'timer_block':
+         return {
+           type: 'timer',
+           seconds: block.fields?.SECONDS ?? 5
+         }
       case 'human_feedback_block':
         return { type: 'human_feedback' }
       default:

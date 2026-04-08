@@ -256,9 +256,9 @@ export const BlockPreviewTooltip = ({
 
   const descriptionText =
     item.description ??
-    'Blocco disponibile nella toolbox per comporre il programma in modo visuale.'
-  const inputText = item.inputs ?? 'Nessuno'
-  const outputText = item.outputs ?? 'Nessuno'
+    'Block available in the toolbox to compose the program visually.'
+  const inputText = item.inputs ?? 'None'
+  const outputText = item.outputs ?? 'None'
 
   const handleOpen = () => {
     setIsOpen(true)

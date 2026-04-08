@@ -18,7 +18,7 @@ export type TaskDetailType = {
 }
 
 export type AbstractObject = {
-  id: number
+  id: number | string
   name: string
   weight?: number
   obj_length?: number
@@ -26,17 +26,17 @@ export type AbstractObject = {
 }
 
 export type AbstractLocation = {
-  id: number
+  id: number | string
   name: string
 }
 
 export type AbstractAction = {
-  id: number
+  id: number | string
   name: string
 }
 
 export type AbstractRobot = {
-  id: number
+  id: number | string
   max_open_tool?: number
   max_load?: number
 }
@@ -55,26 +55,53 @@ export type AbstractStep =
   | AbstractPickStep
   | AbstractPlaceStep
   | AbstractProcessingStep
+  | AbstractMoveToStep
+  | AbstractMoveRelativeStep
+  | AbstractGripperStep
   | AbstractRepeatStep
   | AbstractWhenStep
-  | AbstractWaitForHumanStep
+  | AbstractHumanActionStep
 
 export type AbstractPickStep = {
   type: 'pick'
-  objectId: number
+  objectId: number | string
   objectName: string
 }
 
 export type AbstractPlaceStep = {
   type: 'place'
-  locationId: number
+  locationId: number | string
   locationName: string
 }
 
 export type AbstractProcessingStep = {
   type: 'processing'
-  actionId: number
+  actionId: number | string
   actionName: string
+}
+
+export type AbstractMoveToStep = {
+  type: 'move_to'
+  motionType: 'LINEAR' | 'JOINT'
+  locationId: number | string
+  locationName: string
+}
+
+export type AbstractMoveRelativeStep = {
+  type: 'move_relative'
+  axis: 'X' | 'Y' | 'Z'
+  distance: number
+}
+
+export type AbstractGripperStep = {
+  type: 'gripper'
+  state: 'OPEN' | 'CLOSE'
+}
+
+export type AbstractHumanActionStep = {
+  type: 'human_action'
+  description: string
+  confirmEvent: AbstractCondition | null
 }
 
 export type AbstractRepeatStep = {
@@ -95,7 +122,11 @@ export type AbstractWaitForHumanStep = {
   description?: string
 }
 
+// Cobotta Conditions
 export type AbstractCondition =
   | { type: 'sensor_signal'; sensor: string }
-  | { type: 'find_object'; objectId: number; objectName: string }
+  | { type: 'find_object'; objectId: number | string; objectName: string }
   | { type: 'human_feedback' }
+  | { type: 'touch_detect' }
+  | { type: 'gesture'; gestureType: 'THUMBS_UP' | 'STOP' }
+  | { type: 'timer'; seconds: number }
