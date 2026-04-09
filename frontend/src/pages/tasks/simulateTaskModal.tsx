@@ -57,7 +57,7 @@ export const SimulateTaskModal = ({
       cancelButtonProps={{
         style: { float: 'left' },
       }}
-      maskClosable={false}
+      mask={{ closable: false }}
       closeIcon={null}
     >
       <p>Are you sure to simulate this task?</p>

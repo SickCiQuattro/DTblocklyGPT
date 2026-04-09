@@ -150,6 +150,7 @@ AUTHENTICATION_BACKENDS = [
     # Add any additional authentication backends here
 ]
 
+TIME_ZONE = "Europe/Rome"
 USE_TZ = True
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 50  # 50MB
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"

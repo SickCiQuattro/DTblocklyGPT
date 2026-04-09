@@ -62,7 +62,7 @@ export const RunTaskModal = ({
         setSelectedRobot('')
       }}
       cancelButtonProps={{ style: { float: 'left' } }}
-      maskClosable={false}
+      mask={{ closable: false }}
       closeIcon={null}
     >
       <p>Are you sure to run this task?</p>

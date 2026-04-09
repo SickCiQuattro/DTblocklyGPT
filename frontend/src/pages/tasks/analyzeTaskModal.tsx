@@ -114,7 +114,7 @@ export const AnalyzeTaskModal = ({
         setSelectedRobot('')
       }}
       cancelButtonProps={{ style: { float: 'left' } }}
-      maskClosable={false}
+      mask={{ closable: false }}
       closeIcon={null}
     >
       <p>Are you sure to analyze this task?</p>

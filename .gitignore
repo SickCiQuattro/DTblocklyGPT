@@ -7,6 +7,7 @@ staticfiles
 # frontend
 node_modules
 dist
+*.tsbuildinfo
 
 # general
 .env

@@ -1,9 +1,5 @@
-from pytz import timezone
-from datetime import datetime
+from django.utils import timezone
 
 
 def getDateTimeNow():
-    tmz = timezone("Europe/Rome")
-    date = tmz.localize(datetime.now())
-    date.strftime("%H:%M %d-%m-%Y")
-    return date
+    return timezone.now()

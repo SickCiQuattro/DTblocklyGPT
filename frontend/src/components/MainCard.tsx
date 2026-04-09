@@ -6,6 +6,7 @@ import {
   CardActionArea,
   CardContent,
   CardHeader,
+  Typography,
 } from '@mui/material'
 
 const headerSX = {
@@ -66,8 +67,7 @@ export const MainCard = ({
       {title && (
         <CardHeader
           sx={headerSX}
-          titleTypographyProps={{ variant: 'h3' }}
-          title={title}
+          title={<Typography variant="h3">{title}</Typography>}
           subheader={subtitle}
           action={
             (backFunction || customElement) && (

@@ -95,8 +95,6 @@ export const BlocklyComponent = ({
   const dispatch = useDispatch()
 
   useEffect(() => {
-    console.log('BLOCKLY_EFFECT_TRIGGERED', new Date())
-
     // cleanup workspace div before injection
     if (blocklyDivRef.current) {
       blocklyDivRef.current.innerHTML = ''
