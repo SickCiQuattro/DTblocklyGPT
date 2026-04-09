@@ -207,20 +207,20 @@
 }
 
 .toolbox-category-tabs {
-  width: 100%;
+  width: calc(100% + 16px);
   display: flex;
   align-items: stretch;
   gap: 0;
   background: #FFFFFF;
   border-bottom: 1px solid #CBD5E1;
-  margin-bottom: 2px;
+  margin: -8px -8px 2px;
   flex-shrink: 0;
 }
 
 .toolbox-category-tab {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 34px;
+  min-height: 32px;
   border: none;
   border-bottom: 1px solid #CBD5E1;
   border-radius: 1px 1px 0 0;
@@ -229,8 +229,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 7px 12px;
+  gap: 3px;
+  padding: 4px 6px;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
@@ -253,18 +253,31 @@
   transition: all 0.2s ease;
 }
 
+.toolbox-category-tab__icon {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  display: inline-flex;
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
 .toolbox-category-tab__label {
-  font-size: 0.72rem;
+  font-size: 0.69rem;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .toolbox-category-tab--active {
   font-weight: 700;
 }
 
-.toolbox-category-tab--objects.toolbox-category-tab--active, .toolbox-category-tab--positions.toolbox-category-tab--active {
+.toolbox-category-tab--objects.toolbox-category-tab--active,
+.toolbox-category-tab--positions.toolbox-category-tab--active,
+.toolbox-category-tab--actions.toolbox-category-tab--active {
   background: #E8FEF5;
   color: #007A54;
   border-bottom: 2px solid #00BD83;

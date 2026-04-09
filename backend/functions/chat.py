@@ -1768,9 +1768,11 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     parallel_tool_calls=False,
                 )
 
-                response_json = (
-                    response.choices[0].message.tool_calls[0].function.arguments
-                )
+                msg = response.choices[0].message
+                if msg.tool_calls and len(msg.tool_calls) > 0:
+                    response_json = msg.tool_calls[0].function.arguments
+                else:
+                    response_json = msg.content or "{}"
 
                 try:
                     response_json = loads(response_json)

@@ -109,6 +109,15 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         outputs: 'None',
       },
       {
+        type: 'processing_block',
+        label: 'Process',
+        colour: blocksColours.robotActions,
+        description:
+          'Performs a custom action (e.g., scan, weld, dispense) utilizing the robot tool.',
+        inputs: 'Custom Action',
+        outputs: 'None',
+      },
+      {
         type: 'place_block',
         label: 'Place',
         colour: blocksColours.robotActions,
@@ -164,7 +173,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'objects-positions',
-    name: 'Objects & Positions',
+    name: 'Variables & Entities', // Renamed from "Objects & Positions"
     colour: blocksColours.objectsPositions,
     blocks: [
       // Dynamic blocks — pills are generated from props (dataObjects, dataLocations, dataActions).

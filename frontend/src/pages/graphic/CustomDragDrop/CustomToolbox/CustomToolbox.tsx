@@ -16,6 +16,7 @@ import {
   Trash2,
   FlaskConical,
   MapPin,
+  Zap,
 } from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
@@ -176,7 +177,7 @@ const BlockPill: React.FC<{
   </BlockPreviewTooltip>
 )
 
-type CategoryTabKey = 'objects' | 'positions'
+type CategoryTabKey = 'objects' | 'positions' | 'actions'
 
 interface CategoryTabDefinition {
   key: CategoryTabKey
@@ -198,6 +199,12 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
     icon: MapPin,
     blockTypes: ['location_block'],
   },
+  {
+    key: 'actions',
+    label: 'Actions',
+    icon: Zap,
+    blockTypes: ['action_block'],
+  },
 ]
 
 const CategoryPanel: React.FC<{
@@ -211,7 +218,7 @@ const CategoryPanel: React.FC<{
   ) => void
 }> = ({ category, pills, expanded, onChange, onBlockPointerDown }) => {
   const isObjectsPositionsCategory = category.key === 'objects-positions'
-  const [activeTab, setActiveTab] = useState<'objects' | 'positions'>('objects')
+  const [activeTab, setActiveTab] = useState<CategoryTabKey>('objects')
 
   const activeTabConfig = isObjectsPositionsCategory
     ? OBJECT_POSITION_TABS.find((tab) => tab.key === activeTab)
@@ -287,10 +294,7 @@ const CategoryPanel: React.FC<{
                   <Icon
                     className="toolbox-category-tab__icon"
                     size={16}
-                    style={{
-                      background: 'transparent',
-                      backgroundColor: 'transparent',
-                    }}
+                    aria-hidden="true"
                   />
                   <span className="toolbox-category-tab__label">
                     {tab.label}

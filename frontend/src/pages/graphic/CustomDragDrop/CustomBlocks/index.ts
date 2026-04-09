@@ -180,6 +180,16 @@ Blockly.defineBlocksWithJsonArray([
     tooltip: "Activates the robot's gripper to grasp the selected object.",
   },
   {
+    type: 'processing_block',
+    message0: 'ROBOT: Process %1',
+    args0: [{ type: 'input_value', name: 'ACTION', check: 'action_block' }],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.robotActions,
+    tooltip:
+      'Performs a specific processing action (e.g., glue, scan, weld) on the current object.',
+  },
+  {
     type: 'place_block',
     message0: 'ROBOT: Place %1',
     args0: [{ type: 'input_value', name: 'LOCATION', check: 'location_block' }],
