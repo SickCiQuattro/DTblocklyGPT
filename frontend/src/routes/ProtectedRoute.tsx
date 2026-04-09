@@ -19,6 +19,14 @@ interface ProtectedRouteProps {
   children: JSX.Element
 }
 
+interface VerifyTokenResponse {
+  authError?: boolean
+  id: string | number
+  username: string
+  group: USER_GROUP | string
+  versionServer: string
+}
+
 export const ProtectedRoute = ({
   children,
 }: ProtectedRouteProps): JSX.Element => {
@@ -27,15 +35,15 @@ export const ProtectedRoute = ({
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   const verifyToken = useCallback(async () => {
-    return fetchApi({
+    return fetchApi<VerifyTokenResponse, { id: string | number }>({
       url: endpoints.auth.verifyToken,
       method: MethodHTTP.POST,
       body: { id: getFromLocalStorage(LocalStorageKey.USER).id },
     }).then((res) => {
       removeFromLocalStorage(LocalStorageKey.USER)
-      if (res && !res.authError) {
+      if (!res.authError) {
         const userInfo: UserLoginInterface = {
-          id: res.id,
+          id: String(res.id),
           username: res.username,
           group: res.group as USER_GROUP,
           versionServer: res.versionServer,

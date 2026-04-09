@@ -197,7 +197,7 @@ interface CustomDragDropProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
-  dataTask: State
+  dataTask: State | null
 }
 
 export const CustomDragDrop = ({
@@ -636,7 +636,7 @@ export const CustomDragDrop = ({
       const listener = (event: Blockly.Events.Abstract) => {
         syncHistoryState(workspace)
 
-        if (event.type !== Blockly.Events.BLOCK_DRAG) {
+        if (`${event.type}` !== `${Blockly.Events.BLOCK_DRAG}`) {
           return
         }
 

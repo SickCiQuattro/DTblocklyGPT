@@ -23,7 +23,7 @@ import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
 
 interface RightPanelProps {
   backFunction: () => void
-  dataTask: State
+  dataTask: State | null
 }
 
 export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
@@ -38,19 +38,19 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
     // const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
     const abstractTask = blocklyTaskStructure
 
-    fetchApi({
+    void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
       body: { taskStructure: abstractTask, id },
     }).then(() => {
       toast.success(MessageText.success)
-      dispatch(toggleEditMode())
+      void dispatch(toggleEditMode())
       backFunction()
     })
   }
 
   const handleCancel = () => {
-    dispatch(toggleEditMode())
+    void dispatch(toggleEditMode())
   }
 
   return (
@@ -67,7 +67,9 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
           fullWidth
           variant="contained"
           startIcon={<EditOutlined />}
-          onClick={() => dispatch(toggleEditMode())}
+          onClick={() => {
+            void dispatch(toggleEditMode())
+          }}
           color="warning"
         >
           Edit
@@ -138,11 +140,12 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
                   style={{ marginRight: '1rem' }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    navigator.clipboard
+                    void navigator.clipboard
                       .writeText(
                         actualTask ? JSON.stringify(actualTask, null, 2) : '',
                       )
                       .then(() => toast.success(MessageText.copiedInClipboard))
+                      .catch(() => undefined)
                   }}
                 />
                 <SyncOutlined

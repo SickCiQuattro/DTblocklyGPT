@@ -40,6 +40,12 @@ export const CHATGPT_ERROR =
 
 export const LastMessage = ({ id }: { id: number }) => {
   const theme = useTheme()
+  const successColor =
+    (
+      theme.palette.success as typeof theme.palette.success & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.success.light
   const [messageDate] = useState(() => dayjs().toDate())
 
   return (
@@ -62,10 +68,10 @@ export const LastMessage = ({ id }: { id: number }) => {
       status="sent"
       avatar="/pages/robot.png"
       styles={{
-        backgroundColor: (theme.palette.success as any).lighter,
+        backgroundColor: successColor,
       }}
       notchStyle={{
-        fill: (theme.palette.success as any).lighter,
+        fill: successColor,
       }}
     />
   )

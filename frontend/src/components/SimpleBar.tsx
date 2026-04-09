@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react'
-import { alpha, styled } from '@mui/material/styles'
+import { SxProps, Theme, alpha, styled } from '@mui/material/styles'
 import { Box } from '@mui/material'
 import SimpleBar from 'simplebar-react'
 import { BrowserView, MobileView } from 'react-device-detect'
@@ -36,7 +36,7 @@ const SimpleBarStyle = styled(SimpleBar)(({ theme }) => ({
 
 interface SimpleBarScrollProps {
   children: ReactNode
-  sx: any
+  sx?: SxProps<Theme>
 }
 
 export const SimpleBarScroll = ({

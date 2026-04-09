@@ -31,7 +31,7 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
 
   const listener = (event: Blockly.Events.Abstract) => {
     // selection events
-    if (event.type !== Blockly.Events.SELECTED) return
+    if (`${event.type}` !== `${Blockly.Events.SELECTED}`) return
     if (syncingSelection) return
 
     const selectedEvent = event as Blockly.Events.Selected
@@ -73,9 +73,15 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
 }
 
 interface BlocklyComponentProps {
-  dataTask: State
+  dataTask: State | null
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
 }
+
+const isValidBlockState = (value: State | null): value is State =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string'
 
 export const BlocklyComponent = ({
   dataTask,
@@ -128,7 +134,7 @@ export const BlocklyComponent = ({
       detachChainSelection = enableChainSelection(workspace)
       onWorkspaceReady?.(workspace)
 
-      if (dataTask) {
+      if (isValidBlockState(dataTask)) {
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = dataTask?.x || 200
         defaultDataTask.y = dataTask?.y || 100

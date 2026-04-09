@@ -26,10 +26,10 @@ const DetailAction = () => {
 
   const backFunction = () => {
     if (returnGraphic) {
-      navigate(`/graphic/${returnGraphic}`)
+      void navigate(`/graphic/${returnGraphic}`)
     } else {
-      dispatch(activeItem('actions'))
-      navigate('/actions')
+      void dispatch(activeItem('actions'))
+      void navigate('/actions')
     }
   }
 

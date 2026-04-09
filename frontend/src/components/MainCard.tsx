@@ -1,5 +1,5 @@
 import React, { ReactNode, RefObject } from 'react'
-import { useTheme } from '@mui/material/styles'
+import { SxProps, Theme, useTheme } from '@mui/material/styles'
 import {
   Button,
   Card,
@@ -19,20 +19,20 @@ interface MainCardProps {
   boxShadow?: boolean
   elevation?: number
   shadow?: string
-  sx?: any
+  sx?: SxProps<Theme>
   title?: string
   subtitle?: string
   content?: boolean
   children?: ReactNode | ReactNode[]
-  contentSX?: any
-  backFunction?: any
+  contentSX?: SxProps<Theme>
+  backFunction?: () => void
   backTitle?: string
   customElement?: ReactNode
-  onClick?: any
+  onClick?: () => void
 }
 
-const defaultSx = {}
-const defaultContentSX = {}
+const defaultSx: SxProps<Theme> = {}
+const defaultContentSX: SxProps<Theme> = {}
 
 export const MainCard = ({
   ref,
@@ -46,12 +46,17 @@ export const MainCard = ({
   content = true,
   children = null,
   contentSX = defaultContentSX,
-  backFunction = null,
+  backFunction,
   backTitle = 'Back',
   customElement = null,
-  onClick = null,
+  onClick,
 }: MainCardProps) => {
   const theme = useTheme()
+  const customShadow = (theme as Theme & { customShadows?: { z1?: string } })
+    .customShadows?.z1
+  const lightBorderColor = (
+    theme.palette.grey as typeof theme.palette.grey & { A800?: string }
+  ).A800
   const boxShadowThemed =
     theme.palette.mode === 'dark' ? boxShadow || true : boxShadow
 
@@ -96,14 +101,14 @@ export const MainCard = ({
         borderColor:
           theme.palette.mode === 'dark'
             ? theme.palette.divider
-            : (theme.palette.grey as any).A800,
+            : lightBorderColor || theme.palette.divider,
         boxShadow:
           boxShadowThemed && (!border || theme.palette.mode === 'dark')
-            ? shadow || (theme as any).customShadows.z1
+            ? shadow || customShadow || theme.shadows[1]
             : 'inherit',
         ':hover': {
           boxShadow: boxShadowThemed
-            ? shadow || (theme as any).customShadows.z1
+            ? shadow || customShadow || theme.shadows[1]
             : 'inherit',
         },
         '& pre': {

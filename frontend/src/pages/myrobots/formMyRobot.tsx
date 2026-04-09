@@ -11,6 +11,7 @@ import {
   TextField,
 } from '@mui/material'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import {
   string as YupString,
@@ -34,6 +35,10 @@ interface FormMyRobotProps {
   backFunction: () => void
 }
 
+interface SaveMyRobotResponse {
+  nameAlreadyExists?: boolean
+}
+
 export const FormMyRobot = ({
   dataMyRobot,
   dataRobots,
@@ -42,16 +47,25 @@ export const FormMyRobot = ({
 }: FormMyRobotProps) => {
   const [scanning, setScanning] = React.useState(false)
 
-  const onSubmit = async (
+  const onSubmit = (
     values: MyRobotDetailType,
-    { setStatus, setSubmitting, setFieldError, setFieldTouched },
+    {
+      setStatus,
+      setSubmitting,
+      setFieldError,
+      setFieldTouched,
+    }: FormikHelpers<MyRobotDetailType>,
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    fetchApi({ url: endpoints.home.libraries.myRobot, method, body: values })
-      .then(async (res) => {
-        if (res && res.nameAlreadyExists) {
-          await setFieldTouched('name', true)
-          await setFieldError('name', MessageText.alreadyExists)
+    void fetchApi<SaveMyRobotResponse, MyRobotDetailType>({
+      url: endpoints.home.libraries.myRobot,
+      method,
+      body: values,
+    })
+      .then((res) => {
+        if (res?.nameAlreadyExists) {
+          void setFieldTouched('name', true)
+          setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })
           return
         }
@@ -93,13 +107,7 @@ export const FormMyRobot = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form
-          noValidate
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault()
-          }}
-        >
+        <form noValidate onSubmit={handleSubmit}>
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={8}>
               <Stack spacing={1}>
@@ -177,7 +185,7 @@ export const FormMyRobot = ({
                 <Grid size={4}>
                   <Stack spacing={1}>
                     <Scanner
-                      onScan={async (result) => {
+                      onScan={(result) => {
                         if (result && result.length > 0) {
                           setScanning(false)
                           const code = result[0].rawValue
@@ -186,13 +194,10 @@ export const FormMyRobot = ({
                               (robot) => robot.id.toString() === code,
                             )
                           ) {
-                            setFieldValue('robot', code)
+                            void setFieldValue('robot', Number(code))
                           } else {
-                            await setFieldTouched('robot', true)
-                            await setFieldError(
-                              'robot',
-                              MessageText.robotIdNotFound,
-                            )
+                            void setFieldTouched('robot', true)
+                            setFieldError('robot', MessageText.robotIdNotFound)
                           }
                         }
                       }}

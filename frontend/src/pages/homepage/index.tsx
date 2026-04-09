@@ -38,8 +38,8 @@ const Homepage = () => {
         >
           <CardActionArea
             onClick={() => {
-              navigate('/task/add?type=chat')
-              dispatch(activeItem('definechat'))
+              void navigate('/task/add?type=chat')
+              void dispatch(activeItem('definechat'))
             }}
             title="Create a new task by chat"
           >
@@ -66,8 +66,8 @@ const Homepage = () => {
         >
           <CardActionArea
             onClick={() => {
-              navigate('/task/add?type=graphic')
-              dispatch(activeItem('definegraphic'))
+              void navigate('/task/add?type=graphic')
+              void dispatch(activeItem('definegraphic'))
             }}
             title="Create a new task by graphic interface"
           >
@@ -90,8 +90,8 @@ const Homepage = () => {
         <Card>
           <CardActionArea
             onClick={() => {
-              navigate('/task/add?type=multimodal')
-              dispatch(activeItem('definemultimodal'))
+              void navigate('/task/add?type=multimodal')
+              void dispatch(activeItem('definemultimodal'))
             }}
             title="Create a new task by multimodal interface"
           >

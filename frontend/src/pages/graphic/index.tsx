@@ -12,8 +12,16 @@ import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
+import { AbstractStep } from 'pages/tasks/types'
+import { BlockState as State } from 'utils/blocklyTypes'
 
 import { SplittedLayout } from './splittedLayout'
+
+const isBlockState = (value: unknown): value is State =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string'
 
 const Graphic = () => {
   const { id } = useParams()
@@ -51,15 +59,39 @@ const Graphic = () => {
     : ''
 
   const backFunction = () => {
-    dispatch(openDrawer(true))
-    dispatch(toggleEditMode())
-    dispatch(activeItem('tasks'))
-    navigate('/tasks')
+    void dispatch(openDrawer(true))
+    void dispatch(toggleEditMode())
+    void dispatch(activeItem('tasks'))
+    void navigate('/tasks')
   }
 
   const data = dataTask && dataObjects && dataActions && dataLocations
   const isLoading =
     isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
+
+  const parseTaskCode = (taskCode: string): unknown => {
+    try {
+      return JSON.parse(taskCode) as unknown
+    } catch {
+      return null
+    }
+  }
+
+  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const normalizedTaskCode: State | null =
+    parsedTaskCode && Array.isArray(parsedTaskCode)
+      ? (() => {
+          const convertedTaskCode = abstractToBlockly(
+            parsedTaskCode as AbstractStep[],
+            dataObjects || [],
+            dataLocations || [],
+            dataActions || [],
+          )
+          return isBlockState(convertedTaskCode) ? convertedTaskCode : null
+        })()
+      : isBlockState(parsedTaskCode)
+        ? parsedTaskCode
+        : null
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))
@@ -76,16 +108,7 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataTask={
-            Array.isArray(JSON.parse(dataTask.code))
-              ? abstractToBlockly(
-                  JSON.parse(dataTask.code),
-                  dataObjects,
-                  dataLocations,
-                  dataActions,
-                )
-              : JSON.parse(dataTask.code)
-          }
+          dataTask={normalizedTaskCode}
           backFunction={backFunction}
         />
       )}

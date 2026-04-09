@@ -27,8 +27,8 @@ const DetailMyRobot = () => {
   )
 
   const backFunction = () => {
-    dispatch(activeItem('myrobots'))
-    navigate('/myrobots')
+    void dispatch(activeItem('myrobots'))
+    void navigate('/myrobots')
   }
 
   const { data: dataRobots, isLoading: isLoadingRobots } = useSWR<

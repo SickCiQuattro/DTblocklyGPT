@@ -31,6 +31,10 @@ interface FormUserProps {
   backFunction: () => void
 }
 
+interface SaveUserResponse {
+  usernameAlreadyExists?: boolean
+}
+
 export const FormUser = ({
   dataUser,
   dataRoles,
@@ -42,9 +46,13 @@ export const FormUser = ({
     { setStatus, setSubmitting, setFieldTouched, setFieldError },
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    fetchApi({ url: endpoints.home.management.user, method, body: values })
+    void fetchApi<SaveUserResponse, UserDetailType>({
+      url: endpoints.home.management.user,
+      method,
+      body: values,
+    })
       .then(async (res) => {
-        if (res && res.usernameAlreadyExists) {
+        if (res?.usernameAlreadyExists) {
           await setFieldTouched('username', true)
           await setFieldError('username', MessageText.alreadyExists)
           setStatus({ success: false })

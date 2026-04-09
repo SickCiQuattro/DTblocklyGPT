@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react'
 import { Box, useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 
 import { MainCard } from 'components/MainCard'
 
@@ -9,6 +10,8 @@ interface AuthCardProps {
 
 export const LoginCard = ({ children }: AuthCardProps) => {
   const theme = useTheme()
+  const shadow = (theme as Theme & { customShadows?: { z1?: string } })
+    .customShadows?.z1
 
   return (
     <MainCard
@@ -23,7 +26,7 @@ export const LoginCard = ({ children }: AuthCardProps) => {
       content={false}
       border={false}
       boxShadow
-      shadow={(theme as any).customShadows.z1}
+      shadow={shadow}
     >
       <Box sx={{ p: { xs: 2, sm: 3, md: 4, xl: 5 } }}>{children}</Box>
     </MainCard>

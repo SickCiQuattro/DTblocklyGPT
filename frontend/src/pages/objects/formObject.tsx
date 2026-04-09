@@ -20,6 +20,7 @@ import {
   Typography,
 } from '@mui/material'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { AimOutlined, PlusOutlined } from '@ant-design/icons'
@@ -39,6 +40,32 @@ interface FormObjectProps {
   backFunction: () => void
 }
 
+interface ObjectFormValues extends ObjectDetailType {
+  robot: number | '' | null
+}
+
+interface SaveObjectResponse {
+  nameAlreadyExists?: boolean
+  keywordExist?: boolean
+  keywordFound?: string[]
+}
+
+interface CartesianPositionResponse {
+  position?: {
+    Z?: number
+  }
+}
+
+interface ObjectPhotoResponse {
+  photo?: string
+  contour?: string
+  shape?: string
+}
+
+type SetFieldValue = FormikHelpers<ObjectFormValues>['setFieldValue']
+type SetFieldError = FormikHelpers<ObjectFormValues>['setFieldError']
+type SetFieldTouched = FormikHelpers<ObjectFormValues>['setFieldTouched']
+
 export const FormObject = ({
   dataObject,
   dataMyRobots,
@@ -51,25 +78,38 @@ export const FormObject = ({
   const forcedName = searchParams.get('forcedName')
   // const [acquiredPhoto, setAcquiredPhoto] = React.useState<boolean>(false)
 
-  const onSubmit = async (
-    values: ObjectDetailType,
-    { setStatus, setSubmitting, setFieldError, setFieldTouched },
+  const onSubmit = (
+    values: ObjectFormValues,
+    {
+      setStatus,
+      setSubmitting,
+      setFieldError,
+      setFieldTouched,
+    }: FormikHelpers<ObjectFormValues>,
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
     setKeywordErrors([])
-    fetchApi({ url: endpoints.home.libraries.object, method, body: values })
-      .then(async (res) => {
-        if (res && res.nameAlreadyExists) {
-          await setFieldTouched('name', true)
-          await setFieldError('name', MessageText.alreadyExists)
+    void fetchApi<SaveObjectResponse, ObjectFormValues>({
+      url: endpoints.home.libraries.object,
+      method,
+      body: values,
+    })
+      .then((res) => {
+        if (res?.nameAlreadyExists) {
+          void setFieldTouched('name', true)
+          setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })
           return
         }
-        if (res && res.keywordExist) {
-          setKeywordErrors(res.keywordFound)
+
+        if (res?.keywordExist) {
+          setKeywordErrors(
+            Array.isArray(res.keywordFound) ? res.keywordFound : [],
+          )
           setStatus({ success: false })
           return
         }
+
         setStatus({ success: true })
         toast.success(MessageText.success)
         backFunction()
@@ -79,46 +119,42 @@ export const FormObject = ({
       })
   }
 
-  const handleGetHeight = async (
-    robot: number | null,
-    setFieldValue: (field: string, value: any) => void,
-    setFieldError: (field: string, value: any) => void,
-    setFieldTouched: (field: string, touched: any) => void,
+  const handleGetHeight = (
+    robot: ObjectFormValues['robot'],
+    setFieldValue: SetFieldValue,
+    setFieldError: SetFieldError,
+    setFieldTouched: SetFieldTouched,
   ) => {
     if (!robot) {
-      await setFieldTouched('robot', true)
-      await setFieldError('robot', MessageText.requiredField)
+      void setFieldTouched('robot', true)
+      setFieldError('robot', MessageText.requiredField)
       return
     }
 
     // Mock data
     // setFieldValue('height', 10)
 
-    fetchApi({
+    void fetchApi<CartesianPositionResponse, { robot: number }>({
       url: endpoints.home.libraries.getCartesianPosition,
       method: MethodHTTP.POST,
-      body: { robot },
+      body: { robot: Number(robot) },
     }).then((response) => {
-      if (response) {
-        setFieldValue('height', response.position.Z)
+      if (typeof response?.position?.Z === 'number') {
+        void setFieldValue('height', response.position.Z)
         toast.success('Height acquired')
       }
     })
   }
 
-  const handleGetPhoto = async (
-    robot: number | null,
-    setFieldValue: (field: string, value: any) => void,
-    setFieldError: (field: string, value: any) => void,
-    setFieldTouched: (
-      field: string,
-      isTouched: boolean,
-      shouldValidate: boolean,
-    ) => void,
+  const handleGetPhoto = (
+    robot: ObjectFormValues['robot'],
+    setFieldValue: SetFieldValue,
+    setFieldError: SetFieldError,
+    setFieldTouched: SetFieldTouched,
   ) => {
     if (!robot) {
-      await setFieldTouched('robot', true, true)
-      await setFieldError('robot', MessageText.requiredField)
+      void setFieldTouched('robot', true, true)
+      setFieldError('robot', MessageText.requiredField)
       return
     }
 
@@ -130,22 +166,22 @@ export const FormObject = ({
     setFieldValue('shape', '/test_image/grid_shape.png')
     */
 
-    fetchApi({
+    void fetchApi<ObjectPhotoResponse, { robot: number }>({
       url: endpoints.home.libraries.getPhoto,
       method: MethodHTTP.POST,
-      body: { robot },
+      body: { robot: Number(robot) },
     }).then((response) => {
       if (response) {
-        setFieldValue('photo', response.photo)
-        setFieldValue('contour', response.contour)
-        setFieldValue('shape', response.shape)
+        void setFieldValue('photo', response.photo || '')
+        void setFieldValue('contour', response.contour || '')
+        void setFieldValue('shape', response.shape || '')
         toast.success('Photo acquired')
       }
     })
   }
 
   return (
-    <Formik
+    <Formik<ObjectFormValues>
       initialValues={{
         id: dataObject?.id || -1,
         name: forcedName || dataObject?.name || '',
@@ -180,13 +216,7 @@ export const FormObject = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form
-          noValidate
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault()
-          }}
-        >
+        <form noValidate onSubmit={handleSubmit}>
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={2}>
               <Stack spacing={1}>
@@ -217,7 +247,9 @@ export const FormObject = ({
                       value={values.shared}
                       name="shared"
                       onBlur={handleBlur}
-                      onChange={() => setFieldValue('shared', !values.shared)}
+                      onChange={() => {
+                        void setFieldValue('shared', !values.shared)
+                      }}
                       checked={values.shared}
                     />
                   }
@@ -240,10 +272,11 @@ export const FormObject = ({
                   onChange={(e) => setAddKeyword(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
+                      e.preventDefault()
                       if (addKeyword) {
                         const newKeywords = [...values.keywords]
                         newKeywords.push(addKeyword)
-                        setFieldValue('keywords', newKeywords)
+                        void setFieldValue('keywords', newKeywords)
                         setAddKeyword('')
                       }
                     }
@@ -257,7 +290,7 @@ export const FormObject = ({
                               if (addKeyword) {
                                 const newKeywords = [...values.keywords]
                                 newKeywords.push(addKeyword)
-                                setFieldValue('keywords', newKeywords)
+                                void setFieldValue('keywords', newKeywords)
                                 setAddKeyword('')
                               }
                             }}
@@ -286,7 +319,7 @@ export const FormObject = ({
                     onDelete={() => {
                       const newKeywords = [...values.keywords]
                       newKeywords.splice(index, 1)
-                      setFieldValue('keywords', newKeywords)
+                      void setFieldValue('keywords', newKeywords)
 
                       const newKeywordErrors = keywordErrors.filter(
                         (keywordError) => keywordError !== keyword,

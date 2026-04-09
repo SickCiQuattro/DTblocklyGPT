@@ -14,6 +14,7 @@ import {
 } from '@mui/material'
 import { string as YupString, object as YupObject } from 'yup'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
 import { useDispatch } from 'react-redux'
 
@@ -35,32 +36,38 @@ interface LoginFormProps {
   setResetPassword: (value: boolean) => void
 }
 
+interface LoginFormValues {
+  username: string
+  password: string
+}
+
+interface LoginResponse {
+  authError: boolean
+  username: string
+  id: number
+  group: USER_GROUP
+}
+
 export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
   const [showPassword, setShowPassword] = useState<boolean>(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const onSubmit = async (
-    values: { username: string; password: string },
-    { setErrors, setStatus, setSubmitting },
+  const onSubmit = (
+    values: LoginFormValues,
+    { setErrors, setStatus, setSubmitting }: FormikHelpers<LoginFormValues>,
   ) => {
-    fetchApi({
+    void fetchApi<LoginResponse, LoginFormValues>({
       url: endpoints.auth.login,
       method: MethodHTTP.POST,
       body: { username: values.username, password: values.password },
     })
-      .then((response: any) => {
-        const {
-          authError,
-          username,
-          id,
-          group,
-        }: { authError: boolean; username: string; id: number; group: string } =
-          response
+      .then((response) => {
+        const { authError, username, id, group } = response
         if (!authError) {
           setToLocalStorage(LocalStorageKey.USER, { username, id, group })
-          navigate(defaultPath)
-          dispatch(activeItem(defaultOpenItem))
+          void navigate(defaultPath)
+          void dispatch(activeItem(defaultOpenItem))
           setStatus({ success: true })
           return
         }

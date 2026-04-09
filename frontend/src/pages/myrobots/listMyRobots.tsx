@@ -37,12 +37,12 @@ const ListMyRobots = () => {
   })
 
   const handleDetail = (id: number) => {
-    dispatch(activeItem(''))
-    navigate(`/myrobot/${id}`)
+    void dispatch(activeItem(''))
+    void navigate(`/myrobot/${id}`)
   }
 
   const handleDelete = (id: number) => {
-    fetchApi({
+    void fetchApi({
       url: endpoints.home.libraries.myRobot,
       method: MethodHTTP.DELETE,
       body: {
@@ -50,7 +50,7 @@ const ListMyRobots = () => {
       },
     }).then(() => {
       toast.success(MessageText.success)
-      mutate()
+      void mutate()
       if (data?.length === 1 && tableCurrentPage > 1) {
         setTableCurrentPage(tableCurrentPage - 1)
       }
@@ -117,8 +117,8 @@ const ListMyRobots = () => {
   }
 
   const handleAdd = () => {
-    dispatch(activeItem(''))
-    navigate('/myrobot/add')
+    void dispatch(activeItem(''))
+    void navigate('/myrobot/add')
   }
 
   return (

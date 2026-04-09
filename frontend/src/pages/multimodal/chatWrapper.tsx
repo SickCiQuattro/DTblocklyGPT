@@ -37,7 +37,14 @@ import {
   UserChatEnum,
 } from './utils'
 
-const { username } = getFromLocalStorage('user')
+const storedUser: unknown = getFromLocalStorage('user')
+const username =
+  typeof storedUser === 'object' &&
+  storedUser !== null &&
+  'username' in storedUser &&
+  typeof storedUser.username === 'string'
+    ? storedUser.username
+    : 'User'
 const scrollToBottom = () => {
   const chatContainer = document.getElementById('chatContainer')
   if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight
@@ -67,6 +74,18 @@ export const ChatWrapper = ({
   const { id } = useParams()
   const dispatch = useDispatch()
   const theme = useTheme()
+  const successColor =
+    (
+      theme.palette.success as typeof theme.palette.success & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.success.light
+  const primaryColor =
+    (
+      theme.palette.primary as typeof theme.palette.primary & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.primary.light
   const [listMessages, setListMessages] = React.useState<MessageType[]>([
     INITIAL_MESSAGE_1,
   ])
@@ -82,12 +101,15 @@ export const ChatWrapper = ({
   } = useSpeechRecognition()
 
   const startRecording = () => {
-    SpeechRecognition.startListening({ language: 'en-GB', continuous: true })
+    void SpeechRecognition.startListening({
+      language: 'en-GB',
+      continuous: true,
+    })
     setIsRecording(true)
   }
 
   const stopRecording = () => {
-    SpeechRecognition.stopListening()
+    void SpeechRecognition.stopListening()
     setMessage(transcript)
     resetTranscript()
     setIsRecording(false)
@@ -108,7 +130,7 @@ export const ChatWrapper = ({
     setIsProcessing(true)
     setMessage('')
 
-    fetchApi({
+    void fetchApi<ChatResponse>({
       url: endpoints.chat.newMessageMultimodal,
       method: MethodHTTP.POST,
       body: {
@@ -161,7 +183,7 @@ export const ChatWrapper = ({
   }, [listMessages])
 
   React.useEffect(() => {
-    dispatch(openDrawer(false))
+    void dispatch(openDrawer(false))
   }, [dispatch])
 
   return (
@@ -217,19 +239,19 @@ export const ChatWrapper = ({
             styles={
               msg.user === UserChatEnum.ROBOT
                 ? {
-                    backgroundColor: (theme.palette.success as any).lighter,
+                    backgroundColor: successColor,
                   }
                 : {
-                    backgroundColor: (theme.palette.primary as any).lighter,
+                    backgroundColor: primaryColor,
                   }
             }
             notchStyle={
               msg.user === UserChatEnum.ROBOT
                 ? {
-                    fill: (theme.palette.success as any).lighter,
+                    fill: successColor,
                   }
                 : {
-                    fill: (theme.palette.primary as any).lighter,
+                    fill: primaryColor,
                   }
             }
           />
@@ -247,7 +269,6 @@ export const ChatWrapper = ({
               : 'Type a message...'
         }
         disabled={isRecording || !editingMode}
-        autoFocus
         multiline
         fullWidth
         style={{

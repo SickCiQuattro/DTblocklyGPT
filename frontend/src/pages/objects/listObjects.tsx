@@ -24,7 +24,7 @@ import {
   defaultPageSizeSelection,
   defaultPaginationConfig,
 } from 'utils/constants'
-import { getFromLocalStorage } from 'utils/localStorageUtils'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { ObjectListType } from './types'
 
@@ -33,17 +33,27 @@ const ListObjects = () => {
   const [tableCurrentPage, setTableCurrentPage] = useState(defaultCurrentPage)
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
+  const canManageObject = (owner: ObjectListType['owner']) =>
+    currentUserId !== null && String(owner) === currentUserId
   const { data, mutate, isLoading } = useSWR<ObjectListType[], Error>({
     url: endpoints.home.libraries.objects,
   })
 
   const handleDetail = (id: number) => {
-    dispatch(activeItem(''))
-    navigate(`/object/${id}`)
+    void dispatch(activeItem(''))
+    void navigate(`/object/${id}`)
   }
 
   const handleDelete = (id: number) => {
-    fetchApi({
+    void fetchApi({
       url: endpoints.home.libraries.object,
       method: MethodHTTP.DELETE,
       body: {
@@ -51,7 +61,7 @@ const ListObjects = () => {
       },
     }).then(() => {
       toast.success(MessageText.success)
-      mutate()
+      void mutate()
       if (data?.length === 1 && tableCurrentPage > 1) {
         setTableCurrentPage(tableCurrentPage - 1)
       }
@@ -69,7 +79,7 @@ const ListObjects = () => {
           onClick={() => handleDetail(record.id)}
           color="primary"
           aria-label="detail"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageObject(record.owner)}
           title="View object details"
         >
           <EyeOutlined style={{ fontSize: '2em' }} />
@@ -122,7 +132,7 @@ const ListObjects = () => {
           >
             <Button
               color="error"
-              disabled={record.owner !== getFromLocalStorage('user')?.id}
+              disabled={!canManageObject(record.owner)}
               title="Delete this object"
             >
               Delete
@@ -145,8 +155,8 @@ const ListObjects = () => {
   }
 
   const handleAdd = () => {
-    dispatch(activeItem(''))
-    navigate('/object/add')
+    void dispatch(activeItem(''))
+    void navigate('/object/add')
   }
 
   return (

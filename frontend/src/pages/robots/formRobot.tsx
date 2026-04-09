@@ -32,6 +32,10 @@ interface FormRobotProps {
   backFunction: () => void
 }
 
+interface SaveRobotResponse {
+  nameAlreadyExists?: boolean
+}
+
 export const FormRobot = ({
   data,
   insertMode,
@@ -42,9 +46,13 @@ export const FormRobot = ({
     { setStatus, setSubmitting, setFieldTouched, setFieldError },
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    fetchApi({ url: endpoints.home.management.robot, method, body: values })
+    void fetchApi<SaveRobotResponse, RobotType>({
+      url: endpoints.home.management.robot,
+      method,
+      body: values,
+    })
       .then(async (res) => {
-        if (res && res.nameAlreadyExists) {
+        if (res?.nameAlreadyExists) {
           await setFieldTouched('name', true)
           await setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })

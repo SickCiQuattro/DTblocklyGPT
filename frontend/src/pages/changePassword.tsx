@@ -1,6 +1,7 @@
 import React from 'react'
 import { Button, FormHelperText, Grid, Stack, TextField } from '@mui/material'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { string as YupString, object as YupObject, ref as YupRef } from 'yup'
 import { toast } from 'react-toastify'
 import { useNavigate } from 'react-router-dom'
@@ -18,16 +19,34 @@ import { LocalStorageKey, getFromLocalStorage } from 'utils/localStorageUtils'
 import { defaultPath } from 'utils/constants'
 import { activeItem } from 'store/reducers/menu'
 
+interface ChangePasswordFormValues {
+  oldPassword: string
+  newPassword: string
+  confirmNewPassword: string
+}
+
+interface ChangePasswordResponse {
+  wrongPassword?: boolean
+}
+
 const ChangePassword = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const userId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? Number(storedUser.id)
+      : null
 
   return (
     <MainCard
       title="Change password"
       subtitle="Here you can edit your password. The password must be at least 8 characters."
     >
-      <Formik
+      <Formik<ChangePasswordFormValues>
         initialValues={{
           oldPassword: '',
           newPassword: '',
@@ -43,41 +62,52 @@ const ChangePassword = () => {
             .required(MessageText.requiredField)
             .oneOf([YupRef('newPassword')], MessageText.passwordMismatch),
         })}
-        onSubmit={async (
+        onSubmit={(
           values,
-          { setStatus, setSubmitting, setFieldTouched, setFieldError },
+          {
+            setStatus,
+            setSubmitting,
+            setFieldTouched,
+            setFieldError,
+          }: FormikHelpers<ChangePasswordFormValues>,
         ) => {
           const { newPassword, oldPassword } = values
           if (newPassword === oldPassword) {
-            await setFieldTouched('newPassword', true)
-            await setFieldError('newPassword', MessageText.newPasswordEqualOld)
+            void setFieldTouched('newPassword', true)
+            setFieldError('newPassword', MessageText.newPasswordEqualOld)
             setStatus({ success: false })
             return
           }
 
-          fetchApi({
+          if (userId === null || Number.isNaN(userId)) {
+            setStatus({ success: false })
+            setSubmitting(false)
+            return
+          }
+
+          void fetchApi<
+            ChangePasswordResponse,
+            { id: number; oldPassword: string; newPassword: string }
+          >({
             url: endpoints.home.user.changePassword,
             method: MethodHTTP.POST,
             body: {
-              id: getFromLocalStorage(LocalStorageKey.USER).id,
+              id: userId,
               oldPassword,
               newPassword,
             },
           })
-            .then(async (res) => {
-              if (res && res.wrongPassword) {
-                await setFieldTouched('oldPassword', true)
-                await setFieldError(
-                  'oldPassword',
-                  MessageText.incorrectPassword,
-                )
+            .then((res) => {
+              if (res?.wrongPassword) {
+                void setFieldTouched('oldPassword', true)
+                setFieldError('oldPassword', MessageText.incorrectPassword)
                 setStatus({ success: false })
                 return
               }
               toast.success(MessageText.success)
               setStatus({ success: true })
-              dispatch(activeItem('homepage'))
-              navigate(defaultPath)
+              void dispatch(activeItem('homepage'))
+              void navigate(defaultPath)
             })
             .finally(() => {
               setSubmitting(false)
@@ -93,13 +123,7 @@ const ChangePassword = () => {
           touched,
           values,
         }) => (
-          <form
-            noValidate
-            onSubmit={handleSubmit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.preventDefault()
-            }}
-          >
+          <form noValidate onSubmit={handleSubmit}>
             <Grid container spacing={4}>
               <Grid size={12}>
                 <Stack spacing={1}>

@@ -17,6 +17,7 @@ import {
   TextField,
 } from '@mui/material'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { AimOutlined, PlusOutlined } from '@ant-design/icons'
@@ -36,6 +37,25 @@ interface FormLocationProps {
   backFunction: () => void
 }
 
+interface LocationFormValues extends Omit<LocationDetailType, 'position'> {
+  position: string | null
+  robot: number | '' | null
+}
+
+interface SaveLocationResponse {
+  nameAlreadyExists?: boolean
+  keywordExist?: boolean
+  keywordFound?: string[]
+}
+
+interface GetJointPositionResponse {
+  position?: unknown
+}
+
+type SetFieldValue = FormikHelpers<LocationFormValues>['setFieldValue']
+type SetFieldError = FormikHelpers<LocationFormValues>['setFieldError']
+type SetFieldTouched = FormikHelpers<LocationFormValues>['setFieldTouched']
+
 export const FormLocation = ({
   dataLocation,
   dataMyRobots,
@@ -47,25 +67,38 @@ export const FormLocation = ({
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
   const forcedName = searchParams.get('forcedName')
 
-  const onSubmit = async (
-    values: LocationDetailType,
-    { setStatus, setSubmitting, setFieldError, setFieldTouched },
+  const onSubmit = (
+    values: LocationFormValues,
+    {
+      setStatus,
+      setSubmitting,
+      setFieldError,
+      setFieldTouched,
+    }: FormikHelpers<LocationFormValues>,
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
     setKeywordErrors([])
-    fetchApi({ url: endpoints.home.libraries.location, method, body: values })
-      .then(async (res) => {
-        if (res && res.nameAlreadyExists) {
-          await setFieldTouched('name', true)
-          await setFieldError('name', MessageText.alreadyExists)
+    void fetchApi<SaveLocationResponse, LocationFormValues>({
+      url: endpoints.home.libraries.location,
+      method,
+      body: values,
+    })
+      .then((res) => {
+        if (res?.nameAlreadyExists) {
+          void setFieldTouched('name', true)
+          setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })
           return
         }
-        if (res && res.keywordExist) {
-          setKeywordErrors(res.keywordFound)
+
+        if (res?.keywordExist) {
+          setKeywordErrors(
+            Array.isArray(res.keywordFound) ? res.keywordFound : [],
+          )
           setStatus({ success: false })
           return
         }
+
         setStatus({ success: true })
         toast.success(MessageText.success)
         backFunction()
@@ -75,15 +108,15 @@ export const FormLocation = ({
       })
   }
 
-  const handleGetPosition = async (
-    robot: number | null,
-    setFieldValue: (field: string, value: any) => void,
-    setFieldError: (field: string, value: any) => void,
-    setFieldTouched: (field: string, touched: any) => void,
+  const handleGetPosition = (
+    robot: LocationFormValues['robot'],
+    setFieldValue: SetFieldValue,
+    setFieldError: SetFieldError,
+    setFieldTouched: SetFieldTouched,
   ) => {
     if (!robot) {
-      await setFieldTouched('robot', true)
-      await setFieldError('robot', MessageText.requiredField)
+      void setFieldTouched('robot', true)
+      setFieldError('robot', MessageText.requiredField)
       return
     }
 
@@ -95,25 +128,27 @@ export const FormLocation = ({
     toast.success('Position acquired')
     */
 
-    fetchApi({
+    void fetchApi<GetJointPositionResponse, { robot: number }>({
       url: endpoints.home.libraries.getJointPosition,
       method: MethodHTTP.POST,
-      body: { robot },
+      body: { robot: Number(robot) },
     }).then((response) => {
-      if (response) {
-        setFieldValue('position', JSON.stringify(response.position))
+      if (response?.position) {
+        void setFieldValue('position', JSON.stringify(response.position))
         toast.success('Position acquired')
       }
     })
   }
 
   return (
-    <Formik
+    <Formik<LocationFormValues>
       initialValues={{
         id: dataLocation?.id || -1,
         name: forcedName || dataLocation?.name || '',
         shared: dataLocation?.shared || false,
-        position: dataLocation?.position || null,
+        position: dataLocation?.position
+          ? JSON.stringify(dataLocation.position)
+          : null,
         robot: null,
         keywords: dataLocation?.keywords || [],
       }}
@@ -136,13 +171,7 @@ export const FormLocation = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form
-          noValidate
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault()
-          }}
-        >
+        <form noValidate onSubmit={handleSubmit}>
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={2}>
               <Stack spacing={1}>
@@ -173,7 +202,9 @@ export const FormLocation = ({
                       value={values.shared}
                       name="shared"
                       onBlur={handleBlur}
-                      onChange={() => setFieldValue('shared', !values.shared)}
+                      onChange={() => {
+                        void setFieldValue('shared', !values.shared)
+                      }}
                       checked={values.shared}
                     />
                   }
@@ -196,10 +227,11 @@ export const FormLocation = ({
                   onChange={(e) => setAddKeyword(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
+                      e.preventDefault()
                       if (addKeyword) {
                         const newKeywords = [...values.keywords]
                         newKeywords.push(addKeyword)
-                        setFieldValue('keywords', newKeywords)
+                        void setFieldValue('keywords', newKeywords)
                         setAddKeyword('')
                       }
                     }
@@ -213,7 +245,7 @@ export const FormLocation = ({
                               if (addKeyword) {
                                 const newKeywords = [...values.keywords]
                                 newKeywords.push(addKeyword)
-                                setFieldValue('keywords', newKeywords)
+                                void setFieldValue('keywords', newKeywords)
                                 setAddKeyword('')
                               }
                             }}
@@ -242,7 +274,7 @@ export const FormLocation = ({
                     onDelete={() => {
                       const newKeywords = [...values.keywords]
                       newKeywords.splice(index, 1)
-                      setFieldValue('keywords', newKeywords)
+                      void setFieldValue('keywords', newKeywords)
 
                       const newKeywordErrors = keywordErrors.filter(
                         (keywordError) => keywordError !== keyword,
@@ -271,8 +303,8 @@ export const FormLocation = ({
                     name="robot"
                     onBlur={handleBlur}
                     onChange={(e) => {
-                      setFieldValue('robot', e.target.value)
-                      setFieldValue('position', '')
+                      void setFieldValue('robot', e.target.value)
+                      void setFieldValue('position', '')
                     }}
                     error={Boolean(touched.robot && errors.robot)}
                     title="Robot use to acquire position and photo"

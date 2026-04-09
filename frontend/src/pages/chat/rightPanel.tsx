@@ -1,9 +1,6 @@
 import React from 'react'
 import { Collapse } from 'antd'
 import { Divider, useTheme } from '@mui/material'
-
-// import { MainCard } from 'components/MainCard'
-// import { backgroundForm } from 'themes/theme'
 import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { toast } from 'react-toastify'
 
@@ -82,13 +79,14 @@ export const RightPanel = ({ taskStructure }: RightPanelProps) => {
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  navigator.clipboard
+                  void navigator.clipboard
                     .writeText(
                       taskStructure
                         ? JSON.stringify(taskStructure, null, 2)
                         : '',
                     )
                     .then(() => toast.success(MessageText.copiedInClipboard))
+                    .catch(() => undefined)
                 }}
               />
             ),

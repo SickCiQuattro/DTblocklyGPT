@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useMediaQuery } from '@mui/material'
 import * as Blockly from 'blockly/core'
 import {
@@ -17,6 +17,7 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
 import { AbstractStep } from 'pages/tasks/types'
+import { BlockState as State } from 'utils/blocklyTypes'
 import {
   abstractToBlockly,
   blocklyToAbstract,
@@ -41,6 +42,12 @@ interface SplittedLayoutProps {
   backFunction: () => void
 }
 
+const isBlockState = (value: unknown): value is State =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string'
+
 export const SplittedLayout = ({
   dataLocations,
   dataObjects,
@@ -64,16 +71,28 @@ export const SplittedLayout = ({
     const blocklyTaskStructure = getBlocklyStructure()
     const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
 
-    fetchApi({
+    void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
       body: { taskStructure: abstractTask, id },
     }).then(() => {
       toast.success(MessageText.success)
-      dispatch(toggleEditMode())
+      void dispatch(toggleEditMode())
       backFunction()
     })
   }
+
+  const parsedDataTask = useMemo(() => {
+    if (!taskStructure) return null
+
+    const convertedTask = abstractToBlockly(
+      taskStructure,
+      dataObjects,
+      dataLocations,
+      dataActions,
+    )
+    return isBlockState(convertedTask) ? convertedTask : null
+  }, [taskStructure, dataObjects, dataLocations, dataActions])
 
   return (
     <div>
@@ -210,16 +229,7 @@ export const SplittedLayout = ({
           editingMode={editingMode}
           newChatResponse={newChatResponse}
           setNewChatResponse={setNewChatResponse}
-          dataTask={
-            taskStructure
-              ? abstractToBlockly(
-                  taskStructure,
-                  dataObjects,
-                  dataLocations,
-                  dataActions,
-                )
-              : null
-          }
+          dataTask={parsedDataTask}
           setTaskStructure={setTaskStructure}
         />
         {editingMode && (

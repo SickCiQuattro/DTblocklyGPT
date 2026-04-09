@@ -40,7 +40,14 @@ import {
   UserChatEnum,
 } from './utils'
 
-const { username } = getFromLocalStorage('user')
+const storedUser: unknown = getFromLocalStorage('user')
+const username =
+  typeof storedUser === 'object' &&
+  storedUser !== null &&
+  'username' in storedUser &&
+  typeof storedUser.username === 'string'
+    ? storedUser.username
+    : 'User'
 const scrollToBottom = () => {
   const chatContainer = document.getElementById('chatContainer')
   if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight
@@ -61,6 +68,18 @@ export const ChatWrapper = ({
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const theme = useTheme()
+  const successColor =
+    (
+      theme.palette.success as typeof theme.palette.success & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.success.light
+  const primaryColor =
+    (
+      theme.palette.primary as typeof theme.palette.primary & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.primary.light
   const [fineTunedModel, setFineTunedModel] = React.useState(FINE_TUNED_MODEL)
   const [fineTuningJobId, setFineTuningJobId] =
     React.useState(FINE_TUNING_JOB_ID)
@@ -80,12 +99,15 @@ export const ChatWrapper = ({
   } = useSpeechRecognition()
 
   const startRecording = () => {
-    SpeechRecognition.startListening({ language: 'en-GB', continuous: true })
+    void SpeechRecognition.startListening({
+      language: 'en-GB',
+      continuous: true,
+    })
     setIsRecording(true)
   }
 
   const stopRecording = () => {
-    SpeechRecognition.stopListening()
+    void SpeechRecognition.stopListening()
     setMessage(transcript)
     resetTranscript()
     setIsRecording(false)
@@ -106,7 +128,7 @@ export const ChatWrapper = ({
     setIsProcessing(true)
     setMessage('')
 
-    fetchApi({
+    void fetchApi<ChatResponse>({
       url: endpoints.chat.newMessage,
       method: MethodHTTP.POST,
       body: {
@@ -151,11 +173,11 @@ export const ChatWrapper = ({
             res.response.task,
           )
           setTaskStructure(newTaskStructure)
-          dispatch(updateTask(newTaskStructure))
+          void dispatch(updateTask(newTaskStructure))
 
           if (res.response?.finished) {
             setIsFinished(true)
-            fetchApi({
+            void fetchApi<{ taskCode: unknown }>({
               url: endpoints.chat.saveChatTask,
               method: MethodHTTP.POST,
               body: {
@@ -168,7 +190,7 @@ export const ChatWrapper = ({
                 taskCode as CustomBlock,
               )
 
-              fetchApi({
+              void fetchApi({
                 url: endpoints.graphic.saveGraphicTask,
                 method: MethodHTTP.PUT,
                 body: {
@@ -178,8 +200,8 @@ export const ChatWrapper = ({
               }).then(() => {
                 scrollToBottom()
                 setTimeout(() => {
-                  navigate(`/graphic/${id}`)
-                  dispatch(activeItem('definegraphic'))
+                  void navigate(`/graphic/${id}`)
+                  void dispatch(activeItem('definegraphic'))
                 }, 5000)
               })
             })
@@ -252,19 +274,19 @@ export const ChatWrapper = ({
             styles={
               msg.user === UserChatEnum.ROBOT
                 ? {
-                    backgroundColor: (theme.palette.success as any).lighter,
+                    backgroundColor: successColor,
                   }
                 : {
-                    backgroundColor: (theme.palette.primary as any).lighter,
+                    backgroundColor: primaryColor,
                   }
             }
             notchStyle={
               msg.user === UserChatEnum.ROBOT
                 ? {
-                    fill: (theme.palette.success as any).lighter,
+                    fill: successColor,
                   }
                 : {
-                    fill: (theme.palette.primary as any).lighter,
+                    fill: primaryColor,
                   }
             }
           />
@@ -279,7 +301,6 @@ export const ChatWrapper = ({
         onChange={(e) => setMessage(e.target.value)}
         placeholder={isRecording ? 'Listening...' : 'Type a message...'}
         disabled={isRecording}
-        autoFocus
         fullWidth
         style={{
           position: 'absolute',

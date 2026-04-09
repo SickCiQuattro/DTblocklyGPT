@@ -7,10 +7,9 @@ import { Provider as ReduxProvider } from 'react-redux'
 import { SWRConfig } from 'swr'
 import { ConfigProvider } from 'antd'
 import enGB from 'antd/locale/en_GB'
+import { locale } from 'dayjs'
 import 'dayjs/locale/en-gb'
 import 'antd/dist/reset.css'
-
-import { locale } from 'dayjs'
 
 import { swrParams } from 'services/api'
 import { ToastContainerStyled } from 'components/ToastContainer'

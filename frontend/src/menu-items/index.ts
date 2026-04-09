@@ -8,7 +8,16 @@ import { managementManager, managementOperator } from './management'
 import { homepage } from './homepage'
 
 export const getMenuItems = (): MenuItem[] => {
-  const { group } = getFromLocalStorage(LocalStorageKey.USER)
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const validGroups = Object.values(USER_GROUP)
+  const group =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'group' in storedUser &&
+    typeof storedUser.group === 'string' &&
+    validGroups.includes(storedUser.group as USER_GROUP)
+      ? (storedUser.group as USER_GROUP)
+      : undefined
   const defaultItems = [homepage, define, libraries]
 
   if (group === USER_GROUP.MANAGER) return [...defaultItems, managementManager]

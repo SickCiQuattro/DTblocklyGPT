@@ -12,7 +12,7 @@ interface SplittedLayoutProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
-  dataTask: State
+  dataTask: State | null
   backFunction: () => void
 }
 

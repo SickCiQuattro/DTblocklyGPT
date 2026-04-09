@@ -35,12 +35,12 @@ export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
   }
     */
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setSelectedIndex(1)
     removeFromLocalStorage(LocalStorageKey.USER)
     toast.success(MessageText.logoutSuccess)
     setOpen?.(false)
-    navigate('/login')
+    void navigate('/login')
   }
 
   return (
@@ -74,7 +74,12 @@ export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
         <ListItemText primary="Cambio password" />
       </ListItemButton> */}
 
-      <ListItemButton selected={selectedIndex === 2} onClick={handleLogout}>
+      <ListItemButton
+        selected={selectedIndex === 2}
+        onClick={() => {
+          handleLogout()
+        }}
+      >
         <ListItemIcon>
           <LogoutOutlined />
         </ListItemIcon>

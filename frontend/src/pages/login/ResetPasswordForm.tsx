@@ -2,6 +2,7 @@ import React from 'react'
 import { Button, FormHelperText, Grid, Stack, TextField } from '@mui/material'
 import { string as YupString, object as YupObject } from 'yup'
 import { Formik } from 'formik'
+import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
@@ -12,14 +13,22 @@ interface ResetPasswordFormProps {
   setResetPassword: (value: boolean) => void
 }
 
+interface ResetPasswordFormValues {
+  email: string
+}
+
+interface ResetPasswordResponse {
+  bool?: boolean
+}
+
 export const ResetPasswordForm = ({
   setResetPassword,
 }: ResetPasswordFormProps) => {
-  const onSubmit = async (
-    values: { email: string },
-    { setStatus, setSubmitting },
+  const onSubmit = (
+    values: ResetPasswordFormValues,
+    { setStatus, setSubmitting }: FormikHelpers<ResetPasswordFormValues>,
   ) => {
-    fetchApi({
+    void fetchApi<ResetPasswordResponse, ResetPasswordFormValues>({
       url: endpoints.home.management.resetPassword,
       method: MethodHTTP.POST,
       body: values,
@@ -58,13 +67,7 @@ export const ResetPasswordForm = ({
         touched,
         values,
       }) => (
-        <form
-          noValidate
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault()
-          }}
-        >
+        <form noValidate onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             <Grid size={12}>
               <Stack spacing={1}>

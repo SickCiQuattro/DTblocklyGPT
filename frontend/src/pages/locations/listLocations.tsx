@@ -24,7 +24,7 @@ import {
   defaultPageSizeSelection,
   defaultPaginationConfig,
 } from 'utils/constants'
-import { getFromLocalStorage } from 'utils/localStorageUtils'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { LocationListType } from './types'
 
@@ -33,17 +33,27 @@ const ListLocations = () => {
   const [tableCurrentPage, setTableCurrentPage] = useState(defaultCurrentPage)
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
+  const canManageLocation = (owner: LocationListType['owner']) =>
+    currentUserId !== null && String(owner) === currentUserId
   const { data, mutate, isLoading } = useSWR<LocationListType[], Error>({
     url: endpoints.home.libraries.locations,
   })
 
   const handleDetail = (id: number) => {
-    dispatch(activeItem(''))
-    navigate(`/location/${id}`)
+    void dispatch(activeItem(''))
+    void navigate(`/location/${id}`)
   }
 
   const handleDelete = (id: number) => {
-    fetchApi({
+    void fetchApi({
       url: endpoints.home.libraries.location,
       method: MethodHTTP.DELETE,
       body: {
@@ -51,7 +61,7 @@ const ListLocations = () => {
       },
     }).then(() => {
       toast.success(MessageText.success)
-      mutate()
+      void mutate()
       if (data?.length === 1 && tableCurrentPage > 1) {
         setTableCurrentPage(tableCurrentPage - 1)
       }
@@ -69,7 +79,7 @@ const ListLocations = () => {
           onClick={() => handleDetail(record.id)}
           color="primary"
           aria-label="detail"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageLocation(record.owner)}
           title="View location details"
         >
           <EyeOutlined style={{ fontSize: '2em' }} />
@@ -122,7 +132,7 @@ const ListLocations = () => {
           >
             <Button
               color="error"
-              disabled={record.owner !== getFromLocalStorage('user')?.id}
+              disabled={!canManageLocation(record.owner)}
               title="Delete this location"
             >
               Delete
@@ -145,8 +155,8 @@ const ListLocations = () => {
   }
 
   const handleAdd = () => {
-    dispatch(activeItem(''))
-    navigate('/location/add')
+    void dispatch(activeItem(''))
+    void navigate('/location/add')
   }
 
   return (

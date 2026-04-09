@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
-// import { Backpack } from '@blockly/workspace-backpack'
 import Theme from '@blockly/theme-modern'
 import { ZoomToFitControl } from '@blockly/zoom-to-fit'
-
 import 'blockly/blocks'
 import { useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
@@ -52,7 +50,7 @@ const disableContextMenuItems = () => {
 
 interface BlocklyComponentProps {
   children: React.JSX.Element[]
-  dataTask: State
+  dataTask: State | null
   editingMode: boolean
   setTaskStructure: (task: AbstractStep[] | null) => void
   newChatResponse: boolean
@@ -61,6 +59,12 @@ interface BlocklyComponentProps {
 
 const DEFAULT_X_AXIS = 50
 const DEFAULT_Y_AXIS = 50
+
+const isValidBlockState = (value: State | null): value is State =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string'
 
 export const BlocklyComponent = ({
   children,
@@ -120,7 +124,7 @@ export const BlocklyComponent = ({
 
       // Update the abstractTaskStructure when the workspace changes
       workspace.addChangeListener((event) => {
-        if (event.type !== Blockly.Events.UI) {
+        if (`${event.type}` !== `${Blockly.Events.UI}`) {
           const blocklyTaskStructure = getBlocklyStructure()
 
           const abstractTask = blocklyToAbstract(
@@ -163,7 +167,7 @@ export const BlocklyComponent = ({
       })
       resizeObserverRef.current.observe(blocklyDivRef.current as Element)
 
-      if (dataTask) {
+      if (isValidBlockState(dataTask)) {
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = x_axis
         defaultDataTask.y = y_axis
@@ -188,7 +192,7 @@ export const BlocklyComponent = ({
       const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
       const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
 
-      if (dataTask) {
+      if (isValidBlockState(dataTask)) {
         const defaultDataTask = { ...dataTask }
 
         defaultDataTask.x = x_axis

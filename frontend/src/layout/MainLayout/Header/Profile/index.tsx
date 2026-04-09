@@ -21,6 +21,7 @@ import { MainCard } from 'components/MainCard'
 import { Transitions } from 'components/Transitions'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { RandomUserIcon } from 'assets/robots'
+import { UserLoginInterface } from 'pages/login/LoginForm'
 
 import { ProfileTab } from './ProfileTab'
 
@@ -45,17 +46,30 @@ const TabPanel = ({ children = null, value, index, dir }: TabPanelProps) => (
 
 export const Profile = () => {
   const theme = useTheme()
-  const userName = getFromLocalStorage(LocalStorageKey.USER).username
-  const userGroup = getFromLocalStorage(LocalStorageKey.USER).group
+  const storedUser = getFromLocalStorage(LocalStorageKey.USER) as
+    | Partial<UserLoginInterface>
+    | ''
+  const userName =
+    typeof storedUser === 'object' && storedUser !== null
+      ? storedUser.username || ''
+      : ''
+  const userGroup =
+    typeof storedUser === 'object' && storedUser !== null
+      ? storedUser.group || ''
+      : ''
 
-  const anchorRef = useRef<any>(null)
+  const anchorRef = useRef<HTMLButtonElement | null>(null)
   const [open, setOpen] = useState<boolean>(false)
   const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen)
   }
 
   const handleClose = (event: MouseEvent | TouchEvent) => {
-    if (anchorRef.current && anchorRef.current.contains(event.target)) {
+    if (
+      anchorRef.current &&
+      event.target instanceof Node &&
+      anchorRef.current.contains(event.target)
+    ) {
       return
     }
     setOpen(false)
@@ -63,7 +77,7 @@ export const Profile = () => {
 
   const [value, setValue] = useState(0)
 
-  const handleChange = (_event, newValue) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue)
   }
 
@@ -112,7 +126,7 @@ export const Profile = () => {
             {open && (
               <Paper
                 sx={{
-                  boxShadow: (theme as any).customShadows.z1,
+                  boxShadow: theme.shadows[1],
                   width: 290,
                   minWidth: 240,
                   maxWidth: 290,

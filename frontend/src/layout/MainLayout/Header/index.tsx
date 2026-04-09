@@ -39,22 +39,13 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
     </Toolbar>
   )
 
-  const appBarStyle = {
-    position: 'fixed' as any,
-    color: 'inherit' as any,
-    elevation: 0,
-    sx: {
-      borderBottom: `1px solid ${theme.palette.divider}`,
-    },
-  }
-
   return !matchDownLG ? (
     <AppBar
-      position={appBarStyle.position}
-      color={appBarStyle.color}
-      elevation={appBarStyle.elevation}
+      position="fixed"
+      color="inherit"
+      elevation={0}
       sx={{
-        borderBottom: appBarStyle.sx.borderBottom,
+        borderBottom: `1px solid ${theme.palette.divider}`,
         zIndex: theme.zIndex.drawer + 1,
         transition: theme.transitions.create(['width', 'margin'], {
           easing: theme.transitions.easing.sharp,
@@ -74,10 +65,10 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
     </AppBar>
   ) : (
     <AppBar
-      position={appBarStyle.position}
-      color={appBarStyle.color}
-      elevation={appBarStyle.elevation}
-      sx={appBarStyle.sx}
+      position="fixed"
+      color="inherit"
+      elevation={0}
+      sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}
     >
       {mainHeader}
     </AppBar>

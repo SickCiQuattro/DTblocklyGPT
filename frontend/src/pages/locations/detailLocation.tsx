@@ -30,11 +30,11 @@ const DetailLocation = () => {
 
   const backFunction = () => {
     if (returnGraphic) {
-      navigate(`/graphic/${returnGraphic}`)
-      dispatch(activeItem('graphic'))
+      void navigate(`/graphic/${returnGraphic}`)
+      void dispatch(activeItem('graphic'))
     } else {
-      dispatch(activeItem('locations'))
-      navigate('/locations')
+      void dispatch(activeItem('locations'))
+      void navigate('/locations')
     }
   }
 

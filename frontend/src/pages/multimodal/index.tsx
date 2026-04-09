@@ -11,6 +11,7 @@ import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { AbstractStep } from 'pages/tasks/types'
 
 import { SplittedLayout } from './splittedLayout'
 
@@ -53,14 +54,30 @@ const Multimodal = () => {
     : ''
 
   const backFunction = () => {
-    dispatch(openDrawer(true))
-    dispatch(activeItem('tasks'))
-    navigate('/tasks')
+    void dispatch(openDrawer(true))
+    void dispatch(activeItem('tasks'))
+    void navigate('/tasks')
   }
 
   const data = dataTask && dataObjects && dataActions && dataLocations
   const isLoading =
     isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
+
+  const parseTaskCode = (taskCode: string): unknown => {
+    try {
+      return JSON.parse(taskCode) as unknown
+    } catch {
+      return null
+    }
+  }
+
+  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const abstractTaskCode: AbstractStep[] =
+    parsedTaskCode === null
+      ? []
+      : Array.isArray(parsedTaskCode)
+        ? (parsedTaskCode as AbstractStep[])
+        : (blocklyToAbstract(parsedTaskCode as CustomBlock) ?? [])
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))
@@ -77,11 +94,7 @@ const Multimodal = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          abstractTask={
-            Array.isArray(JSON.parse(dataTask.code))
-              ? JSON.parse(dataTask.code)
-              : blocklyToAbstract(JSON.parse(dataTask.code) as CustomBlock)
-          }
+          abstractTask={abstractTaskCode}
           backFunction={backFunction}
         />
       )}

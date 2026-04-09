@@ -68,11 +68,12 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
                   style={{ marginRight: '1rem' }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    navigator.clipboard
+                    void navigator.clipboard
                       .writeText(
                         dataTask ? JSON.stringify(dataTask, null, 2) : '',
                       )
                       .then(() => toast.success(MessageText.copiedInClipboard))
+                      .catch(() => undefined)
                   }}
                 />
               </>

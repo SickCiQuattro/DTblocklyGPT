@@ -36,6 +36,11 @@ interface FormTaskProps {
   backFunction: () => void
 }
 
+interface SaveTaskResponse {
+  nameAlreadyExists?: boolean
+  id?: number
+}
+
 export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
@@ -47,15 +52,19 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
     { setStatus, setSubmitting, setFieldError, setFieldTouched },
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    fetchApi({ url: endpoints.home.libraries.task, method, body: values })
+    void fetchApi<SaveTaskResponse, TaskDetailType>({
+      url: endpoints.home.libraries.task,
+      method,
+      body: values,
+    })
       .then(async (res) => {
-        if (res && res.nameAlreadyExists) {
+        if (res?.nameAlreadyExists) {
           await setFieldTouched('name', true)
           await setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })
           return
         }
-        const newTaskId = insertMode ? res.id : null
+        const newTaskId = insertMode ? (res?.id ?? null) : null
         setStatus({ success: true })
         if (!type) toast.success(MessageText.success)
         if (type === TypeNewTask.CHAT) {

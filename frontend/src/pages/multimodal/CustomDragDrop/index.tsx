@@ -1,6 +1,7 @@
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
+import { AbstractStep } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 
 import BlocklyComponent, { Block, Field, Category } from './Blockly'
@@ -8,13 +9,12 @@ import { blocksColours } from './CustomBlocks'
 
 import './CustomCategory'
 import './CustomDragDropStyle.css'
-import { AbstractStep } from 'pages/tasks/types'
 
 interface CustomDragDropProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
-  dataTask: State
+  dataTask: State | null
   setTaskStructure: (task: AbstractStep[] | null) => void
   editingMode: boolean
   newChatResponse: boolean

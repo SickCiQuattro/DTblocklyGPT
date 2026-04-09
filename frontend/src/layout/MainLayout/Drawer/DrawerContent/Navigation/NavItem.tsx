@@ -52,7 +52,7 @@ export const NavItem = ({ item, level }: NavItemProps) => {
   }
 
   const Icon = item.icon
-  const itemIcon = item.icon ? (
+  const itemIcon = Icon ? (
     <Icon style={{ fontSize: drawerOpen ? '1rem' : '1.25rem' }} />
   ) : (
     false

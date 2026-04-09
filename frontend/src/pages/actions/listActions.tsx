@@ -24,7 +24,7 @@ import {
   defaultPageSizeSelection,
   defaultPaginationConfig,
 } from 'utils/constants'
-import { getFromLocalStorage } from 'utils/localStorageUtils'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { ActionListType } from './types'
 
@@ -33,23 +33,33 @@ const ListActions = () => {
   const [tableCurrentPage, setTableCurrentPage] = useState(defaultCurrentPage)
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
+  const canManageAction = (owner: ActionListType['owner']) =>
+    currentUserId !== null && String(owner) === currentUserId
   const { data, mutate, isLoading } = useSWR<ActionListType[], Error>({
     url: endpoints.home.libraries.actions,
   })
 
   const handleDetail = (id: number) => {
-    dispatch(activeItem(''))
-    navigate(`/action/${id}`)
+    void dispatch(activeItem(''))
+    void navigate(`/action/${id}`)
   }
 
   const handleDelete = (id: number) => {
-    fetchApi({
+    void fetchApi<unknown, { id: number }>({
       url: endpoints.home.libraries.action,
       method: MethodHTTP.DELETE,
       body: { id },
     }).then(() => {
       toast.success(MessageText.success)
-      mutate()
+      void mutate()
       if (data?.length === 1 && tableCurrentPage > 1) {
         setTableCurrentPage(tableCurrentPage - 1)
       }
@@ -67,7 +77,7 @@ const ListActions = () => {
           onClick={() => handleDetail(record.id)}
           color="primary"
           aria-label="detail"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageAction(record.owner)}
           title="View action details"
         >
           <EyeOutlined style={{ fontSize: '2em' }} />
@@ -112,7 +122,7 @@ const ListActions = () => {
           >
             <Button
               color="error"
-              disabled={record.owner !== getFromLocalStorage('user')?.id}
+              disabled={!canManageAction(record.owner)}
               title="Delete this action"
             >
               Delete
@@ -135,8 +145,8 @@ const ListActions = () => {
   }
 
   const handleAdd = () => {
-    dispatch(activeItem(''))
-    navigate('/action/add')
+    void dispatch(activeItem(''))
+    void navigate('/action/add')
   }
 
   return (

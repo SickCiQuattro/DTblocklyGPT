@@ -17,7 +17,7 @@ export interface ResponseInterface {
   msg: string
   timestamp: string
   status: number
-  payload: any
+  payload: unknown
 }
 
 axios.defaults.timeout = 60000 // 60 seconds
@@ -28,34 +28,45 @@ axios.defaults.xsrfCookieName = 'csrftoken'
 axios.defaults.headers.common['Content-Type'] = 'application/json'
 axios.defaults.headers.common['X-CSRFToken'] = Cookies.get('csrftoken') || ''
 
-interface FetchApiParamsInterface {
+interface FetchApiParamsInterface<TBody extends object = object> {
   url: string
-  body?: any
+  body?: TBody
   method?: MethodHTTP
 }
 
-export const fetchApi = async ({
+export const fetchApi = async <
+  TResponse = unknown,
+  TBody extends object = object,
+>({
   url,
-  body = {},
+  body = {} as TBody,
   method = MethodHTTP.GET,
-}: FetchApiParamsInterface) => {
-  const apiParameters = method === MethodHTTP.GET ? { ...body } : {}
-  const apiData = method !== MethodHTTP.GET ? { ...body } : {}
+}: FetchApiParamsInterface<TBody>): Promise<TResponse> => {
+  const apiParameters = method === MethodHTTP.GET ? body : {}
+  const apiData = method !== MethodHTTP.GET ? body : {}
   const options: AxiosRequestConfig = {
     url,
     method, // Axios default is GET
-    data: { ...apiData },
-    params: { ...apiParameters },
+    data: apiData,
+    params: apiParameters,
+  }
+
+  const hasRecords = (
+    payload: unknown,
+  ): payload is { records: TResponse | null } => {
+    return (
+      typeof payload === 'object' && payload !== null && 'records' in payload
+    )
   }
 
   return axios(options)
-    .then((response: AxiosResponse) => response.data)
+    .then((response: AxiosResponse<ResponseInterface>) => response.data)
     .then((response: ResponseInterface) =>
-      response.payload !== null && response.payload.records !== undefined
-        ? response.payload.records
-        : response.payload,
+      hasRecords(response.payload)
+        ? (response.payload.records as TResponse)
+        : (response.payload as TResponse),
     )
-    .catch((error: AxiosError<any>) => {
+    .catch((error: AxiosError<{ message?: string; payload?: TResponse }>) => {
       if (error.response) {
         const err = new Error(error.response.data?.message || 'No connection')
         err.name = error.response.status.toString()
@@ -65,7 +76,7 @@ export const fetchApi = async ({
             break
           case 400:
             toast.error(err.message)
-            return error.response.data.payload
+            return error.response.data.payload as TResponse
           case 401:
             toast.error(err.message)
             break
@@ -91,7 +102,7 @@ export const fetchApi = async ({
 }
 
 const disableCache: Middleware = (useSWRNext: SWRHook) => {
-  return <Data = any, Error = any>(
+  return <Data = unknown, Error = unknown>(
     key: Key,
     fetcher: BareFetcher<Data> | null,
     config: SWRConfiguration<Data, Error, BareFetcher<Data>>,

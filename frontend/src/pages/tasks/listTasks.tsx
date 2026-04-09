@@ -34,7 +34,7 @@ import {
   defaultPaginationConfig,
 } from 'utils/constants'
 import { formatDateTimeFrontend } from 'utils/date'
-import { getFromLocalStorage } from 'utils/localStorageUtils'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
@@ -81,8 +81,18 @@ const ListTasks = () => {
   const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
 
   const themePalette = Palette('light')
+  const canManageTask = (owner: TaskType['owner']) =>
+    currentUserId !== null && String(owner) === currentUserId
 
   const handleDetail = (id: number) => {
     dispatch(activeItem(''))
@@ -127,7 +137,7 @@ const ListTasks = () => {
           color="primary"
           aria-label="detail"
           title="View task details"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageTask(record.owner)}
         >
           <EyeOutlined style={{ fontSize: '2em' }} />
         </IconButton>
@@ -144,7 +154,7 @@ const ListTasks = () => {
           color="primary"
           aria-label="graphic"
           title="Go to graphic interface"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageTask(record.owner)}
         >
           <BuildOutlined style={{ fontSize: '2em' }} />
         </IconButton>
@@ -161,7 +171,7 @@ const ListTasks = () => {
           color="primary"
           aria-label="multimodal"
           title="Go to multimodal interface"
-          disabled={record.owner !== getFromLocalStorage('user')?.id}
+          disabled={!canManageTask(record.owner)}
         >
           <MergeCellsOutlined style={{ fontSize: '2em' }} />
         </IconButton>
@@ -273,7 +283,7 @@ const ListTasks = () => {
           >
             <Button
               color="error"
-              disabled={record.owner !== getFromLocalStorage('user')?.id}
+              disabled={!canManageTask(record.owner)}
               title="Delete this task"
             >
               Delete
