@@ -20,21 +20,22 @@ migrate = "backend.poetry_scripts.server:migrate"
 makemigrations = "backend.poetry_scripts.server:makemigrations"
 
 [tool.poetry.dependencies]
-django = "^5.2.3"
+django = "^6.0"
 django-cors-headers = "^4.7.0"
-django-mysql = "^4.17.0"
+django-mysql = "^4.19"
 numpy = "^2.3.1"
-openai = "^1.90.0"
+openai = "^2.31.0"
 opencv-python = "^4.11.0.86"
-pillow = "^11.2.1"
-python = ">=3.11,<3.15"
+pillow = "^12.2.0"
+python = ">=3.12,<3.15"
 python-dotenv = "^1.1.0"
-pytz = "^2025.2"
+pytz = "^2026.1.post1"
 pywin32 = {version = "^311", markers = "sys_platform == 'win32'"}
 rapidfuzz = "^3.13.0"
+pydantic-core = "^2.45.0"
 
 [tool.poetry.group.dev.dependencies]
-black = "^25.1.0"
+black = "^26.3.1"
 flake8 = "^7.3.0"
 poetry-plugin-up = "^0.6.0"
 
