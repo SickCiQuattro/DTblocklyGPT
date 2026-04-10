@@ -251,7 +251,6 @@ export const BlockPreviewTooltip = ({
   const previewMountRef = useRef<HTMLDivElement | null>(null)
   const ownerRef = useRef(Symbol('block-preview-tooltip-owner'))
 
-  // STATO MANUALE DEL TOOLTIP
   const [isOpen, setIsOpen] = useState(false)
 
   const descriptionText =
@@ -281,7 +280,7 @@ export const BlockPreviewTooltip = ({
     parkPreviewHost()
   }
 
-  // EVENT LISTENER INTELLIGENTE: Ascolta solo l'evento di VERO trascinamento
+  // SMART EVENT LISTENER: Listen only to the TRUE drag event
   useEffect(() => {
     const owner = ownerRef.current
 
@@ -330,7 +329,10 @@ export const BlockPreviewTooltip = ({
           </div>
 
           <div className="toolbox-preview-card__body">
-            <p className="toolbox-preview-card__description">
+            <p
+              className="toolbox-preview-card__description"
+              style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4' }}
+            >
               {descriptionText}
             </p>
             <div className="toolbox-preview-card__io">

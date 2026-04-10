@@ -251,7 +251,12 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     name: 'Macro-tasks',
     colour: blocksColours.macroTasks,
     blocks: [
-      // Empty for now — blocks will be added in a later phase.
+      {
+        type: 'macro_task_block',
+        label: 'Macro',
+        colour: blocksColours.macroTasks,
+        dynamic: true,
+      },
     ],
   },
 ]

@@ -659,6 +659,26 @@ def simulation_recursive_blockly_parser(
             if code.get("next") is not None:
                 simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
 
+        elif code["type"] == "macro_task_block":
+            # 1. Retrieve the Task ID saved by the block
+            macro_data = loads(code["data"]) # ocode["fields"]["name"] depending on how we save it
+            macro_id = macro_data["id"]
+            
+            print(f"[MACRO] Start macro execution: {macro_data['name']}")
+            
+            # 2. Query the Database to get the code for that Task
+            macro_task = Task.objects.filter(id=macro_id).first()
+            if macro_task:
+                macro_code = loads(macro_task.code)
+                
+                # 3. RECURSIVE EXECUTION! pass it the macro's JSON.
+                simulation_recursive_blockly_parser(macro_code, objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
+                
+            print(f"[MACRO] End of macro execution.")
+            
+            # 4. Continue with the next block of the main Task
+            if code.get("next") is not None:
+                simulation_recursive_blockly_parser(code["next"]["block"], objectsOfUser, actionsOfUser, locationsOfUser, simulate_event, inside_conditional)
         else:
             print(f"[WARNING] Block type unknown or ignored: {code.get('type')}")
 

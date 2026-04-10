@@ -22,3 +22,9 @@ export const listPatterns = [
   { id: 'C', name: 'Circular' },
   { id: 'X', name: 'Cross' },
 ]
+
+export type AbstractMacroStep = {
+  type: 'macro'
+  taskId: number | string
+  taskName: string
+}

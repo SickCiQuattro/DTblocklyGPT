@@ -10,6 +10,7 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
+import { TaskType } from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
 import { AbstractStep } from 'pages/tasks/types'
@@ -35,23 +36,33 @@ const Graphic = () => {
     url: endpoints.graphic.getGraphicTask,
     body: { id },
   })
+
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
   >({
     url: endpoints.graphic.objectsGraphic,
   })
+
   const { data: dataActions, isLoading: isLoadingActions } = useSWR<
     ActionListType[],
     Error
   >({
     url: endpoints.graphic.actionsGraphic,
   })
+
   const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
     LocationListType[],
     Error
   >({
     url: endpoints.graphic.locationsGraphic,
+  })
+
+  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
+    TaskType[],
+    Error
+  >({
+    url: endpoints.home.libraries.tasks,
   })
 
   const title = dataTask
@@ -65,9 +76,15 @@ const Graphic = () => {
     void navigate('/tasks')
   }
 
-  const data = dataTask && dataObjects && dataActions && dataLocations
+  const data =
+    dataTask && dataObjects && dataActions && dataLocations && dataMacros
+
   const isLoading =
-    isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
+    isLoadingTask ||
+    isLoadingObjects ||
+    isLoadingActions ||
+    isLoadingLocations ||
+    isLoadingMacros
 
   const parseTaskCode = (taskCode: string): unknown => {
     try {
@@ -78,6 +95,7 @@ const Graphic = () => {
   }
 
   const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+
   const normalizedTaskCode: State | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)
       ? (() => {
@@ -108,6 +126,7 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
+          dataMacros={dataMacros}
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
         />

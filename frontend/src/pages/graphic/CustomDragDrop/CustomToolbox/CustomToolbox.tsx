@@ -22,6 +22,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
+import { TaskType } from 'pages/tasks/types'
 
 import {
   TOOLBOX_CATEGORIES,
@@ -37,6 +38,7 @@ interface CustomToolboxProps {
   dataObjects: ObjectListType[]
   dataLocations: LocationListType[]
   dataActions: ActionListType[]
+  dataMacros: TaskType[]
   isDeleting: boolean
   onRootRefChange?: (element: HTMLElement | null) => void
   onBlockPointerDown: (
@@ -52,6 +54,7 @@ const resolveDynamicBlocks = (
   dataObjects: ObjectListType[],
   dataLocations: LocationListType[],
   dataActions: ActionListType[],
+  dataMacros: TaskType[],
 ): ToolboxBlockItem[] => {
   const toKeywordsCsvOrNull = (keywords: string[] | null | undefined) => {
     if (!Array.isArray(keywords) || keywords.length === 0) {
@@ -121,6 +124,108 @@ const resolveDynamicBlocks = (
             colour: block.colour,
             fields: { name: displayName },
             data: buildEntityData(act.id, displayName, act.keywords),
+          })
+        })
+        break
+
+      case 'macro_task_block':
+        // Helper function that "navigates" the Blockly tree
+        const extractStepsFromBlocklyTree = (
+          blockNode: any,
+          maxSteps = 6,
+        ): string[] => {
+          const lines: string[] = []
+          let count = 0
+
+          const traverse = (b: any, indent = '') => {
+            if (!b || count >= maxSteps) return
+
+            count++
+            const prefix = `${indent}${count}. `
+
+            // Dynamic translation of block names
+            switch (b.type) {
+              case 'pick_block':
+                lines.push(`${prefix}Pick`)
+                break
+              case 'place_block':
+                lines.push(`${prefix}Place`)
+                break
+              case 'processing_block':
+                lines.push(`${prefix}Process`)
+                break
+              case 'move_to_block':
+                lines.push(`${prefix}Move To`)
+                break
+              case 'move_relative_block':
+                lines.push(`${prefix}Move Relative`)
+                break
+              case 'gripper_block':
+                lines.push(`${prefix}Gripper Control`)
+                break
+              case 'human_action_block':
+                lines.push(`${prefix}Human Waiting`)
+                break
+              case 'macro_task_block':
+                const mName = b.fields?.name || 'Macro'
+                lines.push(`${prefix}Execute: ${mName}`)
+                break
+              case 'repeat_block':
+                const times = b.fields?.times ?? 'N'
+                lines.push(`${prefix}Repeat ${times} times:`)
+                // If there is a block inside the repeat, go down one level with the indentation
+                if (b.inputs?.DO?.block)
+                  traverse(b.inputs.DO.block, indent + '   ')
+                break
+              case 'when_block':
+              case 'when_otherwise_block':
+                lines.push(`${prefix}Condition (If):`)
+                if (b.inputs?.DO?.block)
+                  traverse(b.inputs.DO.block, indent + '   ')
+                break
+              default:
+                // ignore blocks that are not primary actions so as not to clutter the list.
+                count--
+            }
+
+            if (b.next?.block) {
+              traverse(b.next.block, indent)
+            }
+          }
+
+          traverse(blockNode)
+          return lines
+        }
+
+        dataMacros.forEach((macro) => {
+          const displayName = macro.name?.trim() || `Task ${macro.id}`
+
+          let summary = 'This macro contains the following steps:\n'
+          try {
+            const parsed = JSON.parse(macro.code)
+            const previewSteps = extractStepsFromBlocklyTree(parsed, 6) // Maximum 6 lines
+
+            if (previewSteps.length === 0) {
+              summary += '- No action'
+            } else {
+              summary += previewSteps.join('\n')
+              if (previewSteps.length >= 6) {
+                summary += '\n...and others.'
+              }
+            }
+          } catch (e) {
+            summary = 'Unable to load step preview.'
+          }
+
+          resolved.push({
+            type: 'macro_task_block',
+            label: displayName,
+            colour: block.colour,
+            fields: { name: displayName },
+            data: JSON.stringify({ id: macro.id, name: displayName }),
+            description: summary,
+            inputs: 'None',
+            outputs: 'Sequence Execution',
           })
         })
         break
@@ -337,6 +442,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   dataObjects,
   dataLocations,
   dataActions,
+  dataMacros,
   isDeleting,
   onRootRefChange,
   onBlockPointerDown,
@@ -417,6 +523,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
             dataObjects,
             dataLocations,
             dataActions,
+            dataMacros,
           )
 
           return (

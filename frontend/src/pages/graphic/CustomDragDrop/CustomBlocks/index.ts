@@ -1,5 +1,4 @@
 import * as Blockly from 'blockly/core'
-import './index.css'
 
 // ─── COLOR PALETTE ────────────────────────────────────────────────────────
 export const blocksColours = {
@@ -13,7 +12,7 @@ export const blocksColours = {
   objectsPositions: '#00BD56',
   /** Conditions and event triggers (sensors, find object, touch, timer) */
   eventsConditions: '#E15930',
-  /** Macro-tasks / predefined sub-routines (future use) */
+  /** Macro-tasks / predefined sub-routines */
   macroTasks: '#3B97F4',
 } as const
 
@@ -88,7 +87,23 @@ Blockly.Extensions.registerMutator('action_block_mutation', {
   },
 })
 
-// ─── 1. ENTITIES (OBJECTS & POSITIONS) ────────────────────────────────────
+Blockly.Extensions.registerMutator('macro_block_mutation', {
+  mutationToDom(this: any) {
+    applyEntityMetadata(this, 'Macro not defined')
+    return Blockly.utils.xml.createElement('mutation')
+  },
+  domToMutation(this: any) {
+    applyEntityMetadata(this, 'Macro not defined')
+  },
+  saveExtraState(this: any) {
+    return null
+  },
+  loadExtraState(this: any) {
+    applyEntityMetadata(this, 'Macro not defined')
+  },
+})
+
+// ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'object_block',
@@ -168,7 +183,6 @@ Blockly.defineBlocksWithJsonArray([
 ])
 
 // ─── 3. ROBOT ACTIONS ─────────────────────────────────────────────────────
-// Nota: Usiamo 'robot_sequence' e 'logic_sequence' per permettere incastri flessibili
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'pick_block',
@@ -277,6 +291,7 @@ Blockly.defineBlocksWithJsonArray([
           'gesture_block',
           'timer_block',
           'sensor_signal_block',
+          'human_feedback_block',
         ],
       },
     ],
@@ -389,6 +404,20 @@ Blockly.defineBlocksWithJsonArray([
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
     tooltip:
-      'Evaluates a condition and automatically chooses the alternative branch (If-Else).',
+      'Evaluates a condition and automatically chooses the alternative branch.',
+  },
+])
+
+// ─── 6. MACRO TASKS ────────────────────────────────────────────────────────────
+Blockly.defineBlocksWithJsonArray([
+  {
+    type: 'macro_task_block',
+    message0: 'MACRO: %1',
+    args0: [{ type: 'field_label_serializable', name: 'name', text: '' }],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.macroTasks,
+    mutator: 'macro_block_mutation',
+    tooltip: "Esegue l'intera sequenza del task salvato selezionato.",
   },
 ])
