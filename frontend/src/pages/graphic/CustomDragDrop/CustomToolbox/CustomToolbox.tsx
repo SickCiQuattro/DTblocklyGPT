@@ -223,6 +223,7 @@ const resolveDynamicBlocks = (
             colour: block.colour,
             fields: { name: displayName },
             data: JSON.stringify({ id: macro.id, name: displayName }),
+            macroCode: macro.code,
             description: summary,
             inputs: 'None',
             outputs: 'Sequence Execution',

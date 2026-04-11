@@ -35,6 +35,8 @@ export interface ToolboxBlockItem {
   fields?: Record<string, string | number | boolean>
   /** Optional serialized metadata for block.data (used by entity mutators/tooltips). */
   data?: string
+  /** Optional serialized macro source code used for expanded macro preview. */
+  macroCode?: string
 }
 
 /** Represents a collapsible category in the toolbox accordion. */
