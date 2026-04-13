@@ -12,6 +12,9 @@ interface BlocklyViewerProps {
   height?: string
   startScale?: number
   autoCenter?: boolean
+  autoFit?: boolean
+  workspaceConfig?: Blockly.BlocklyOptions
+  onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
 }
 
 /**
@@ -22,23 +25,30 @@ export const BlocklyViewer = ({
   height = '100%',
   startScale,
   autoCenter = true,
+  autoFit = false,
+  workspaceConfig,
+  onWorkspaceReady,
 }: BlocklyViewerProps) => {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
 
   const injectConfig = useMemo<Blockly.BlocklyOptions>(() => {
+    const baseConfig = workspaceConfig ?? READONLY_WORKSPACE_CONFIG
+
     if (typeof startScale !== 'number') {
-      return READONLY_WORKSPACE_CONFIG
+      return baseConfig
     }
 
+    const baseZoom = baseConfig.zoom ?? {}
+
     return {
-      ...READONLY_WORKSPACE_CONFIG,
+      ...baseConfig,
       zoom: {
-        ...READONLY_WORKSPACE_CONFIG.zoom,
+        ...baseZoom,
         startScale,
       },
     }
-  }, [startScale])
+  }, [startScale, workspaceConfig])
 
   useEffect(() => {
     const container = mountRef.current
@@ -49,6 +59,7 @@ export const BlocklyViewer = ({
     container.innerHTML = ''
     const workspace = Blockly.inject(container, injectConfig)
     workspaceRef.current = workspace
+    onWorkspaceReady?.(workspace)
 
     const resizeObserver = new ResizeObserver(() => {
       if (workspaceRef.current) {
@@ -61,8 +72,9 @@ export const BlocklyViewer = ({
       resizeObserver.disconnect()
       workspace.dispose()
       workspaceRef.current = null
+      onWorkspaceReady?.(null)
     }
-  }, [injectConfig])
+  }, [injectConfig, onWorkspaceReady])
 
   useEffect(() => {
     const workspace = workspaceRef.current
@@ -84,11 +96,14 @@ export const BlocklyViewer = ({
       }
 
       Blockly.svgResize(workspaceRef.current)
+      if (autoFit) {
+        workspaceRef.current.zoomToFit()
+      }
       if (autoCenter) {
         workspaceRef.current.scrollCenter()
       }
     })
-  }, [autoCenter, blockState])
+  }, [autoCenter, autoFit, blockState])
 
   return <div ref={mountRef} style={{ width: '100%', height }} />
 }

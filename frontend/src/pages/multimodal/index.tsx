@@ -85,6 +85,8 @@ const Multimodal = () => {
   }
 
   const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const currentTaskId =
+    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const abstractTaskCode: AbstractStep[] =
     parsedTaskCode === null
       ? []
@@ -108,6 +110,7 @@ const Multimodal = () => {
           dataLocations={dataLocations}
           dataActions={dataActions}
           dataMacros={dataMacros}
+          currentTaskId={currentTaskId}
           abstractTask={abstractTaskCode}
           backFunction={backFunction}
         />

@@ -8,6 +8,86 @@ import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { parseJson } from '../utils/serialization'
 
+type WorkspaceSnapshot = Record<string, unknown>
+
+const cloneWorkspaceSnapshot = (
+  snapshot: WorkspaceSnapshot,
+): WorkspaceSnapshot => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(snapshot)
+  }
+
+  return JSON.parse(JSON.stringify(snapshot)) as WorkspaceSnapshot
+}
+
+const saveWorkspaceSnapshot = (
+  workspace: Blockly.WorkspaceSvg,
+): WorkspaceSnapshot => {
+  return cloneWorkspaceSnapshot(
+    Blockly.serialization.workspaces.save(workspace) as WorkspaceSnapshot,
+  )
+}
+
+const hasMacroStepsArray = (value: unknown): value is { steps: unknown[] } => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { steps?: unknown }).steps)
+  )
+}
+
+const isBlockStateLike = (value: unknown): value is State => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    typeof (value as { type?: unknown }).type === 'string'
+  )
+}
+
+/**
+ * Single undoable event that swaps the full workspace snapshot for composite operations.
+ */
+class WorkspaceSnapshotEvent extends Blockly.Events.Abstract {
+  type = 'workspace_snapshot_replace'
+  isBlank = false
+  isUiEvent = false
+
+  private readonly beforeState: WorkspaceSnapshot
+  private readonly afterState: WorkspaceSnapshot
+
+  constructor(
+    workspace: Blockly.WorkspaceSvg,
+    beforeState: WorkspaceSnapshot,
+    afterState: WorkspaceSnapshot,
+  ) {
+    super()
+    this.workspaceId = workspace.id
+    this.beforeState = beforeState
+    this.afterState = afterState
+    this.recordUndo = true
+  }
+
+  override toJson() {
+    return {
+      ...super.toJson(),
+      beforeState: this.beforeState,
+      afterState: this.afterState,
+    }
+  }
+
+  override run(forward: boolean) {
+    const workspace = this.getEventWorkspace_()
+    const nextState = forward ? this.afterState : this.beforeState
+
+    Blockly.serialization.workspaces.load(
+      cloneWorkspaceSnapshot(nextState),
+      workspace,
+      { recordUndo: false },
+    )
+  }
+}
+
 /**
  * Resolve the macro identifier from Blockly block metadata.
  */
@@ -28,33 +108,6 @@ export const getMacroIdFromBlockData = (rawData: unknown) => {
 
   const normalizedMacroId = `${macroId}`.trim()
   return normalizedMacroId.length > 0 ? normalizedMacroId : null
-}
-
-/**
- * Parse macro code payloads that may be stored as plain arrays or wrapped in a `steps` object.
- */
-export const parseMacroSteps = (rawCode: string) => {
-  if (typeof rawCode !== 'string' || rawCode.trim().length === 0) {
-    return null
-  }
-
-  const parsedCode = parseJson<unknown>(rawCode)
-  if (!parsedCode) {
-    return null
-  }
-
-  if (Array.isArray(parsedCode)) {
-    return parsedCode
-  }
-
-  if (
-    typeof parsedCode === 'object' &&
-    Array.isArray((parsedCode as { steps?: unknown }).steps)
-  ) {
-    return (parsedCode as { steps: unknown[] }).steps
-  }
-
-  return null
 }
 
 /**
@@ -92,17 +145,14 @@ export const explodeMacro = ({
     return
   }
 
-  const parsedCode = parseJson<any>(macro.code)
+  const parsedCode = parseJson<unknown>(macro.code)
   if (!parsedCode) {
     return
   }
 
   let blockState: State | null = null
 
-  if (
-    Array.isArray(parsedCode) ||
-    (parsedCode && Array.isArray(parsedCode.steps))
-  ) {
+  if (Array.isArray(parsedCode) || hasMacroStepsArray(parsedCode)) {
     const abstractSteps = Array.isArray(parsedCode)
       ? parsedCode
       : parsedCode.steps
@@ -112,59 +162,76 @@ export const explodeMacro = ({
       dataLocations,
       dataActions,
     ) as State | null
-  } else if (parsedCode && typeof parsedCode.type === 'string') {
+  } else if (isBlockStateLike(parsedCode)) {
     blockState = parsedCode
   }
 
-  if (
-    !blockState ||
-    typeof blockState !== 'object' ||
-    !(blockState as any).type
-  ) {
+  if (!isBlockStateLike(blockState)) {
     return
   }
 
   const prevConnection = block.previousConnection?.targetConnection ?? null
   const nextConnection = block.nextConnection?.targetConnection ?? null
   const xyCoordinates = block.getRelativeToSurfaceXY()
+  const beforeSnapshot = saveWorkspaceSnapshot(workspace)
 
-  const currentEventGroup = Blockly.Events.getGroup()
-  if (!currentEventGroup) {
+  const existingEventGroup = Blockly.Events.getGroup()
+  const shouldManageEventGroup = !existingEventGroup
+
+  if (shouldManageEventGroup) {
     Blockly.Events.setGroup(true)
   }
 
   try {
-    if (block.nextConnection && block.nextConnection.targetConnection) {
-      block.nextConnection.disconnect()
+    Blockly.Events.disable()
+
+    try {
+      if (block.nextConnection && block.nextConnection.targetConnection) {
+        block.nextConnection.disconnect()
+      }
+
+      block.dispose(false)
+
+      const newFirstBlock = Blockly.serialization.blocks.append(
+        blockState,
+        workspace,
+      ) as Blockly.BlockSvg | null
+
+      if (!newFirstBlock) {
+        throw new Error('Blockly failed to render the block state.')
+      }
+
+      if (prevConnection && newFirstBlock.previousConnection) {
+        prevConnection.connect(newFirstBlock.previousConnection)
+      } else {
+        newFirstBlock.moveTo(xyCoordinates)
+      }
+
+      let newLastBlock: Blockly.Block | null = newFirstBlock
+      while (newLastBlock?.getNextBlock()) {
+        newLastBlock = newLastBlock.getNextBlock()
+      }
+
+      if (nextConnection && newLastBlock?.nextConnection) {
+        newLastBlock.nextConnection.connect(nextConnection)
+      }
+    } finally {
+      Blockly.Events.enable()
     }
 
-    block.dispose(false)
-
-    const newFirstBlock = Blockly.serialization.blocks.append(
-      blockState,
+    const afterSnapshot = saveWorkspaceSnapshot(workspace)
+    Blockly.Events.fire(
+      new WorkspaceSnapshotEvent(workspace, beforeSnapshot, afterSnapshot),
+    )
+  } catch (error) {
+    Blockly.serialization.workspaces.load(
+      cloneWorkspaceSnapshot(beforeSnapshot),
       workspace,
-    ) as Blockly.BlockSvg | null
-
-    if (!newFirstBlock) {
-      throw new Error('Blockly failed to render the block state.')
-    }
-
-    if (prevConnection && newFirstBlock.previousConnection) {
-      prevConnection.connect(newFirstBlock.previousConnection)
-    } else {
-      newFirstBlock.moveTo(xyCoordinates)
-    }
-
-    let newLastBlock: Blockly.Block | null = newFirstBlock
-    while (newLastBlock?.getNextBlock()) {
-      newLastBlock = newLastBlock.getNextBlock()
-    }
-
-    if (nextConnection && newLastBlock?.nextConnection) {
-      newLastBlock.nextConnection.connect(nextConnection)
-    }
+      { recordUndo: false },
+    )
+    console.error('Blockly macro explode undo snapshot error:', error)
   } finally {
-    if (!currentEventGroup) {
+    if (shouldManageEventGroup) {
       Blockly.Events.setGroup(false)
     }
   }

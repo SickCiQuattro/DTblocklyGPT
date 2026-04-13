@@ -211,6 +211,9 @@
   display: flex;
   align-items: stretch;
   gap: 0;
+  position: sticky;
+  top: -8px;
+  z-index: 3;
   background: #FFFFFF;
   border-bottom: 1px solid #CBD5E1;
   margin: -8px -8px 2px;
@@ -220,7 +223,7 @@
 .toolbox-category-tab {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 32px;
+  min-height: 30px;
   border: none;
   border-bottom: 1px solid #CBD5E1;
   border-radius: 1px 1px 0 0;
@@ -229,8 +232,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 4px 6px;
+  gap: 0;
+  padding: 6px 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
@@ -247,24 +250,14 @@
   background: #F8FAFC;
 }
 
-.toolbox-category-tab__icon,
 .toolbox-category-tab__label {
   color: inherit;
   transition: all 0.2s ease;
 }
 
-.toolbox-category-tab__icon {
-  width: 14px;
-  height: 14px;
-  min-width: 14px;
-  display: inline-flex;
-  flex-shrink: 0;
-  stroke: currentColor;
-}
-
 .toolbox-category-tab__label {
-  font-size: 0.69rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -354,23 +347,36 @@
 .toolbox-preview-card__header {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
 }
 
-.toolbox-preview-card__category {
-  color: #64748B;
-  font-size: 0.64rem;
+.toolbox-preview-card__category-pill {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #BFDBFE;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+  text-transform: none;
+}
+
+.toolbox-preview-card__category-pill-icon {
+  flex-shrink: 0;
 }
 
 .toolbox-preview-card__title {
   margin: 0;
   color: #0F172A;
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .toolbox-preview-card__preview {

@@ -9,7 +9,14 @@ import { isValidBlockState } from '../utils/serialization'
 import { updateStructureAndFireFakeChangeEvent } from './chatSync'
 import { INTERACTIVE_WORKSPACE_CONFIG } from './workspaceConfig'
 
-Blockly.setLocale(locale as unknown as { [key: string]: string })
+const localeMessages: Record<string, string> = {}
+for (const [key, value] of Object.entries(locale)) {
+  if (typeof value === 'string') {
+    localeMessages[key] = value
+  }
+}
+
+Blockly.setLocale(localeMessages)
 
 /**
  * Read the root serialized block currently mounted in the main Blockly workspace.

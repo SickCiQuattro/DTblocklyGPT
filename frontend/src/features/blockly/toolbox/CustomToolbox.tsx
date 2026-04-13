@@ -14,9 +14,6 @@ import {
   Radar,
   LayoutGrid,
   Trash2,
-  FlaskConical,
-  MapPin,
-  Zap,
 } from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
@@ -129,93 +126,12 @@ const resolveDynamicBlocks = (
         break
 
       case 'macro_task_block':
-        // Helper function that "navigates" the Blockly tree
-        const extractStepsFromBlocklyTree = (
-          blockNode: any,
-          maxSteps = 6,
-        ): string[] => {
-          const lines: string[] = []
-          let count = 0
-
-          const traverse = (b: any, indent = '') => {
-            if (!b || count >= maxSteps) return
-
-            count++
-            const prefix = `${indent}${count}. `
-
-            // Dynamic translation of block names
-            switch (b.type) {
-              case 'pick_block':
-                lines.push(`${prefix}Pick`)
-                break
-              case 'place_block':
-                lines.push(`${prefix}Place`)
-                break
-              case 'processing_block':
-                lines.push(`${prefix}Process`)
-                break
-              case 'move_to_block':
-                lines.push(`${prefix}Move To`)
-                break
-              case 'move_relative_block':
-                lines.push(`${prefix}Move Relative`)
-                break
-              case 'gripper_block':
-                lines.push(`${prefix}Gripper Control`)
-                break
-              case 'human_action_block':
-                lines.push(`${prefix}Human Waiting`)
-                break
-              case 'macro_task_block':
-                const mName = b.fields?.name || 'Macro'
-                lines.push(`${prefix}Execute: ${mName}`)
-                break
-              case 'repeat_block':
-                const times = b.fields?.times ?? 'N'
-                lines.push(`${prefix}Repeat ${times} times:`)
-                // If there is a block inside the repeat, go down one level with the indentation
-                if (b.inputs?.DO?.block)
-                  traverse(b.inputs.DO.block, indent + '   ')
-                break
-              case 'when_block':
-              case 'when_otherwise_block':
-                lines.push(`${prefix}Condition (If):`)
-                if (b.inputs?.DO?.block)
-                  traverse(b.inputs.DO.block, indent + '   ')
-                break
-              default:
-                // ignore blocks that are not primary actions so as not to clutter the list.
-                count--
-            }
-
-            if (b.next?.block) {
-              traverse(b.next.block, indent)
-            }
-          }
-
-          traverse(blockNode)
-          return lines
-        }
-
         dataMacros.forEach((macro) => {
           const displayName = macro.name?.trim() || `Task ${macro.id}`
-
-          let summary = 'This macro contains the following steps:\n'
-          try {
-            const parsed = JSON.parse(macro.code)
-            const previewSteps = extractStepsFromBlocklyTree(parsed, 6) // Maximum 6 lines
-
-            if (previewSteps.length === 0) {
-              summary += '- No action'
-            } else {
-              summary += previewSteps.join('\n')
-              if (previewSteps.length >= 6) {
-                summary += '\n...and others.'
-              }
-            }
-          } catch (e) {
-            summary = 'Unable to load step preview.'
-          }
+          const summary =
+            macro.description?.trim() && macro.description.trim().length > 0
+              ? macro.description.trim()
+              : 'No description available.'
 
           resolved.push({
             type: 'macro_task_block',
@@ -266,12 +182,17 @@ const getCategoryIcon = (key: string, colour: string) => {
 const BlockPill: React.FC<{
   item: ToolboxBlockItem
   categoryName: string
+  categoryColour: string
   onPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ item, categoryName, onPointerDown }) => (
-  <BlockPreviewTooltip item={item} categoryName={categoryName}>
+}> = ({ item, categoryName, categoryColour, onPointerDown }) => (
+  <BlockPreviewTooltip
+    item={item}
+    categoryName={categoryName}
+    categoryColour={categoryColour}
+  >
     <div
       className="toolbox-pill"
       style={{ backgroundColor: item.colour }}
@@ -288,7 +209,6 @@ type CategoryTabKey = 'objects' | 'positions' | 'actions'
 interface CategoryTabDefinition {
   key: CategoryTabKey
   label: string
-  icon: React.ElementType
   blockTypes: string[]
 }
 
@@ -296,19 +216,16 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   {
     key: 'objects',
     label: 'Objects',
-    icon: FlaskConical,
     blockTypes: ['object_block'],
   },
   {
     key: 'positions',
     label: 'Positions',
-    icon: MapPin,
     blockTypes: ['location_block'],
   },
   {
     key: 'actions',
     label: 'Actions',
-    icon: Zap,
     blockTypes: ['action_block'],
   },
 ]
@@ -375,7 +292,6 @@ const CategoryPanel: React.FC<{
             aria-label={`${category.name} tabs`}
           >
             {OBJECT_POSITION_TABS.map((tab) => {
-              const Icon = tab.icon
               const isActive = activeTab === tab.key
               const stateClass = isActive
                 ? 'toolbox-category-tab--active'
@@ -396,12 +312,6 @@ const CategoryPanel: React.FC<{
                   role="tab"
                   aria-selected={isActive}
                 >
-                  {/* Space */}
-                  <Icon
-                    className="toolbox-category-tab__icon"
-                    size={16}
-                    aria-hidden="true"
-                  />
                   <span className="toolbox-category-tab__label">
                     {tab.label}
                   </span>
@@ -425,6 +335,7 @@ const CategoryPanel: React.FC<{
                 key={`${category.key}-${pill.type}-${pill.label}-${pill.data ?? ''}`}
                 item={pill}
                 categoryName={category.name}
+                categoryColour={category.colour}
                 onPointerDown={onBlockPointerDown}
               />
             ))}

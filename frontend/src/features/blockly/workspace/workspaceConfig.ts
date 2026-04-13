@@ -62,3 +62,28 @@ export const PREVIEW_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   comments: false,
   theme: ModernTheme,
 }
+
+/** Shared config for macro modal viewer with custom controls overlay. */
+export const MODAL_VIEWER_CONFIG: Blockly.BlocklyOptions = {
+  ...READONLY_WORKSPACE_CONFIG,
+  move: { drag: true, wheel: true, scrollbars: true },
+  zoom: {
+    controls: false,
+    wheel: true,
+    pinch: true,
+    startScale: 1.2,
+    maxScale: 2,
+    minScale: 0.3,
+    scaleSpeed: 1.2,
+  },
+  grid: {
+    spacing: 18,
+    length: 2,
+    colour: '#CBD5E1',
+    snap: false,
+  },
+  sounds: false,
+  collapse: false,
+  comments: false,
+  theme: ModernTheme,
+}

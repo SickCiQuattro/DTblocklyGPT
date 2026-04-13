@@ -19,89 +19,57 @@ export const blocksColours = {
 // ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
 const parseBlockData = (rawData: unknown) => {
   if (typeof rawData !== 'string' || rawData.length === 0) return null
+
   try {
-    return JSON.parse(rawData)
+    const parsed = JSON.parse(rawData) as unknown
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as { id?: unknown; keywords?: unknown })
+      : null
   } catch {
     return null
   }
 }
 
-const applyEntityMetadata = (block: any, missingWarning: string) => {
+const applyEntityMetadata = (block: Blockly.Block, missingWarning: string) => {
   const data = parseBlockData(block.data)
-  const keywords = data?.keywords
 
-  const tooltipText =
-    typeof keywords === 'string' && keywords.length > 0
-      ? `Keywords: ${keywords.split(',').join(', ')}`
+  const keywords =
+    typeof data?.keywords === 'string'
+      ? data.keywords
+          .split(',')
+          .map((keyword) => keyword.trim())
+          .filter((keyword) => keyword.length > 0)
+          .join(', ')
       : ''
+
+  const tooltipText = keywords.length > 0 ? `Keywords: ${keywords}` : ''
 
   block.setTooltip(tooltipText)
   block.setWarningText(data?.id ? null : missingWarning)
 }
 
-Blockly.Extensions.registerMutator('object_block_mutation', {
-  mutationToDom(this: any) {
-    applyEntityMetadata(this, 'Object not defined')
-    return Blockly.utils.xml.createElement('mutation')
-  },
-  domToMutation(this: any) {
-    applyEntityMetadata(this, 'Object not defined')
-  },
-  saveExtraState(this: any) {
-    return null
-  },
-  loadExtraState(this: any) {
-    applyEntityMetadata(this, 'Object not defined')
-  },
-})
+const registerEntityMutator = (id: string, missingWarning: string) => {
+  Blockly.Extensions.registerMutator(id, {
+    mutationToDom(this: Blockly.Block) {
+      applyEntityMetadata(this, missingWarning)
+      return Blockly.utils.xml.createElement('mutation')
+    },
+    domToMutation(this: Blockly.Block) {
+      applyEntityMetadata(this, missingWarning)
+    },
+    saveExtraState() {
+      return null
+    },
+    loadExtraState(this: Blockly.Block) {
+      applyEntityMetadata(this, missingWarning)
+    },
+  })
+}
 
-Blockly.Extensions.registerMutator('location_block_mutation', {
-  mutationToDom(this: any) {
-    applyEntityMetadata(this, 'Location not defined')
-    return Blockly.utils.xml.createElement('mutation')
-  },
-  domToMutation(this: any) {
-    applyEntityMetadata(this, 'Location not defined')
-  },
-  saveExtraState(this: any) {
-    return null
-  },
-  loadExtraState(this: any) {
-    applyEntityMetadata(this, 'Location not defined')
-  },
-})
-
-Blockly.Extensions.registerMutator('action_block_mutation', {
-  mutationToDom(this: any) {
-    applyEntityMetadata(this, 'Action not defined')
-    return Blockly.utils.xml.createElement('mutation')
-  },
-  domToMutation(this: any) {
-    applyEntityMetadata(this, 'Action not defined')
-  },
-  saveExtraState(this: any) {
-    return null
-  },
-  loadExtraState(this: any) {
-    applyEntityMetadata(this, 'Action not defined')
-  },
-})
-
-Blockly.Extensions.registerMutator('macro_block_mutation', {
-  mutationToDom(this: any) {
-    applyEntityMetadata(this, 'Macro not defined')
-    return Blockly.utils.xml.createElement('mutation')
-  },
-  domToMutation(this: any) {
-    applyEntityMetadata(this, 'Macro not defined')
-  },
-  saveExtraState(this: any) {
-    return null
-  },
-  loadExtraState(this: any) {
-    applyEntityMetadata(this, 'Macro not defined')
-  },
-})
+registerEntityMutator('object_block_mutation', 'Object not defined')
+registerEntityMutator('location_block_mutation', 'Location not defined')
+registerEntityMutator('action_block_mutation', 'Action not defined')
+registerEntityMutator('macro_block_mutation', 'Macro not defined')
 
 // ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([

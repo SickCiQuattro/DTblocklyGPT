@@ -167,8 +167,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         colour: blocksColours.humanActions,
         description:
           'Pauses the cobot to allow human intervention, resuming upon activation of the chosen trigger.',
-        inputs:
-          'Task Description | Confirmation Method (Touch, UI, Gesture, Timer)',
+        inputs: 'Task Description | Confirmation Method',
         outputs: 'None',
       },
     ],

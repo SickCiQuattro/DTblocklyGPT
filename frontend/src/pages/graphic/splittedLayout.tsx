@@ -16,6 +16,7 @@ interface SplittedLayoutProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros: TaskType[]
+  currentTaskId?: number
   dataTask: State | null
   backFunction: () => void
 }
@@ -25,6 +26,7 @@ export const SplittedLayout = ({
   dataObjects,
   dataActions,
   dataMacros,
+  currentTaskId,
   dataTask,
   backFunction,
 }: SplittedLayoutProps) => {
@@ -39,6 +41,7 @@ export const SplittedLayout = ({
         dataObjects={dataObjects}
         dataActions={dataActions}
         dataMacros={dataMacros}
+        currentTaskId={currentTaskId}
         dataTask={dataTask}
         editMode={editMode}
       />

@@ -95,6 +95,8 @@ const Graphic = () => {
   }
 
   const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const currentTaskId =
+    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
 
   const normalizedTaskCode: State | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)
@@ -127,6 +129,7 @@ const Graphic = () => {
           dataLocations={dataLocations}
           dataActions={dataActions}
           dataMacros={dataMacros}
+          currentTaskId={currentTaskId}
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
         />

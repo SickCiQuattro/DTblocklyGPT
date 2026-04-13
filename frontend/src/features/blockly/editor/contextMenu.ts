@@ -22,7 +22,7 @@ import {
 export interface ContextMenuAction {
   id: number
   text: string
-  enabled: boolean | undefined
+  enabled: boolean
   callback: () => void
 }
 
@@ -41,6 +41,26 @@ interface InstallContextMenuBridgeParams {
     workspace: Blockly.WorkspaceSvg,
   ) => void
   resolveMacroId: (rawData: unknown) => string | null
+}
+
+type BridgedMenuOption =
+  | Blockly.ContextMenuRegistry.ContextMenuOption
+  | Blockly.ContextMenuRegistry.LegacyContextMenuOption
+
+type BlockWithGeneratedContextMenu = Blockly.BlockSvg & {
+  generateContextMenu?: (event: Event) => BridgedMenuOption[] | null
+}
+
+const isSeparatorOption = (
+  option: BridgedMenuOption,
+): option is Blockly.ContextMenuRegistry.SeparatorContextMenuOption => {
+  return 'separator' in option && option.separator === true
+}
+
+const toWorkspaceSvg = (
+  workspace: Blockly.Workspace | null | undefined,
+): Blockly.WorkspaceSvg | undefined => {
+  return workspace instanceof Blockly.WorkspaceSvg ? workspace : undefined
 }
 
 /**
@@ -152,27 +172,9 @@ export const installContextMenuBridge = ({
   const originalContextMenuShow = Blockly.ContextMenu.show
   const originalContextMenuHide = Blockly.ContextMenu.hide
 
-  const blockPrototype = Blockly.BlockSvg?.prototype as unknown as {
-    showContextMenu?: (event: Event) => void
-    generateContextMenu?: (event: Event) => unknown[] | null
-  }
-  const workspacePrototype = Blockly.WorkspaceSvg?.prototype as unknown as {
-    showContextMenu?: (event: Event) => void
-    configureContextMenu?: ((menuOptions: unknown[], e: Event) => void) | null
-    options?: {
-      readOnly?: boolean
-    }
-    isReadOnly?: () => boolean
-    isFlyout?: boolean
-  }
-  const connectionPrototype = (
-    Blockly.RenderedConnection as unknown as {
-      prototype?: {
-        showContextMenu?: (event: Event) => void
-        getSourceBlock?: () => Blockly.BlockSvg
-      }
-    }
-  )?.prototype
+  const blockPrototype = Blockly.BlockSvg?.prototype
+  const workspacePrototype = Blockly.WorkspaceSvg?.prototype
+  const connectionPrototype = Blockly.RenderedConnection?.prototype
 
   const originalBlockShowContextMenu =
     typeof blockPrototype?.showContextMenu === 'function'
@@ -187,9 +189,26 @@ export const installContextMenuBridge = ({
       ? connectionPrototype.showContextMenu
       : null
 
+  const resolveScope = (
+    fallbackScope?: Blockly.ContextMenuRegistry.Scope,
+  ): Blockly.ContextMenuRegistry.Scope | null => {
+    if (fallbackScope) {
+      return fallbackScope
+    }
+
+    if (workspaceRef.current) {
+      return {
+        workspace: workspaceRef.current,
+        focusedNode: workspaceRef.current,
+      }
+    }
+
+    return null
+  }
+
   const openMuiContextMenu = (
     menuOpenEvent: Event,
-    menuOptions: unknown[] | null | undefined,
+    menuOptions: ReadonlyArray<BridgedMenuOption> | null | undefined,
     fallbackScope?: Blockly.ContextMenuRegistry.Scope,
   ) => {
     menuOpenEvent.preventDefault()
@@ -214,31 +233,28 @@ export const installContextMenuBridge = ({
 
     const options = (menuOptions || [])
       .map((option) => {
-        const actionOption = option as {
-          text?: string | HTMLElement
-          enabled?: boolean
-          scope?: Blockly.ContextMenuRegistry.Scope
-          callback?: (...args: unknown[]) => void
-          separator?: boolean
-        }
-
-        if (!actionOption || actionOption.separator) {
+        if (isSeparatorOption(option)) {
           return null
         }
 
-        const label = getMenuOptionText(actionOption.text)
-        if (!label || typeof actionOption.callback !== 'function') {
+        const label = getMenuOptionText(option.text)
+        if (!label || typeof option.callback !== 'function') {
           return null
         }
 
-        if ('scope' in actionOption && actionOption.scope) {
+        if ('scope' in option) {
+          const actionScope = option.scope ?? resolveScope(fallbackScope)
+          if (!actionScope) {
+            return null
+          }
+
           return {
             id: getNextOptionId(),
             text: label,
-            enabled: actionOption.enabled,
+            enabled: option.enabled ?? true,
             callback: () => {
-              actionOption.callback?.(
-                actionOption.scope,
+              option.callback(
+                actionScope,
                 menuOpenEvent,
                 new MouseEvent('click', {
                   bubbles: true,
@@ -252,21 +268,21 @@ export const installContextMenuBridge = ({
           }
         }
 
+        const legacyScope = resolveScope(fallbackScope)
+        if (!legacyScope) {
+          return null
+        }
+
         return {
           id: getNextOptionId(),
           text: label,
-          enabled: actionOption.enabled,
+          enabled: option.enabled ?? true,
           callback: () => {
-            actionOption.callback?.(
-              fallbackScope ||
-                (workspaceRef.current as Blockly.ContextMenuRegistry.Scope),
-            )
+            option.callback(legacyScope)
           },
         }
       })
-      .filter(
-        (option): option is Exclude<typeof option, null> => option !== null,
-      )
+      .filter((option): option is ContextMenuAction => option !== null)
 
     setContextMenu(
       options.length > 0
@@ -288,34 +304,35 @@ export const installContextMenuBridge = ({
   }
 
   if (blockPrototype && originalBlockShowContextMenu) {
-    blockPrototype.showContextMenu = function (event: Event) {
+    blockPrototype.showContextMenu = function (
+      this: Blockly.BlockSvg,
+      event: Event,
+    ) {
+      const blockWithMenu = this as BlockWithGeneratedContextMenu
       const generatedOptions =
-        typeof this.generateContextMenu === 'function'
-          ? this.generateContextMenu(event)
+        typeof blockWithMenu.generateContextMenu === 'function'
+          ? blockWithMenu.generateContextMenu(event)
           : null
 
       const menuOptions = Array.isArray(generatedOptions)
         ? [...generatedOptions]
-        : generatedOptions
-          ? [generatedOptions]
-          : []
+        : []
 
-      const sourceBlock = this as unknown as Blockly.BlockSvg
+      const sourceBlock = this
+      const sourceWorkspace = toWorkspaceSvg(sourceBlock.workspace)
+
       if (sourceBlock.type === 'macro_task_block') {
         const explodeOption = {
           text: 'Expand Macro',
-          enabled:
-            !!sourceBlock.workspace && !!resolveMacroId(sourceBlock.data),
+          enabled: !!sourceWorkspace && !!resolveMacroId(sourceBlock.data),
           scope: {
             block: sourceBlock,
-            workspace: sourceBlock.workspace,
+            workspace: sourceWorkspace,
             focusedNode: sourceBlock,
           },
           callback: (scope: Blockly.ContextMenuRegistry.Scope) => {
-            const blockFromScope = scope?.block as Blockly.BlockSvg | undefined
-            const workspaceFromScope = scope?.workspace as
-              | Blockly.WorkspaceSvg
-              | undefined
+            const blockFromScope = scope?.block
+            const workspaceFromScope = scope?.workspace
 
             if (!blockFromScope || !workspaceFromScope) {
               return
@@ -326,9 +343,11 @@ export const installContextMenuBridge = ({
         }
 
         const deleteOptionIndex = menuOptions.findIndex((option) => {
-          const optionText = getMenuOptionText(
-            (option as { text?: string | HTMLElement })?.text,
-          ).toLowerCase()
+          if (isSeparatorOption(option)) {
+            return false
+          }
+
+          const optionText = getMenuOptionText(option.text).toLowerCase()
 
           return optionText.includes('delete')
         })
@@ -342,14 +361,17 @@ export const installContextMenuBridge = ({
 
       openMuiContextMenu(event, menuOptions, {
         block: sourceBlock,
-        workspace: sourceBlock.workspace,
+        workspace: sourceWorkspace,
         focusedNode: sourceBlock,
       })
     }
   }
 
   if (workspacePrototype && originalWorkspaceShowContextMenu) {
-    workspacePrototype.showContextMenu = function (event: Event) {
+    workspacePrototype.showContextMenu = function (
+      this: Blockly.WorkspaceSvg,
+      event: Event,
+    ) {
       const isReadOnly =
         typeof this.isReadOnly === 'function'
           ? this.isReadOnly()
@@ -362,8 +384,8 @@ export const installContextMenuBridge = ({
       const menuOptions =
         Blockly.ContextMenuRegistry.registry.getContextMenuOptions(
           {
-            workspace: this as unknown as Blockly.WorkspaceSvg,
-            focusedNode: this as any,
+            workspace: this,
+            focusedNode: this,
           },
           event,
         )
@@ -373,33 +395,35 @@ export const installContextMenuBridge = ({
       }
 
       openMuiContextMenu(event, menuOptions, {
-        workspace: this as unknown as Blockly.WorkspaceSvg,
-        focusedNode: this as any,
+        workspace: this,
+        focusedNode: this,
       })
     }
   }
 
   if (connectionPrototype && originalConnectionShowContextMenu) {
-    connectionPrototype.showContextMenu = function (event: Event) {
+    connectionPrototype.showContextMenu = function (
+      this: Blockly.RenderedConnection,
+      event: Event,
+    ) {
       const sourceBlock =
         typeof this.getSourceBlock === 'function' ? this.getSourceBlock() : null
+      const sourceWorkspace = toWorkspaceSvg(sourceBlock?.workspace)
 
       const menuOptions =
         Blockly.ContextMenuRegistry.registry.getContextMenuOptions(
           {
-            focusedNode: this as any,
+            focusedNode: this,
             ...(sourceBlock ? { block: sourceBlock } : {}),
-            ...(sourceBlock?.workspace
-              ? { workspace: sourceBlock.workspace }
-              : {}),
+            ...(sourceWorkspace ? { workspace: sourceWorkspace } : {}),
           },
           event,
         )
 
       openMuiContextMenu(event, menuOptions, {
-        focusedNode: this as any,
+        focusedNode: this,
         ...(sourceBlock ? { block: sourceBlock } : {}),
-        ...(sourceBlock?.workspace ? { workspace: sourceBlock.workspace } : {}),
+        ...(sourceWorkspace ? { workspace: sourceWorkspace } : {}),
       })
     }
   }

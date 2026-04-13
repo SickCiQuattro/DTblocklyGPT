@@ -1,5 +1,5 @@
 import * as Blockly from 'blockly/core'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   IconButton,
   ListItemIcon,
@@ -21,6 +21,7 @@ import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
 import '../styles/editor.css'
 import {
+  type ContextMenuAction,
   getMenuIconInfo,
   getMenuOptionText,
   installContextMenuBridge,
@@ -43,6 +44,7 @@ interface BlocklyEditorProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros?: TaskType[]
+  currentTaskId?: number
   dataTask: State | null
   editMode?: boolean
   applyExternalTaskState?: boolean
@@ -58,6 +60,7 @@ export const BlocklyEditor = ({
   dataObjects,
   dataActions,
   dataMacros = [],
+  currentTaskId,
   dataTask,
   editMode = true,
   applyExternalTaskState = false,
@@ -80,18 +83,26 @@ export const BlocklyEditor = ({
   })
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
+  const availableMacros = useMemo(() => {
+    if (currentTaskId === undefined) {
+      return dataMacros
+    }
+
+    return dataMacros.filter((macro) => macro.id !== currentTaskId)
+  }, [currentTaskId, dataMacros])
+
   const explodeMacro = useCallback(
     (block: Blockly.BlockSvg, workspace: Blockly.WorkspaceSvg) => {
       expandMacroTask({
         block,
         workspace,
-        dataMacros,
+        dataMacros: availableMacros,
         dataObjects,
         dataLocations,
         dataActions,
       })
     },
-    [dataActions, dataLocations, dataMacros, dataObjects],
+    [availableMacros, dataActions, dataLocations, dataObjects],
   )
 
   /** Keep floating toolbar undo/redo state in sync with Blockly history stacks. */
@@ -299,17 +310,20 @@ export const BlocklyEditor = ({
     setContextMenu(null)
   }, [])
 
-  const handleContextMenuItemClick = useCallback((option: any) => {
-    setContextMenu(null)
+  const handleContextMenuItemClick = useCallback(
+    (option: ContextMenuAction) => {
+      setContextMenu(null)
 
-    if (typeof option?.callback !== 'function') {
-      return
-    }
+      if (typeof option?.callback !== 'function') {
+        return
+      }
 
-    window.setTimeout(() => {
-      option.callback()
-    }, 50)
-  }, [])
+      window.setTimeout(() => {
+        option.callback()
+      }, 50)
+    },
+    [],
+  )
 
   const handleBlockPointerDown = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -328,7 +342,7 @@ export const BlocklyEditor = ({
     // close any open tooltip
     workspace.hideChaff()
 
-    // clenup listener
+    // cleanup listener
     pendingDragCleanupRef.current?.()
     pendingDragCleanupRef.current = null
 
@@ -383,7 +397,7 @@ export const BlocklyEditor = ({
         dataObjects={dataObjects}
         dataLocations={dataLocations}
         dataActions={dataActions}
-        dataMacros={dataMacros}
+        dataMacros={availableMacros}
         isDeleting={isDeleting}
         onRootRefChange={handleToolboxRootRefChange}
         onBlockPointerDown={handleBlockPointerDown}

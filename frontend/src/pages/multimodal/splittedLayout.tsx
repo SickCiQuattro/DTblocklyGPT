@@ -35,6 +35,7 @@ interface SplittedLayoutProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros: TaskType[]
+  currentTaskId?: number
   abstractTask: AbstractStep[]
   backFunction: () => void
 }
@@ -50,6 +51,7 @@ export const SplittedLayout = ({
   dataObjects,
   dataActions,
   dataMacros,
+  currentTaskId,
   abstractTask,
   backFunction,
 }: SplittedLayoutProps) => {
@@ -159,6 +161,7 @@ export const SplittedLayout = ({
           dataObjects={dataObjects}
           dataActions={dataActions}
           dataMacros={dataMacros}
+          currentTaskId={currentTaskId}
           dataTask={parsedDataTask}
           editMode={editingMode}
           applyExternalTaskState={newChatResponse}

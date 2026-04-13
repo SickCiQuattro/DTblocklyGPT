@@ -3,6 +3,7 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -17,18 +18,23 @@ import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import {
   Eye,
+  FlaskConical,
+  MapPin,
   Pointer,
   SquareArrowRightEnter,
   SquareArrowRightExit,
+  Zap,
   X,
 } from 'lucide-react'
 
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
+import { type AbstractStep } from 'pages/tasks/types'
 
-import { BlocklyViewer } from '../workspace/BlocklyViewer'
+import { BlocklyViewerWithControls } from '../workspace'
 import { isValidBlockState, parseJson } from '../utils/serialization'
 import { PREVIEW_WORKSPACE_CONFIG } from '../workspace/workspaceConfig'
+import '../styles/editor.css'
 
 import { ToolboxBlockItem } from './toolboxRegistry'
 import './BlockPreviewTooltip.css'
@@ -36,6 +42,7 @@ import './BlockPreviewTooltip.css'
 interface BlockPreviewTooltipProps {
   item: ToolboxBlockItem
   categoryName?: string
+  categoryColour?: string
   children: ReactElement
 }
 
@@ -52,38 +59,133 @@ let singletonRenderRaf: number | null = null
 let singletonRenderRequestId = 0
 let activeTooltipOwner: symbol | null = null
 
+const getPreviewCategoryBadgeMeta = (
+  itemType: string,
+  fallbackCategoryName?: string,
+) => {
+  switch (itemType) {
+    case 'object_block':
+      return {
+        label: 'Objects',
+        Icon: FlaskConical,
+      }
+    case 'location_block':
+      return {
+        label: 'Positions',
+        Icon: MapPin,
+      }
+    case 'action_block':
+      return {
+        label: 'Actions',
+        Icon: Zap,
+      }
+    default:
+      return {
+        label: fallbackCategoryName ?? 'Toolbox',
+        Icon: null,
+      }
+  }
+}
+
+const parseHexColor = (hexColor: string) => {
+  const normalized = hexColor.replace('#', '').trim()
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((value) => `${value}${value}`)
+          .join('')
+      : normalized
+
+  if (!/^[\da-fA-F]{6}$/.test(expanded)) {
+    return null
+  }
+
+  return {
+    r: Number.parseInt(expanded.slice(0, 2), 16),
+    g: Number.parseInt(expanded.slice(2, 4), 16),
+    b: Number.parseInt(expanded.slice(4, 6), 16),
+  }
+}
+
+const darkenRgb = (
+  rgb: { r: number; g: number; b: number },
+  factor: number,
+) => {
+  const clampedFactor = Math.min(Math.max(factor, 0), 1)
+  return {
+    r: Math.round(rgb.r * (1 - clampedFactor)),
+    g: Math.round(rgb.g * (1 - clampedFactor)),
+    b: Math.round(rgb.b * (1 - clampedFactor)),
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null
+}
+
+const isAbstractStepLike = (value: unknown): value is AbstractStep => {
+  return (
+    isRecord(value) && typeof (value as { type?: unknown }).type === 'string'
+  )
+}
+
+const isAbstractStepArray = (value: unknown): value is AbstractStep[] => {
+  return Array.isArray(value) && value.every(isAbstractStepLike)
+}
+
+const hasAbstractStepsArray = (
+  value: unknown,
+): value is { steps: AbstractStep[] } => {
+  return (
+    isRecord(value) && isAbstractStepArray((value as { steps?: unknown }).steps)
+  )
+}
+
+const hasWorkspaceBlocksPayload = (
+  value: unknown,
+): value is { blocks: { blocks: unknown[] } } => {
+  return (
+    isRecord(value) &&
+    isRecord(value.blocks) &&
+    Array.isArray((value.blocks as { blocks?: unknown }).blocks)
+  )
+}
+
+const hasTopLevelBlocksArray = (
+  value: unknown,
+): value is { blocks: unknown[] } => {
+  return (
+    isRecord(value) && Array.isArray((value as { blocks?: unknown }).blocks)
+  )
+}
+
 /**
  * Normalize heterogeneous macro payloads to a single Blockly root block state.
  */
 const toMacroRootState = (macroCode: string): State | null => {
   try {
-    const parsed = parseJson<any>(macroCode)
+    const parsed = parseJson<unknown>(macroCode)
     if (!parsed) return null
 
-    if (Array.isArray(parsed) || Array.isArray(parsed.steps)) {
-      const steps = Array.isArray(parsed) ? parsed : parsed.steps
-      const converted = abstractToBlockly(steps as any, [], [], [])
+    if (isAbstractStepArray(parsed) || hasAbstractStepsArray(parsed)) {
+      const steps = isAbstractStepArray(parsed) ? parsed : parsed.steps
+      const converted = abstractToBlockly(steps, [], [], [])
       return isValidBlockState(converted) ? converted : null
     }
 
-    if (typeof parsed.type === 'string') {
-      return parsed as State
+    if (isValidBlockState(parsed)) {
+      return parsed
     }
 
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      Array.isArray(
-        (parsed as { blocks?: { blocks?: unknown[] } }).blocks?.blocks,
-      )
-    ) {
-      const blocks = (parsed as { blocks: { blocks: unknown[] } }).blocks.blocks
+    if (hasWorkspaceBlocksPayload(parsed)) {
+      const blocks = parsed.blocks.blocks
       if (blocks.length > 0 && isValidBlockState(blocks[0])) {
         return blocks[0]
       }
     }
 
-    if (Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+    if (hasTopLevelBlocksArray(parsed) && parsed.blocks.length > 0) {
       const firstBlock = parsed.blocks[0]
       return isValidBlockState(firstBlock) ? firstBlock : null
     }
@@ -97,6 +199,7 @@ interface MacroPreviewModalProps {
   isOpen: boolean
   onClose: () => void
   macroName: string
+  macroDescription?: string
   macroCode: string
 }
 
@@ -104,49 +207,118 @@ const MacroPreviewModal = ({
   isOpen,
   onClose,
   macroName,
+  macroDescription,
   macroCode,
 }: MacroPreviewModalProps) => {
   const macroState = toMacroRootState(macroCode)
+  const resolvedMacroDescription =
+    typeof macroDescription === 'string' && macroDescription.trim().length > 0
+      ? macroDescription.trim()
+      : 'No description available for this macro.'
 
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
       fullWidth
-      maxWidth="md"
+      maxWidth="sm"
       aria-labelledby="macro-preview-dialog-title"
+      slotProps={{
+        paper: {
+          sx: {
+            overflow: 'hidden',
+            borderRadius: 2,
+            border: '1px solid #E2E8F0',
+            boxShadow:
+              '0 20px 50px rgba(15, 23, 42, 0.2), 0 6px 16px rgba(15, 23, 42, 0.12)',
+          },
+        },
+      }}
     >
       <DialogTitle
         id="macro-preview-dialog-title"
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          px: 2,
+          py: 1.5,
           borderBottom: '1px solid #E2E8F0',
-          backgroundColor: '#FFFFFF',
+          background:
+            'linear-gradient(180deg, #FFFFFF 0%, rgba(248, 250, 252, 0.92) 100%)',
         }}
       >
-        <Typography component="span" sx={{ fontWeight: 600 }}>
-          Internal Structure: {macroName}
-        </Typography>
-        <IconButton aria-label="Close" onClick={onClose}>
-          <X size={18} />
-        </IconButton>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            width: '100%',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              minWidth: 0,
+            }}
+          >
+            <Typography
+              component="h2"
+              sx={{
+                m: 0,
+                fontSize: '1.08rem',
+                fontWeight: 800,
+                lineHeight: 1.2,
+                color: '#0F172A',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              Macro: {macroName}
+            </Typography>
+            <Typography
+              component="p"
+              sx={{
+                m: 0,
+                fontSize: '0.78rem',
+                fontWeight: 500,
+                lineHeight: 1.4,
+                color: '#475569',
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 2,
+                overflow: 'hidden',
+              }}
+            >
+              {resolvedMacroDescription}
+            </Typography>
+          </div>
+          <IconButton
+            aria-label="Close"
+            onClick={onClose}
+            size="small"
+            className="workspace-control-button"
+          >
+            <X size={18} />
+          </IconButton>
+        </div>
       </DialogTitle>
       <div
         style={{
           width: '100%',
-          height: '600px',
+          height: '450px',
           backgroundColor: '#F8FAFC',
           padding: 0,
           overflow: 'hidden',
         }}
       >
-        <BlocklyViewer
+        <BlocklyViewerWithControls
           blockState={macroState}
-          height="600px"
-          startScale={0.9}
+          height="450px"
+          startScale={1.2}
           autoCenter
+          autoFit
         />
       </div>
     </Dialog>
@@ -336,6 +508,7 @@ const scheduleSingletonRender = (
 export const BlockPreviewTooltip = ({
   item,
   categoryName,
+  categoryColour,
   children,
 }: BlockPreviewTooltipProps) => {
   const previewMountRef = useRef<HTMLDivElement | null>(null)
@@ -354,6 +527,44 @@ export const BlockPreviewTooltip = ({
     'Block available in the toolbox to compose the program visually.'
   const inputText = item.inputs ?? 'None'
   const outputText = item.outputs ?? 'None'
+
+  const categoryAccentColors = useMemo(() => {
+    const fallback = {
+      pillBackgroundColor: '#EFF6FF',
+      pillBorderColor: '#BFDBFE',
+      pillTextColor: '#1D4ED8',
+      buttonBackgroundColor: '#EFF6FF',
+      buttonBorderColor: '#BFDBFE',
+      buttonHoverBackgroundColor: '#DBEAFE',
+      buttonTextColor: '#1E3A8A',
+    }
+
+    if (!categoryColour) {
+      return fallback
+    }
+
+    const rgb = parseHexColor(categoryColour)
+    if (!rgb) {
+      return fallback
+    }
+
+    const pillText = darkenRgb(rgb, 0.28)
+
+    return {
+      pillBackgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14)`,
+      pillBorderColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`,
+      pillTextColor: `rgb(${pillText.r}, ${pillText.g}, ${pillText.b})`,
+      buttonBackgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14)`,
+      buttonBorderColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.45)`,
+      buttonHoverBackgroundColor: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.24)`,
+      buttonTextColor: `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`,
+    }
+  }, [categoryColour])
+
+  const previewCategoryBadge = useMemo(
+    () => getPreviewCategoryBadgeMeta(item.type, categoryName),
+    [categoryName, item.type],
+  )
 
   const handleOpen = () => {
     setIsOpen(true)
@@ -420,10 +631,24 @@ export const BlockPreviewTooltip = ({
         title={
           <div className="toolbox-preview-card">
             <div className="toolbox-preview-card__header">
-              <span className="toolbox-preview-card__category">
-                [{categoryName ?? 'Toolbox'}]
-              </span>
               <p className="toolbox-preview-card__title">{item.label}</p>
+              <span
+                className="toolbox-preview-card__category-pill"
+                style={{
+                  backgroundColor: categoryAccentColors.pillBackgroundColor,
+                  borderColor: categoryAccentColors.pillBorderColor,
+                  color: categoryAccentColors.pillTextColor,
+                }}
+              >
+                {previewCategoryBadge.Icon && (
+                  <previewCategoryBadge.Icon
+                    size={13}
+                    className="toolbox-preview-card__category-pill-icon"
+                    aria-hidden="true"
+                  />
+                )}
+                {previewCategoryBadge.label}
+              </span>
             </div>
 
             <div className="toolbox-preview-card__preview">
@@ -464,10 +689,10 @@ export const BlockPreviewTooltip = ({
                     width: '100%',
                     marginTop: '12px',
                     padding: '8px 12px',
-                    border: '1px solid #BFDBFE',
+                    border: `1px solid ${categoryAccentColors.buttonBorderColor}`,
                     borderRadius: '6px',
-                    backgroundColor: '#EFF6FF',
-                    color: '#1E3A8A',
+                    backgroundColor: categoryAccentColors.buttonBackgroundColor,
+                    color: categoryAccentColors.buttonTextColor,
                     fontSize: '13px',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -475,14 +700,16 @@ export const BlockPreviewTooltip = ({
                     fontFamily: 'inherit',
                   }}
                   onMouseOver={(e) =>
-                    (e.currentTarget.style.backgroundColor = '#DBEAFE')
+                    (e.currentTarget.style.backgroundColor =
+                      categoryAccentColors.buttonHoverBackgroundColor)
                   }
                   onMouseOut={(e) =>
-                    (e.currentTarget.style.backgroundColor = '#EFF6FF')
+                    (e.currentTarget.style.backgroundColor =
+                      categoryAccentColors.buttonBackgroundColor)
                   }
                 >
                   <Eye size={16} />
-                  Explore Macro Structure
+                  View Macro Blocks
                 </button>
               )}
             </div>
@@ -523,6 +750,7 @@ export const BlockPreviewTooltip = ({
           isOpen={isModalOpen}
           onClose={handleCloseMacroPreview}
           macroName={item.label}
+          macroDescription={item.description}
           macroCode={item.macroCode}
         />
       )}
