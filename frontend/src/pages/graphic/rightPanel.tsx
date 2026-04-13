@@ -14,12 +14,11 @@ import {
 
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
+import { getBlocklyStructure } from 'features/blockly'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { RootState } from 'store/reducers'
-
-import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
 
 interface RightPanelProps {
   backFunction: () => void

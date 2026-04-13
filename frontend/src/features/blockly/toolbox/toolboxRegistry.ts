@@ -7,7 +7,7 @@
  * runtime so the accordion can render independently of workspace lifecycle.
  */
 
-import { blocksColours } from '../CustomBlocks'
+import { blocksColours } from '../blocks'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

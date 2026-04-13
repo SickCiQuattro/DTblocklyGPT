@@ -2,18 +2,22 @@ import { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
-import ModernTheme from '@blockly/theme-modern'
-import { useSearchParams } from 'react-router-dom'
-import { useDispatch } from 'react-redux'
 
-import { useAppSelector } from 'store/reducers'
-import { BlockState as State } from 'utils/blocklyTypes'
-import { toggleEditMode } from 'store/reducers/task'
+import { BlockState } from 'utils/blocklyTypes'
+
+import { isValidBlockState } from '../utils/serialization'
+import { updateStructureAndFireFakeChangeEvent } from './chatSync'
+import { INTERACTIVE_WORKSPACE_CONFIG } from './workspaceConfig'
 
 Blockly.setLocale(locale as unknown as { [key: string]: string })
 
-export const getBlocklyStructure = (): State | null => {
+/**
+ * Read the root serialized block currently mounted in the main Blockly workspace.
+ */
+export const getBlocklyStructure = (): BlockState | null => {
   const workspace = Blockly.getMainWorkspace()
+  if (!workspace) return null
+
   const blocklyTaskStructure =
     Blockly.serialization.workspaces.save(workspace).blocks?.blocks
   if (!blocklyTaskStructure) return null
@@ -73,26 +77,28 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
 }
 
 interface BlocklyComponentProps {
-  dataTask: State | null
+  dataTask: BlockState | null
+  editMode: boolean
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
+  applyExternalTaskState?: boolean
+  onExternalTaskStateApplied?: () => void
 }
 
-const isValidBlockState = (value: State | null): value is State =>
-  typeof value === 'object' &&
-  value !== null &&
-  'type' in value &&
-  typeof (value as { type?: unknown }).type === 'string'
+const DEFAULT_X_AXIS = 200
+const DEFAULT_Y_AXIS = 100
 
-export const BlocklyComponent = ({
+/**
+ * Interactive Blockly workspace used by both graphic and multimodal layouts.
+ */
+export const BlocklyWorkspace = ({
   dataTask,
+  editMode,
   onWorkspaceReady,
+  applyExternalTaskState = false,
+  onExternalTaskStateApplied,
 }: BlocklyComponentProps) => {
-  const { editMode } = useAppSelector((state) => state.task)
   const blocklyDivRef = useRef<HTMLDivElement | null>(null)
   const primaryWorkspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
-  const [searchParams] = useSearchParams()
-  const newTaskParam = searchParams.get('newTask')
-  const dispatch = useDispatch()
 
   useEffect(() => {
     // cleanup workspace div before injection
@@ -102,24 +108,13 @@ export const BlocklyComponent = ({
 
     const blocklyDivCurrent = blocklyDivRef.current as Element
 
-    // Inject Blockly WITHOUT a toolbox — the custom React toolbox is a sibling component.
-    primaryWorkspaceRef.current = Blockly.inject(blocklyDivCurrent, {
-      renderer: 'thrasos',
+    const workspaceConfig: Blockly.BlocklyOptions = {
+      ...INTERACTIVE_WORKSPACE_CONFIG,
       readOnly: !editMode,
-      trashcan: false,
-      media: '/blocklyMedia',
-      move: { scrollbars: true, drag: true, wheel: true },
-      zoom: { startScale: 1.5, controls: false, wheel: true, pinch: true },
-      grid: {
-        spacing: 18,
-        length: 2,
-        colour: '#CBD5E1',
-        snap: true,
-      },
-      sounds: false,
-      collapse: true,
-      comments: false,
-      theme: ModernTheme,
+    }
+
+    primaryWorkspaceRef.current = Blockly.inject(blocklyDivCurrent, {
+      ...workspaceConfig,
     })
 
     // observer variables
@@ -134,8 +129,8 @@ export const BlocklyComponent = ({
 
       if (isValidBlockState(dataTask)) {
         const defaultDataTask = { ...dataTask }
-        defaultDataTask.x = dataTask?.x || 200
-        defaultDataTask.y = dataTask?.y || 100
+        defaultDataTask.x = dataTask?.x || DEFAULT_X_AXIS
+        defaultDataTask.y = dataTask?.y || DEFAULT_Y_AXIS
 
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
@@ -171,10 +166,26 @@ export const BlocklyComponent = ({
   }, [editMode, dataTask, onWorkspaceReady])
 
   useEffect(() => {
-    if (newTaskParam) {
-      dispatch(toggleEditMode())
+    if (!primaryWorkspaceRef.current || !applyExternalTaskState) {
+      return
     }
-  }, [newTaskParam, dispatch])
+
+    if (!isValidBlockState(dataTask)) {
+      return
+    }
+
+    const workspace = primaryWorkspaceRef.current
+    const blocklyTaskStructure = getBlocklyStructure()
+    const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
+    const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
+
+    const defaultDataTask = { ...dataTask }
+    defaultDataTask.x = x_axis
+    defaultDataTask.y = y_axis
+
+    updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
+    onExternalTaskStateApplied?.()
+  }, [applyExternalTaskState, dataTask, onExternalTaskStateApplied])
 
   return (
     <div

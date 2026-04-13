@@ -12,15 +12,20 @@ export type AnalyzerIssue = {
   stepPath: (number | string)[] // Path to the step in the steps tree
 }
 
+/** Returns an object by id from the task object catalog. */
 const findObject = (objects: AbstractObject[] | undefined, id: number) => {
   return objects?.find((obj) => obj.id === id)
 }
+
+/** Returns a location by id from the task location catalog. */
 const findLocation = (
   locations: AbstractLocation[] | undefined,
   id: number,
 ) => {
   return locations?.find((loc) => loc.id === id)
 }
+
+/** Returns an action by id from the task action catalog. */
 const findAction = (actions: AbstractAction[] | undefined, id: number) => {
   return actions?.find((act) => act.id === id)
 }

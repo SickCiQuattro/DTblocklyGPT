@@ -10,6 +10,7 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
+import { TaskType } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 import { AbstractStep } from 'pages/tasks/types'
 
@@ -49,6 +50,13 @@ const Multimodal = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
+  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
+    TaskType[],
+    Error
+  >({
+    url: endpoints.home.libraries.tasks,
+  })
+
   const title = dataTask
     ? `Multimodal interface for the task: "${dataTask.name}"`
     : ''
@@ -59,9 +67,14 @@ const Multimodal = () => {
     void navigate('/tasks')
   }
 
-  const data = dataTask && dataObjects && dataActions && dataLocations
+  const data =
+    dataTask && dataObjects && dataActions && dataLocations && dataMacros
   const isLoading =
-    isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
+    isLoadingTask ||
+    isLoadingObjects ||
+    isLoadingActions ||
+    isLoadingLocations ||
+    isLoadingMacros
 
   const parseTaskCode = (taskCode: string): unknown => {
     try {
@@ -94,6 +107,7 @@ const Multimodal = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
+          dataMacros={dataMacros}
           abstractTask={abstractTaskCode}
           backFunction={backFunction}
         />

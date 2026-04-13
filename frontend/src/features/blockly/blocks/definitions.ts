@@ -418,6 +418,6 @@ Blockly.defineBlocksWithJsonArray([
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.macroTasks,
     mutator: 'macro_block_mutation',
-    tooltip: "Esegue l'intera sequenza del task salvato selezionato.",
+    tooltip: 'Executes the entire block sequence of the selected saved task.',
   },
 ])

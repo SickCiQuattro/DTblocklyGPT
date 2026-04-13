@@ -8,7 +8,6 @@ import {
 } from 'react'
 import {
   Dialog,
-  DialogContent,
   DialogTitle,
   IconButton,
   Tooltip,
@@ -16,7 +15,6 @@ import {
 } from '@mui/material'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
-import ModernTheme from '@blockly/theme-modern'
 import {
   Eye,
   Pointer,
@@ -27,6 +25,10 @@ import {
 
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
+
+import { BlocklyViewer } from '../workspace/BlocklyViewer'
+import { isValidBlockState, parseJson } from '../utils/serialization'
+import { PREVIEW_WORKSPACE_CONFIG } from '../workspace/workspaceConfig'
 
 import { ToolboxBlockItem } from './toolboxRegistry'
 import './BlockPreviewTooltip.css'
@@ -50,22 +52,9 @@ let singletonRenderRaf: number | null = null
 let singletonRenderRequestId = 0
 let activeTooltipOwner: symbol | null = null
 
-const parseJson = <T,>(raw: string): T | null => {
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return null
-  }
-}
-
-const isBlockState = (value: unknown): value is State => {
-  return (
-    !!value &&
-    typeof value === 'object' &&
-    typeof (value as { type?: unknown }).type === 'string'
-  )
-}
-
+/**
+ * Normalize heterogeneous macro payloads to a single Blockly root block state.
+ */
 const toMacroRootState = (macroCode: string): State | null => {
   try {
     const parsed = parseJson<any>(macroCode)
@@ -74,16 +63,29 @@ const toMacroRootState = (macroCode: string): State | null => {
     if (Array.isArray(parsed) || Array.isArray(parsed.steps)) {
       const steps = Array.isArray(parsed) ? parsed : parsed.steps
       const converted = abstractToBlockly(steps as any, [], [], [])
-      return isBlockState(converted) ? converted : null
+      return isValidBlockState(converted) ? converted : null
     }
 
     if (typeof parsed.type === 'string') {
       return parsed as State
     }
 
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      Array.isArray(
+        (parsed as { blocks?: { blocks?: unknown[] } }).blocks?.blocks,
+      )
+    ) {
+      const blocks = (parsed as { blocks: { blocks: unknown[] } }).blocks.blocks
+      if (blocks.length > 0 && isValidBlockState(blocks[0])) {
+        return blocks[0]
+      }
+    }
+
     if (Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
       const firstBlock = parsed.blocks[0]
-      return isBlockState(firstBlock) ? firstBlock : null
+      return isValidBlockState(firstBlock) ? firstBlock : null
     }
   } catch (e) {
     console.error('Failed to parse macro code for preview:', e)
@@ -104,114 +106,7 @@ const MacroPreviewModal = ({
   macroName,
   macroCode,
 }: MacroPreviewModalProps) => {
-  const mountRef = useRef<HTMLDivElement | null>(null)
-  const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    let isCancelled = false
-    let bootstrapRafId: number | null = null
-
-    const renderWorkspace = (container: HTMLDivElement) => {
-      container.innerHTML = ''
-
-      const workspace = Blockly.inject(container, {
-        renderer: 'thrasos',
-        readOnly: true,
-        trashcan: false,
-        media: '/blocklyMedia',
-        move: { drag: true, wheel: true, scrollbars: true },
-        zoom: {
-          controls: true,
-          wheel: true,
-          pinch: true,
-          startScale: 0.9,
-          maxScale: 2,
-          minScale: 0.3,
-          scaleSpeed: 1.2,
-        },
-        theme: ModernTheme,
-      })
-      workspaceRef.current = workspace
-
-      const parsed = parseJson<any>(macroCode)
-      let injected = false
-
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        parsed.blocks &&
-        parsed.blocks.blocks
-      ) {
-        Blockly.serialization.workspaces.load(parsed, workspace)
-        injected = true
-      } else {
-        const state = toMacroRootState(macroCode)
-        if (state) {
-          Blockly.serialization.blocks.append(state, workspace)
-          injected = true
-        }
-      }
-
-      if (!injected) {
-        return
-      }
-
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          if (isCancelled || workspaceRef.current !== workspace) {
-            return
-          }
-          Blockly.svgResize(workspace)
-          workspace.scrollCenter()
-        })
-      })
-    }
-
-    const bootstrapWhenReady = () => {
-      if (isCancelled) {
-        return
-      }
-
-      const container = mountRef.current
-      const isReady =
-        !!container &&
-        container.isConnected &&
-        container.clientWidth > 0 &&
-        container.clientHeight > 0
-
-      if (!isReady) {
-        bootstrapRafId = window.requestAnimationFrame(bootstrapWhenReady)
-        return
-      }
-
-      try {
-        renderWorkspace(container)
-      } catch {
-        // Keep modal open even when preview cannot be rendered.
-      }
-    }
-
-    bootstrapRafId = window.requestAnimationFrame(bootstrapWhenReady)
-
-    const handleResize = () => {
-      if (workspaceRef.current) Blockly.svgResize(workspaceRef.current)
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      isCancelled = true
-      if (bootstrapRafId !== null) {
-        window.cancelAnimationFrame(bootstrapRafId)
-      }
-      window.removeEventListener('resize', handleResize)
-      if (workspaceRef.current) {
-        workspaceRef.current.dispose()
-        workspaceRef.current = null
-      }
-    }
-  }, [isOpen, macroCode])
+  const macroState = toMacroRootState(macroCode)
 
   return (
     <Dialog
@@ -232,26 +127,33 @@ const MacroPreviewModal = ({
         }}
       >
         <Typography component="span" sx={{ fontWeight: 600 }}>
-          Internal structure: {macroName}
+          Internal Structure: {macroName}
         </Typography>
-        <IconButton aria-label="Chiudi" onClick={onClose}>
+        <IconButton aria-label="Close" onClick={onClose}>
           <X size={18} />
         </IconButton>
       </DialogTitle>
-      <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
-        <div
-          ref={mountRef}
-          style={{
-            width: '100%',
-            height: '600px',
-            backgroundColor: '#F8FAFC',
-          }}
+      <div
+        style={{
+          width: '100%',
+          height: '600px',
+          backgroundColor: '#F8FAFC',
+          padding: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <BlocklyViewer
+          blockState={macroState}
+          height="600px"
+          startScale={0.9}
+          autoCenter
         />
-      </DialogContent>
+      </div>
     </Dialog>
   )
 }
 
+/** Create (once) the off-screen DOM root used to host the shared preview workspace. */
 const ensureParkingRoot = () => {
   if (singletonParkingRoot) return singletonParkingRoot
 
@@ -271,6 +173,7 @@ const ensureParkingRoot = () => {
   return root
 }
 
+/** Ensure the shared preview host element exists and is mounted under the parking root. */
 const ensureHost = () => {
   if (singletonHost) return singletonHost
 
@@ -284,35 +187,17 @@ const ensureHost = () => {
   return host
 }
 
+/** Create (once) the shared read-only preview workspace. */
 const ensureWorkspace = () => {
   if (singletonWorkspace) return singletonWorkspace
 
   const host = ensureHost()
-  singletonWorkspace = Blockly.inject(host, {
-    renderer: 'thrasos',
-    readOnly: true,
-    trashcan: false,
-    media: '/blocklyMedia',
-    move: { drag: false, wheel: false, scrollbars: false },
-    zoom: {
-      controls: false,
-      wheel: false,
-      pinch: false,
-      startScale: 1,
-      maxScale: 2,
-      minScale: 0.3,
-      scaleSpeed: 1,
-    },
-    grid: { spacing: 0, length: 0, colour: '#FFFFFF', snap: false },
-    sounds: false,
-    collapse: false,
-    comments: false,
-    theme: ModernTheme,
-  })
+  singletonWorkspace = Blockly.inject(host, PREVIEW_WORKSPACE_CONFIG)
 
   return singletonWorkspace
 }
 
+/** Move the shared preview host back to the off-screen parking root. */
 const parkPreviewHost = () => {
   if (!singletonHost || !singletonParkingRoot) return
 
@@ -321,6 +206,7 @@ const parkPreviewHost = () => {
   }
 }
 
+/** Attach the shared preview host to the active tooltip mount target. */
 const mountPreviewHost = (container: HTMLElement) => {
   const host = ensureHost()
   if (host.parentElement !== container) {

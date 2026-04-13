@@ -1,22 +1,20 @@
 import React, { useState, useMemo } from 'react'
 import { useMediaQuery } from '@mui/material'
-import * as Blockly from 'blockly/core'
 import {
   CloseOutlined,
   EditOutlined,
-  RedoOutlined,
   SaveOutlined,
   SoundOutlined,
-  UndoOutlined,
 } from '@ant-design/icons'
 import { useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
 import { useParams } from 'react-router-dom'
 
+import { BlocklyEditor, getBlocklyStructure } from 'features/blockly'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
-import { AbstractStep } from 'pages/tasks/types'
+import { AbstractStep, TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import {
   abstractToBlockly,
@@ -29,15 +27,14 @@ import { endpoints } from 'services/endpoints'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 
-import { getBlocklyStructure } from './CustomDragDrop/Blockly/BlocklyComponent'
 import { ChatWrapper } from './chatWrapper'
-import { CustomDragDrop } from './CustomDragDrop'
 import { RightPanel } from './rightPanel'
 
 interface SplittedLayoutProps {
   dataLocations: LocationListType[]
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
+  dataMacros: TaskType[]
   abstractTask: AbstractStep[]
   backFunction: () => void
 }
@@ -52,6 +49,7 @@ export const SplittedLayout = ({
   dataLocations,
   dataObjects,
   dataActions,
+  dataMacros,
   abstractTask,
   backFunction,
 }: SplittedLayoutProps) => {
@@ -137,76 +135,10 @@ export const SplittedLayout = ({
           }}
           disabled={!editingMode}
         />
-        <UndoOutlined
-          style={{
-            fontSize: '2em',
-            marginRight: '1rem',
-            color:
-              editingMode &&
-              Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getUndoStack().length > 0
-                ? themePalette.palette.primary.main
-                : themePalette.palette.grey[300],
-            cursor:
-              editingMode &&
-              Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getUndoStack().length > 0
-                ? 'pointer'
-                : 'not-allowed',
-          }}
-          title="Undo"
-          disabled={
-            !editingMode ||
-            (Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getUndoStack().length === 0)
-          }
-          onClick={() => {
-            Blockly.getMainWorkspace().undo(false)
-            const blocklyTaskStructure = getBlocklyStructure()
-            const abstractTask = blocklyToAbstract(
-              blocklyTaskStructure as CustomBlock,
-            )
-            if (!abstractTask) return
-            setTaskStructure(abstractTask)
-          }}
-        />
-        <RedoOutlined
-          style={{
-            fontSize: '2em',
-            marginRight: '2rem',
-            color:
-              editingMode &&
-              Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getRedoStack().length > 0
-                ? themePalette.palette.primary.main
-                : themePalette.palette.grey[300],
-            cursor:
-              editingMode &&
-              Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getRedoStack().length > 0
-                ? 'pointer'
-                : 'not-allowed',
-          }}
-          title="Redo"
-          disabled={
-            !editingMode ||
-            (Blockly.getMainWorkspace() &&
-              Blockly.getMainWorkspace().getRedoStack().length === 0)
-          }
-          onClick={() => {
-            Blockly.getMainWorkspace().undo(true)
-            const blocklyTaskStructure = getBlocklyStructure()
-            const abstractTask = blocklyToAbstract(
-              blocklyTaskStructure as CustomBlock,
-            )
-            if (!abstractTask) return
-            setTaskStructure(abstractTask)
-          }}
-        />
         <SoundOutlined
           style={{
             fontSize: '2em',
-            marginRight: '1rem',
+            marginRight: '2rem',
             color: !editingMode
               ? themePalette.palette.grey[300]
               : speaker
@@ -222,15 +154,16 @@ export const SplittedLayout = ({
         />
       </div>
       <div style={{ display: 'flex', height }}>
-        <CustomDragDrop
+        <BlocklyEditor
           dataLocations={dataLocations}
           dataObjects={dataObjects}
           dataActions={dataActions}
-          editingMode={editingMode}
-          newChatResponse={newChatResponse}
-          setNewChatResponse={setNewChatResponse}
+          dataMacros={dataMacros}
           dataTask={parsedDataTask}
-          setTaskStructure={setTaskStructure}
+          editMode={editingMode}
+          applyExternalTaskState={newChatResponse}
+          onExternalTaskStateApplied={() => setNewChatResponse(false)}
+          onTaskStructureChange={setTaskStructure}
         />
         {editingMode && (
           <ChatWrapper

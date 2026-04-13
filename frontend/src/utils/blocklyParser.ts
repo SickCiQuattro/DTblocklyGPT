@@ -3,6 +3,12 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { AbstractCondition, AbstractStep } from 'pages/tasks/types'
 
+/**
+ * Converts an abstract task step sequence into a Blockly-compatible serialized block tree.
+ *
+ * The output is rooted at the first top-level executable block and can be appended
+ * directly through Blockly serialization APIs.
+ */
 export const abstractToBlockly = (
   abstractTask: AbstractStep[],
   dataObjects: ObjectListType[],
@@ -276,6 +282,10 @@ export interface CustomBlock {
   next?: { block: CustomBlock }
 }
 
+/**
+ * Converts a Blockly serialized block tree to the AbstractStep representation
+ * used by task APIs and chat workflows.
+ */
 export const blocklyToAbstract = (
   blocklyRoot: CustomBlock | null,
 ): AbstractStep[] | null => {
