@@ -1,6 +1,16 @@
 import * as Blockly from 'blockly/core'
 import ModernTheme from '@blockly/theme-modern'
 
+const DTheme = Blockly.Theme.defineTheme('DTheme', {
+  name: 'DTheme',
+  base: ModernTheme,
+  componentStyles: {
+    workspaceBackgroundColour: '#F5F5F5',
+    scrollbarColour: '#D9D9D9',
+    scrollbarOpacity: 0.8,
+  },
+})
+
 /** Shared config for the editable Blockly workspace. */
 export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   renderer: 'thrasos',
@@ -10,15 +20,15 @@ export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   move: { scrollbars: true, drag: true, wheel: true },
   zoom: { startScale: 1.5, controls: false, wheel: true, pinch: true },
   grid: {
-    spacing: 18,
+    spacing: 20,
     length: 2,
-    colour: '#CBD5E1',
+    colour: '#D4D4D4',
     snap: true,
   },
   sounds: false,
   collapse: true,
   comments: false,
-  theme: ModernTheme,
+  theme: DTheme,
 }
 
 /** Shared config for full-size read-only viewers (e.g., modal previews). */
@@ -37,7 +47,7 @@ export const READONLY_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
     minScale: 0.3,
     scaleSpeed: 1.2,
   },
-  theme: ModernTheme,
+  theme: DTheme,
 }
 
 /** Shared config for compact tooltip previews backed by a singleton workspace. */
@@ -56,11 +66,16 @@ export const PREVIEW_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
     minScale: 0.3,
     scaleSpeed: 1,
   },
-  grid: { spacing: 0, length: 0, colour: '#FFFFFF', snap: false },
+  grid: {
+    spacing: 0,
+    length: 0,
+    colour: '#transparent',
+    snap: false,
+  },
   sounds: false,
   collapse: false,
   comments: false,
-  theme: ModernTheme,
+  theme: DTheme,
 }
 
 /** Shared config for macro modal viewer with custom controls overlay. */
@@ -79,11 +94,11 @@ export const MODAL_VIEWER_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 18,
     length: 2,
-    colour: '#CBD5E1',
+    colour: '#D4D4D4',
     snap: false,
   },
   sounds: false,
   collapse: false,
   comments: false,
-  theme: ModernTheme,
+  theme: DTheme,
 }

@@ -103,14 +103,14 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'sensor_signal_block',
-    message0: 'EVENT: Sensor signal is true',
+    message0: 'Sensor signal is true',
     output: 'sensor_signal_block',
     colour: blocksColours.eventsConditions,
     tooltip: 'Triggers when a generic external sensor signal is received.',
   },
   {
     type: 'find_object_block',
-    message0: 'EVENT: Find %1',
+    message0: 'Find %1',
     args0: [{ type: 'input_value', name: 'OBJECT', check: 'object_block' }],
     output: 'find_object_block',
     colour: blocksColours.eventsConditions,
@@ -118,14 +118,14 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'touch_detect_block',
-    message0: 'EVENT: Touch Detected',
+    message0: 'Touch Detected',
     output: 'touch_detect_block',
     colour: blocksColours.eventsConditions,
     tooltip: "Detects a physical touch or a torque peak on the Cobot's joints.",
   },
   {
     type: 'gesture_block',
-    message0: 'EVENT: Gesture %1',
+    message0: 'Gesture %1',
     args0: [
       {
         type: 'field_dropdown',
@@ -142,7 +142,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'timer_block',
-    message0: 'EVENT: Time elapsed %1 s',
+    message0: 'Time elapsed %1 s',
     args0: [{ type: 'field_number', name: 'SECONDS', value: 5, min: 1 }],
     output: 'timer_block',
     colour: blocksColours.eventsConditions,
@@ -275,7 +275,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
-    message0: 'CTRL: Repeat %1 times',
+    message0: 'Repeat %1 times',
     args0: [{ type: 'field_number', name: 'times', value: 2, min: 1, max: 99 }],
     message1: 'Do %1',
     args1: [
@@ -292,7 +292,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'loop_block',
-    message0: 'CTRL: Loop',
+    message0: 'Loop',
     message1: 'Do %1',
     args1: [
       {
@@ -309,7 +309,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_block',
-    message0: 'CTRL: When %1',
+    message0: 'When %1',
     args0: [
       {
         type: 'input_value',
@@ -338,7 +338,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_otherwise_block',
-    message0: 'CTRL: When %1',
+    message0: 'When %1',
     args0: [
       {
         type: 'input_value',
