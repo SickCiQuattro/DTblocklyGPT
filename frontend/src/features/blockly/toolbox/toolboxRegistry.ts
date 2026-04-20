@@ -7,7 +7,7 @@
  * runtime so the accordion can render independently of workspace lifecycle.
  */
 
-import { blocksColours } from '../blocks'
+import { blockDescriptionsByType, blocksColours } from '../blocks'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -56,144 +56,135 @@ export interface ToolboxCategory {
 export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   {
     key: 'logic-control',
-    name: 'Logic / Control',
+    name: 'Program Flow', // Logic / Control
     colour: blocksColours.logicControl,
     blocks: [
       {
         type: 'repeat_block',
-        label: 'Repeat N times',
+        label: 'Repeat Times', // Repeat N Times
         colour: blocksColours.logicControl,
-        description:
-          'Repeats a block of actions for a specified number of times.',
-        inputs: 'Number of repetitions | Actions to repeat',
+        description: blockDescriptionsByType.repeat_block,
+        inputs: 'Number of repetitions | Steps to repeat',
         outputs: 'None',
       },
       {
         type: 'loop_block',
-        label: 'Loop',
+        label: 'Repeat Forever', // Loop
         colour: blocksColours.logicControl,
-        description:
-          'Repeats actions indefinitely (useful for continuous sensory monitoring).',
-        inputs: 'Actions to repeat',
+        description: blockDescriptionsByType.loop_block,
+        inputs: 'Steps to repeat',
         outputs: 'None',
       },
       {
         type: 'when_block',
-        label: 'When … Do',
+        label: 'If ... Then Do', // When … Do
         colour: blocksColours.logicControl,
-        description: 'Executes actions only if the specified condition is met.',
-        inputs: 'Condition | Actions to execute',
+        description: blockDescriptionsByType.when_block,
+        inputs: 'Event to check | Steps to run',
         outputs: 'None',
       },
       {
         type: 'when_otherwise_block',
-        label: 'When … Do … Otherwise',
+        label: 'If ... Then ... Else', // When … Do … Otherwise
         colour: blocksColours.logicControl,
-        description:
-          'Evaluates a condition and automatically chooses the alternative branch (If-Else).',
-        inputs: 'Condition | Actions if true | Actions if false',
+        description: blockDescriptionsByType.when_otherwise_block,
+        inputs: 'Event to check | First set of steps | Second set of steps',
         outputs: 'None',
       },
     ],
   },
   {
     key: 'robot-actions',
-    name: 'Robot Actions',
+    name: 'Robot Movements', // Robot Actions
     colour: blocksColours.robotActions,
     blocks: [
       {
         type: 'pick_block',
-        label: 'Pick',
+        label: 'Pick Up', // Pick
         colour: blocksColours.robotActions,
-        description:
-          "Activates the robot's gripper to grasp the selected object.",
+        description: blockDescriptionsByType.pick_block,
         inputs: 'Target object',
         outputs: 'None',
       },
       {
         type: 'processing_block',
-        label: 'Process',
+        label: 'Execute Skill', // Process
         colour: blocksColours.robotActions,
-        description:
-          'Performs a custom action (e.g., scan, weld, dispense) utilizing the robot tool.',
-        inputs: 'Custom Action',
+        description: blockDescriptionsByType.processing_block,
+        inputs: 'Custom Skill',
         outputs: 'None',
       },
       {
         type: 'place_block',
-        label: 'Place',
+        label: 'Put Down', // Place
         colour: blocksColours.robotActions,
-        description:
-          'Places the currently held object at the specified destination.',
-        inputs: 'Target location',
+        description: blockDescriptionsByType.place_block,
+        inputs: 'Target destination',
         outputs: 'None',
       },
       {
         type: 'move_to_block',
-        label: 'Move To',
+        label: 'Go To Location', // Move To
         colour: blocksColours.robotActions,
-        description:
-          'Moves the robotic arm to a destination using linear or joint trajectories.',
+        description: blockDescriptionsByType.move_to_block,
         inputs: 'Motion type | Destination',
         outputs: 'None',
       },
       {
         type: 'move_relative_block',
-        label: 'Move Relative',
+        label: 'Shift Position', // Move Relative
         colour: blocksColours.robotActions,
-        description:
-          'Moves the robot by a specific distance along a Cartesian axis (ideal for approaching or retreating from parts).',
-        inputs: 'Axis (X, Y, Z) | Distance in mm',
+        description: blockDescriptionsByType.move_relative_block,
+        inputs: 'Direction (X, Y, Z) | Distance in mm',
         outputs: 'None',
       },
       {
         type: 'gripper_block',
-        label: 'Gripper',
+        label: 'Open / Close Gripper', // Gripper
         colour: blocksColours.robotActions,
-        description: "Explicitly opens or closes the Cobotta's gripper.",
-        inputs: 'State (Open/Close)',
+        description: blockDescriptionsByType.gripper_block,
+        inputs: 'Action (Open/Close)',
         outputs: 'None',
       },
     ],
   },
   {
     key: 'human-actions',
-    name: 'Human Actions',
+    name: 'Operator Interaction', // Human Actions
     colour: blocksColours.humanActions,
     blocks: [
       {
         type: 'human_action_block',
-        label: 'Human Action',
+        label: 'Wait for Operator', // Human Action
         colour: blocksColours.humanActions,
-        description:
-          'Pauses the cobot to allow human intervention, resuming upon activation of the chosen trigger.',
-        inputs: 'Task Description | Confirmation Method',
+        description: blockDescriptionsByType.human_action_block,
+        inputs: 'Instruction for the person | Signal to wait for',
         outputs: 'None',
       },
     ],
   },
   {
     key: 'objects-positions',
-    name: 'Variables & Entities', // Renamed from "Objects & Positions"
+    name: 'My Workspace', // Renamed from "Objects & Positions" // Variables & Entities
     colour: blocksColours.objectsPositions,
     blocks: [
       // Dynamic blocks — pills are generated from props (dataObjects, dataLocations, dataActions).
       // Each entry here acts as a "template"; the actual pills are rendered per data item.
       {
         type: 'object_block',
-        label: 'Object',
+        label: 'Part / Object', // Object
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
       {
         type: 'location_block',
-        label: 'Location',
+        label: 'Destination / Area', // Location
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
       {
         type: 'action_block',
-        label: 'Action',
+        label: 'Custom Skill', // Action
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
@@ -201,60 +192,55 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'events-conditions',
-    name: 'Events / Conditions',
+    name: 'Sensors & Triggers', // Events / Conditions
     colour: blocksColours.eventsConditions,
     blocks: [
       {
         type: 'find_object_block',
-        label: 'Find object',
+        label: 'Look for Object', // Find Object
         colour: blocksColours.eventsConditions,
-        description:
-          'Searches for a specific object using the 3D vision system.',
-        outputs: 'Boolean (True if found)',
+        description: blockDescriptionsByType.find_object_block,
+        outputs: 'Yes or No',
       },
       {
         type: 'touch_detect_block',
-        label: 'Touch Detect',
+        label: 'Detect Collision', // Touch Detect
         colour: blocksColours.eventsConditions,
-        description:
-          "Detects a physical touch or a torque peak on the Cobot's joints.",
-        outputs: 'Boolean (True if touched)',
+        description: blockDescriptionsByType.touch_detect_block,
+        outputs: 'Yes or No',
       },
       {
         type: 'gesture_block',
-        label: 'Gesture Detect',
+        label: 'See Gesture', // Gesture Detect
         colour: blocksColours.eventsConditions,
-        description:
-          'Detects a specific hand gesture from the operator via camera.',
-        outputs: 'Boolean (True if detected)',
+        description: blockDescriptionsByType.gesture_block,
+        outputs: 'Yes or No',
       },
       {
         type: 'timer_block',
-        label: 'Timer',
+        label: 'Wait (Time)', // Timer
         colour: blocksColours.eventsConditions,
-        description:
-          'Returns true when the specified time in seconds has elapsed.',
+        description: blockDescriptionsByType.timer_block,
         inputs: 'Seconds',
-        outputs: 'Boolean (True if elapsed)',
+        outputs: 'Yes or No',
       },
       {
         type: 'sensor_signal_block',
-        label: 'Sensor signal',
+        label: 'Check External Sensor', // Sensor Signal
         colour: blocksColours.eventsConditions,
-        description:
-          'Triggers when a generic external sensor signal is received.',
-        outputs: 'Boolean (True if received)',
+        description: blockDescriptionsByType.sensor_signal_block,
+        outputs: 'Yes or No',
       },
     ],
   },
   {
     key: 'macro-tasks',
-    name: 'Macro-tasks',
+    name: 'Saved Routines', // Macro-tasks
     colour: blocksColours.macroTasks,
     blocks: [
       {
         type: 'macro_task_block',
-        label: 'Macro',
+        label: 'Run Saved Routine', // Macro
         colour: blocksColours.macroTasks,
         dynamic: true,
       },

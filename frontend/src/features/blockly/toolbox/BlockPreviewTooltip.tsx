@@ -66,17 +66,17 @@ const getPreviewCategoryBadgeMeta = (
   switch (itemType) {
     case 'object_block':
       return {
-        label: 'Objects',
+        label: 'Parts',
         Icon: FlaskConical,
       }
     case 'location_block':
       return {
-        label: 'Positions',
+        label: 'Destinations',
         Icon: MapPin,
       }
     case 'action_block':
       return {
-        label: 'Actions',
+        label: 'Custom Skills',
         Icon: Zap,
       }
     default:
@@ -160,9 +160,6 @@ const hasTopLevelBlocksArray = (
   )
 }
 
-/**
- * Normalize heterogeneous macro payloads to a single Blockly root block state.
- */
 const toMacroRootState = (macroCode: string): State | null => {
   try {
     const parsed = parseJson<unknown>(macroCode)
@@ -214,7 +211,7 @@ const MacroPreviewModal = ({
   const resolvedMacroDescription =
     typeof macroDescription === 'string' && macroDescription.trim().length > 0
       ? macroDescription.trim()
-      : 'No description available for this macro.'
+      : 'No description available for this routine.'
 
   return (
     <Dialog
@@ -275,7 +272,7 @@ const MacroPreviewModal = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              Macro: {macroName}
+              Saved Routine: {macroName}
             </Typography>
             <Typography
               component="p"
@@ -325,7 +322,6 @@ const MacroPreviewModal = ({
   )
 }
 
-/** Create (once) the off-screen DOM root used to host the shared preview workspace. */
 const ensureParkingRoot = () => {
   if (singletonParkingRoot) return singletonParkingRoot
 
@@ -345,7 +341,6 @@ const ensureParkingRoot = () => {
   return root
 }
 
-/** Ensure the shared preview host element exists and is mounted under the parking root. */
 const ensureHost = () => {
   if (singletonHost) return singletonHost
 
@@ -359,7 +354,6 @@ const ensureHost = () => {
   return host
 }
 
-/** Create (once) the shared read-only preview workspace. */
 const ensureWorkspace = () => {
   if (singletonWorkspace) return singletonWorkspace
 
@@ -369,7 +363,6 @@ const ensureWorkspace = () => {
   return singletonWorkspace
 }
 
-/** Move the shared preview host back to the off-screen parking root. */
 const parkPreviewHost = () => {
   if (!singletonHost || !singletonParkingRoot) return
 
@@ -378,7 +371,6 @@ const parkPreviewHost = () => {
   }
 }
 
-/** Attach the shared preview host to the active tooltip mount target. */
 const mountPreviewHost = (container: HTMLElement) => {
   const host = ensureHost()
   if (host.parentElement !== container) {
@@ -709,7 +701,7 @@ export const BlockPreviewTooltip = ({
                   }
                 >
                   <Eye size={16} />
-                  View Macro Blocks
+                  View Routine Blocks
                 </button>
               )}
             </div>

@@ -1,5 +1,7 @@
 import * as Blockly from 'blockly/core'
 
+import { blockDescriptionsByType } from './blockTextDictionary'
+
 // ─── COLOR PALETTE ────────────────────────────────────────────────────────
 export const blocksColours = {
   /** Logic/Control flow blocks (repeat, when, loop) */
@@ -15,6 +17,28 @@ export const blocksColours = {
   /** Macro-tasks / predefined sub-routines */
   macroTasks: '#3B97F4',
 } as const
+
+// ─── ICONS (BASE64 FROM LUCIDE-REACT) ─────────────────────────────────────
+// Icona "Bot" (Robot) con tratto bianco
+const BOT_ICON_B64 =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDhWNEg4Ii8+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEyIiB4PSI0IiB5PSI4IiByeD0iMiIvPjxwYXRoIGQ9Ik0yIDE0aDIiLz48cGF0aCBkPSJNMjAgMTRoMiIvPjxwYXRoIGQ9Ik0xNSAxM3YyIi8+PHBhdGggZD0iTTkgMTN2MiIvPjwvc3ZnPg=='
+
+// Icona "User" (Human) con tratto bianco
+const USER_ICON_B64 =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxdi0yYTQgNCAwIDAgMC00LTRIOWE0IDQgMCAwIDAtNCA0djIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjciIHI9IjQiLz48L3N2Zz4='
+
+// Icona "Layers" (Sub-routine / Macro) con tratto bianco
+const ROUTINE_ICON_B64 =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDIgNyAxMiAxMiAyMiA3IDEyIDIiLz48cG9seWxpbmUgcG9pbnRzPSIyIDEyIDEyIDE3IDIyIDEyIi8+PHBvbHlsaW5lIHBvaW50cz0iMiAxNyAxMiAyMiAyMiAxNyIvPjwvc3ZnPg=='
+
+const iconConfig = (src: string, alt: string) => ({
+  type: 'field_image',
+  src: src,
+  width: 18,
+  height: 18,
+  alt: alt,
+  flipRtl: false,
+})
 
 // ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
 const parseBlockData = (rawData: unknown) => {
@@ -69,7 +93,7 @@ const registerEntityMutator = (id: string, missingWarning: string) => {
 registerEntityMutator('object_block_mutation', 'Object not defined')
 registerEntityMutator('location_block_mutation', 'Location not defined')
 registerEntityMutator('action_block_mutation', 'Action not defined')
-registerEntityMutator('macro_block_mutation', 'Macro not defined')
+registerEntityMutator('macro_block_mutation', 'Routine not defined')
 
 // ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([
@@ -103,29 +127,29 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'sensor_signal_block',
-    message0: 'Sensor signal is true',
+    message0: 'External Sensor is ON',
     output: 'sensor_signal_block',
     colour: blocksColours.eventsConditions,
-    tooltip: 'Triggers when a generic external sensor signal is received.',
+    tooltip: blockDescriptionsByType.sensor_signal_block,
   },
   {
     type: 'find_object_block',
-    message0: 'Find %1',
+    message0: 'Object %1 is Found',
     args0: [{ type: 'input_value', name: 'OBJECT', check: 'object_block' }],
     output: 'find_object_block',
     colour: blocksColours.eventsConditions,
-    tooltip: 'Searches for a specific object using the 3D vision system.',
+    tooltip: blockDescriptionsByType.find_object_block,
   },
   {
     type: 'touch_detect_block',
-    message0: 'Touch Detected',
+    message0: 'Robot is Touched',
     output: 'touch_detect_block',
     colour: blocksColours.eventsConditions,
-    tooltip: "Detects a physical touch or a torque peak on the Cobot's joints.",
+    tooltip: blockDescriptionsByType.touch_detect_block,
   },
   {
     type: 'gesture_block',
-    message0: 'Gesture %1',
+    message0: 'Gesture %1 is Seen',
     args0: [
       {
         type: 'field_dropdown',
@@ -138,15 +162,15 @@ Blockly.defineBlocksWithJsonArray([
     ],
     output: 'gesture_block',
     colour: blocksColours.eventsConditions,
-    tooltip: 'Detects a specific hand gesture from the operator via camera.',
+    tooltip: blockDescriptionsByType.gesture_block,
   },
   {
     type: 'timer_block',
-    message0: 'Time elapsed %1 s',
+    message0: '%1 Seconds have passed',
     args0: [{ type: 'field_number', name: 'SECONDS', value: 5, min: 1 }],
     output: 'timer_block',
     colour: blocksColours.eventsConditions,
-    tooltip: 'Returns true when the specified time in seconds has elapsed.',
+    tooltip: blockDescriptionsByType.timer_block,
   },
 ])
 
@@ -154,56 +178,72 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'pick_block',
-    message0: 'ROBOT: Pick %1',
-    args0: [{ type: 'input_value', name: 'OBJECT', check: 'object_block' }],
+    message0: '%1 Pick Up %2',
+    args0: [
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      { type: 'input_value', name: 'OBJECT', check: 'object_block' },
+    ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
-    tooltip: "Activates the robot's gripper to grasp the selected object.",
+    tooltip: blockDescriptionsByType.pick_block,
   },
   {
     type: 'processing_block',
-    message0: 'ROBOT: Process %1',
-    args0: [{ type: 'input_value', name: 'ACTION', check: 'action_block' }],
+    message0: '%1 Execute Skill %2',
+    args0: [
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      { type: 'input_value', name: 'ACTION', check: 'action_block' },
+    ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
-    tooltip:
-      'Performs a specific processing action (e.g., glue, scan, weld) on the current object.',
+    tooltip: blockDescriptionsByType.processing_block,
   },
   {
     type: 'place_block',
-    message0: 'ROBOT: Place %1',
-    args0: [{ type: 'input_value', name: 'LOCATION', check: 'location_block' }],
-    previousStatement: ['robot_sequence', 'logic_sequence'],
-    nextStatement: ['robot_sequence', 'logic_sequence'],
-    colour: blocksColours.robotActions,
-    tooltip: 'Places the currently held object at the specified destination.',
-  },
-  {
-    type: 'move_to_block',
-    message0: 'ROBOT: Move %1 to %2',
+    message0: '%1 Put Down at %2',
     args0: [
-      {
-        type: 'field_dropdown',
-        name: 'MOTION_TYPE',
-        options: [
-          ['Linear', 'LINEAR'],
-          ['Joints (Fast)', 'JOINT'],
-        ],
-      },
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
       { type: 'input_value', name: 'LOCATION', check: 'location_block' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
-    tooltip:
-      'Moves the robotic arm to a destination using linear or joint trajectories.',
+    tooltip: blockDescriptionsByType.place_block,
+  },
+  {
+    type: 'move_to_block',
+    message0: '%1 Go To Location %2',
+    args0: [
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      {
+        type: 'input_value',
+        name: 'LOCATION',
+        check: 'location_block',
+      },
+    ],
+    message1: 'using %1',
+    args1: [
+      {
+        type: 'field_dropdown',
+        name: 'MOTION_TYPE',
+        options: [
+          ['Linear motion', 'LINEAR'],
+          ['Joint motion (Fast)', 'JOINT'],
+        ],
+      },
+    ],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.robotActions,
+    tooltip: blockDescriptionsByType.move_to_block,
   },
   {
     type: 'move_relative_block',
-    message0: 'ROBOT: Move %1 by %2 mm',
+    message0: '%1 Shift Position %2 by %3 mm',
     args0: [
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
       {
         type: 'field_dropdown',
         name: 'AXIS',
@@ -218,13 +258,13 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
-    tooltip:
-      'Moves the robot by a specific distance along a Cartesian axis (ideal for approaching or retreating from parts).',
+    tooltip: blockDescriptionsByType.move_relative_block,
   },
   {
     type: 'gripper_block',
-    message0: 'ROBOT: %1 Gripper',
+    message0: '%1 %2 Gripper',
     args0: [
+      iconConfig(BOT_ICON_B64, 'ROBOT:'),
       {
         type: 'field_dropdown',
         name: 'GRIPPER_STATE',
@@ -237,7 +277,7 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
-    tooltip: "Explicitly opens or closes the Cobotta's gripper.",
+    tooltip: blockDescriptionsByType.gripper_block,
   },
 ])
 
@@ -245,11 +285,12 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'human_action_block',
-    message0: 'HUMAN: Please %1',
+    message0: '%1 Wait for Operator: %2',
     args0: [
+      iconConfig(USER_ICON_B64, 'HUMAN:'),
       { type: 'field_input', name: 'TASK_DESC', text: 'insert component' },
     ],
-    message1: 'RESUME ON: %1',
+    message1: 'Resume when: %1',
     args1: [
       {
         type: 'input_value',
@@ -266,8 +307,7 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.humanActions,
-    tooltip:
-      'Pauses the cobot to allow human intervention, resuming upon activation of the chosen trigger.',
+    tooltip: blockDescriptionsByType.human_action_block,
   },
 ])
 
@@ -275,7 +315,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
-    message0: 'Repeat %1 times',
+    message0: 'Repeat %1 Times',
     args0: [{ type: 'field_number', name: 'times', value: 2, min: 1, max: 99 }],
     message1: 'Do %1',
     args1: [
@@ -288,11 +328,11 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
-    tooltip: 'Repeats a block of actions for a specified number of times.',
+    tooltip: blockDescriptionsByType.repeat_block,
   },
   {
     type: 'loop_block',
-    message0: 'Loop',
+    message0: 'Repeat Forever',
     message1: 'Do %1',
     args1: [
       {
@@ -304,12 +344,11 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
-    tooltip:
-      'Repeats actions indefinitely (useful for continuous sensory monitoring).',
+    tooltip: blockDescriptionsByType.loop_block,
   },
   {
     type: 'when_block',
-    message0: 'When %1',
+    message0: 'If %1',
     args0: [
       {
         type: 'input_value',
@@ -323,7 +362,7 @@ Blockly.defineBlocksWithJsonArray([
         ],
       },
     ],
-    message1: 'Do %1',
+    message1: 'Then Do %1',
     args1: [
       {
         type: 'input_statement',
@@ -334,11 +373,11 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
-    tooltip: 'Executes actions only if the specified condition is met.',
+    tooltip: blockDescriptionsByType.when_block,
   },
   {
     type: 'when_otherwise_block',
-    message0: 'When %1',
+    message0: 'If %1',
     args0: [
       {
         type: 'input_value',
@@ -352,7 +391,7 @@ Blockly.defineBlocksWithJsonArray([
         ],
       },
     ],
-    message1: 'Do %1',
+    message1: 'Then Do %1',
     args1: [
       {
         type: 'input_statement',
@@ -360,7 +399,7 @@ Blockly.defineBlocksWithJsonArray([
         check: ['robot_sequence', 'logic_sequence'],
       },
     ],
-    message2: 'Otherwise %1',
+    message2: 'Else %1',
     args2: [
       {
         type: 'input_statement',
@@ -371,8 +410,7 @@ Blockly.defineBlocksWithJsonArray([
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
-    tooltip:
-      'Evaluates a condition and automatically chooses the alternative branch.',
+    tooltip: blockDescriptionsByType.when_otherwise_block,
   },
 ])
 
@@ -380,12 +418,15 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'macro_task_block',
-    message0: 'MACRO: %1',
-    args0: [{ type: 'field_label_serializable', name: 'name', text: '' }],
+    message0: '%1 Run: %2', // Run Routine:
+    args0: [
+      iconConfig(ROUTINE_ICON_B64, 'ROUTINE:'),
+      { type: 'field_label_serializable', name: 'name', text: '' },
+    ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.macroTasks,
     mutator: 'macro_block_mutation',
-    tooltip: 'Executes the entire block sequence of the selected saved task.',
+    tooltip: blockDescriptionsByType.macro_task_block,
   },
 ])

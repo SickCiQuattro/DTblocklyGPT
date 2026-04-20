@@ -12,7 +12,7 @@ import {
   User,
   Shapes,
   Radar,
-  LayoutGrid,
+  Layers,
   Trash2,
 } from 'lucide-react'
 
@@ -171,7 +171,7 @@ const getCategoryIcon = (key: string, colour: string) => {
     case 'events-conditions':
       return <Radar color={colour} size={size} />
     case 'macro-tasks':
-      return <LayoutGrid color={colour} size={size} />
+      return <Layers color={colour} size={size} />
     default:
       return <SlidersHorizontal color={colour} size={size} />
   }
@@ -215,17 +215,17 @@ interface CategoryTabDefinition {
 const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   {
     key: 'objects',
-    label: 'Objects',
+    label: 'Parts',
     blockTypes: ['object_block'],
   },
   {
     key: 'positions',
-    label: 'Positions',
+    label: 'Destination / Area',
     blockTypes: ['location_block'],
   },
   {
     key: 'actions',
-    label: 'Actions',
+    label: 'Custom Skill',
     blockTypes: ['action_block'],
   },
 ]
