@@ -1,13 +1,17 @@
 import * as Blockly from 'blockly/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Box,
+  Divider,
   IconButton,
+  InputBase,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
+  Typography,
 } from '@mui/material'
-import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
+import { Maximize, Minus, Plus, Redo2, Search, Undo2 } from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
@@ -35,6 +39,188 @@ import {
 } from './macroExplosion'
 
 const DRAG_THRESHOLD_PX = 5
+
+type ShadowPopoverType = 'object' | 'location' | 'action' | 'trigger'
+
+type SelectableShadowBlockType =
+  | 'object_block'
+  | 'location_block'
+  | 'action_block'
+  | 'sensor_signal_block'
+  | 'find_object_block'
+  | 'touch_detect_block'
+  | 'gesture_block'
+  | 'timer_block'
+
+type ShadowEntityBlockType =
+  | 'object_block'
+  | 'location_block'
+  | 'action_block'
+  | 'shadow_object_block'
+  | 'shadow_location_block'
+  | 'shadow_action_block'
+  | 'shadow_trigger_block'
+
+interface ShadowPickerItem {
+  id: number
+  name: string
+  keywords: string[]
+  blockType?: SelectableShadowBlockType
+}
+
+interface ShadowPickerPosition {
+  top: number
+  left: number
+}
+
+interface ShadowEntitySource {
+  id: number
+  name: string
+  keywords?: string[] | null
+}
+
+const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
+  ShadowEntityBlockType,
+  ShadowPopoverType
+> = {
+  object_block: 'object',
+  shadow_object_block: 'object',
+  location_block: 'location',
+  shadow_location_block: 'location',
+  action_block: 'action',
+  shadow_action_block: 'action',
+  shadow_trigger_block: 'trigger',
+}
+
+const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
+  object: 'Select Part',
+  location: 'Select Destination',
+  action: 'Select Skill',
+  trigger: 'Select Trigger',
+}
+
+const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
+  object: 'No parts available.',
+  location: 'No destinations available.',
+  action: 'No skills available.',
+  trigger: 'No triggers available.',
+}
+
+const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
+  {
+    id: 1,
+    name: 'External Sensor is ON',
+    keywords: ['sensor', 'signal', 'machine', 'external'],
+    blockType: 'sensor_signal_block',
+  },
+  {
+    id: 2,
+    name: 'Object is Found',
+    keywords: ['object', 'vision', 'camera', 'find'],
+    blockType: 'find_object_block',
+  },
+  {
+    id: 3,
+    name: 'Robot is Touched',
+    keywords: ['touch', 'collision', 'contact', 'force'],
+    blockType: 'touch_detect_block',
+  },
+  {
+    id: 4,
+    name: 'Gesture is Seen',
+    keywords: ['gesture', 'camera', 'operator', 'hand'],
+    blockType: 'gesture_block',
+  },
+  {
+    id: 5,
+    name: 'Seconds have passed',
+    keywords: ['timer', 'seconds', 'delay', 'time'],
+    blockType: 'timer_block',
+  },
+]
+
+const resolveShadowPopoverType = (
+  blockType: string,
+): ShadowPopoverType | null => {
+  if (blockType in SHADOW_POPOVER_BY_BLOCK_TYPE) {
+    return SHADOW_POPOVER_BY_BLOCK_TYPE[blockType as ShadowEntityBlockType]
+  }
+  return null
+}
+
+const toKeywordsCsvOrNull = (keywords: string[]) => {
+  const normalized = keywords
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => keyword.length > 0)
+
+  return normalized.length > 0 ? normalized.join(',') : null
+}
+
+const buildShadowPickerItems = (
+  entities: ShadowEntitySource[],
+  fallbackPrefix: 'Object' | 'Location' | 'Action',
+): ShadowPickerItem[] => {
+  return entities.map((entity) => ({
+    id: entity.id,
+    name: entity.name?.trim() || `${fallbackPrefix} ${entity.id}`,
+    keywords: Array.isArray(entity.keywords) ? entity.keywords : [],
+  }))
+}
+
+const filterShadowItems = (
+  items: ShadowPickerItem[],
+  query: string,
+): ShadowPickerItem[] => {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  if (!normalizedQuery) {
+    return items
+  }
+
+  return items.filter((item) => {
+    if (item.name.toLowerCase().includes(normalizedQuery)) {
+      return true
+    }
+
+    return item.keywords.some((keyword) =>
+      keyword.toLowerCase().includes(normalizedQuery),
+    )
+  })
+}
+
+const resolveRealBlockTypeFromShadow = (
+  blockType: string,
+): SelectableShadowBlockType | null => {
+  if (blockType === 'shadow_trigger_block') {
+    return 'sensor_signal_block'
+  }
+
+  if (blockType.startsWith('shadow_')) {
+    const resolvedType = blockType.replace('shadow_', '')
+    if (
+      resolvedType === 'object_block' ||
+      resolvedType === 'location_block' ||
+      resolvedType === 'action_block'
+    ) {
+      return resolvedType
+    }
+  }
+
+  if (
+    blockType === 'object_block' ||
+    blockType === 'location_block' ||
+    blockType === 'action_block' ||
+    blockType === 'sensor_signal_block' ||
+    blockType === 'find_object_block' ||
+    blockType === 'touch_detect_block' ||
+    blockType === 'gesture_block' ||
+    blockType === 'timer_block'
+  ) {
+    return blockType
+  }
+
+  return null
+}
 
 /**
  * Props for the shared Blockly editor container.
@@ -76,12 +262,22 @@ export const BlocklyEditor = ({
   >(null)
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
   const contextMenuOptionIdRef = useRef(0)
+
   const [isDeleting, setIsDeleting] = useState(false)
   const [historyState, setHistoryState] = useState({
     canUndo: false,
     canRedo: false,
   })
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [shadowPickerPosition, setShadowPickerPosition] =
+    useState<ShadowPickerPosition | null>(null)
+  const [popoverType, setPopoverType] = useState<ShadowPopoverType | null>(null)
+  const [targetShadowBlockId, setTargetShadowBlockId] = useState<string | null>(
+    null,
+  )
+
+  // Search query used by the shadow picker menu.
+  const [searchQuery, setSearchQuery] = useState('')
 
   const availableMacros = useMemo(() => {
     if (currentTaskId === undefined) {
@@ -90,6 +286,76 @@ export const BlocklyEditor = ({
 
     return dataMacros.filter((macro) => macro.id !== currentTaskId)
   }, [currentTaskId, dataMacros])
+
+  const selectedShadowItems = useMemo<ShadowPickerItem[]>(() => {
+    switch (popoverType) {
+      case 'object':
+        return buildShadowPickerItems(dataObjects, 'Object')
+      case 'location':
+        return buildShadowPickerItems(dataLocations, 'Location')
+      case 'action':
+        return buildShadowPickerItems(dataActions, 'Action')
+      case 'trigger':
+        return TRIGGER_PICKER_ITEMS
+      default:
+        return []
+    }
+  }, [dataActions, dataLocations, dataObjects, popoverType])
+
+  // Filter menu entries by name and keywords while the user types.
+  const filteredShadowItems = useMemo(
+    () => filterShadowItems(selectedShadowItems, searchQuery),
+    [selectedShadowItems, searchQuery],
+  )
+
+  // Reset all shadow-picker state together when it closes.
+  const closeShadowPicker = useCallback(() => {
+    setShadowPickerPosition(null)
+    setPopoverType(null)
+    setTargetShadowBlockId(null)
+    setSearchQuery('')
+  }, [])
+
+  const resolveShadowPickerPosition = useCallback(
+    (workspace: Blockly.WorkspaceSvg, block: Blockly.Block) => {
+      const blockSvg = block as Blockly.BlockSvg
+      const svgRoot = blockSvg.getSvgRoot?.()
+
+      if (svgRoot) {
+        const rect = svgRoot.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            top: Math.round(rect.top + rect.height / 2),
+            left: Math.round(rect.left + rect.width / 2),
+          }
+        }
+      }
+
+      try {
+        const surfacePosition = block.getRelativeToSurfaceXY()
+        const blockSize = blockSvg.getHeightWidth()
+        const blockCenter = new Blockly.utils.Coordinate(
+          surfacePosition.x + blockSize.width / 2,
+          surfacePosition.y + blockSize.height / 2,
+        )
+        const screenCenter = Blockly.utils.svgMath.wsToScreenCoordinates(
+          workspace,
+          blockCenter,
+        )
+
+        return {
+          top: Math.round(screenCenter.y),
+          left: Math.round(screenCenter.x),
+        }
+      } catch {
+        return {
+          top: Math.round(window.innerHeight / 2),
+          left: Math.round(window.innerWidth / 2),
+        }
+      }
+    },
+    [],
+  )
 
   const explodeMacro = useCallback(
     (block: Blockly.BlockSvg, workspace: Blockly.WorkspaceSvg) => {
@@ -204,12 +470,96 @@ export const BlocklyEditor = ({
       pendingDragCleanupRef.current?.()
       pendingDragCleanupRef.current = null
       setIsDeleting(false)
+      closeShadowPicker()
       setContextMenu(null)
       detachWorkspaceListener()
       unregisterToolboxDeleteArea()
       workspaceRef.current = null
     }
-  }, [detachWorkspaceListener, unregisterToolboxDeleteArea])
+  }, [closeShadowPicker, detachWorkspaceListener, unregisterToolboxDeleteArea])
+
+  const handleSelectShadowItem = useCallback(
+    (item: ShadowPickerItem) => {
+      const workspace = workspaceRef.current
+
+      if (!workspace || !targetShadowBlockId) {
+        closeShadowPicker()
+        return
+      }
+
+      const shadowBlock = workspace.getBlockById(targetShadowBlockId)
+      if (!shadowBlock || !shadowBlock.isShadow()) {
+        closeShadowPicker()
+        return
+      }
+
+      const parentConnection = shadowBlock.outputConnection?.targetConnection
+      if (!parentConnection) {
+        closeShadowPicker()
+        return
+      }
+
+      const selectedBlockType =
+        item.blockType ?? resolveRealBlockTypeFromShadow(shadowBlock.type)
+
+      if (!selectedBlockType) {
+        closeShadowPicker()
+        return
+      }
+
+      const isEntityBlock =
+        selectedBlockType === 'object_block' ||
+        selectedBlockType === 'location_block' ||
+        selectedBlockType === 'action_block'
+
+      Blockly.Events.setGroup(true)
+      try {
+        const displayName =
+          item.name.trim().length > 0 ? item.name.trim() : `${item.id}`
+
+        const blockState: State = isEntityBlock
+          ? {
+              type: selectedBlockType,
+              fields: { name: displayName },
+              data: JSON.stringify({
+                id: item.id,
+                name: displayName,
+                keywords: toKeywordsCsvOrNull(item.keywords),
+              }),
+            }
+          : {
+              type: selectedBlockType,
+              ...(selectedBlockType === 'find_object_block'
+                ? {
+                    inputs: {
+                      OBJECT: {
+                        shadow: {
+                          type: 'shadow_object_block',
+                          fields: { name: 'Select Part...' },
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            }
+
+        // Let Blockly create and hydrate the block in one pass.
+        const newBlock = Blockly.serialization.blocks.append(
+          blockState,
+          workspace,
+        ) as Blockly.BlockSvg
+
+        // Connect the new block to the parent input; the shadow is replaced automatically.
+        if (newBlock.outputConnection) {
+          parentConnection.connect(newBlock.outputConnection)
+        }
+      } finally {
+        Blockly.Events.setGroup(false)
+        closeShadowPicker()
+      }
+    },
+    [closeShadowPicker, targetShadowBlockId],
+  )
 
   const handleWorkspaceReady = useCallback(
     (workspace: Blockly.WorkspaceSvg | null) => {
@@ -219,12 +569,54 @@ export const BlocklyEditor = ({
 
       if (!workspace) {
         setIsDeleting(false)
+        closeShadowPicker()
         syncHistoryState(null)
         return
       }
 
       const listener = (event: Blockly.Events.Abstract) => {
         syncHistoryState(workspace)
+
+        if (`${event.type}` === `${Blockly.Events.CLICK}`) {
+          // Open the contextual picker only for supported shadow blocks.
+          if (workspace.options.readOnly) {
+            closeShadowPicker()
+            return
+          }
+
+          const clickEvent = event as Blockly.Events.Click & {
+            blockId?: string
+          }
+
+          if (!clickEvent.blockId) {
+            closeShadowPicker()
+            return
+          }
+
+          const clickedBlock = workspace.getBlockById(clickEvent.blockId)
+
+          if (!clickedBlock || !clickedBlock.isShadow()) {
+            closeShadowPicker()
+            return
+          }
+
+          const nextPopoverType = resolveShadowPopoverType(clickedBlock.type)
+
+          if (!nextPopoverType) {
+            closeShadowPicker()
+            return
+          }
+
+          // Close Blockly floating UI before opening the custom MUI picker.
+          workspace.hideChaff()
+          setContextMenu(null)
+          setShadowPickerPosition(
+            resolveShadowPickerPosition(workspace, clickedBlock),
+          )
+          setPopoverType(nextPopoverType)
+          setTargetShadowBlockId(clickedBlock.id)
+          return
+        }
 
         if (
           `${event.type}` !== `${Blockly.Events.UI}` &&
@@ -258,9 +650,11 @@ export const BlocklyEditor = ({
       registerToolboxDeleteArea(workspace, toolboxRootRef.current)
     },
     [
+      closeShadowPicker,
       detachWorkspaceListener,
       onTaskStructureChange,
       registerToolboxDeleteArea,
+      resolveShadowPickerPosition,
       syncHistoryState,
       unregisterToolboxDeleteArea,
     ],
@@ -309,6 +703,10 @@ export const BlocklyEditor = ({
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null)
   }, [])
+
+  const handleCloseShadowMenu = useCallback(() => {
+    closeShadowPicker()
+  }, [closeShadowPicker])
 
   const handleContextMenuItemClick = useCallback(
     (option: ContextMenuAction) => {
@@ -466,6 +864,201 @@ export const BlocklyEditor = ({
             </IconButton>
           </div>
         </div>
+
+        <Menu
+          open={
+            shadowPickerPosition !== null &&
+            popoverType !== null &&
+            targetShadowBlockId !== null
+          }
+          onClose={handleCloseShadowMenu}
+          autoFocus={false}
+          disableAutoFocusItem
+          anchorReference="anchorPosition"
+          anchorPosition={shadowPickerPosition ?? undefined}
+          transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+          slotProps={{
+            paper: {
+              elevation: 0,
+              sx: {
+                mt: 1,
+                minWidth: 280,
+                maxWidth: 380,
+                borderRadius: '12px',
+                border: '1px solid rgba(226, 232, 240, 1)',
+                boxShadow:
+                  '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+              },
+            },
+            list: {
+              dense: true,
+              sx: {
+                p: 0,
+              },
+            },
+          }}
+        >
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              backgroundColor: '#fff',
+              zIndex: 1,
+              px: 1.25,
+              pt: 1.25,
+              pb: 1,
+            }}
+          >
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                color: '#0F172A',
+                fontSize: '0.85rem',
+                mb: 1,
+              }}
+            >
+              {popoverType
+                ? SHADOW_PICKER_TITLE_BY_TYPE[popoverType]
+                : 'Select'}
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                px: 1,
+                py: 0.5,
+                transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
+                '&:focus-within': {
+                  borderColor: '#3B82F6',
+                  boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.15)',
+                },
+              }}
+            >
+              <Search size={16} color="#64748B" style={{ marginRight: 8 }} />
+              <InputBase
+                autoFocus
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(event) => {
+                  // Prevent MUI MenuList typeahead from hijacking keyboard input.
+                  event.stopPropagation()
+                }}
+                sx={{
+                  flex: 1,
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  color: '#1E293B',
+                  '& input::placeholder': {
+                    color: '#94A3B8',
+                    opacity: 1,
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+
+          <Divider sx={{ mx: 0, borderColor: '#E2E8F0' }} />
+
+          <Box
+            sx={{
+              maxHeight: 280,
+              overflowY: 'auto',
+              px: 1,
+              py: 0.75,
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: '#CBD5E1',
+                borderRadius: '10px',
+              },
+              '&::-webkit-scrollbar-thumb:hover': {
+                backgroundColor: '#94A3B8',
+              },
+            }}
+          >
+            {filteredShadowItems.length === 0 ? (
+              <MenuItem disabled sx={{ borderRadius: 1.5 }}>
+                <ListItemText
+                  primary={
+                    searchQuery
+                      ? 'No results found.'
+                      : popoverType
+                        ? SHADOW_PICKER_EMPTY_BY_TYPE[popoverType]
+                        : 'No items.'
+                  }
+                  slotProps={{
+                    primary: {
+                      sx: { fontSize: '0.85rem', textAlign: 'center', py: 2 },
+                    },
+                  }}
+                />
+              </MenuItem>
+            ) : (
+              filteredShadowItems.map((item) => {
+                const keywords = item.keywords
+                  .map((keyword) => keyword.trim())
+                  .filter((keyword) => keyword.length > 0)
+
+                return (
+                  <MenuItem
+                    key={`${popoverType}-${item.id}`}
+                    onClick={() => handleSelectShadowItem(item)}
+                    sx={{
+                      my: 0.2,
+                      minHeight: 44,
+                      borderRadius: '8px',
+                      px: 1.25,
+                      alignItems: 'flex-start',
+                      transition: 'background-color 0.2s',
+                      '&:hover': {
+                        backgroundColor: '#F8FAFC',
+                      },
+                    }}
+                  >
+                    <ListItemText
+                      primary={item.name}
+                      secondary={
+                        keywords.length > 0
+                          ? `Keywords: ${keywords.join(', ')}`
+                          : undefined
+                      }
+                      slotProps={{
+                        primary: {
+                          sx: {
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: '#0F172A',
+                          },
+                        },
+                        secondary: {
+                          sx: {
+                            mt: 0.2,
+                            fontSize: '0.75rem',
+                            color: '#64748B',
+                          },
+                        },
+                      }}
+                    />
+                  </MenuItem>
+                )
+              })
+            )}
+          </Box>
+        </Menu>
 
         <Menu
           open={contextMenu !== null}

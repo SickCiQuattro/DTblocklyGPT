@@ -18,27 +18,54 @@ export const blocksColours = {
   macroTasks: '#3B97F4',
 } as const
 
-// ─── ICONS (BASE64 FROM LUCIDE-REACT) ─────────────────────────────────────
-// Icona "Bot" (Robot) con tratto bianco
-const BOT_ICON_B64 =
-  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDhWNEg4Ii8+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjEyIiB4PSI0IiB5PSI4IiByeD0iMiIvPjxwYXRoIGQ9Ik0yIDE0aDIiLz48cGF0aCBkPSJNMjAgMTRoMiIvPjxwYXRoIGQ9Ik0xNSAxM3YyIi8+PHBhdGggZD0iTTkgMTN2MiIvPjwvc3ZnPg=='
+// ─── ICON HELPERS ────────────────────────────────────────────────────────
 
-// Icona "User" (Human) con tratto bianco
-const USER_ICON_B64 =
-  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxdi0yYTQgNCAwIDAgMC00LTRIOWE0IDQgMCAwIDAtNCA0djIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjciIHI9IjQiLz48L3N2Zz4='
+/**
+ * Generates a Blockly-friendly Data URI from raw Lucide-like SVG inner markup.
+ * Paste the inner tags (<path>, <circle>, <rect>, ...) directly from the source icon.
+ *
+ * @param svgContent Inner SVG nodes as a string
+ * @param color Stroke color. Defaults to white.
+ */
+const createLucideIconURI = (svgContent: string, color: string = 'white') => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgContent}</svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
 
-// Icona "Layers" (Sub-routine / Macro) con tratto bianco
-const ROUTINE_ICON_B64 =
-  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDIgNyAxMiAxMiAyMiA3IDEyIDIiLz48cG9seWxpbmUgcG9pbnRzPSIyIDEyIDEyIDE3IDIyIDEyIi8+PHBvbHlsaW5lIHBvaW50cz0iMiAxNyAxMiAyMiAyMiAxNyIvPjwvc3ZnPg=='
+const BOT_ICON_URI = createLucideIconURI(
+  '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+)
 
-const iconConfig = (src: string, alt: string) => ({
+const USER_ICON_URI = createLucideIconURI(
+  '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+)
+
+const ROUTINE_ICON_URI = createLucideIconURI(
+  '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/>',
+)
+
+const CIRCLE_PLUS_ICON_URI = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  blocksColours.objectsPositions,
+)
+
+const CIRCLE_PLUS_TRIGGER_ICON_URI = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  blocksColours.eventsConditions,
+)
+
+const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
   type: 'field_image',
-  src: src,
-  width: 18,
-  height: 18,
+  src,
+  width,
+  height,
   alt: alt,
   flipRtl: false,
 })
+
+const plusFieldConfig = () => iconConfig(CIRCLE_PLUS_ICON_URI, '+', 14, 14)
+const triggerPlusFieldConfig = () =>
+  iconConfig(CIRCLE_PLUS_TRIGGER_ICON_URI, '+', 14, 14)
 
 // ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
 const parseBlockData = (rawData: unknown) => {
@@ -94,6 +121,32 @@ registerEntityMutator('object_block_mutation', 'Object not defined')
 registerEntityMutator('location_block_mutation', 'Location not defined')
 registerEntityMutator('action_block_mutation', 'Action not defined')
 registerEntityMutator('macro_block_mutation', 'Routine not defined')
+
+// ─── EXTENSION: CUSTOM DASHED SHADOW BLOCKS ──────────────────────────────
+type BlockWithSvgHooks = Blockly.Block & {
+  initSvg?: () => void
+  getSvgRoot?: () => SVGGElement | null
+}
+
+Blockly.Extensions.register('shadow_placeholder_extension', function () {
+  const block = this as BlockWithSvgHooks
+  const originalInitSvg = block.initSvg
+
+  const cssClass =
+    block.type === 'shadow_trigger_block'
+      ? 'custom-dashed-shadow-trigger'
+      : 'custom-dashed-shadow-workspace'
+
+  block.initSvg = function (this: Blockly.Block) {
+    originalInitSvg?.call(this)
+
+    // Attach a CSS hook to style each placeholder variant consistently.
+    const svgRoot = (this as BlockWithSvgHooks).getSvgRoot?.()
+    if (svgRoot) {
+      svgRoot.classList.add(cssClass)
+    }
+  }
+})
 
 // ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([
@@ -180,7 +233,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'pick_block',
     message0: '%1 Pick Up %2',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'OBJECT', check: 'object_block' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -192,7 +245,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'processing_block',
     message0: '%1 Execute Skill %2',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'ACTION', check: 'action_block' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -204,7 +257,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'place_block',
     message0: '%1 Put Down at %2',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'LOCATION', check: 'location_block' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -216,7 +269,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'move_to_block',
     message0: '%1 Go To Location %2',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       {
         type: 'input_value',
         name: 'LOCATION',
@@ -243,7 +296,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'move_relative_block',
     message0: '%1 Shift Position %2 by %3 mm',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       {
         type: 'field_dropdown',
         name: 'AXIS',
@@ -264,7 +317,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'gripper_block',
     message0: '%1 %2 Gripper',
     args0: [
-      iconConfig(BOT_ICON_B64, 'ROBOT:'),
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
       {
         type: 'field_dropdown',
         name: 'GRIPPER_STATE',
@@ -287,7 +340,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'human_action_block',
     message0: '%1 Wait for Operator: %2',
     args0: [
-      iconConfig(USER_ICON_B64, 'HUMAN:'),
+      iconConfig(USER_ICON_URI, 'HUMAN:'),
       { type: 'field_input', name: 'TASK_DESC', text: 'insert component' },
     ],
     message1: 'Resume when: %1',
@@ -418,9 +471,9 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'macro_task_block',
-    message0: '%1 Run: %2', // Run Routine:
+    message0: '%1 Run: %2',
     args0: [
-      iconConfig(ROUTINE_ICON_B64, 'ROUTINE:'),
+      iconConfig(ROUTINE_ICON_URI, 'ROUTINE:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -429,4 +482,49 @@ Blockly.defineBlocksWithJsonArray([
     mutator: 'macro_block_mutation',
     tooltip: blockDescriptionsByType.macro_task_block,
   },
+])
+
+// ─── SHADOW PLACEHOLDERS WITH "+" ICON ────────────────────────────────────
+const createShadowEntityBlock = (
+  type: 'shadow_object_block' | 'shadow_location_block' | 'shadow_action_block',
+  output: 'object_block' | 'location_block' | 'action_block',
+  label: string,
+) => ({
+  type,
+  message0: '%1 %2',
+  args0: [
+    { type: 'field_label_serializable', name: 'name', text: label },
+    plusFieldConfig(),
+  ],
+  output,
+  colour: blocksColours.objectsPositions,
+  extensions: ['shadow_placeholder_extension'],
+})
+
+const createShadowTriggerBlock = () => ({
+  type: 'shadow_trigger_block',
+  message0: '%1 %2',
+  args0: [
+    { type: 'field_label_serializable', name: 'name', text: 'Select Trigger' },
+    triggerPlusFieldConfig(),
+  ],
+  output: 'sensor_signal_block',
+  colour: blocksColours.eventsConditions,
+  extensions: ['shadow_placeholder_extension'],
+  tooltip: 'Insert a Sensors & Triggers block here.',
+})
+
+Blockly.defineBlocksWithJsonArray([
+  createShadowEntityBlock('shadow_object_block', 'object_block', 'Select Part'),
+  createShadowEntityBlock(
+    'shadow_location_block',
+    'location_block',
+    'Select Dest.',
+  ),
+  createShadowEntityBlock(
+    'shadow_action_block',
+    'action_block',
+    'Select Skill',
+  ),
+  createShadowTriggerBlock(),
 ])

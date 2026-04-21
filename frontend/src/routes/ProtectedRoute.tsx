@@ -35,11 +35,19 @@ export const ProtectedRoute = ({
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   const verifyToken = useCallback(async () => {
-    return fetchApi<VerifyTokenResponse, { id: string | number }>({
-      url: endpoints.auth.verifyToken,
-      method: MethodHTTP.POST,
-      body: { id: getFromLocalStorage(LocalStorageKey.USER).id },
-    }).then((res) => {
+    try {
+      const storedUser = getFromLocalStorage(LocalStorageKey.USER)
+      if (!storedUser?.id) {
+        setIsAuthenticated(false)
+        return
+      }
+
+      const res = await fetchApi<VerifyTokenResponse, { id: string | number }>({
+        url: endpoints.auth.verifyToken,
+        method: MethodHTTP.POST,
+        body: { id: storedUser.id },
+      })
+
       removeFromLocalStorage(LocalStorageKey.USER)
       if (!res.authError) {
         const userInfo: UserLoginInterface = {
@@ -51,8 +59,11 @@ export const ProtectedRoute = ({
         setToLocalStorage(LocalStorageKey.USER, userInfo)
         setIsAuthenticated(true)
       }
+    } catch {
+      setIsAuthenticated(false)
+    } finally {
       setLoading(false)
-    })
+    }
   }, [])
 
   useEffect(() => {

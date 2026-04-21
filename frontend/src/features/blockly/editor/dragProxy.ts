@@ -4,6 +4,64 @@ import { BlockState as State } from 'utils/blocklyTypes'
 
 import { ToolboxBlockItem } from '../toolbox'
 
+const getShadowInputs = (
+  blockType: string,
+): Record<string, any> | undefined => {
+  switch (blockType) {
+    case 'processing_block':
+      return {
+        ACTION: {
+          shadow: {
+            type: 'shadow_action_block',
+            fields: { name: 'Select Skill...' },
+          },
+        },
+      }
+    case 'pick_block':
+    case 'find_object_block':
+      return {
+        OBJECT: {
+          shadow: {
+            type: 'shadow_object_block',
+            fields: { name: 'Select Part...' },
+          },
+        },
+      }
+    case 'place_block':
+    case 'move_to_block':
+      return {
+        LOCATION: {
+          shadow: {
+            type: 'shadow_location_block',
+            fields: { name: 'Select Destination...' },
+          },
+        },
+      }
+    case 'when_block':
+    case 'when_otherwise_block':
+      return {
+        WHEN: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Trigger...' },
+          },
+        },
+      }
+    case 'human_action_block':
+      return {
+        CONFIRM_EVENT: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Trigger...' },
+          },
+        },
+      }
+    default:
+      return undefined
+  }
+}
+// ────────────────────────────────────────────────────────────────────────
+
 /**
  * Convert a toolbox pill pointer interaction into a Blockly-native block drag gesture.
  */
@@ -16,10 +74,13 @@ export const startSyntheticBlockDrag = (
   const hasFields = !!item.fields && Object.keys(item.fields).length > 0
   const hasData = typeof item.data === 'string' && item.data.length > 0
 
+  const shadowInputs = getShadowInputs(item.type)
+
   const blockState: State = {
     type: item.type,
     ...(hasFields ? { fields: item.fields } : {}),
     ...(hasData ? { data: item.data } : {}),
+    ...(shadowInputs ? { inputs: shadowInputs } : {}),
   }
 
   try {
