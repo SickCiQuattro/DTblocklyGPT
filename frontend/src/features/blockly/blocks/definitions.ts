@@ -180,48 +180,48 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'sensor_signal_block',
-    message0: 'External Sensor is ON',
-    output: 'sensor_signal_block',
+    message0: 'External signal received',
+    output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.sensor_signal_block,
   },
   {
     type: 'find_object_block',
-    message0: 'Object %1 is Found',
+    message0: 'Object detected %1',
     args0: [{ type: 'input_value', name: 'OBJECT', check: 'object_block' }],
-    output: 'find_object_block',
+    output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.find_object_block,
   },
   {
     type: 'touch_detect_block',
-    message0: 'Robot is Touched',
-    output: 'touch_detect_block',
+    message0: 'Something touched',
+    output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.touch_detect_block,
   },
   {
     type: 'gesture_block',
-    message0: 'Gesture %1 is Seen',
+    message0: 'Gesture detected %1',
     args0: [
       {
         type: 'field_dropdown',
         name: 'GESTURE_TYPE',
         options: [
           ['Thumbs Up', 'THUMBS_UP'],
-          ['Stop Hand', 'STOP'],
+          ['Open hand', 'OPEN_HAND'],
         ],
       },
     ],
-    output: 'gesture_block',
+    output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.gesture_block,
   },
   {
     type: 'timer_block',
-    message0: '%1 Seconds have passed',
+    message0: '%1 seconds have passed',
     args0: [{ type: 'field_number', name: 'SECONDS', value: 5, min: 1 }],
-    output: 'timer_block',
+    output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.timer_block,
   },
@@ -231,7 +231,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'pick_block',
-    message0: '%1 Pick Up %2',
+    message0: '%1 Pick up %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'OBJECT', check: 'object_block' },
@@ -243,7 +243,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'processing_block',
-    message0: '%1 Execute Skill %2',
+    message0: '%1 Perform %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'ACTION', check: 'action_block' },
@@ -255,7 +255,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'place_block',
-    message0: '%1 Put Down at %2',
+    message0: '%1 Place at %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'LOCATION', check: 'location_block' },
@@ -267,7 +267,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'move_to_block',
-    message0: '%1 Go To Location %2',
+    message0: '%1 Move to %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       {
@@ -282,8 +282,8 @@ Blockly.defineBlocksWithJsonArray([
         type: 'field_dropdown',
         name: 'MOTION_TYPE',
         options: [
-          ['Linear motion', 'LINEAR'],
-          ['Joint motion (Fast)', 'JOINT'],
+          ['Straight path', 'LINEAR'],
+          ['Free path', 'JOINT'],
         ],
       },
     ],
@@ -292,27 +292,7 @@ Blockly.defineBlocksWithJsonArray([
     colour: blocksColours.robotActions,
     tooltip: blockDescriptionsByType.move_to_block,
   },
-  {
-    type: 'move_relative_block',
-    message0: '%1 Shift Position %2 by %3 mm',
-    args0: [
-      iconConfig(BOT_ICON_URI, 'ROBOT:'),
-      {
-        type: 'field_dropdown',
-        name: 'AXIS',
-        options: [
-          ['Z-Axis (Up/Down)', 'Z'],
-          ['X-Axis', 'X'],
-          ['Y-Axis', 'Y'],
-        ],
-      },
-      { type: 'field_number', name: 'DISTANCE', value: 50 },
-    ],
-    previousStatement: ['robot_sequence', 'logic_sequence'],
-    nextStatement: ['robot_sequence', 'logic_sequence'],
-    colour: blocksColours.robotActions,
-    tooltip: blockDescriptionsByType.move_relative_block,
-  },
+
   {
     type: 'gripper_block',
     message0: '%1 %2 Gripper',
@@ -338,7 +318,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'human_action_block',
-    message0: '%1 Wait for Operator: %2',
+    message0: '%1 Pause and wait: %2',
     args0: [
       iconConfig(USER_ICON_URI, 'HUMAN:'),
       { type: 'field_input', name: 'TASK_DESC', text: 'insert component' },
@@ -348,13 +328,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         type: 'input_value',
         name: 'CONFIRM_EVENT',
-        check: [
-          'touch_detect_block',
-          'gesture_block',
-          'timer_block',
-          'sensor_signal_block',
-          'human_feedback_block',
-        ],
+        check: 'Boolean',
       },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -368,7 +342,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
-    message0: 'Repeat %1 Times',
+    message0: 'Repeat %1 times',
     args0: [{ type: 'field_number', name: 'times', value: 2, min: 1, max: 99 }],
     message1: 'Do %1',
     args1: [
@@ -385,7 +359,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'loop_block',
-    message0: 'Repeat Forever',
+    message0: 'Repeat forever',
     message1: 'Do %1',
     args1: [
       {
@@ -400,22 +374,39 @@ Blockly.defineBlocksWithJsonArray([
     tooltip: blockDescriptionsByType.loop_block,
   },
   {
+    type: 'repeat_until_block',
+    message0: 'Repeat until %1',
+    args0: [
+      {
+        type: 'input_value',
+        name: 'CONDITION',
+        check: 'Boolean',
+      },
+    ],
+    message1: 'Do %1',
+    args1: [
+      {
+        type: 'input_statement',
+        name: 'DO',
+        check: ['robot_sequence', 'logic_sequence'],
+      },
+    ],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.logicControl,
+    tooltip: blockDescriptionsByType.repeat_until_block,
+  },
+  {
     type: 'when_block',
-    message0: 'If %1',
+    message0: 'When %1',
     args0: [
       {
         type: 'input_value',
         name: 'WHEN',
-        check: [
-          'find_object_block',
-          'sensor_signal_block',
-          'touch_detect_block',
-          'gesture_block',
-          'timer_block',
-        ],
+        check: 'Boolean',
       },
     ],
-    message1: 'Then Do %1',
+    message1: 'Do %1',
     args1: [
       {
         type: 'input_statement',
@@ -430,21 +421,15 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_otherwise_block',
-    message0: 'If %1',
+    message0: 'When %1',
     args0: [
       {
         type: 'input_value',
         name: 'WHEN',
-        check: [
-          'find_object_block',
-          'sensor_signal_block',
-          'touch_detect_block',
-          'gesture_block',
-          'timer_block',
-        ],
+        check: 'Boolean',
       },
     ],
-    message1: 'Then Do %1',
+    message1: 'Do %1',
     args1: [
       {
         type: 'input_statement',
@@ -452,7 +437,7 @@ Blockly.defineBlocksWithJsonArray([
         check: ['robot_sequence', 'logic_sequence'],
       },
     ],
-    message2: 'Else %1',
+    message2: 'Otherwise %1',
     args2: [
       {
         type: 'input_statement',
@@ -471,7 +456,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'macro_task_block',
-    message0: '%1 Run: %2',
+    message0: '%1 Do: %2',
     args0: [
       iconConfig(ROUTINE_ICON_URI, 'ROUTINE:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
@@ -505,26 +490,34 @@ const createShadowTriggerBlock = () => ({
   type: 'shadow_trigger_block',
   message0: '%1 %2',
   args0: [
-    { type: 'field_label_serializable', name: 'name', text: 'Select Trigger' },
+    {
+      type: 'field_label_serializable',
+      name: 'name',
+      text: 'Select Condition',
+    },
     triggerPlusFieldConfig(),
   ],
-  output: 'sensor_signal_block',
+  output: 'Boolean',
   colour: blocksColours.eventsConditions,
   extensions: ['shadow_placeholder_extension'],
   tooltip: 'Insert a Sensors & Triggers block here.',
 })
 
 Blockly.defineBlocksWithJsonArray([
-  createShadowEntityBlock('shadow_object_block', 'object_block', 'Select Part'),
+  createShadowEntityBlock(
+    'shadow_object_block',
+    'object_block',
+    'Select Object',
+  ),
   createShadowEntityBlock(
     'shadow_location_block',
     'location_block',
-    'Select Dest.',
+    'Select Destination',
   ),
   createShadowEntityBlock(
     'shadow_action_block',
     'action_block',
-    'Select Skill',
+    'Select Procedure',
   ),
   createShadowTriggerBlock(),
 ])

@@ -33,7 +33,6 @@ class StepsItems(Enum):
     PLACE = "place_block"
     HUMAN_ACTION = "human_action_block"
     MOVE_TO = "move_to_block"
-    MOVE_RELATIVE = "move_relative_block"
     GRIPPER = "gripper_block"
 
 

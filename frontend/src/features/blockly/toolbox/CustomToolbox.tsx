@@ -215,17 +215,17 @@ interface CategoryTabDefinition {
 const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   {
     key: 'objects',
-    label: 'Parts',
+    label: 'Objects',
     blockTypes: ['object_block'],
   },
   {
     key: 'positions',
-    label: 'Destination / Area',
+    label: 'Destinations',
     blockTypes: ['location_block'],
   },
   {
     key: 'actions',
-    label: 'Custom Skill',
+    label: 'Procedures',
     blockTypes: ['action_block'],
   },
 ]

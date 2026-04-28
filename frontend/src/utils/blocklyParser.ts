@@ -102,14 +102,6 @@ export const abstractToBlockly = (
           },
         }
       }
-      case 'move_relative':
-        return {
-          type: 'move_relative_block',
-          fields: {
-            AXIS: step.axis || 'Z',
-            DISTANCE: step.distance || 50,
-          },
-        }
       case 'gripper':
         return {
           type: 'gripper_block',
@@ -243,7 +235,6 @@ export interface CustomBlock {
     | 'place_block'
     | 'processing_block'
     | 'move_to_block'
-    | 'move_relative_block'
     | 'gripper_block'
     | 'repeat_block'
     | 'when_block'
@@ -317,12 +308,6 @@ export const blocklyToAbstract = (
           motionType: block.fields?.MOTION_TYPE || 'LINEAR',
           locationId: getIdFromBlock(block.inputs?.LOCATION?.block),
           locationName: getNameFromBlock(block.inputs?.LOCATION?.block),
-        }
-      case 'move_relative_block':
-        return {
-          type: 'move_relative',
-          axis: block.fields?.AXIS || 'Z',
-          distance: block.fields?.DISTANCE ?? 50,
         }
       case 'gripper_block':
         return {

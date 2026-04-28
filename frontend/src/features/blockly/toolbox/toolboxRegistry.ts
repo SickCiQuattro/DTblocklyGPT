@@ -56,12 +56,12 @@ export interface ToolboxCategory {
 export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   {
     key: 'logic-control',
-    name: 'Program Flow', // Logic / Control
+    name: 'Task Flow', // Logic / Control -> Program Flow -> Task Flow
     colour: blocksColours.logicControl,
     blocks: [
       {
         type: 'repeat_block',
-        label: 'Repeat Times', // Repeat N Times
+        label: 'Repeat times', // Repeat N Times
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.repeat_block,
         inputs: 'Number of repetitions | Steps to repeat',
@@ -69,15 +69,23 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'loop_block',
-        label: 'Repeat Forever', // Loop
+        label: 'Repeat forever', // Loop
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.loop_block,
         inputs: 'Steps to repeat',
         outputs: 'None',
       },
       {
+        type: 'repeat_until_block',
+        label: 'Repeat until',
+        colour: blocksColours.logicControl,
+        description: blockDescriptionsByType.repeat_until_block,
+        inputs: 'Condition to stop | Steps to repeat',
+        outputs: 'None',
+      },
+      {
         type: 'when_block',
-        label: 'If ... Then Do', // When … Do
+        label: 'When → Do', // When … Do
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.when_block,
         inputs: 'Event to check | Steps to run',
@@ -85,7 +93,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'when_otherwise_block',
-        label: 'If ... Then ... Else', // When … Do … Otherwise
+        label: 'When → Do / Otherwise', // When … Do … Otherwise
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.when_otherwise_block,
         inputs: 'Event to check | First set of steps | Second set of steps',
@@ -95,12 +103,12 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'robot-actions',
-    name: 'Robot Movements', // Robot Actions
+    name: 'Robot Actions', // Robot Actions -> Robot Movements
     colour: blocksColours.robotActions,
     blocks: [
       {
         type: 'pick_block',
-        label: 'Pick Up', // Pick
+        label: 'Pick up', // Pick
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.pick_block,
         inputs: 'Target object',
@@ -108,15 +116,15 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'processing_block',
-        label: 'Execute Skill', // Process
+        label: 'Perform', // Process -> Execute Skill -> Perform
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
-        inputs: 'Custom Skill',
+        inputs: 'Procedures',
         outputs: 'None',
       },
       {
         type: 'place_block',
-        label: 'Put Down', // Place
+        label: 'Place at', // Place
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.place_block,
         inputs: 'Target destination',
@@ -124,23 +132,15 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'move_to_block',
-        label: 'Go To Location', // Move To
+        label: 'Move to', // Move To
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.move_to_block,
         inputs: 'Motion type | Destination',
         outputs: 'None',
       },
       {
-        type: 'move_relative_block',
-        label: 'Shift Position', // Move Relative
-        colour: blocksColours.robotActions,
-        description: blockDescriptionsByType.move_relative_block,
-        inputs: 'Direction (X, Y, Z) | Distance in mm',
-        outputs: 'None',
-      },
-      {
         type: 'gripper_block',
-        label: 'Open / Close Gripper', // Gripper
+        label: 'Gripper', // Gripper
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.gripper_block,
         inputs: 'Action (Open/Close)',
@@ -150,12 +150,12 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'human-actions',
-    name: 'Operator Interaction', // Human Actions
+    name: 'Human Step', // Human Actions -> Opeator Interaction
     colour: blocksColours.humanActions,
     blocks: [
       {
         type: 'human_action_block',
-        label: 'Wait for Operator', // Human Action
+        label: 'Pause and wait', // Human Action -> Wait for Operator
         colour: blocksColours.humanActions,
         description: blockDescriptionsByType.human_action_block,
         inputs: 'Instruction for the person | Signal to wait for',
@@ -172,19 +172,19 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       // Each entry here acts as a "template"; the actual pills are rendered per data item.
       {
         type: 'object_block',
-        label: 'Part / Object', // Object
+        label: 'Objects', // Object
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
       {
         type: 'location_block',
-        label: 'Destination / Area', // Location
+        label: 'Destinations', // Location
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
       {
         type: 'action_block',
-        label: 'Custom Skill', // Action
+        label: 'Procedures', // Action ->  Skill
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
@@ -192,33 +192,33 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'events-conditions',
-    name: 'Sensors & Triggers', // Events / Conditions
+    name: 'Conditions', // Events / Conditions -> Sensors & Triggers
     colour: blocksColours.eventsConditions,
     blocks: [
       {
         type: 'find_object_block',
-        label: 'Look for Object', // Find Object
+        label: 'Object detected', // Find Object
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.find_object_block,
         outputs: 'Yes or No',
       },
       {
         type: 'touch_detect_block',
-        label: 'Detect Collision', // Touch Detect
+        label: 'Something touched', // Touch Detect
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.touch_detect_block,
         outputs: 'Yes or No',
       },
       {
         type: 'gesture_block',
-        label: 'See Gesture', // Gesture Detect
+        label: 'Gesture detected', // Gesture Detect
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.gesture_block,
         outputs: 'Yes or No',
       },
       {
         type: 'timer_block',
-        label: 'Wait (Time)', // Timer
+        label: 'Time passed', // Timer
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.timer_block,
         inputs: 'Seconds',
@@ -226,7 +226,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'sensor_signal_block',
-        label: 'Check External Sensor', // Sensor Signal
+        label: 'External signal received', // Sensor Signal
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.sensor_signal_block,
         outputs: 'Yes or No',
@@ -235,12 +235,12 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'macro-tasks',
-    name: 'Saved Routines', // Macro-tasks
+    name: 'My Tasks', // Macro-tasks -> saved Routines
     colour: blocksColours.macroTasks,
     blocks: [
       {
         type: 'macro_task_block',
-        label: 'Run Saved Routine', // Macro
+        label: 'Do My Task', // Macro
         colour: blocksColours.macroTasks,
         dynamic: true,
       },

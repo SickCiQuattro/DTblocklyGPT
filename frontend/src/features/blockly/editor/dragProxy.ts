@@ -13,7 +13,7 @@ const getShadowInputs = (
         ACTION: {
           shadow: {
             type: 'shadow_action_block',
-            fields: { name: 'Select Skill...' },
+            fields: { name: 'Select Procedure...' },
           },
         },
       }
@@ -23,7 +23,7 @@ const getShadowInputs = (
         OBJECT: {
           shadow: {
             type: 'shadow_object_block',
-            fields: { name: 'Select Part...' },
+            fields: { name: 'Select Object...' },
           },
         },
       }
@@ -41,6 +41,15 @@ const getShadowInputs = (
     case 'when_otherwise_block':
       return {
         WHEN: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Trigger...' },
+          },
+        },
+      }
+    case 'repeat_until_block':
+      return {
+        CONDITION: {
           shadow: {
             type: 'shadow_trigger_block',
             fields: { name: 'Select Trigger...' },

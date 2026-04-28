@@ -18,8 +18,6 @@ export const blockDescriptionsByType = {
   place_block:
     'Tells the robot to release the object at the chosen destination.',
   move_to_block: 'Moves the robot to a specific location or safe area.',
-  move_relative_block:
-    'Shifts the robot slightly up, down, or sideways from where it is right now.',
   gripper_block: "Opens or closes the robot's gripper.",
   human_action_block:
     'Stops the robot so a person can safely do a task. The robot waits for a signal before moving again.',
@@ -29,4 +27,5 @@ export const blockDescriptionsByType = {
   when_otherwise_block:
     'If a specific event happens, the robot does the first set of steps. If not, it does the second set.',
   macro_task_block: 'Runs all the steps inside a previously saved routine.',
+  repeat_until_block: 'Repeats these steps until a specific event happens.',
 } as const

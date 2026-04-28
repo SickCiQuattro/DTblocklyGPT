@@ -1,5 +1,6 @@
 import * as Blockly from 'blockly/core'
 import ModernTheme from '@blockly/theme-modern'
+import './customRender'
 
 const DTheme = Blockly.Theme.defineTheme('DTheme', {
   name: 'DTheme',
@@ -13,7 +14,7 @@ const DTheme = Blockly.Theme.defineTheme('DTheme', {
 
 /** Shared config for the editable Blockly workspace. */
 export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
-  renderer: 'thrasos',
+  renderer: 'thrasos_boolean',
   readOnly: false,
   trashcan: false,
   media: '/blocklyMedia',
@@ -33,7 +34,7 @@ export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
 
 /** Shared config for full-size read-only viewers (e.g., modal previews). */
 export const READONLY_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
-  renderer: 'thrasos',
+  renderer: 'thrasos_boolean',
   readOnly: true,
   trashcan: false,
   media: '/blocklyMedia',
@@ -52,7 +53,7 @@ export const READONLY_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
 
 /** Shared config for compact tooltip previews backed by a singleton workspace. */
 export const PREVIEW_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
-  renderer: 'thrasos',
+  renderer: 'thrasos_boolean',
   readOnly: true,
   trashcan: false,
   media: '/blocklyMedia',

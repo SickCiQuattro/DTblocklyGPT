@@ -66,7 +66,7 @@ const getPreviewCategoryBadgeMeta = (
   switch (itemType) {
     case 'object_block':
       return {
-        label: 'Parts',
+        label: 'Objects',
         Icon: FlaskConical,
       }
     case 'location_block':
@@ -76,7 +76,7 @@ const getPreviewCategoryBadgeMeta = (
       }
     case 'action_block':
       return {
-        label: 'Custom Skills',
+        label: 'Procedures',
         Icon: Zap,
       }
     default:
