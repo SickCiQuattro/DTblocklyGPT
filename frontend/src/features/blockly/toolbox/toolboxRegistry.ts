@@ -80,7 +80,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         label: 'Repeat until',
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.repeat_until_block,
-        inputs: 'Condition to stop | Steps to repeat',
+        inputs: 'Condition to wait for | Steps to repeat',
         outputs: 'None',
       },
       {
@@ -88,7 +88,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         label: 'When → Do', // When … Do
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.when_block,
-        inputs: 'Event to check | Steps to run',
+        inputs: 'Condition to check | Steps to run',
         outputs: 'None',
       },
       {
@@ -119,7 +119,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         label: 'Perform', // Process -> Execute Skill -> Perform
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
-        inputs: 'Procedures',
+        inputs: 'Procedure to perform',
         outputs: 'None',
       },
       {
@@ -140,7 +140,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'gripper_block',
-        label: 'Gripper', // Gripper
+        label: 'Open / Close Gripper', // Gripper
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.gripper_block,
         inputs: 'Action (Open/Close)',
@@ -201,6 +201,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.find_object_block,
         outputs: 'Yes or No',
+        inputs: 'Object to look for',
       },
       {
         type: 'touch_detect_block',
@@ -215,6 +216,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.gesture_block,
         outputs: 'Yes or No',
+        inputs: 'Type of gesture',
       },
       {
         type: 'timer_block',
@@ -240,7 +242,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'macro_task_block',
-        label: 'Do My Task', // Macro
+        label: 'My Task', // Macro
         colour: blocksColours.macroTasks,
         dynamic: true,
       },

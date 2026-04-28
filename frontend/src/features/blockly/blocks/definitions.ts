@@ -118,9 +118,9 @@ const registerEntityMutator = (id: string, missingWarning: string) => {
 }
 
 registerEntityMutator('object_block_mutation', 'Object not defined')
-registerEntityMutator('location_block_mutation', 'Location not defined')
-registerEntityMutator('action_block_mutation', 'Action not defined')
-registerEntityMutator('macro_block_mutation', 'Routine not defined')
+registerEntityMutator('location_block_mutation', 'Destination not defined')
+registerEntityMutator('action_block_mutation', 'Procedure not defined')
+registerEntityMutator('macro_block_mutation', 'Task not defined')
 
 // ─── EXTENSION: CUSTOM DASHED SHADOW BLOCKS ──────────────────────────────
 type BlockWithSvgHooks = Blockly.Block & {
@@ -208,7 +208,7 @@ Blockly.defineBlocksWithJsonArray([
         type: 'field_dropdown',
         name: 'GESTURE_TYPE',
         options: [
-          ['Thumbs Up', 'THUMBS_UP'],
+          ['Thumbs up', 'THUMBS_UP'],
           ['Open hand', 'OPEN_HAND'],
         ],
       },
@@ -458,7 +458,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'macro_task_block',
     message0: '%1 Do: %2',
     args0: [
-      iconConfig(ROUTINE_ICON_URI, 'ROUTINE:'),
+      iconConfig(ROUTINE_ICON_URI, 'TASK:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -500,7 +500,7 @@ const createShadowTriggerBlock = () => ({
   output: 'Boolean',
   colour: blocksColours.eventsConditions,
   extensions: ['shadow_placeholder_extension'],
-  tooltip: 'Insert a Sensors & Triggers block here.',
+  tooltip: 'Insert a Conditions block here.',
 })
 
 Blockly.defineBlocksWithJsonArray([
