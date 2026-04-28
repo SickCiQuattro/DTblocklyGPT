@@ -155,10 +155,18 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'human_action_block',
-        label: 'Pause and wait', // Human Action -> Wait for Operator
+        label: 'Pause and show message', // Human Action -> Wait for Operator
         colour: blocksColours.humanActions,
         description: blockDescriptionsByType.human_action_block,
-        inputs: 'Instruction for the person | Signal to wait for',
+        inputs: 'Message to display | Condition to resume',
+        outputs: 'None',
+      },
+      {
+        type: 'notify_action_block',
+        label: 'Show message',
+        colour: blocksColours.humanActions,
+        description: blockDescriptionsByType.notify_action_block,
+        inputs: 'Message to display',
         outputs: 'None',
       },
     ],

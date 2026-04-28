@@ -19,7 +19,7 @@ export const blockDescriptionsByType = {
   move_to_block: 'Moves the robot to a specific location or safe area.',
   gripper_block: "Opens or closes the robot's gripper.",
   human_action_block:
-    'Stops the robot so a person can safely do a task. The robot waits for a signal before moving again.',
+    'Stops the robot and shows a message on screen. The robot waits for the chosen condition before resuming.',
   repeat_block: 'Repeats these steps a specific number of times.',
   loop_block: 'Repeats these steps continuously, without stopping on its own.',
   when_block: 'Runs these steps once, when a specific condition becomes true.',
@@ -27,4 +27,6 @@ export const blockDescriptionsByType = {
     'When a condition is true, the robot does the first steps. When it is not, it does the second steps.',
   macro_task_block: 'Runs all the steps of a previously saved task.',
   repeat_until_block: 'Repeats these steps until a specific event happens.',
+  notify_action_block:
+    'Shows a message on screen while the robot keeps working. Use this to guide the person to prepare for the next step.',
 } as const

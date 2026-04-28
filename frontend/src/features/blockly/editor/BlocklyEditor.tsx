@@ -96,14 +96,14 @@ const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'Select Part',
   location: 'Select Destination',
   action: 'Select Skill',
-  trigger: 'Select Trigger',
+  trigger: 'Select Condition',
 }
 
 const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'No parts available.',
   location: 'No destinations available.',
   action: 'No skills available.',
-  trigger: 'No triggers available.',
+  trigger: 'No Condition available.',
 }
 
 const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [

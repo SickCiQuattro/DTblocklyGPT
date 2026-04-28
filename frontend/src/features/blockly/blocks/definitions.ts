@@ -318,10 +318,14 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'human_action_block',
-    message0: '%1 Pause and wait: %2',
+    message0: '%1 Pause and show: \n%2\n',
     args0: [
       iconConfig(USER_ICON_URI, 'HUMAN:'),
-      { type: 'field_input', name: 'TASK_DESC', text: 'insert component' },
+      {
+        type: 'field_input',
+        name: 'TASK_DESC',
+        text: 'Describe what the person must do',
+      },
     ],
     message1: 'Resume when: %1',
     args1: [
@@ -333,8 +337,28 @@ Blockly.defineBlocksWithJsonArray([
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
+    inputsInline: false,
     colour: blocksColours.humanActions,
     tooltip: blockDescriptionsByType.human_action_block,
+  },
+])
+
+Blockly.defineBlocksWithJsonArray([
+  {
+    type: 'notify_action_block',
+    message0: '%1 Show message and continue: \n%2',
+    args0: [
+      iconConfig(USER_ICON_URI, 'HUMAN:'),
+      {
+        type: 'field_input',
+        name: 'TASK_DESC',
+        text: 'Prepare the next component',
+      },
+    ],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.humanActions,
+    tooltip: blockDescriptionsByType.notify_action_block,
   },
 ])
 

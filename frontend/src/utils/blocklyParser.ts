@@ -4,6 +4,21 @@ import { ObjectListType } from 'pages/objects/types'
 import { AbstractCondition, AbstractStep } from 'pages/tasks/types'
 
 /**
+ * Parser for bidirectional conversion between Blockly blocks and abstract task representation.
+ *
+ * BLOCK SUPPORT STATUS:
+ * ✅ FULLY SUPPORTED (in both abstractToBlockly and blocklyToAbstract):
+ *    - pick, place, processing, move_to, gripper, repeat, when, human_action
+ *
+ * ⚠️  FRONTEND ONLY (Blockly UI exists, but not saved to backend):
+ *    - loop_block: infinite loop (would need backend support)
+ *    - repeat_until_block: conditional loop (would need AbstractRepeatUntilStep)
+ *    - notify_action_block: non-blocking message (would need backend support)
+ *
+ * These UI-only blocks return null when blocklyToAbstract is called.
+ */
+
+/**
  * Converts an abstract task step sequence into a Blockly-compatible serialized block tree.
  *
  * The output is rooted at the first top-level executable block and can be appended
@@ -237,6 +252,8 @@ export interface CustomBlock {
     | 'move_to_block'
     | 'gripper_block'
     | 'repeat_block'
+    | 'loop_block'
+    | 'repeat_until_block'
     | 'when_block'
     | 'when_otherwise_block'
     | 'sensor_signal_block'
@@ -246,6 +263,7 @@ export interface CustomBlock {
     | 'timer_block'
     | 'human_feedback_block'
     | 'human_action_block'
+    | 'notify_action_block'
     | 'wait_for_human_block' // kept for backwards compatibility
   inputs?: {
     OBJECT?: { block: CustomBlock }
@@ -253,6 +271,7 @@ export interface CustomBlock {
     ACTION?: { block: CustomBlock }
     DO?: { block: CustomBlock }
     WHEN?: { block: CustomBlock }
+    CONDITION?: { block: CustomBlock }
     OTHERWISE?: { block: CustomBlock }
     CONFIRM_EVENT?: { block: CustomBlock }
   }
@@ -267,7 +286,7 @@ export interface CustomBlock {
     AXIS?: 'X' | 'Y' | 'Z'
     DISTANCE?: number
     GRIPPER_STATE?: 'OPEN' | 'CLOSE'
-    GESTURE_TYPE?: 'THUMBS_UP' | 'STOP'
+    GESTURE_TYPE?: 'THUMBS_UP' | 'STOP' | 'OPEN_HAND'
     SECONDS?: number
   }
   next?: { block: CustomBlock }
@@ -320,6 +339,14 @@ export const blocklyToAbstract = (
           times: block.fields?.times ?? 1,
           steps: sequenceToSteps(block.inputs?.DO?.block),
         }
+      case 'loop_block':
+        // loop_block is not yet supported in AbstractStep (infinite loop)
+        // Return null until backend supports this pattern
+        return null
+      case 'repeat_until_block':
+        // repeat_until_block is not yet supported in AbstractStep
+        // Would need AbstractRepeatUntilStep type in backend
+        return null
       case 'when_block':
         return {
           type: 'when',
@@ -339,6 +366,10 @@ export const blocklyToAbstract = (
           description: block.fields?.TASK_DESC || '',
           confirmEvent: blockToCondition(block.inputs?.CONFIRM_EVENT?.block),
         }
+      case 'notify_action_block':
+        // notify_action_block is not yet supported in AbstractStep
+        // It's a non-blocking notification that doesn't pause the robot
+        return null
 
       default:
         return null
@@ -403,7 +434,7 @@ export const blocklyToAbstract = (
       case 'gesture_block':
         return {
           type: 'gesture',
-          gestureType: block.fields?.GESTURE_TYPE || 'THUMBS_UP',
+          gestureType: (block.fields?.GESTURE_TYPE || 'THUMBS_UP') as 'THUMBS_UP' | 'STOP',
         }
       case 'timer_block':
         return {
@@ -412,6 +443,9 @@ export const blocklyToAbstract = (
         }
       case 'human_feedback_block':
         return { type: 'human_feedback' }
+      case 'notify_action_block':
+        // notify_action_block doesn't produce a condition
+        return null
       default:
         return null
     }

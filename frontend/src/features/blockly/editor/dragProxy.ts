@@ -43,7 +43,7 @@ const getShadowInputs = (
         WHEN: {
           shadow: {
             type: 'shadow_trigger_block',
-            fields: { name: 'Select Trigger...' },
+            fields: { name: 'Select Condition...' },
           },
         },
       }
@@ -52,7 +52,7 @@ const getShadowInputs = (
         CONDITION: {
           shadow: {
             type: 'shadow_trigger_block',
-            fields: { name: 'Select Trigger...' },
+            fields: { name: 'Select Condition...' },
           },
         },
       }
@@ -61,7 +61,7 @@ const getShadowInputs = (
         CONFIRM_EVENT: {
           shadow: {
             type: 'shadow_trigger_block',
-            fields: { name: 'Select Trigger...' },
+            fields: { name: 'Select Condition...' },
           },
         },
       }
