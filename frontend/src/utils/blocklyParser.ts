@@ -434,7 +434,9 @@ export const blocklyToAbstract = (
       case 'gesture_block':
         return {
           type: 'gesture',
-          gestureType: (block.fields?.GESTURE_TYPE || 'THUMBS_UP') as 'THUMBS_UP' | 'STOP',
+          gestureType: (block.fields?.GESTURE_TYPE || 'THUMBS_UP') as
+            | 'THUMBS_UP'
+            | 'STOP',
         }
       case 'timer_block':
         return {

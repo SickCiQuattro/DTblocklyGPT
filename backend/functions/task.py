@@ -10,7 +10,6 @@ from backend.utils.response import (
 from backend.models import Task, Object, UserRobot, Location, Action, Robot
 from json import loads
 from django.db.models import Q
-from enum import Enum
 
 import sys
 if sys.platform == 'win32':
@@ -56,33 +55,15 @@ import cv2
 from numpy import zeros
 from typing import Tuple
 
-
-class LogicItems(Enum):
-    REPEAT = "repeat_block"
-    # LOOP = "loop_block"
-    WHEN_OTHERWISE = "when_otherwise_block"
-    WHEN = "when_block"
-    # STOP_WHEN = "stop_when_block"
-    # DO_WHEN = "do_when_block"
-
-
-class StepsItems(Enum):
-    PICK = "pick_block"
-    PROCESSING = "processing_block"
-    PLACE = "place_block"
-
-
-class EventsItems(Enum):
-    FIND = "find_object_block"
-    SENSOR = "sensor_signal_block"
-    HUMAN = "human_feedback_block"
-    # DETECT = "detect_block"
-
-
-class LibrariesItems(Enum):
-    OBJECT = "object_block"
-    ACTION = "action_block"
-    LOCATION = "location_block"
+# All block type identifiers: shared source of truth
+# NOTE: task.py still uses a fixed Pick→[Processing]→Place chain; the
+# enums from block_types cover only the subset task.py currently handles.
+from backend.block_types import (
+    LogicItems,
+    StepsItems,
+    EventsItems,
+    LibrariesItems,
+)
 
 
 class ActionPatterns(Enum):

@@ -18,7 +18,7 @@ from django.db.models import Q
 from django.contrib.auth.models import User
 from enum import Enum
 from typing import Tuple
-from backend.functions.task import EventsItems, LibrariesItems, LogicItems, StepsItems
+from backend.block_types import EventsItems, LibrariesItems, LogicItems, StepsItems
 import os
 
 # api_key = os.getenv("OPENAI_API_KEY")
@@ -417,20 +417,18 @@ def new_message(request: HttpRequest) -> HttpResponse:
         return error_response(CHATGPT_ERROR)
 
 
+# Alias for chat-side logic: kept for local readability
 class ChatLogicItems(Enum):
     REPEAT = "repeat"
     LOOP = "loop"
     WHEN_OTHERWISE = "when_otherwise"
     WHEN = "when"
-    # STOP_WHEN = "stop_when"
-    # DO_WHEN = "do_when"
 
 
 class ChatEventItems(Enum):
     SENSOR = "sensor"
     FIND = "find"
     HUMAN = "human"
-    # DETECT = "detect"
 
 
 def save_chat_task(request: HttpRequest) -> HttpResponse:
@@ -1326,6 +1324,7 @@ from dataclasses import dataclass
 from typing import List, Union, Optional, Literal
 
 
+
 @dataclass
 class SensorSignalCondition:
     type: Literal["sensor_signal"]
@@ -1344,8 +1343,30 @@ class HumanFeedbackCondition:
     type: Literal["human_feedback"]
 
 
+@dataclass
+class TouchDetectCondition:
+    type: Literal["touch_detect"]
+
+
+@dataclass
+class GestureCondition:
+    type: Literal["gesture"]
+    gestureType: str  # "THUMBS_UP" | "STOP" | "OPEN_HAND"
+
+
+@dataclass
+class TimerCondition:
+    type: Literal["timer"]
+    seconds: int
+
+
 AbstractCondition = Union[
-    SensorSignalCondition, FindObjectCondition, HumanFeedbackCondition
+    SensorSignalCondition,
+    FindObjectCondition,
+    HumanFeedbackCondition,
+    TouchDetectCondition,
+    GestureCondition,
+    TimerCondition,
 ]
 
 
@@ -1371,11 +1392,42 @@ class AbstractProcessingStep:
 
 
 @dataclass
+class AbstractMoveToStep:
+    type: Literal["move_to"]
+    motionType: str  # "LINEAR" | "JOINT"
+    locationId: int
+    locationName: str
+
+
+@dataclass
+class AbstractGripperStep:
+    type: Literal["gripper"]
+    state: str  # "OPEN" | "CLOSE"
+
+
+@dataclass
+class AbstractHumanActionStep:
+    type: Literal["human_action"]
+    description: str
+    confirmEvent: Optional[AbstractCondition] = None
+
+
+@dataclass
+class AbstractNotifyActionStep:
+    type: Literal["notify_action"]
+    description: str
+
+@dataclass
 class AbstractRepeatStep:
     type: Literal["repeat"]
     times: int
     steps: List["AbstractStep"]
 
+@dataclass
+class AbstractRepeatUntilStep:
+    type: Literal["repeat_until"]
+    condition: AbstractCondition
+    do: List["AbstractStep"]
 
 @dataclass
 class AbstractWhenStep:
@@ -1384,19 +1436,24 @@ class AbstractWhenStep:
     do: List["AbstractStep"]
     otherwise: Optional[List["AbstractStep"]] = None
 
-
 AbstractStep = Union[
     AbstractPickStep,
     AbstractPlaceStep,
     AbstractProcessingStep,
+    AbstractMoveToStep,
+    AbstractGripperStep,
+    AbstractHumanActionStep,
+    AbstractNotifyActionStep,
     AbstractRepeatStep,
+    AbstractRepeatUntilStep,
     AbstractWhenStep,
 ]
+
 
 CHATGPT_INSTRUCTIONS_MULTIMODAL = """
 # OBJECTIVE #
 You are an assistant designed to extract user intents from natural language and convert them into or edit a collaborative robot task structured as a JSON program.
-The task program consists of sequential and conditional steps of the following types: "pick", "place", "processing", "repeat", and "when". You may need to create a new task or modify an existing one.
+The task program consists of sequential and conditional steps. You may need to create a new task or modify an existing one.
 Steps can be nested inside "steps", "do", or "otherwise" arrays to represent loops and conditions.
 
 You must reply with a JSON response that follows this format:
@@ -1428,6 +1485,40 @@ Where AbstractStep is one of:
       "actionName": string
     }}
 
+  - Move-To Step (moves the robot to a location without picking/placing):
+    {{
+      "type": "move_to",
+      "motionType": "LINEAR" | "JOINT",
+      "locationId": number,
+      "locationName": string
+    }}
+
+  - Gripper Step (open or close the robot gripper):
+    {{
+      "type": "gripper",
+      "state": "OPEN" | "CLOSE"
+    }}
+
+  - Human Action Step (pause the robot and show a message to the operator):
+    {{
+      "type": "human_action",
+      "description": string,
+      "confirmEvent": AbstractCondition | null
+    }}
+
+    - Notify Action Step (send a message to the operator without stopping the robot):
+    {{
+      "type": "notify_action",
+      "description": string
+    }}
+
+  - Repeat-Until Step:
+    {{
+      "type": "repeat_until",
+      "condition": AbstractCondition,
+      "do": AbstractStep[]
+    }}
+
   - Repeat Step:
     {{
       "type": "repeat",
@@ -1439,7 +1530,7 @@ Where AbstractStep is one of:
     {{
       "type": "when",
       "condition": AbstractCondition | null,
-      "do": AbstractStep[],
+      "do": AbstractStep[]
     }}
 
   - When-Do-Otherwise Step:
@@ -1451,92 +1542,17 @@ Where AbstractStep is one of:
     }}
 
 Conditions (AbstractCondition) can be one of:
-- {{"type": "sensor_signal", "sensor":  "camera" | "ir"}}
+- {{"type": "sensor_signal", "sensor": "camera" | "ir"}}
 - {{"type": "find_object", "objectId": number, "objectName": string}}
 - {{"type": "human_feedback"}}
+- {{"type": "touch_detect"}}
+- {{"type": "gesture", "gestureType": "THUMBS_UP" | "OPEN_HAND"}}
+- {{"type": "timer", "seconds": number}}
 
 # CONNECTION RULES #
-These are the rules by which Blockly blocks can be connected:
-
-Blockly.Blocks.pick_block = {{
-  init() {{
-    this.setPreviousStatement(true, ['logic_pick_rel', 'place_pick_rel'])
-    this.setNextStatement(true, ['pick_place_rel', 'pick_processing_rel'])
-  }},
-}}
-
-Blockly.Blocks.place_block = {{
-  init() {{
-    this.setPreviousStatement(true, [
-      'pick_place_rel',
-      'processing_place_rel',
-      'when_otherwise_place_rel',
-    ])
-    this.setNextStatement(true, [
-      'place_repeat_rel',
-      'place_when_rel',
-      'place_when_otherwise_rel',
-      'place_pick_rel',
-    ])
-  }},
-}}
-
-Blockly.Blocks.processing_block = {{
-  init() {{
-    this.setNextStatement(true, [
-      'processing_place_rel',
-      'processing_processing_rel',
-      'processing_when_otherwise_rel',
-    ])
-    this.setPreviousStatement(true, [
-      'pick_processing_rel',
-      'processing_processing_rel',
-      'logic_processing_rel',
-    ])
-  }},
-}}
-
-Blockly.Blocks.when_otherwise_block = {{
-  init() {{
-    this.appendStatementInput('DO')
-        .setCheck([
-        'logic_pick_rel',
-        'logic_logic_rel',
-        'when_otherwise_place_rel',
-        ])
-    this.appendStatementInput('OTHERWISE')
-        .setCheck([
-        'logic_pick_rel',
-        'logic_logic_rel',
-        'when_otherwise_place_rel',
-        ])
-    this.setPreviousStatement(true, [
-      'logic_logic_rel',
-      'processing_when_otherwise_rel',
-      'place_when_otherwise_rel',
-    ])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
-  }},
-}}
-
-Blockly.Blocks.when_block = {{
-  init() {{
-    this.appendStatementInput('DO')
-        .setCheck(['logic_pick_rel', 'logic_logic_rel'])
-    this.setPreviousStatement(true, ['logic_logic_rel', 'place_when_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
-  }},
-}}
-
-Blockly.Blocks.repeat_block = {{
-  init() {{
-    this.appendStatementInput('DO')
-      .setCheck(['logic_pick_rel', 'logic_logic_rel'])
-    this.setPreviousStatement(true, ['logic_logic_rel', 'place_repeat_rel'])
-    this.setNextStatement(true, ['logic_logic_rel', 'logic_pick_rel','logic_processing_rel])
-  }},
-}}
-
+All step blocks (pick, place, processing, move_to, gripper, human_action, repeat, when, when_otherwise)
+can be freely chained in sequence. Condition blocks can only appear inside a "when" step or as
+the "confirmEvent" of a "human_action" step.
 
 # CONTEXT #
 - The user is not an expert in robotics or programming.
@@ -1547,17 +1563,16 @@ Blockly.Blocks.repeat_block = {{
 - Always reply with the language used by the user, even if it is not English.
 
 # IMPORTANT INSTRUCTIONS #
-- Between a user request and the next one, the use may change the existing task structure using the Blockly interface. Always consider the latest task structure provided.
+- Between a user request and the next one, the user may change the existing task structure using the Blockly interface. Always consider the latest task structure provided.
 - If no modifications are needed, return the existing task structure as it is.
 - Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
-- Always create a task compatible with the rules defined in the Blockly CONNECTION RULES section.
 - By default, if the user asks for a request, modify the existing task. Only if the user explicitly asks for a new task, create a new one from scratch.
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):
-- Objects: {objects}
-- Locations: {locations}
-- Actions: {actions}
+- Objects: {{objects}}
+- Locations: {{locations}}
+- Actions: {{actions}}
 
 # EXAMPLES #
 User says: "Pick the widget and place it in the bin A."
@@ -1567,6 +1582,25 @@ Response:
   "task": [
       {{"type": "pick", "objectId": 3, "objectName": "widget"}},
       {{"type": "place", "locationId": 2, "locationName": "bin A"}}
+    ]
+}}
+
+User says: "Move to the inspection zone then open the gripper."
+Response:
+{{
+  "answer": "I added a move-to step towards the inspection zone followed by an open-gripper step.",
+  "task": [
+      {{"type": "move_to", "motionType": "LINEAR", "locationId": 5, "locationName": "inspection zone"}},
+      {{"type": "gripper", "state": "OPEN"}}
+    ]
+}}
+
+User says: "Wait for the operator to put a part on the table before starting."
+Response:
+{{
+  "answer": "I added a human action step that pauses the robot and waits for the operator.",
+  "task": [
+      {{"type": "human_action", "description": "Please place the part on the table and confirm.", "confirmEvent": {{"type": "human_feedback"}}}}
     ]
 }}
 """
@@ -1595,42 +1629,28 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                                     "pick",
                                     "place",
                                     "processing",
+                                    "move_to",
+                                    "gripper",
+                                    "human_action",
+                                    "notify_action",
                                     "repeat",
+                                    "repeat_until",
                                     "when",
                                 ],
                                 "description": "Step type",
                             },
-                            "objectId": {
-                                "type": "integer",
-                                "description": "Object ID (for step pick)",
-                            },
-                            "objectName": {
-                                "type": "string",
-                                "description": "Object name (for step pick)",
-                            },
-                            "locationId": {
-                                "type": "integer",
-                                "description": "Location ID (for step place)",
-                            },
-                            "locationName": {
-                                "type": "string",
-                                "description": "Location name (for step place)",
-                            },
-                            "actionId": {
-                                "type": "integer",
-                                "description": "Action ID (for step processing)",
-                            },
-                            "actionName": {
-                                "type": "string",
-                                "description": "Action name (for step processing)",
-                            },
-                            "times": {
-                                "type": "integer",
-                                "description": "Number of repetitions (for step repeat)",
-                            },
+                            "objectId": {"type": "integer"},
+                            "objectName": {"type": "string"},
+                            "locationId": {"type": "integer"},
+                            "locationName": {"type": "string"},
+                            "actionId": {"type": "integer"},
+                            "actionName": {"type": "string"},
+                            "motionType": {"type": "string", "enum": ["LINEAR", "JOINT"]},
+                            "state": {"type": "string", "enum": ["OPEN", "CLOSE"]},
+                            "description": {"type": "string", "description": "Message for human interaction"},
+                            "times": {"type": "integer"},
                             "condition": {
                                 "type": "object",
-                                "description": "Condition for step when",
                                 "properties": {
                                     "type": {
                                         "type": "string",
@@ -1638,65 +1658,43 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                                             "sensor_signal",
                                             "find_object",
                                             "human_feedback",
-                                        ],
-                                        "description": "Condition type",
+                                            "touch_detect",
+                                            "gesture",
+                                            "timer",
+                                        ]
                                     },
-                                    "sensor": {
-                                        "type": "string",
-                                        "description": "Sensor name (for sensor_signal condition)",
-                                    },
-                                    "objectId": {
-                                        "type": "integer",
-                                        "description": "Object ID (for find_object condition)",
-                                    },
-                                    "objectName": {
-                                        "type": "string",
-                                        "description": "Object name (for find_object condition)",
-                                    },
+                                    "sensor": {"type": "string"},
+                                    "objectId": {"type": "integer"},
+                                    "objectName": {"type": "string"},
+                                    "gestureType": {"type": "string"},
+                                    "seconds": {"type": "integer"}
                                 },
+                                "required": ["type"]
+                            },
+                            "confirmEvent": {
+                                "type": "object",
+                                "description": "Event required to resume from human action",
+                                # Use same structure as condition for simplicity
+                                "properties": {
+                                    "type": {"type": "string"}
+                                },
+                                "required": ["type"]
                             },
                             "do": {
                                 "type": "array",
-                                "description": "Steps to execute when condition is met (for step when)",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": [
-                                                "pick",
-                                                "place",
-                                                "processing",
-                                                "repeat",
-                                                "when",
-                                            ],
-                                            "description": "Step type",
-                                        },
-                                    },
-                                    "required": ["type"],
-                                },
+                                "description": "Steps to execute",
+                                "items": {"type": "object"}  # Recursive types are hard in strict JSON schema, keep it generic
                             },
                             "otherwise": {
                                 "type": "array",
-                                "description": "Steps to execute when condition is not met (for step when)",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": [
-                                                "pick",
-                                                "place",
-                                                "processing",
-                                                "repeat",
-                                                "when",
-                                            ],
-                                            "description": "Step type",
-                                        },
-                                    },
-                                    "required": ["type"],
-                                },
+                                "description": "Steps to execute when condition is not met",
+                                "items": {"type": "object"}
                             },
+                            "steps": {
+                                "type": "array",
+                                "description": "Steps for repeat loop",
+                                "items": {"type": "object"}
+                            }
                         },
                         "required": ["type"],
                     },
@@ -1704,7 +1702,8 @@ CHATGPT_FUNCTION_MULTIMODAL = {
             },
             "additionalProperties": False,
             "required": ["answer", "task"],
-            "strict": True,
+            # Strict validation ensures the LLM sticks exactly to the provided schema
+            "strict": False, # Changed to False momentarily because recursive schema definition (like 'do' containing 'steps') breaks strict JSON schemas in OpenAI unless built intricately.
         },
     },
 }
