@@ -40,10 +40,6 @@ const USER_ICON_URI = createLucideIconURI(
   '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 )
 
-const ROUTINE_ICON_URI = createLucideIconURI(
-  '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/>',
-)
-
 const CIRCLE_PLUS_ICON_URI = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   blocksColours.objectsPositions,
@@ -52,6 +48,26 @@ const CIRCLE_PLUS_ICON_URI = createLucideIconURI(
 const CIRCLE_PLUS_TRIGGER_ICON_URI = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   blocksColours.eventsConditions,
+)
+
+const TAG_ICON_URI = createLucideIconURI(
+  '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+)
+
+const MAP_PIN_ICON_URI = createLucideIconURI(
+  '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+)
+
+const WRENCH_ICON_URI = createLucideIconURI(
+  '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/>',
+)
+
+const WORKFLOW_ICON_URI = createLucideIconURI(
+  '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+)
+
+const SCAN_EYE_ICON_URI = createLucideIconURI(
+  '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
 )
 
 const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
@@ -152,24 +168,33 @@ Blockly.Extensions.register('shadow_placeholder_extension', function () {
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'object_block',
-    message0: '%1',
-    args0: [{ type: 'field_label_serializable', name: 'name', text: '' }],
+    message0: '%1 %2',
+    args0: [
+      iconConfig(TAG_ICON_URI, 'OBJECT:'),
+      { type: 'field_label_serializable', name: 'name', text: '' },
+    ],
     output: 'object_block',
     colour: blocksColours.objectsPositions,
     mutator: 'object_block_mutation',
   },
   {
     type: 'location_block',
-    message0: '%1',
-    args0: [{ type: 'field_label_serializable', name: 'name', text: '' }],
+    message0: '%1 %2',
+    args0: [
+      iconConfig(MAP_PIN_ICON_URI, 'DESTINATION:'),
+      { type: 'field_label_serializable', name: 'name', text: '' },
+    ],
     output: 'location_block',
     colour: blocksColours.objectsPositions,
     mutator: 'location_block_mutation',
   },
   {
     type: 'action_block',
-    message0: '%1',
-    args0: [{ type: 'field_label_serializable', name: 'name', text: '' }],
+    message0: '%1 %2',
+    args0: [
+      iconConfig(WRENCH_ICON_URI, 'PROCEDURE:'),
+      { type: 'field_label_serializable', name: 'name', text: '' },
+    ],
     output: 'action_block',
     colour: blocksColours.objectsPositions,
     mutator: 'action_block_mutation',
@@ -180,30 +205,33 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'sensor_signal_block',
-    message0: 'External signal received',
+    message0: '%1 External signal received',
+    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.sensor_signal_block,
   },
   {
     type: 'find_object_block',
-    message0: 'Object detected %1',
-    args0: [{ type: 'input_value', name: 'OBJECT', check: 'object_block' }],
+    message0: '%1 Object detected',
+    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.find_object_block,
   },
   {
     type: 'touch_detect_block',
-    message0: 'Something touched',
+    message0: '%1 Something touched',
+    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.touch_detect_block,
   },
   {
     type: 'gesture_block',
-    message0: 'Gesture detected %1',
+    message0: '%1 %2 Gesture detected',
     args0: [
+      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
       {
         type: 'field_dropdown',
         name: 'GESTURE_TYPE',
@@ -219,8 +247,11 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'timer_block',
-    message0: '%1 seconds have passed',
-    args0: [{ type: 'field_number', name: 'SECONDS', value: 5, min: 1 }],
+    message0: '%1 %2 seconds have passed',
+    args0: [
+      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
+      { type: 'field_number', name: 'SECONDS', value: 5, min: 1 },
+    ],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.timer_block,
@@ -482,7 +513,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'macro_task_block',
     message0: '%1 Do: %2',
     args0: [
-      iconConfig(ROUTINE_ICON_URI, 'TASK:'),
+      iconConfig(WORKFLOW_ICON_URI, 'TASK:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],

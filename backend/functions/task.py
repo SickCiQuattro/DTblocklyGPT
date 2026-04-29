@@ -10,6 +10,7 @@ from backend.utils.response import (
 from backend.models import Task, Object, UserRobot, Location, Action, Robot
 from json import loads
 from django.db.models import Q
+from enum import Enum
 
 import sys
 if sys.platform == 'win32':

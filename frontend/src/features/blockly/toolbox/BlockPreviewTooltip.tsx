@@ -18,12 +18,17 @@ import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import {
   Eye,
-  FlaskConical,
+  ScanEye,
   MapPin,
   Pointer,
+  Bot,
+  Repeat2,
   SquareArrowRightEnter,
   SquareArrowRightExit,
-  Zap,
+  Tag,
+  User,
+  Wrench,
+  Workflow,
   X,
 } from 'lucide-react'
 
@@ -63,28 +68,60 @@ const getPreviewCategoryBadgeMeta = (
   itemType: string,
   fallbackCategoryName?: string,
 ) => {
+  // First try exact block-type matches (covers dynamic entity pills)
   switch (itemType) {
     case 'object_block':
-      return {
-        label: 'Objects',
-        Icon: FlaskConical,
-      }
+      return { label: 'Objects', Icon: Tag }
     case 'location_block':
-      return {
-        label: 'Destinations',
-        Icon: MapPin,
-      }
+      return { label: 'Destinations', Icon: MapPin }
     case 'action_block':
-      return {
-        label: 'Procedures',
-        Icon: Zap,
-      }
+      return { label: 'Procedures', Icon: Wrench }
+    case 'human_action_block':
+    case 'notify_action_block':
+      return { label: 'Human Step', Icon: User }
+    case 'pick_block':
+    case 'processing_block':
+    case 'place_block':
+    case 'move_to_block':
+    case 'gripper_block':
+      return { label: 'Robot Actions', Icon: Bot }
+    case 'find_object_block':
+    case 'touch_detect_block':
+    case 'gesture_block':
+    case 'timer_block':
+    case 'sensor_signal_block':
+      return { label: 'Conditions', Icon: ScanEye }
+    case 'macro_task_block':
+      return { label: 'Macro', Icon: Workflow }
+    case 'repeat_block':
+    case 'loop_block':
+    case 'when_block':
+    case 'when_otherwise_block':
+    case 'repeat_until_block':
+      return { label: 'Task Flow', Icon: Repeat2 }
     default:
-      return {
-        label: fallbackCategoryName ?? 'Toolbox',
-        Icon: null,
-      }
+      break
   }
+
+  // Fallback: try to infer from category display name if provided
+  const hint = (fallbackCategoryName || '').toLowerCase()
+  if (hint.includes('block'))
+    return { label: fallbackCategoryName ?? 'Task Flow', Icon: Repeat2 }
+  if (hint.includes('human'))
+    return { label: fallbackCategoryName ?? 'Human', Icon: User }
+  if (hint.includes('robot') || hint.includes('actions'))
+    return {
+      label: fallbackCategoryName ?? 'Robot Actions',
+      Icon: SquareArrowRightEnter,
+    }
+  if (hint.includes('condition') || hint.includes('events'))
+    return { label: fallbackCategoryName ?? 'Conditions', Icon: Eye }
+  if (hint.includes('workspace') || hint.includes('objects'))
+    return { label: fallbackCategoryName ?? 'My Workspace', Icon: Tag }
+  if (hint.includes('tasks') || hint.includes('macro'))
+    return { label: fallbackCategoryName ?? 'My Tasks', Icon: Pointer }
+
+  return { label: fallbackCategoryName ?? 'Toolbox', Icon: null }
 }
 
 const parseHexColor = (hexColor: string) => {

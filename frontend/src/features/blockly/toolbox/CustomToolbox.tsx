@@ -6,13 +6,13 @@ import {
   Typography,
 } from '@mui/material'
 import {
+  Blocks,
   ChevronDown,
-  SlidersHorizontal,
   Bot,
   User,
-  Shapes,
-  Radar,
-  Layers,
+  Repeat2,
+  ScanEye,
+  Workflow,
   Trash2,
 } from 'lucide-react'
 
@@ -161,19 +161,19 @@ const getCategoryIcon = (key: string, colour: string) => {
 
   switch (key) {
     case 'logic-control':
-      return <SlidersHorizontal color={colour} size={size} />
+      return <Repeat2 color={colour} size={size} />
     case 'robot-actions':
       return <Bot color={colour} size={size} />
     case 'human-actions':
       return <User color={colour} size={size} />
     case 'objects-positions':
-      return <Shapes color={colour} size={size} />
+      return <Blocks color={colour} size={size} />
     case 'events-conditions':
-      return <Radar color={colour} size={size} />
+      return <ScanEye color={colour} size={size} />
     case 'macro-tasks':
-      return <Layers color={colour} size={size} />
+      return <Workflow color={colour} size={size} />
     default:
-      return <SlidersHorizontal color={colour} size={size} />
+      return <Repeat2 color={colour} size={size} />
   }
 }
 
