@@ -146,6 +146,14 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         inputs: 'Action (Open/Close)',
         outputs: 'None',
       },
+      {
+        type: 'wait_block',
+        label: 'Wait',
+        colour: blocksColours.robotActions,
+        description: blockDescriptionsByType.wait_block,
+        inputs: 'Duration (seconds)',
+        outputs: 'None',
+      },
     ],
   },
   {
@@ -213,7 +221,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'touch_detect_block',
-        label: 'Something touched', // Touch Detect
+        label: 'Contact detected', // Touch Detect
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.touch_detect_block,
         outputs: 'Yes or No',
@@ -239,6 +247,30 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         label: 'External signal received', // Sensor Signal
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.sensor_signal_block,
+        outputs: 'Yes or No',
+      },
+      {
+        type: 'logic_and_block',
+        label: 'AND',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_and_block,
+        inputs: 'First condition | Second condition',
+        outputs: 'Yes or No',
+      },
+      {
+        type: 'logic_or_block',
+        label: 'OR',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_or_block,
+        inputs: 'First condition | Second condition',
+        outputs: 'Yes or No',
+      },
+      {
+        type: 'logic_not_block',
+        label: 'NOT',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_not_block,
+        inputs: 'Condition to reverse',
         outputs: 'Yes or No',
       },
     ],

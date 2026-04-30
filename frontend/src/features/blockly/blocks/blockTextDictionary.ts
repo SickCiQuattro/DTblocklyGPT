@@ -8,13 +8,14 @@ export const blockDescriptionsByType = {
     'Checks if a connected external machine or sensor is sending a signal.',
   find_object_block:
     'Checks if the camera can currently see the chosen object.',
-  touch_detect_block: 'Checks if someone or something is touching the robot.',
+  touch_detect_block:
+    'Checks if someone or something is physically touching the robot.',
   gesture_block:
     'Checks if the camera sees a specific hand gesture (like a thumbs up).',
   timer_block: 'Checks if the set amount of time has passed.',
   pick_block: 'Tells the robot to pick up the chosen object.',
   processing_block:
-    'Makes the robot perform a custom action (like shaking or dispensing).',
+    'Makes the robot perform a custom procedure (like shaking or dispensing).',
   place_block: 'Tells the robot to place the object at the chosen destination.',
   move_to_block: 'Moves the robot to a specific location or safe area.',
   gripper_block: "Opens or closes the robot's gripper.",
@@ -29,4 +30,9 @@ export const blockDescriptionsByType = {
   repeat_until_block: 'Repeats these steps until a specific event happens.',
   notify_action_block:
     'Shows a message on screen while the robot keeps working. Use this to guide the person to prepare for the next step.',
+  logic_and_block: 'True only when both conditions are true at the same time.',
+  logic_or_block: 'True when at least one of the two conditions is true.',
+  logic_not_block:
+    'Reverses the result: true becomes false, false becomes true.',
+  wait_block: 'Pauses the robot for a set number of seconds before continuing.',
 } as const

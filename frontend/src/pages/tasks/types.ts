@@ -130,3 +130,6 @@ export type AbstractCondition =
   | { type: 'touch_detect' }
   | { type: 'gesture'; gestureType: 'THUMBS_UP' | 'STOP' }
   | { type: 'timer'; seconds: number }
+  | { type: 'and'; left: AbstractCondition; right: AbstractCondition }
+  | { type: 'or'; left: AbstractCondition; right: AbstractCondition }
+  | { type: 'not'; condition: AbstractCondition }

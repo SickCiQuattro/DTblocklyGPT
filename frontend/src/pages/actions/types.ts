@@ -1,6 +1,7 @@
 export interface ActionListType {
   id: number
   name: string
+  group?: string | null
   shared: boolean
   owner: number
   owner__username: string

@@ -7,10 +7,12 @@ import { AbstractCondition, AbstractStep } from 'pages/tasks/types'
  * Parser for bidirectional conversion between Blockly blocks and abstract task representation.
  *
  * BLOCK SUPPORT STATUS:
- * ✅ FULLY SUPPORTED (in both abstractToBlockly and blocklyToAbstract):
+ *  FULLY SUPPORTED:
  *    - pick, place, processing, move_to, gripper, repeat, when, human_action
+ *    - sensor_signal, find_object, touch_detect, gesture, timer
+ *    - logic_and, logic_or, logic_not
  *
- * ⚠️  FRONTEND ONLY (Blockly UI exists, but not saved to backend):
+ *  FRONTEND ONLY (Blockly UI exists, but not saved to backend):
  *    - loop_block: infinite loop (would need backend support)
  *    - repeat_until_block: conditional loop (would need AbstractRepeatUntilStep)
  *    - notify_action_block: non-blocking message (would need backend support)
@@ -225,6 +227,29 @@ export const abstractToBlockly = (
           type: 'timer_block',
           fields: { SECONDS: condition.seconds || 5 },
         }
+      case 'and':
+        return {
+          type: 'logic_and_block',
+          inputs: {
+            A: { block: conditionToBlock(condition.left) },
+            B: { block: conditionToBlock(condition.right) },
+          },
+        }
+      case 'or':
+        return {
+          type: 'logic_or_block',
+          inputs: {
+            A: { block: conditionToBlock(condition.left) },
+            B: { block: conditionToBlock(condition.right) },
+          },
+        }
+      case 'not':
+        return {
+          type: 'logic_not_block',
+          inputs: {
+            BOOL: { block: conditionToBlock(condition.condition) },
+          },
+        }
       case 'human_feedback':
         return { type: 'human_feedback_block' }
       default:
@@ -264,6 +289,9 @@ export interface CustomBlock {
     | 'human_feedback_block'
     | 'human_action_block'
     | 'notify_action_block'
+    | 'logic_and_block'
+    | 'logic_or_block'
+    | 'logic_not_block'
     | 'wait_for_human_block' // kept for backwards compatibility
   inputs?: {
     OBJECT?: { block: CustomBlock }
@@ -274,6 +302,9 @@ export interface CustomBlock {
     CONDITION?: { block: CustomBlock }
     OTHERWISE?: { block: CustomBlock }
     CONFIRM_EVENT?: { block: CustomBlock }
+    A?: { block: CustomBlock }
+    B?: { block: CustomBlock }
+    BOOL?: { block: CustomBlock }
   }
   data?: string
   extraState?: string
@@ -443,6 +474,23 @@ export const blocklyToAbstract = (
           type: 'timer',
           seconds: block.fields?.SECONDS ?? 5,
         }
+      case 'logic_and_block': {
+        const left = blockToCondition(block.inputs?.A?.block)
+        const right = blockToCondition(block.inputs?.B?.block)
+        if (!left || !right) return null
+        return { type: 'and', left, right }
+      }
+      case 'logic_or_block': {
+        const left = blockToCondition(block.inputs?.A?.block)
+        const right = blockToCondition(block.inputs?.B?.block)
+        if (!left || !right) return null
+        return { type: 'or', left, right }
+      }
+      case 'logic_not_block': {
+        const condition = blockToCondition(block.inputs?.BOOL?.block)
+        if (!condition) return null
+        return { type: 'not', condition }
+      }
       case 'human_feedback_block':
         return { type: 'human_feedback' }
       case 'notify_action_block':

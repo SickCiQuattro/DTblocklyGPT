@@ -3,6 +3,7 @@ export interface ObjectListType {
   name: string
   owner: number
   shared: boolean
+  group?: string | null
   keywords: string[]
   obj_length: number
   obj_width: number

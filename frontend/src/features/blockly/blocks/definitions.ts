@@ -213,15 +213,18 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'find_object_block',
-    message0: '%1 Object detected',
-    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
+    message0: '%1 Object detected %2',
+    args0: [
+      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
+      { type: 'input_value', name: 'OBJECT', check: 'object_block' },
+    ],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.find_object_block,
   },
   {
     type: 'touch_detect_block',
-    message0: '%1 Something touched',
+    message0: '%1 Contact detected',
     args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
@@ -229,7 +232,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'gesture_block',
-    message0: '%1 %2 Gesture detected',
+    message0: '%1 Gesture detected %2',
     args0: [
       iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
       {
@@ -255,6 +258,39 @@ Blockly.defineBlocksWithJsonArray([
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.timer_block,
+  },
+  {
+    type: 'logic_and_block',
+    message0: '%1 AND %2',
+    args0: [
+      { type: 'input_value', name: 'A', check: 'Boolean' },
+      { type: 'input_value', name: 'B', check: 'Boolean' },
+    ],
+    output: 'Boolean',
+    inputsInline: true,
+    colour: blocksColours.eventsConditions,
+    tooltip: blockDescriptionsByType.logic_and_block,
+  },
+  {
+    type: 'logic_or_block',
+    message0: '%1 OR %2',
+    args0: [
+      { type: 'input_value', name: 'A', check: 'Boolean' },
+      { type: 'input_value', name: 'B', check: 'Boolean' },
+    ],
+    output: 'Boolean',
+    inputsInline: true,
+    colour: blocksColours.eventsConditions,
+    tooltip: blockDescriptionsByType.logic_or_block,
+  },
+  {
+    type: 'logic_not_block',
+    message0: 'NOT %1',
+    args0: [{ type: 'input_value', name: 'BOOL', check: 'Boolean' }],
+    output: 'Boolean',
+    inputsInline: true,
+    colour: blocksColours.eventsConditions,
+    tooltip: blockDescriptionsByType.logic_not_block,
   },
 ])
 
@@ -342,6 +378,18 @@ Blockly.defineBlocksWithJsonArray([
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.robotActions,
     tooltip: blockDescriptionsByType.gripper_block,
+  },
+  {
+    type: 'wait_block',
+    message0: '%1 Wait %2 seconds',
+    args0: [
+      iconConfig(BOT_ICON_URI, 'ROBOT:'),
+      { type: 'field_number', name: 'SECONDS', value: 3, min: 1 },
+    ],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.robotActions,
+    tooltip: blockDescriptionsByType.wait_block,
   },
 ])
 

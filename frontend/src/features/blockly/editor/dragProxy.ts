@@ -65,6 +65,31 @@ const getShadowInputs = (
           },
         },
       }
+    case 'logic_and_block':
+    case 'logic_or_block':
+      return {
+        A: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Condition...' },
+          },
+        },
+        B: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Condition...' },
+          },
+        },
+      }
+    case 'logic_not_block':
+      return {
+        BOOL: {
+          shadow: {
+            type: 'shadow_trigger_block',
+            fields: { name: 'Select Condition...' },
+          },
+        },
+      }
     default:
       return undefined
   }

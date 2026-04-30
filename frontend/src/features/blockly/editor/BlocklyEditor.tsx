@@ -13,6 +13,7 @@ import {
 } from '@mui/material'
 import { Maximize, Minus, Plus, Redo2, Search, Undo2 } from 'lucide-react'
 
+import { blocksColours } from '../blocks'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -51,6 +52,9 @@ type SelectableShadowBlockType =
   | 'touch_detect_block'
   | 'gesture_block'
   | 'timer_block'
+  | 'logic_and_block'
+  | 'logic_or_block'
+  | 'logic_not_block'
 
 type ShadowEntityBlockType =
   | 'object_block'
@@ -61,9 +65,57 @@ type ShadowEntityBlockType =
   | 'shadow_action_block'
   | 'shadow_trigger_block'
 
+// Block types that can be selected directly from the shadow picker.
+const DIRECT_BLOCK_TYPES = new Set<SelectableShadowBlockType>([
+  'object_block',
+  'location_block',
+  'action_block',
+  'sensor_signal_block',
+  'find_object_block',
+  'touch_detect_block',
+  'gesture_block',
+  'timer_block',
+  'logic_and_block',
+  'logic_or_block',
+  'logic_not_block',
+])
+
+// Pure helper: returns blockState fragments for blocks that need shadow inputs.
+const getBlockInputState = (
+  blockType: SelectableShadowBlockType,
+): Record<string, unknown> => {
+  const shadowTrigger = {
+    shadow: {
+      type: 'shadow_trigger_block',
+      fields: { name: 'Select Condition' },
+    },
+  }
+  const shadowObject = {
+    shadow: {
+      type: 'shadow_object_block',
+      fields: { name: 'Select Object' },
+    },
+  }
+
+  switch (blockType) {
+    case 'logic_and_block':
+    case 'logic_or_block':
+      return { inputs: { A: shadowTrigger, B: shadowTrigger } }
+    case 'logic_not_block':
+      return { inputs: { BOOL: shadowTrigger } }
+    case 'find_object_block':
+      return { inputs: { OBJECT: shadowObject } }
+    default:
+      return {}
+  }
+}
+
 interface ShadowPickerItem {
   id: number
   name: string
+  description?: string
+  group?: string
+  paramHint?: string
   keywords: string[]
   blockType?: SelectableShadowBlockType
 }
@@ -76,6 +128,7 @@ interface ShadowPickerPosition {
 interface ShadowEntitySource {
   id: number
   name: string
+  group?: string | null
   keywords?: string[] | null
 }
 
@@ -93,49 +146,89 @@ const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
 }
 
 const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
-  object: 'Select Part',
+  object: 'Select Object',
   location: 'Select Destination',
-  action: 'Select Skill',
+  action: 'Select Procedure',
   trigger: 'Select Condition',
 }
 
 const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
-  object: 'No parts available.',
+  object: 'No objects available.',
   location: 'No destinations available.',
-  action: 'No skills available.',
-  trigger: 'No Condition available.',
+  action: 'No procedures available.',
+  trigger: 'No conditions available.',
 }
 
 const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
   {
     id: 1,
-    name: 'External Sensor is ON',
+    name: 'External signal received',
+    description: 'A connected machine or button sends a digital signal.',
+    group: 'Conditions',
     keywords: ['sensor', 'signal', 'machine', 'external'],
     blockType: 'sensor_signal_block',
   },
   {
     id: 2,
-    name: 'Object is Found',
+    name: 'Object detected',
+    description: 'Camera checks if a specific object is visible.',
+    group: 'Conditions',
+    paramHint: 'object',
     keywords: ['object', 'vision', 'camera', 'find'],
     blockType: 'find_object_block',
   },
   {
     id: 3,
-    name: 'Robot is Touched',
+    name: 'Contact detected',
+    description: 'Someone or something is physically touching the robot.',
+    group: 'Conditions',
     keywords: ['touch', 'collision', 'contact', 'force'],
     blockType: 'touch_detect_block',
   },
   {
     id: 4,
-    name: 'Gesture is Seen',
-    keywords: ['gesture', 'camera', 'operator', 'hand'],
+    name: 'Gesture detected',
+    description: 'Worker shows a specific hand gesture to the camera.',
+    group: 'Conditions',
+    paramHint: 'gesture type',
+    keywords: ['gesture', 'camera', 'hand'],
     blockType: 'gesture_block',
   },
   {
     id: 5,
-    name: 'Seconds have passed',
+    name: 'Time passed',
+    description: 'Becomes true after a set number of seconds.',
+    group: 'Conditions',
+    paramHint: 'seconds',
     keywords: ['timer', 'seconds', 'delay', 'time'],
     blockType: 'timer_block',
+  },
+  {
+    id: 6,
+    name: 'AND',
+    description: 'Both conditions must be true at the same time.',
+    group: 'Logic',
+    paramHint: 'A  +  B',
+    keywords: ['and', 'both', 'combine'],
+    blockType: 'logic_and_block',
+  },
+  {
+    id: 7,
+    name: 'OR',
+    description: 'At least one of the two conditions must be true.',
+    group: 'Logic',
+    paramHint: 'A  or  B',
+    keywords: ['or', 'either', 'combine'],
+    blockType: 'logic_or_block',
+  },
+  {
+    id: 8,
+    name: 'NOT',
+    description: 'Reverses the result — true becomes false.',
+    group: 'Logic',
+    paramHint: 'reverses',
+    keywords: ['not', 'negate', 'invert', 'opposite'],
+    blockType: 'logic_not_block',
   },
 ]
 
@@ -159,10 +252,12 @@ const toKeywordsCsvOrNull = (keywords: string[]) => {
 const buildShadowPickerItems = (
   entities: ShadowEntitySource[],
   fallbackPrefix: 'Object' | 'Location' | 'Action',
+  group: string,
 ): ShadowPickerItem[] => {
   return entities.map((entity) => ({
     id: entity.id,
     name: entity.name?.trim() || `${fallbackPrefix} ${entity.id}`,
+    group: entity.group?.trim() || group,
     keywords: Array.isArray(entity.keywords) ? entity.keywords : [],
   }))
 }
@@ -206,20 +301,28 @@ const resolveRealBlockTypeFromShadow = (
     }
   }
 
-  if (
-    blockType === 'object_block' ||
-    blockType === 'location_block' ||
-    blockType === 'action_block' ||
-    blockType === 'sensor_signal_block' ||
-    blockType === 'find_object_block' ||
-    blockType === 'touch_detect_block' ||
-    blockType === 'gesture_block' ||
-    blockType === 'timer_block'
-  ) {
-    return blockType
+  if (DIRECT_BLOCK_TYPES.has(blockType as SelectableShadowBlockType)) {
+    return blockType as SelectableShadowBlockType
   }
 
   return null
+}
+
+const getDotColour = (group: string): string => {
+  switch (group) {
+    case 'Objects':
+      return blocksColours.objectsPositions
+    case 'Destinations':
+      return blocksColours.objectsPositions
+    case 'Procedures':
+      return blocksColours.objectsPositions
+    case 'Conditions':
+      return blocksColours.eventsConditions
+    case 'Logic':
+      return blocksColours.eventsConditions
+    default:
+      return '#94A3B8'
+  }
 }
 
 /**
@@ -290,11 +393,11 @@ export const BlocklyEditor = ({
   const selectedShadowItems = useMemo<ShadowPickerItem[]>(() => {
     switch (popoverType) {
       case 'object':
-        return buildShadowPickerItems(dataObjects, 'Object')
+        return buildShadowPickerItems(dataObjects, 'Object', 'Objects')
       case 'location':
-        return buildShadowPickerItems(dataLocations, 'Location')
+        return buildShadowPickerItems(dataLocations, 'Location', 'Destinations')
       case 'action':
-        return buildShadowPickerItems(dataActions, 'Action')
+        return buildShadowPickerItems(dataActions, 'Action', 'Procedures')
       case 'trigger':
         return TRIGGER_PICKER_ITEMS
       default:
@@ -306,6 +409,19 @@ export const BlocklyEditor = ({
   const filteredShadowItems = useMemo(
     () => filterShadowItems(selectedShadowItems, searchQuery),
     [selectedShadowItems, searchQuery],
+  )
+
+  const groupedShadowItems = useMemo(
+    () =>
+      filteredShadowItems.reduce<Record<string, ShadowPickerItem[]>>(
+        (acc, item) => {
+          const group = item.group ?? 'Other'
+          ;(acc[group] ??= []).push(item)
+          return acc
+        },
+        {},
+      ),
+    [filteredShadowItems],
   )
 
   // Reset all shadow-picker state together when it closes.
@@ -529,18 +645,7 @@ export const BlocklyEditor = ({
             }
           : {
               type: selectedBlockType,
-              ...(selectedBlockType === 'find_object_block'
-                ? {
-                    inputs: {
-                      OBJECT: {
-                        shadow: {
-                          type: 'shadow_object_block',
-                          fields: { name: 'Select Part...' },
-                        },
-                      },
-                    },
-                  }
-                : {}),
+              ...getBlockInputState(selectedBlockType),
             }
 
         // Let Blockly create and hydrate the block in one pass.
@@ -704,10 +809,6 @@ export const BlocklyEditor = ({
     setContextMenu(null)
   }, [])
 
-  const handleCloseShadowMenu = useCallback(() => {
-    closeShadowPicker()
-  }, [closeShadowPicker])
-
   const handleContextMenuItemClick = useCallback(
     (option: ContextMenuAction) => {
       setContextMenu(null)
@@ -723,71 +824,71 @@ export const BlocklyEditor = ({
     [],
   )
 
-  const handleBlockPointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
-    item: ToolboxBlockItem,
-  ) => {
-    // primary button only
-    if (e.button !== 0) return
+  const handleBlockPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, item: ToolboxBlockItem) => {
+      // primary button only
+      if (e.button !== 0) return
 
-    const workspace = workspaceRef.current
-    if (!workspace) return
+      const workspace = workspaceRef.current
+      if (!workspace) return
 
-    if (workspace.options.readOnly) return
+      if (workspace.options.readOnly) return
 
-    e.preventDefault()
+      e.preventDefault()
 
-    // close any open tooltip
-    workspace.hideChaff()
+      // close any open tooltip
+      workspace.hideChaff()
 
-    // cleanup listener
-    pendingDragCleanupRef.current?.()
-    pendingDragCleanupRef.current = null
+      // cleanup listener
+      pendingDragCleanupRef.current?.()
+      pendingDragCleanupRef.current = null
 
-    const startX = e.clientX
-    const startY = e.clientY
-    const pointerId = e.pointerId
-    const sourceElement = e.currentTarget
+      const startX = e.clientX
+      const startY = e.clientY
+      const pointerId = e.pointerId
+      const sourceElement = e.currentTarget
 
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerEnd)
-      window.removeEventListener('pointercancel', onPointerEnd)
+      const cleanup = () => {
+        window.removeEventListener('pointermove', onPointerMove)
+        window.removeEventListener('pointerup', onPointerEnd)
+        window.removeEventListener('pointercancel', onPointerEnd)
 
-      if (pendingDragCleanupRef.current === cleanup) {
-        pendingDragCleanupRef.current = null
-      }
-    }
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) return
-
-      const distance = Math.hypot(
-        moveEvent.clientX - startX,
-        moveEvent.clientY - startY,
-      )
-
-      if (distance < DRAG_THRESHOLD_PX) {
-        return
+        if (pendingDragCleanupRef.current === cleanup) {
+          pendingDragCleanupRef.current = null
+        }
       }
 
-      window.dispatchEvent(new Event('toolboxDragStart'))
-      cleanup()
-      startSyntheticBlockDrag(moveEvent, sourceElement, item, workspace)
-    }
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) return
 
-    const onPointerEnd = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== pointerId) return
-      // click: no creation
-      cleanup()
-    }
+        const distance = Math.hypot(
+          moveEvent.clientX - startX,
+          moveEvent.clientY - startY,
+        )
 
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerEnd)
-    window.addEventListener('pointercancel', onPointerEnd)
+        if (distance < DRAG_THRESHOLD_PX) {
+          return
+        }
 
-    pendingDragCleanupRef.current = cleanup
-  }
+        window.dispatchEvent(new Event('toolboxDragStart'))
+        cleanup()
+        startSyntheticBlockDrag(moveEvent, sourceElement, item, workspace)
+      }
+
+      const onPointerEnd = (endEvent: PointerEvent) => {
+        if (endEvent.pointerId !== pointerId) return
+        // click: no creation
+        cleanup()
+      }
+
+      window.addEventListener('pointermove', onPointerMove)
+      window.addEventListener('pointerup', onPointerEnd)
+      window.addEventListener('pointercancel', onPointerEnd)
+
+      pendingDragCleanupRef.current = cleanup
+    },
+    [],
+  )
 
   return (
     <div className="custom-dragdrop-layout">
@@ -812,7 +913,7 @@ export const BlocklyEditor = ({
           onWorkspaceReady={handleWorkspaceReady}
         />
 
-        <div className="workspace-controls-overlay" aria-hidden={false}>
+        <div className="workspace-controls-overlay">
           <div className="workspace-controls-group workspace-controls-group--top-right">
             <IconButton
               className="workspace-control-button"
@@ -871,7 +972,7 @@ export const BlocklyEditor = ({
             popoverType !== null &&
             targetShadowBlockId !== null
           }
-          onClose={handleCloseShadowMenu}
+          onClose={closeShadowPicker}
           autoFocus={false}
           disableAutoFocusItem
           anchorReference="anchorPosition"
@@ -1008,54 +1109,128 @@ export const BlocklyEditor = ({
                 />
               </MenuItem>
             ) : (
-              filteredShadowItems.map((item) => {
-                const keywords = item.keywords
-                  .map((keyword) => keyword.trim())
-                  .filter((keyword) => keyword.length > 0)
+              Object.entries(groupedShadowItems).map(
+                ([group, items], groupIdx) => (
+                  <Box key={group}>
+                    {groupIdx > 0 && (
+                      <Divider sx={{ my: 0.5, borderColor: '#E2E8F0' }} />
+                    )}
 
-                return (
-                  <MenuItem
-                    key={`${popoverType}-${item.id}`}
-                    onClick={() => handleSelectShadowItem(item)}
-                    sx={{
-                      my: 0.2,
-                      minHeight: 44,
-                      borderRadius: '8px',
-                      px: 1.25,
-                      alignItems: 'flex-start',
-                      transition: 'background-color 0.2s',
-                      '&:hover': {
-                        backgroundColor: '#F8FAFC',
-                      },
-                    }}
-                  >
-                    <ListItemText
-                      primary={item.name}
-                      secondary={
-                        keywords.length > 0
-                          ? `Keywords: ${keywords.join(', ')}`
-                          : undefined
-                      }
-                      slotProps={{
-                        primary: {
-                          sx: {
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            color: '#0F172A',
-                          },
-                        },
-                        secondary: {
-                          sx: {
-                            mt: 0.2,
-                            fontSize: '0.75rem',
-                            color: '#64748B',
-                          },
-                        },
+                    <Typography
+                      sx={{
+                        px: 1.25,
+                        py: 0.5,
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        color: '#94A3B8',
+                        textTransform: 'uppercase',
                       }}
-                    />
-                  </MenuItem>
-                )
-              })
+                    >
+                      {group}
+                    </Typography>
+
+                    {items.map((item) => {
+                      const keywords = item.keywords
+                        .map((keyword) => keyword.trim())
+                        .filter((keyword) => keyword.length > 0)
+
+                      return (
+                        <MenuItem
+                          key={`${popoverType}-${item.id}`}
+                          onClick={() => handleSelectShadowItem(item)}
+                          sx={{
+                            my: 0.15,
+                            minHeight: 52,
+                            borderRadius: '8px',
+                            px: 1.25,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                            '&:hover': {
+                              backgroundColor: '#F8FAFC',
+                            },
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              mt: '5px',
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              flexShrink: 0,
+                              backgroundColor: getDotColour(group),
+                              // opacity: group === 'Logic' ? 0.5 : 1,
+                            }}
+                          />
+
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.75,
+                              }}
+                            >
+                              <Typography
+                                sx={{
+                                  fontSize: '0.85rem',
+                                  fontWeight: 600,
+                                  color: '#0F172A',
+                                }}
+                              >
+                                {item.name}
+                              </Typography>
+                              {item.paramHint && (
+                                <Box
+                                  sx={{
+                                    px: 0.75,
+                                    py: 0.1,
+                                    borderRadius: '4px',
+                                    backgroundColor: '#F1F5F9',
+                                    border: '1px solid #E2E8F0',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 500,
+                                    color: '#64748B',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {item.paramHint}
+                                </Box>
+                              )}
+                            </Box>
+
+                            {item.description && (
+                              <Typography
+                                sx={{
+                                  mt: 0.2,
+                                  fontSize: '0.75rem',
+                                  color: '#64748B',
+                                  lineHeight: 1.4,
+                                }}
+                              >
+                                {item.description}
+                              </Typography>
+                            )}
+
+                            {keywords.length > 0 && !item.description && (
+                              <Typography
+                                sx={{
+                                  mt: 0.2,
+                                  fontSize: '0.75rem',
+                                  color: '#64748B',
+                                }}
+                              >
+                                Keywords: {keywords.join(', ')}
+                              </Typography>
+                            )}
+                          </Box>
+                        </MenuItem>
+                      )
+                    })}
+                  </Box>
+                ),
+              )
             )}
           </Box>
         </Menu>
