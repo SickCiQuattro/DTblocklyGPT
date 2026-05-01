@@ -1,98 +1,26 @@
 import * as Blockly from 'blockly/core'
 
-import { BlockState as State } from 'utils/blocklyTypes'
-
+import { BlockState as State, ConnectionState } from 'utils/blocklyTypes'
 import { ToolboxBlockItem } from '../toolbox'
+import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
 
 const getShadowInputs = (
   blockType: string,
-): Record<string, any> | undefined => {
-  switch (blockType) {
-    case 'processing_block':
-      return {
-        ACTION: {
-          shadow: {
-            type: 'shadow_action_block',
-            fields: { name: 'Select Procedure...' },
-          },
+): Record<string, ConnectionState> | undefined => {
+  const inputMap = GHOST_INPUT_MAP[blockType]
+  if (!inputMap) return undefined
+
+  return Object.fromEntries(
+    Object.entries(inputMap).map(([inputName, ghostDef]) => [
+      inputName,
+      {
+        shadow: {
+          type: ghostDef.type,
+          fields: { name: ghostDef.label },
         },
-      }
-    case 'pick_block':
-    case 'find_object_block':
-      return {
-        OBJECT: {
-          shadow: {
-            type: 'shadow_object_block',
-            fields: { name: 'Select Object...' },
-          },
-        },
-      }
-    case 'place_block':
-    case 'move_to_block':
-      return {
-        LOCATION: {
-          shadow: {
-            type: 'shadow_location_block',
-            fields: { name: 'Select Destination...' },
-          },
-        },
-      }
-    case 'when_block':
-    case 'when_otherwise_block':
-      return {
-        WHEN: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-      }
-    case 'repeat_until_block':
-      return {
-        CONDITION: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-      }
-    case 'human_action_block':
-      return {
-        CONFIRM_EVENT: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-      }
-    case 'logic_and_block':
-    case 'logic_or_block':
-      return {
-        A: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-        B: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-      }
-    case 'logic_not_block':
-      return {
-        BOOL: {
-          shadow: {
-            type: 'shadow_trigger_block',
-            fields: { name: 'Select Condition...' },
-          },
-        },
-      }
-    default:
-      return undefined
-  }
+      } satisfies ConnectionState,
+    ]),
+  )
 }
 // ────────────────────────────────────────────────────────────────────────
 

@@ -146,6 +146,8 @@ type BlockWithSvgHooks = Blockly.Block & {
 
 Blockly.Extensions.register('shadow_placeholder_extension', function () {
   const block = this as BlockWithSvgHooks
+  block.setShadow(true)
+
   const originalInitSvg = block.initSvg
 
   const cssClass =

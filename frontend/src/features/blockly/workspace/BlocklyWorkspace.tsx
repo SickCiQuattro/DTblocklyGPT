@@ -5,6 +5,12 @@ import 'blockly/blocks'
 
 import { BlockState } from 'utils/blocklyTypes'
 
+import {
+  injectAllGhostBlocks,
+  registerGhostRestoreListener,
+  saveWorkspaceWithoutGhosts,
+} from 'utils/ghostBlockManager'
+
 import { isValidBlockState } from '../utils/serialization'
 import { updateStructureAndFireFakeChangeEvent } from './chatSync'
 import { INTERACTIVE_WORKSPACE_CONFIG } from './workspaceConfig'
@@ -25,10 +31,11 @@ export const getBlocklyStructure = (): BlockState | null => {
   const workspace = Blockly.getMainWorkspace()
   if (!workspace) return null
 
-  const blocklyTaskStructure =
-    Blockly.serialization.workspaces.save(workspace).blocks?.blocks
+  const blocklyTaskStructure = saveWorkspaceWithoutGhosts(
+    workspace as Blockly.WorkspaceSvg,
+  ).blocks?.blocks
   if (!blocklyTaskStructure) return null
-  return blocklyTaskStructure[0]
+  return blocklyTaskStructure[0] as BlockState
 }
 
 const disableContextMenuItems = () => {
@@ -114,7 +121,6 @@ export const BlocklyWorkspace = ({
     }
 
     const blocklyDivCurrent = blocklyDivRef.current as Element
-
     const workspaceConfig: Blockly.BlocklyOptions = {
       ...INTERACTIVE_WORKSPACE_CONFIG,
       readOnly: !editMode,
@@ -127,11 +133,15 @@ export const BlocklyWorkspace = ({
     // observer variables
     let resizeObserver: ResizeObserver | null = null
     let detachChainSelection: (() => void) | null = null
+    let detachGhostListener: (() => void) | null = null
 
     if (primaryWorkspaceRef.current) {
       disableContextMenuItems()
       const workspace = primaryWorkspaceRef.current
       detachChainSelection = enableChainSelection(workspace)
+
+      detachGhostListener = registerGhostRestoreListener(workspace)
+
       onWorkspaceReady?.(workspace)
 
       if (isValidBlockState(dataTask)) {
@@ -140,6 +150,8 @@ export const BlocklyWorkspace = ({
         defaultDataTask.y = dataTask?.y || DEFAULT_Y_AXIS
 
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
+
+        injectAllGhostBlocks(workspace)
       }
 
       if (blocklyDivCurrent) {
@@ -154,15 +166,9 @@ export const BlocklyWorkspace = ({
 
     // Cleanup phase
     return () => {
-      if (resizeObserver) {
-        resizeObserver.disconnect()
-      }
-
-      if (detachChainSelection) {
-        detachChainSelection()
-        detachChainSelection = null
-      }
-
+      resizeObserver?.disconnect()
+      detachChainSelection?.()
+      detachGhostListener?.()
       onWorkspaceReady?.(null)
 
       if (primaryWorkspaceRef.current) {
@@ -173,13 +179,8 @@ export const BlocklyWorkspace = ({
   }, [editMode, dataTask, onWorkspaceReady])
 
   useEffect(() => {
-    if (!primaryWorkspaceRef.current || !applyExternalTaskState) {
-      return
-    }
-
-    if (!isValidBlockState(dataTask)) {
-      return
-    }
+    if (!primaryWorkspaceRef.current || !applyExternalTaskState) return
+    if (!isValidBlockState(dataTask)) return
 
     const workspace = primaryWorkspaceRef.current
     const blocklyTaskStructure = getBlocklyStructure()
@@ -191,6 +192,10 @@ export const BlocklyWorkspace = ({
     defaultDataTask.y = y_axis
 
     updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
+
+    // ─── FIX 4: re-inietta ghost dopo aggiornamento esterno ──────────────────
+    injectAllGhostBlocks(workspace)
+
     onExternalTaskStateApplied?.()
   }, [applyExternalTaskState, dataTask, onExternalTaskStateApplied])
 
