@@ -193,7 +193,6 @@ export const BlocklyWorkspace = ({
 
     updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
 
-    // ─── FIX 4: re-inietta ghost dopo aggiornamento esterno ──────────────────
     injectAllGhostBlocks(workspace)
 
     onExternalTaskStateApplied?.()

@@ -26,12 +26,16 @@ export const GHOST_INPUT_MAP: Record<
   },
   when_block: {
     WHEN: { type: 'shadow_trigger_block', label: 'Select Condition...' },
+    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
   },
   when_otherwise_block: {
     WHEN: { type: 'shadow_trigger_block', label: 'Select Condition...' },
+    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
+    OTHERWISE: { type: 'shadow_sequence_block', label: 'Add a step...' },
   },
   repeat_until_block: {
     CONDITION: { type: 'shadow_trigger_block', label: 'Select Condition...' },
+    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
   },
   human_action_block: {
     CONFIRM_EVENT: {
@@ -50,6 +54,12 @@ export const GHOST_INPUT_MAP: Record<
   logic_not_block: {
     BOOL: { type: 'shadow_trigger_block', label: 'Select Condition...' },
   },
+  repeat_block: {
+    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
+  },
+  loop_block: {
+    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
+  },
 }
 
 /**
@@ -61,6 +71,7 @@ export const GHOST_BLOCK_TYPES = new Set([
   'shadow_location_block',
   'shadow_action_block',
   'shadow_trigger_block',
+  'shadow_sequence_block',
 ])
 
 // --- UTILITY 1: STRIP GHOSTS FOR STORAGE --------------------------------------
@@ -153,7 +164,11 @@ function injectGhostBlock(
     ghost.setShadow(true) // Marks the block as a native shadow block
     ghost.initSvg()
     ghost.render()
-    input.connection.connect(ghost.outputConnection!)
+
+    const ghostConnection = ghost.outputConnection ?? ghost.previousConnection
+    if (ghostConnection) {
+      input.connection.connect(ghostConnection)
+    }
   } finally {
     Blockly.Events.enable()
   }
@@ -193,11 +208,22 @@ export function registerGhostRestoreListener(
     )
       return
 
+    const moveEvent = event as Blockly.Events.BlockMove
+    if (moveEvent.blockId) {
+      const movedBlock = workspace.getBlockById(moveEvent.blockId)
+      if (movedBlock?.isShadow()) return // ← nuovo: ignora MOVE dei shadow
+    }
+
     // Use a small debounce to avoid performance issues during rapid changes
     if (debounce) clearTimeout(debounce)
     debounce = setTimeout(() => {
-      injectAllGhostBlocks(workspace)
-      debounce = null
+      Blockly.Events.setGroup('ghost-restore')
+      try {
+        injectAllGhostBlocks(workspace)
+      } finally {
+        Blockly.Events.setGroup(false)
+        debounce = null
+      }
     }, 30)
   }
 

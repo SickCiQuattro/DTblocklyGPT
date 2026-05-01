@@ -50,6 +50,11 @@ const CIRCLE_PLUS_TRIGGER_ICON_URI = createLucideIconURI(
   blocksColours.eventsConditions,
 )
 
+const CIRCLE_PLUS_SEQUENCE_ICON_URI = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  '#9E9E9E',
+)
+
 const TAG_ICON_URI = createLucideIconURI(
   '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
 )
@@ -69,6 +74,9 @@ const WORKFLOW_ICON_URI = createLucideIconURI(
 const SCAN_EYE_ICON_URI = createLucideIconURI(
   '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
 )
+
+const sequencePlusFieldConfig = () =>
+  iconConfig(CIRCLE_PLUS_SEQUENCE_ICON_URI, '+', 14, 14)
 
 const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
   type: 'field_image',
@@ -153,16 +161,14 @@ Blockly.Extensions.register('shadow_placeholder_extension', function () {
   const cssClass =
     block.type === 'shadow_trigger_block'
       ? 'custom-dashed-shadow-trigger'
-      : 'custom-dashed-shadow-workspace'
+      : block.type === 'shadow_sequence_block'
+        ? 'custom-dashed-shadow-sequence'
+        : 'custom-dashed-shadow-workspace'
 
   block.initSvg = function (this: Blockly.Block) {
     originalInitSvg?.call(this)
-
-    // Attach a CSS hook to style each placeholder variant consistently.
     const svgRoot = (this as BlockWithSvgHooks).getSvgRoot?.()
-    if (svgRoot) {
-      svgRoot.classList.add(cssClass)
-    }
+    if (svgRoot) svgRoot.classList.add(cssClass)
   }
 })
 
@@ -625,4 +631,41 @@ Blockly.defineBlocksWithJsonArray([
     'Select Procedure',
   ),
   createShadowTriggerBlock(),
+])
+
+// Aggiungi in fondo alla sezione "SHADOW PLACEHOLDERS WITH '+' ICON"
+
+const createShadowSequenceBlock = () => ({
+  type: 'shadow_sequence_block',
+  message0: '%1 %2',
+  args0: [
+    { type: 'field_label_serializable', name: 'name', text: 'Add a step' },
+    sequencePlusFieldConfig(),
+  ],
+  // Fondamentale: previousStatement + nextStatement, NON output
+  previousStatement: ['robot_sequence', 'logic_sequence'],
+  nextStatement: ['robot_sequence', 'logic_sequence'],
+  colour: '#7A7A8A',
+  extensions: ['shadow_placeholder_extension'],
+  tooltip: 'Drop a block here to add a step.',
+})
+
+Blockly.defineBlocksWithJsonArray([
+  createShadowEntityBlock(
+    'shadow_object_block',
+    'object_block',
+    'Select Object',
+  ),
+  createShadowEntityBlock(
+    'shadow_location_block',
+    'location_block',
+    'Select Destination',
+  ),
+  createShadowEntityBlock(
+    'shadow_action_block',
+    'action_block',
+    'Select Procedure',
+  ),
+  createShadowTriggerBlock(),
+  createShadowSequenceBlock(), // ← nuovo
 ])

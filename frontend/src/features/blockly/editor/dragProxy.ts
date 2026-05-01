@@ -22,7 +22,6 @@ const getShadowInputs = (
     ]),
   )
 }
-// ────────────────────────────────────────────────────────────────────────
 
 /**
  * Convert a toolbox pill pointer interaction into a Blockly-native block drag gesture.
@@ -33,10 +32,9 @@ export const startSyntheticBlockDrag = (
   item: ToolboxBlockItem,
   workspace: Blockly.WorkspaceSvg,
 ) => {
+  const shadowInputs = getShadowInputs(item.type)
   const hasFields = !!item.fields && Object.keys(item.fields).length > 0
   const hasData = typeof item.data === 'string' && item.data.length > 0
-
-  const shadowInputs = getShadowInputs(item.type)
 
   const blockState: State = {
     type: item.type,
@@ -46,26 +44,25 @@ export const startSyntheticBlockDrag = (
   }
 
   try {
-    Blockly.Events.disable()
+    const screenCoordinates = new Blockly.utils.Coordinate(
+      pointerEvent.clientX,
+      pointerEvent.clientY,
+    )
+    const workspaceCoords = Blockly.utils.svgMath.screenToWsCoordinates(
+      workspace,
+      screenCoordinates,
+    )
 
+    // Crea il blocco silenziosamente — nessun evento
+    Blockly.Events.disable()
     let block: Blockly.BlockSvg | null = null
     try {
       block = Blockly.serialization.blocks.append(
         blockState,
         workspace,
       ) as Blockly.BlockSvg
-
       block.initSvg()
       block.render()
-
-      const screenCoordinates = new Blockly.utils.Coordinate(
-        pointerEvent.clientX,
-        pointerEvent.clientY,
-      )
-      const workspaceCoords = Blockly.utils.svgMath.screenToWsCoordinates(
-        workspace,
-        screenCoordinates,
-      )
       block.moveTo(
         new Blockly.utils.Coordinate(
           workspaceCoords.x - 20,
@@ -76,19 +73,34 @@ export const startSyntheticBlockDrag = (
       Blockly.Events.enable()
     }
 
-    if (!block) {
-      return
+    if (!block) return
+
+    const capturedBlock = block
+
+    // Apri il gruppo PRIMA di fare fire del CREATE
+    Blockly.Events.setGroup(true)
+    const currentGroup = Blockly.Events.getGroup()
+
+    // Registra manualmente il CREATE nello stack undo
+    Blockly.Events.fire(new Blockly.Events.BlockCreate(capturedBlock))
+
+    // Listener che chiude il gruppo dopo il drop
+    const dragEndListener = (event: Blockly.Events.Abstract) => {
+      const dragEvent = event as Blockly.Events.Abstract & { isStart?: boolean }
+      if (`${event.type}` !== `${Blockly.Events.BLOCK_DRAG}`) return
+      if (dragEvent.isStart !== false) return
+
+      Blockly.Events.setGroup(false)
+      workspace.removeChangeListener(dragEndListener)
     }
 
-    if (Blockly.Events.isEnabled()) {
-      Blockly.Events.fire(new Blockly.Events.BlockCreate(block))
-    }
+    workspace.addChangeListener(dragEndListener)
 
     if (sourceElement.hasPointerCapture(pointerEvent.pointerId)) {
       sourceElement.releasePointerCapture(pointerEvent.pointerId)
     }
 
-    const svgRoot = block.getSvgRoot()
+    const svgRoot = capturedBlock.getSvgRoot()
     const syntheticEvent = new PointerEvent('pointerdown', {
       clientX: pointerEvent.clientX,
       clientY: pointerEvent.clientY,
@@ -102,6 +114,7 @@ export const startSyntheticBlockDrag = (
 
     svgRoot.dispatchEvent(syntheticEvent)
   } catch (error) {
+    Blockly.Events.setGroup(false)
     console.error('Blockly Gesture Proxy Error:', error)
   }
 }

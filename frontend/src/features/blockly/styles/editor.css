@@ -148,11 +148,11 @@
 
 .custom-dashed-shadow-workspace > .blocklyPath {
   fill: rgba(0, 189, 86, 0.15) !important;
-  
+
   stroke: #01BD56 !important;
   stroke-width: 2px !important;
   stroke-dasharray: 6, 5 !important;
-  
+
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
 }
@@ -165,17 +165,34 @@
 
 .custom-dashed-shadow-trigger > .blocklyPath {
   fill: rgba(225, 89, 48, 0.15) !important;
-  
+
   stroke: #E15930 !important;
   stroke-width: 2px !important;
   stroke-dasharray: 6, 5 !important;
-  
+
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
 }
 
 .custom-dashed-shadow-trigger text.blocklyText {
   fill: #E15930 !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+}
+
+.custom-dashed-shadow-sequence > .blocklyPath {
+  fill: rgba(151, 134, 118, 0.15) !important;
+
+  stroke: #978676 !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 6, 5 !important;
+
+  fill-opacity: 1 !important;
+  stroke-opacity: 1 !important;
+}
+
+.custom-dashed-shadow-sequence text.blocklyText {
+  fill: #978676 !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }

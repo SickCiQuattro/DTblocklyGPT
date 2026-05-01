@@ -41,7 +41,12 @@ import {
 
 const DRAG_THRESHOLD_PX = 5
 
-type ShadowPopoverType = 'object' | 'location' | 'action' | 'trigger'
+type ShadowPopoverType =
+  | 'object'
+  | 'location'
+  | 'action'
+  | 'trigger'
+  | 'sequence'
 
 type SelectableShadowBlockType =
   | 'object_block'
@@ -55,6 +60,21 @@ type SelectableShadowBlockType =
   | 'logic_and_block'
   | 'logic_or_block'
   | 'logic_not_block'
+  // sequence blocks
+  | 'pick_block'
+  | 'processing_block'
+  | 'place_block'
+  | 'move_to_block'
+  | 'gripper_block'
+  | 'wait_block'
+  | 'human_action_block'
+  | 'notify_action_block'
+  | 'repeat_block'
+  | 'loop_block'
+  | 'repeat_until_block'
+  | 'when_block'
+  | 'when_otherwise_block'
+  | 'macro_task_block'
 
 type ShadowEntityBlockType =
   | 'object_block'
@@ -64,6 +84,7 @@ type ShadowEntityBlockType =
   | 'shadow_location_block'
   | 'shadow_action_block'
   | 'shadow_trigger_block'
+  | 'shadow_sequence_block'
 
 // Block types that can be selected directly from the shadow picker.
 const DIRECT_BLOCK_TYPES = new Set<SelectableShadowBlockType>([
@@ -143,6 +164,7 @@ const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
   action_block: 'action',
   shadow_action_block: 'action',
   shadow_trigger_block: 'trigger',
+  shadow_sequence_block: 'sequence',
 }
 
 const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
@@ -150,6 +172,7 @@ const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
   location: 'Select Destination',
   action: 'Select Procedure',
   trigger: 'Select Condition',
+  sequence: 'Add a step',
 }
 
 const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
@@ -157,6 +180,7 @@ const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   location: 'No destinations available.',
   action: 'No procedures available.',
   trigger: 'No conditions available.',
+  sequence: 'No steps available.',
 }
 
 const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
@@ -231,6 +255,126 @@ const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
     blockType: 'logic_not_block',
   },
 ]
+
+const buildSequencePickerItems = (macros: TaskType[]): ShadowPickerItem[] => {
+  const staticItems: ShadowPickerItem[] = [
+    {
+      id: -1,
+      name: 'Pick up',
+      description: 'Pick up an object with the robot arm',
+      keywords: ['pick', 'grab', 'grasp', 'object'],
+      blockType: 'pick_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -2,
+      name: 'Perform',
+      description: 'Execute a pre-configured procedure',
+      keywords: ['perform', 'procedure', 'execute', 'skill'],
+      blockType: 'processing_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -3,
+      name: 'Place at',
+      description: 'Place the held object at a destination',
+      keywords: ['place', 'put', 'deposit', 'location'],
+      blockType: 'place_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -4,
+      name: 'Move to',
+      description: 'Move the robot to a specific location',
+      keywords: ['move', 'go', 'navigate', 'location'],
+      blockType: 'move_to_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -5,
+      name: 'Gripper',
+      description: 'Open or close the robot gripper',
+      keywords: ['gripper', 'open', 'close', 'hand'],
+      blockType: 'gripper_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -6,
+      name: 'Wait',
+      description: 'Pause execution for a set amount of time',
+      keywords: ['wait', 'pause', 'delay', 'seconds'],
+      blockType: 'wait_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -7,
+      name: 'Pause and show',
+      description: 'Pause and prompt a human operator to act',
+      keywords: ['human', 'pause', 'operator', 'show'],
+      blockType: 'human_action_block',
+      group: 'Human Steps',
+    },
+    {
+      id: -8,
+      name: 'Show message',
+      description: 'Display a notification and continue',
+      keywords: ['notify', 'message', 'info', 'continue'],
+      blockType: 'notify_action_block',
+      group: 'Human Steps',
+    },
+    {
+      id: -9,
+      name: 'Repeat N times',
+      description: 'Repeat a sequence a fixed number of times',
+      keywords: ['repeat', 'loop', 'times', 'count'],
+      blockType: 'repeat_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -10,
+      name: 'Repeat forever',
+      description: 'Repeat a sequence indefinitely',
+      keywords: ['loop', 'forever', 'infinite'],
+      blockType: 'loop_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -11,
+      name: 'Repeat until',
+      description: 'Repeat until a condition is met',
+      keywords: ['repeat', 'until', 'condition', 'while'],
+      blockType: 'repeat_until_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -12,
+      name: 'When',
+      description: 'Execute steps only when a condition is true',
+      keywords: ['when', 'if', 'condition'],
+      blockType: 'when_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -13,
+      name: 'When / Otherwise',
+      description: 'Execute different steps based on a condition',
+      keywords: ['when', 'otherwise', 'if', 'else'],
+      blockType: 'when_otherwise_block',
+      group: 'Task Flow',
+    },
+  ]
+
+  const macroItems: ShadowPickerItem[] = macros.map((macro) => ({
+    id: macro.id,
+    name: macro.name?.trim() || `Task ${macro.id}`,
+    description: macro.description?.trim() || undefined,
+    keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
+    blockType: 'macro_task_block',
+    group: 'My Tasks',
+  }))
+
+  return [...staticItems, ...macroItems]
+}
 
 const resolveShadowPopoverType = (
   blockType: string,
@@ -320,6 +464,14 @@ const getDotColour = (group: string): string => {
       return blocksColours.eventsConditions
     case 'Logic':
       return blocksColours.eventsConditions
+    case 'Robot Actions':
+      return blocksColours.robotActions
+    case 'Human Steps':
+      return blocksColours.humanActions
+    case 'Task Flow':
+      return blocksColours.logicControl
+    case 'My Tasks':
+      return blocksColours.macroTasks
     default:
       return '#94A3B8'
   }
@@ -400,10 +552,12 @@ export const BlocklyEditor = ({
         return buildShadowPickerItems(dataActions, 'Action', 'Procedures')
       case 'trigger':
         return TRIGGER_PICKER_ITEMS
+      case 'sequence':
+        return buildSequencePickerItems(availableMacros)
       default:
         return []
     }
-  }, [dataActions, dataLocations, dataObjects, popoverType])
+  }, [dataActions, dataLocations, dataObjects, popoverType, availableMacros])
 
   // Filter menu entries by name and keywords while the user types.
   const filteredShadowItems = useMemo(
@@ -597,7 +751,6 @@ export const BlocklyEditor = ({
   const handleSelectShadowItem = useCallback(
     (item: ShadowPickerItem) => {
       const workspace = workspaceRef.current
-
       if (!workspace || !targetShadowBlockId) {
         closeShadowPicker()
         return
@@ -609,7 +762,11 @@ export const BlocklyEditor = ({
         return
       }
 
-      const parentConnection = shadowBlock.outputConnection?.targetConnection
+      const isSequence = shadowBlock.type === 'shadow_sequence_block'
+      const parentConnection = isSequence
+        ? shadowBlock.previousConnection?.targetConnection
+        : shadowBlock.outputConnection?.targetConnection
+
       if (!parentConnection) {
         closeShadowPicker()
         return
@@ -617,7 +774,6 @@ export const BlocklyEditor = ({
 
       const selectedBlockType =
         item.blockType ?? resolveRealBlockTypeFromShadow(shadowBlock.type)
-
       if (!selectedBlockType) {
         closeShadowPicker()
         return
@@ -628,14 +784,16 @@ export const BlocklyEditor = ({
         selectedBlockType === 'location_block' ||
         selectedBlockType === 'action_block'
 
+      const isMacroBlock = selectedBlockType === 'macro_task_block'
+
       Blockly.Events.setGroup(true)
       try {
         const displayName =
           item.name.trim().length > 0 ? item.name.trim() : `${item.id}`
 
-        const blockState: State = isEntityBlock
+        const baseState: State = isMacroBlock
           ? {
-              type: selectedBlockType,
+              type: 'macro_task_block',
               fields: { name: displayName },
               data: JSON.stringify({
                 id: item.id,
@@ -643,20 +801,50 @@ export const BlocklyEditor = ({
                 keywords: toKeywordsCsvOrNull(item.keywords),
               }),
             }
-          : {
-              type: selectedBlockType,
-              ...getBlockInputState(selectedBlockType),
-            }
+          : isEntityBlock
+            ? {
+                type: selectedBlockType,
+                fields: { name: displayName },
+                data: JSON.stringify({
+                  id: item.id,
+                  name: displayName,
+                  keywords: toKeywordsCsvOrNull(item.keywords),
+                }),
+              }
+            : {
+                type: selectedBlockType,
+                ...(DIRECT_BLOCK_TYPES.has(
+                  selectedBlockType as SelectableShadowBlockType,
+                )
+                  ? getBlockInputState(
+                      selectedBlockType as SelectableShadowBlockType,
+                    )
+                  : {}),
+              }
 
-        // Let Blockly create and hydrate the block in one pass.
-        const newBlock = Blockly.serialization.blocks.append(
-          blockState,
-          workspace,
-        ) as Blockly.BlockSvg
+        Blockly.Events.disable()
+        let newBlock: Blockly.BlockSvg
+        try {
+          newBlock = Blockly.serialization.blocks.append(
+            baseState,
+            workspace,
+          ) as Blockly.BlockSvg
+          newBlock.initSvg()
+          newBlock.render()
+        } finally {
+          Blockly.Events.enable()
+        }
 
-        // Connect the new block to the parent input; the shadow is replaced automatically.
-        if (newBlock.outputConnection) {
-          parentConnection.connect(newBlock.outputConnection)
+        Blockly.Events.fire(new Blockly.Events.BlockCreate(newBlock))
+
+        if (isSequence) {
+          if (newBlock.previousConnection) {
+            parentConnection.connect(newBlock.previousConnection)
+          }
+        } else {
+          if (newBlock.outputConnection) {
+            parentConnection.connect(newBlock.outputConnection)
+          }
         }
       } finally {
         Blockly.Events.setGroup(false)
@@ -679,40 +867,60 @@ export const BlocklyEditor = ({
         return
       }
 
-      const listener = (event: Blockly.Events.Abstract) => {
-        syncHistoryState(workspace)
+      // Tracks the group id of the current drag operation (set on BLOCK_DRAG isStart).
+      let activeDragGroup: string | null = null
 
+      const listener = (event: Blockly.Events.Abstract) => {
+        // Drag tracking
+        if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
+          const dragEvent = event as Blockly.Events.Abstract & {
+            isStart?: boolean
+          }
+          if (dragEvent.isStart === true) {
+            activeDragGroup = event.group || null
+            setIsDeleting(true)
+          } else if (dragEvent.isStart === false) {
+            setIsDeleting(false)
+          }
+          syncHistoryState(workspace)
+          return
+        }
+
+        if (
+          activeDragGroup &&
+          `${event.type}` === `${Blockly.Events.BLOCK_MOVE}` &&
+          !event.group
+        ) {
+          ;(event as any).group = activeDragGroup
+        }
+
+        if (activeDragGroup && event.group && event.group !== activeDragGroup) {
+          activeDragGroup = null
+        }
+
+        // Click: open shadow picker
         if (`${event.type}` === `${Blockly.Events.CLICK}`) {
-          // Open the contextual picker only for supported shadow blocks.
           if (workspace.options.readOnly) {
             closeShadowPicker()
             return
           }
-
           const clickEvent = event as Blockly.Events.Click & {
             blockId?: string
           }
-
           if (!clickEvent.blockId) {
             closeShadowPicker()
             return
           }
-
           const clickedBlock = workspace.getBlockById(clickEvent.blockId)
-
           if (!clickedBlock || !clickedBlock.isShadow()) {
             closeShadowPicker()
             return
           }
-
           const nextPopoverType = resolveShadowPopoverType(clickedBlock.type)
-
           if (!nextPopoverType) {
             closeShadowPicker()
             return
           }
-
-          // Close Blockly floating UI before opening the custom MUI picker.
           workspace.hideChaff()
           setContextMenu(null)
           setShadowPickerPosition(
@@ -722,6 +930,7 @@ export const BlocklyEditor = ({
           setTargetShadowBlockId(clickedBlock.id)
           return
         }
+        syncHistoryState(workspace)
 
         if (
           `${event.type}` !== `${Blockly.Events.UI}` &&
@@ -733,21 +942,8 @@ export const BlocklyEditor = ({
           )
           onTaskStructureChange(abstractTask)
         }
-
-        if (`${event.type}` !== `${Blockly.Events.BLOCK_DRAG}`) {
-          return
-        }
-
-        const dragEvent = event as Blockly.Events.Abstract & {
-          isStart?: boolean
-        }
-
-        if (dragEvent.isStart === true) {
-          setIsDeleting(true)
-        } else if (dragEvent.isStart === false) {
-          setIsDeleting(false)
-        }
       }
+
       workspace.addChangeListener(listener)
       workspaceChangeListenerRef.current = listener
 
