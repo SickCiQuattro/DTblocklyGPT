@@ -1,22 +1,24 @@
 import * as Blockly from 'blockly/core'
 import {
-  Bomb,
-  Check,
+  ArrowLeftRight,
   CircleHelp,
   ClipboardPaste,
   Copy,
-  Maximize,
+  LayoutTemplate,
+  MessageSquare,
   Minimize2,
   Minus,
+  Maximize2,
+  EyeOff,
+  Eye,
   Pencil,
   Plus,
   Redo2,
   Scissors,
-  Settings,
-  Settings2,
+  LayoutDashboard,
+  AlignJustify,
   Trash2,
   Undo2,
-  X,
 } from 'lucide-react'
 
 export interface ContextMenuAction {
@@ -26,11 +28,32 @@ export interface ContextMenuAction {
   callback: () => void
 }
 
+/** Separator sentinel — rendered as a visual divider, not a clickable item. */
+export interface ContextMenuSeparator {
+  separator: true
+}
+
+export type ContextMenuEntry = ContextMenuAction | ContextMenuSeparator
+
 export interface ContextMenuState {
   mouseX: number
   mouseY: number
-  options: ContextMenuAction[]
+  options: ContextMenuEntry[]
+  blockId: string | null
 }
+
+/**
+ * Called when the user clicks "Inline Task" on a macro block.
+ * The caller is responsible for showing a confirmation modal before
+ * invoking the actual onExpandMacro handler.
+ *
+ * @param macroName   Human-readable name of the macro (for modal copy).
+ * @param onConfirm   Execute the inline operation if the user confirms.
+ */
+export type RequestInlineTaskConfirmation = (
+  macroName: string,
+  onConfirm: () => void,
+) => void
 
 interface InstallContextMenuBridgeParams {
   workspaceRef: { current: Blockly.WorkspaceSvg | null }
@@ -41,8 +64,12 @@ interface InstallContextMenuBridgeParams {
     workspace: Blockly.WorkspaceSvg,
   ) => void
   resolveMacroId: (rawData: unknown) => string | null
+  /**
+   * Optional — when provided, clicking "Inline Task" will invoke this callback
+   * so the caller can show a confirmation modal before committing.
+   */
+  requestInlineTaskConfirmation?: RequestInlineTaskConfirmation
 }
-
 type BridgedMenuOption =
   | Blockly.ContextMenuRegistry.ContextMenuOption
   | Blockly.ContextMenuRegistry.LegacyContextMenuOption
@@ -51,116 +78,116 @@ type BlockWithGeneratedContextMenu = Blockly.BlockSvg & {
   generateContextMenu?: (event: Event) => BridgedMenuOption[] | null
 }
 
-const isSeparatorOption = (
-  option: BridgedMenuOption,
-): option is Blockly.ContextMenuRegistry.SeparatorContextMenuOption => {
-  return 'separator' in option && option.separator === true
-}
-
-const toWorkspaceSvg = (
-  workspace: Blockly.Workspace | null | undefined,
-): Blockly.WorkspaceSvg | undefined => {
-  return workspace instanceof Blockly.WorkspaceSvg ? workspace : undefined
-}
-
-/**
- * Normalize Blockly context-menu labels that can be provided as plain strings or DOM nodes.
- */
+// Blockly context-menu labels — they can be plain strings or DOM nodes.
 export const getMenuOptionText = (
   text: string | HTMLElement | undefined,
 ): string => {
-  if (typeof text === 'string') {
-    return text
-  }
-
-  if (text instanceof HTMLElement) {
+  if (typeof text === 'string') return text
+  if (text instanceof HTMLElement)
     return (text.innerText || text.textContent || '').trim()
-  }
-
   return ''
 }
 
-/**
- * Resolve menu icon and color based on the option text.
- */
-export const getMenuIconInfo = (text: string) => {
-  const normalized = text.toLowerCase()
-  const containsAny = (terms: string[]) =>
-    terms.some((term) => normalized.includes(term))
-
-  if (containsAny(['delete'])) {
-    return { Icon: Trash2, color: '#DC2626' }
-  }
-
-  if (containsAny(['duplicate', 'copy'])) {
-    return { Icon: Copy, color: '#2563EB' }
-  }
-
-  if (containsAny(['cut'])) {
-    return { Icon: Scissors, color: '#0891B2' }
-  }
-
-  if (containsAny(['paste'])) {
-    return { Icon: ClipboardPaste, color: '#0F766E' }
-  }
-
-  if (containsAny(['undo'])) {
-    return { Icon: Undo2, color: '#334155' }
-  }
-
-  if (containsAny(['redo'])) {
-    return { Icon: Redo2, color: '#334155' }
-  }
-
-  if (containsAny(['expand macro'])) {
-    return { Icon: Bomb, color: '#7C3AED' }
-  }
-
-  if (containsAny(['expand block', 'expand'])) {
-    return { Icon: Maximize, color: '#0F766E' }
-  }
-
-  if (containsAny(['collapse block', 'collapse'])) {
-    return { Icon: Minimize2, color: '#0F766E' }
-  }
-
-  if (containsAny(['enable block', 'enable'])) {
-    return { Icon: Check, color: '#15803D' }
-  }
-
-  if (containsAny(['disable block', 'disable'])) {
-    return { Icon: X, color: '#B91C1C' }
-  }
-
-  if (containsAny(['rename'])) {
-    return { Icon: Pencil, color: '#7C2D12' }
-  }
-
-  if (containsAny(['inline inputs', 'external inputs'])) {
-    return { Icon: Settings2, color: '#334155' }
-  }
-
-  if (containsAny(['clean up'])) {
-    return { Icon: Settings, color: '#475569' }
-  }
-
-  if (containsAny(['help'])) {
-    return { Icon: CircleHelp, color: '#4F46E5' }
-  }
-
-  if (containsAny(['add '])) {
-    return { Icon: Plus, color: '#2563EB' }
-  }
-
-  if (containsAny(['remove '])) {
-    return { Icon: Minus, color: '#475569' }
-  }
-
-  return { Icon: CircleHelp, color: '#64748B' }
+const LABEL_MAP: Record<string, string> = {
+  // Block layout
+  'expand block': 'Show Block Details',
+  'collapse block': 'Compact Block',
+  // Input layout
+  'inline inputs': 'Compact Layout',
+  'external inputs': 'Expanded Layout',
+  // Block state
+  'enable block': 'Include This Step',
+  'disable block': 'Skip This Step',
+  // Workspace
+  'clean up workspace': 'Arrange Blocks',
+  'clean up': 'Arrange Blocks',
+  // Comment
+  'add comment': 'Add Note',
+  'remove comment': 'Remove Note',
 }
 
 /**
- * Bridge Blockly native context-menu internals to a React/MUI rendered menu.
+ * Returns the user-friendly label for a given raw Blockly option text.
+ * Unrecognised labels are returned as-is.
+ */
+export const rewriteLabel = (raw: string): string => {
+  const key = raw.toLowerCase().trim()
+  return LABEL_MAP[key] ?? raw
+}
+
+const NEUTRAL = '#475569'
+const DESTRUCTIVE = '#DC2626'
+const ADDITIVE = '#15803D'
+
+export const getMenuIconInfo = (text: string) => {
+  const n = text.toLowerCase()
+  const has = (terms: string[]) => terms.some((t) => n.includes(t))
+  if (has(['delete'])) return { Icon: Trash2, color: DESTRUCTIVE }
+  if (has(['duplicate', 'copy'])) return { Icon: Copy, color: NEUTRAL }
+  if (has(['cut'])) return { Icon: Scissors, color: NEUTRAL }
+  if (has(['paste'])) return { Icon: ClipboardPaste, color: NEUTRAL }
+  if (has(['undo'])) return { Icon: Undo2, color: NEUTRAL }
+  if (has(['redo'])) return { Icon: Redo2, color: NEUTRAL }
+  if (has(['inline task'])) return { Icon: ArrowLeftRight, color: DESTRUCTIVE }
+  if (has(['show block details'])) return { Icon: Maximize2, color: NEUTRAL }
+  if (has(['compact block'])) return { Icon: Minimize2, color: NEUTRAL }
+  if (has(['compact layout'])) return { Icon: Minimize2, color: NEUTRAL }
+  if (has(['expanded layout'])) return { Icon: LayoutDashboard, color: NEUTRAL }
+  if (has(['include this step'])) return { Icon: Eye, color: ADDITIVE }
+  if (has(['skip this step'])) return { Icon: EyeOff, color: NEUTRAL }
+  if (has(['rename'])) return { Icon: Pencil, color: NEUTRAL }
+  if (has(['arrange blocks'])) return { Icon: AlignJustify, color: NEUTRAL }
+  if (has(['add note'])) return { Icon: MessageSquare, color: ADDITIVE }
+  if (has(['remove note'])) return { Icon: MessageSquare, color: DESTRUCTIVE }
+  if (has(['help'])) return { Icon: CircleHelp, color: NEUTRAL }
+  if (has(['add '])) return { Icon: Plus, color: ADDITIVE }
+  if (has(['remove '])) return { Icon: Minus, color: DESTRUCTIVE }
+
+  return { Icon: LayoutTemplate, color: NEUTRAL }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPTION ORDERING
+//
+// Destructive actions (delete, inline task) are always moved to the bottom,
+// separated from editing actions by a divider.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DESTRUCTIVE_LABELS = ['delete', 'inline task']
+
+const isDestructiveLabel = (label: string) => {
+  const n = label.toLowerCase()
+  return DESTRUCTIVE_LABELS.some((d) => n.includes(d))
+}
+
+const sortAndSeparateOptions = (
+  options: ContextMenuAction[],
+): ContextMenuEntry[] => {
+  const normal = options.filter((o) => !isDestructiveLabel(o.text))
+  const destructive = options.filter((o) => isDestructiveLabel(o.text))
+
+  if (destructive.length === 0) return normal
+  return [...normal, { separator: true }, ...destructive]
+}
+
+// SEPARATOR HELPER
+
+const isSeparatorOption = (
+  option: BridgedMenuOption,
+): option is Blockly.ContextMenuRegistry.SeparatorContextMenuOption =>
+  'separator' in option && option.separator === true
+
+const toWorkspaceSvg = (
+  workspace: Blockly.Workspace | null | undefined,
+): Blockly.WorkspaceSvg | undefined =>
+  workspace instanceof Blockly.WorkspaceSvg ? workspace : undefined
+
+/**
+ * Monkey-patches Blockly's context-menu internals so that every right-click
+ * menu is rendered by the React/MUI layer instead of Blockly's built-in popup.
+ *
+ * Returns a cleanup function that restores the original Blockly behaviour
+ * (call it in a useEffect cleanup or on component unmount).
  */
 export const installContextMenuBridge = ({
   workspaceRef,
@@ -168,6 +195,7 @@ export const installContextMenuBridge = ({
   getNextOptionId,
   onExpandMacro,
   resolveMacroId,
+  requestInlineTaskConfirmation,
 }: InstallContextMenuBridgeParams) => {
   const originalContextMenuShow = Blockly.ContextMenu.show
   const originalContextMenuHide = Blockly.ContextMenu.hide
@@ -189,27 +217,25 @@ export const installContextMenuBridge = ({
       ? connectionPrototype.showContextMenu
       : null
 
+  // Scope resolver
   const resolveScope = (
     fallbackScope?: Blockly.ContextMenuRegistry.Scope,
   ): Blockly.ContextMenuRegistry.Scope | null => {
-    if (fallbackScope) {
-      return fallbackScope
-    }
-
-    if (workspaceRef.current) {
+    if (fallbackScope) return fallbackScope
+    if (workspaceRef.current)
       return {
         workspace: workspaceRef.current,
         focusedNode: workspaceRef.current,
       }
-    }
-
     return null
   }
 
+  // Core menu builder
   const openMuiContextMenu = (
     menuOpenEvent: Event,
     menuOptions: ReadonlyArray<BridgedMenuOption> | null | undefined,
     fallbackScope?: Blockly.ContextMenuRegistry.Scope,
+    blockId?: string | null,
   ) => {
     menuOpenEvent.preventDefault()
     menuOpenEvent.stopPropagation()
@@ -218,83 +244,73 @@ export const installContextMenuBridge = ({
     let mouseY = 0
 
     if ('clientX' in menuOpenEvent && 'clientY' in menuOpenEvent) {
-      const mouseEvent = menuOpenEvent as MouseEvent
-      mouseX = Number.isFinite(mouseEvent.clientX) ? mouseEvent.clientX : 0
-      mouseY = Number.isFinite(mouseEvent.clientY) ? mouseEvent.clientY : 0
+      const e = menuOpenEvent as MouseEvent
+      mouseX = Number.isFinite(e.clientX) ? e.clientX : 0
+      mouseY = Number.isFinite(e.clientY) ? e.clientY : 0
     } else if (workspaceRef.current) {
-      const workspaceRect = workspaceRef.current
+      const rect = workspaceRef.current
         .getInjectionDiv()
         .getBoundingClientRect()
-      mouseX = Math.round(workspaceRect.left + workspaceRect.width / 2)
-      mouseY = Math.round(workspaceRect.top + workspaceRect.height / 2)
+      mouseX = Math.round(rect.left + rect.width / 2)
+      mouseY = Math.round(rect.top + rect.height / 2)
     }
 
     const menuLocation = new Blockly.utils.Coordinate(mouseX, mouseY)
 
-    const options = (menuOptions || [])
-      .map((option) => {
-        if (isSeparatorOption(option)) {
-          return null
-        }
+    const rawOptions = (menuOptions ?? [])
+      .map((option): ContextMenuAction | null => {
+        if (isSeparatorOption(option)) return null
 
-        const label = getMenuOptionText(option.text)
-        if (!label || typeof option.callback !== 'function') {
-          return null
-        }
+        const rawLabel = getMenuOptionText(option.text)
+        if (!rawLabel || typeof option.callback !== 'function') return null
 
-        if ('scope' in option) {
-          const actionScope = option.scope ?? resolveScope(fallbackScope)
-          if (!actionScope) {
-            return null
-          }
+        // rewrite technical Blockly labels to user-friendly language
+        const label = rewriteLabel(rawLabel)
 
-          return {
-            id: getNextOptionId(),
-            text: label,
-            enabled: option.enabled ?? true,
-            callback: () => {
-              option.callback(
-                actionScope,
-                menuOpenEvent,
-                new MouseEvent('click', {
-                  bubbles: true,
-                  cancelable: true,
-                  clientX: mouseX,
-                  clientY: mouseY,
-                }),
-                menuLocation,
-              )
-            },
-          }
-        }
-
-        const legacyScope = resolveScope(fallbackScope)
-        if (!legacyScope) {
-          return null
-        }
-
-        return {
+        const buildAction = (callFn: () => void): ContextMenuAction => ({
           id: getNextOptionId(),
           text: label,
           enabled: option.enabled ?? true,
-          callback: () => {
-            option.callback(legacyScope)
-          },
+          callback: callFn,
+        })
+
+        if ('scope' in option) {
+          const actionScope = option.scope ?? resolveScope(fallbackScope)
+          if (!actionScope) return null
+
+          return buildAction(() =>
+            option.callback(
+              actionScope,
+              menuOpenEvent,
+              new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                clientX: mouseX,
+                clientY: mouseY,
+              }),
+              menuLocation,
+            ),
+          )
         }
+
+        const legacyScope = resolveScope(fallbackScope)
+        if (!legacyScope) return null
+
+        return buildAction(() => option.callback(legacyScope))
       })
-      .filter((option): option is ContextMenuAction => option !== null)
+      .filter((o): o is ContextMenuAction => o !== null)
+
+    // sort destructive items to the bottom, add separator
+    const entries = sortAndSeparateOptions(rawOptions)
 
     setContextMenu(
-      options.length > 0
-        ? {
-            mouseX,
-            mouseY,
-            options,
-          }
+      entries.length > 0
+        ? { mouseX, mouseY, options: entries, blockId: blockId ?? null }
         : null,
     )
   }
 
+  // Patch Blockly.ContextMenu
   Blockly.ContextMenu.show = function (menuOpenEvent, menuOptions) {
     openMuiContextMenu(menuOpenEvent, menuOptions)
   }
@@ -303,6 +319,7 @@ export const installContextMenuBridge = ({
     setContextMenu(null)
   }
 
+  // Patch BlockSvg.showContextMenu
   if (blockPrototype && originalBlockShowContextMenu) {
     blockPrototype.showContextMenu = function (
       this: Blockly.BlockSvg,
@@ -314,17 +331,33 @@ export const installContextMenuBridge = ({
           ? blockWithMenu.generateContextMenu(event)
           : null
 
-      const menuOptions = Array.isArray(generatedOptions)
+      const menuOptions: BridgedMenuOption[] = Array.isArray(generatedOptions)
         ? [...generatedOptions]
         : []
 
       const sourceBlock = this
       const sourceWorkspace = toWorkspaceSvg(sourceBlock.workspace)
 
+      // "Inline Task" option for macro_task_block
       if (sourceBlock.type === 'macro_task_block') {
-        const explodeOption = {
-          text: 'Expand Macro',
-          enabled: !!sourceWorkspace && !!resolveMacroId(sourceBlock.data),
+        const macroId = resolveMacroId(sourceBlock.data)
+        const isEnabled = !!sourceWorkspace && !!macroId
+
+        // Derive macro name for the confirmation modal copy
+        let macroName = 'this task'
+        try {
+          const parsed =
+            typeof sourceBlock.data === 'string'
+              ? JSON.parse(sourceBlock.data)
+              : sourceBlock.data
+          if (parsed?.name) macroName = String(parsed.name)
+        } catch {
+          /* leave default */
+        }
+
+        const inlineOption = {
+          text: 'Inline Task',
+          enabled: isEnabled,
           scope: {
             block: sourceBlock,
             workspace: sourceWorkspace,
@@ -333,40 +366,80 @@ export const installContextMenuBridge = ({
           callback: (scope: Blockly.ContextMenuRegistry.Scope) => {
             const blockFromScope = scope?.block
             const workspaceFromScope = scope?.workspace
+            if (!blockFromScope || !workspaceFromScope) return
 
-            if (!blockFromScope || !workspaceFromScope) {
-              return
+            const executeInline = () =>
+              onExpandMacro(blockFromScope, workspaceFromScope)
+
+            // show confirmation modal for irreversible operation
+            if (requestInlineTaskConfirmation) {
+              requestInlineTaskConfirmation(macroName, executeInline)
+            } else {
+              executeInline()
             }
-
-            onExpandMacro(blockFromScope, workspaceFromScope)
           },
         }
 
-        const deleteOptionIndex = menuOptions.findIndex((option) => {
-          if (isSeparatorOption(option)) {
-            return false
-          }
-
-          const optionText = getMenuOptionText(option.text).toLowerCase()
-
-          return optionText.includes('delete')
+        const deleteIdx = menuOptions.findIndex((o) => {
+          if (isSeparatorOption(o)) return false
+          return getMenuOptionText(o.text).toLowerCase().includes('delete')
         })
 
-        if (deleteOptionIndex >= 0) {
-          menuOptions.splice(deleteOptionIndex, 0, explodeOption)
+        if (deleteIdx >= 0) {
+          menuOptions.splice(deleteIdx, 0, inlineOption)
         } else {
-          menuOptions.push(explodeOption)
+          menuOptions.push(inlineOption)
         }
       }
 
-      openMuiContextMenu(event, menuOptions, {
-        block: sourceBlock,
-        workspace: sourceWorkspace,
-        focusedNode: sourceBlock,
+      const BLOCKS_WITH_COLLAPSIBLE_BODY = new Set([
+        'repeat_block',
+        'loop_block',
+        'repeat_until_block',
+        'when_block',
+        'when_otherwise_block',
+      ])
+
+      const ALWAYS_HIDDEN_LABELS = new Set([
+        'compact layout',
+        'expanded layout',
+        'inline inputs',
+        'external inputs',
+      ])
+
+      const filteredOptions = menuOptions.filter((option) => {
+        if (isSeparatorOption(option)) return true
+        const label = getMenuOptionText(option.text).toLowerCase()
+
+        if (ALWAYS_HIDDEN_LABELS.has(label)) return false
+
+        if (
+          (label.includes('compact block') ||
+            label.includes('show block details') ||
+            label.includes('collapse block') ||
+            label.includes('expand block')) &&
+          !BLOCKS_WITH_COLLAPSIBLE_BODY.has(sourceBlock.type)
+        ) {
+          return false
+        }
+
+        return true
       })
+
+      openMuiContextMenu(
+        event,
+        filteredOptions,
+        {
+          block: sourceBlock,
+          workspace: sourceWorkspace,
+          focusedNode: sourceBlock,
+        },
+        sourceBlock.id,
+      )
     }
   }
 
+  // Patch WorkspaceSvg.showContextMenu
   if (workspacePrototype && originalWorkspaceShowContextMenu) {
     workspacePrototype.showContextMenu = function (
       this: Blockly.WorkspaceSvg,
@@ -377,16 +450,11 @@ export const installContextMenuBridge = ({
           ? this.isReadOnly()
           : this.options?.readOnly === true
 
-      if (isReadOnly || this.isFlyout) {
-        return
-      }
+      if (isReadOnly || this.isFlyout) return
 
       const menuOptions =
         Blockly.ContextMenuRegistry.registry.getContextMenuOptions(
-          {
-            workspace: this,
-            focusedNode: this,
-          },
+          { workspace: this, focusedNode: this },
           event,
         )
 
@@ -401,6 +469,7 @@ export const installContextMenuBridge = ({
     }
   }
 
+  // Patch RenderedConnection.showContextMenu
   if (connectionPrototype && originalConnectionShowContextMenu) {
     connectionPrototype.showContextMenu = function (
       this: Blockly.RenderedConnection,
@@ -428,18 +497,16 @@ export const installContextMenuBridge = ({
     }
   }
 
+  // Cleanup (call on unmount)
   return () => {
     Blockly.ContextMenu.show = originalContextMenuShow
     Blockly.ContextMenu.hide = originalContextMenuHide
 
-    if (blockPrototype && originalBlockShowContextMenu) {
+    if (blockPrototype && originalBlockShowContextMenu)
       blockPrototype.showContextMenu = originalBlockShowContextMenu
-    }
-    if (workspacePrototype && originalWorkspaceShowContextMenu) {
+    if (workspacePrototype && originalWorkspaceShowContextMenu)
       workspacePrototype.showContextMenu = originalWorkspaceShowContextMenu
-    }
-    if (connectionPrototype && originalConnectionShowContextMenu) {
+    if (connectionPrototype && originalConnectionShowContextMenu)
       connectionPrototype.showContextMenu = originalConnectionShowContextMenu
-    }
   }
 }

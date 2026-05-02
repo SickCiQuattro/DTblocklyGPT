@@ -50,7 +50,7 @@ const CIRCLE_PLUS_TRIGGER_ICON_URI_BASE = createLucideIconURI(
 )
 const CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(151, 134, 118, 0.45)',
+  'rgba(128, 138, 157, 0.45)',
 )
 
 const CIRCLE_PLUS_ICON_URI_LIT = createLucideIconURI(
@@ -65,7 +65,7 @@ const CIRCLE_PLUS_TRIGGER_ICON_URI_LIT = createLucideIconURI(
 
 const CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  blocksColours.logicControl,
+  'rgba(128, 138, 157, 1)',
 )
 
 const TAG_ICON_URI = createLucideIconURI(

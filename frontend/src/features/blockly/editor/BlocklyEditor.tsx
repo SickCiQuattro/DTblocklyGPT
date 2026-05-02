@@ -2,6 +2,11 @@ import * as Blockly from 'blockly/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   InputBase,
@@ -11,6 +16,7 @@ import {
   MenuItem,
   Typography,
 } from '@mui/material'
+
 import { Maximize, Minus, Plus, Redo2, Search, Undo2 } from 'lucide-react'
 
 import { blocksColours } from '../blocks'
@@ -20,17 +26,20 @@ import { ObjectListType } from 'pages/objects/types'
 import { AbstractStep, TaskType } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
-
+import { getOwnBodyDescendants } from 'utils/blocklySelection'
 import { CustomToolbox, ToolboxBlockItem } from '../toolbox'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
 import '../styles/editor.css'
 import {
   type ContextMenuAction,
+  type ContextMenuEntry,
+  type ContextMenuSeparator,
   getMenuIconInfo,
   getMenuOptionText,
   installContextMenuBridge,
   type ContextMenuState,
+  type RequestInlineTaskConfirmation,
 } from './contextMenu'
 import { CustomToolboxDeleteArea } from './deleteArea'
 import { startSyntheticBlockDrag } from './dragProxy'
@@ -520,6 +529,7 @@ export const BlocklyEditor = ({
   >(null)
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
   const contextMenuOptionIdRef = useRef(0)
+  const keydownCleanupRef = useRef<(() => void) | null>(null)
   const onTaskStructureChangeRef = useRef(onTaskStructureChange)
   useEffect(() => {
     onTaskStructureChangeRef.current = onTaskStructureChange
@@ -763,6 +773,22 @@ export const BlocklyEditor = ({
     workspaceChangeListenerRef.current = null
   }, [])
 
+  const [inlineTaskConfirm, setInlineTaskConfirm] = useState<{
+    macroName: string
+    onConfirm: () => void
+  } | null>(null)
+
+  const handleRequestInlineTaskConfirmation =
+    useCallback<RequestInlineTaskConfirmation>((macroName, onConfirm) => {
+      setInlineTaskConfirm({ macroName, onConfirm })
+    }, [])
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string
+    onConfirm: () => void
+    onCancel: () => void
+  } | null>(null)
+
   useEffect(() => {
     return installContextMenuBridge({
       workspaceRef,
@@ -770,12 +796,15 @@ export const BlocklyEditor = ({
       getNextOptionId: () => ++contextMenuOptionIdRef.current,
       onExpandMacro: explodeMacro,
       resolveMacroId: getMacroIdFromBlockData,
+      requestInlineTaskConfirmation: handleRequestInlineTaskConfirmation,
     })
-  }, [explodeMacro])
+  }, [explodeMacro, handleRequestInlineTaskConfirmation])
 
   useEffect(() => {
     return () => {
       pendingDragCleanupRef.current?.()
+      keydownCleanupRef.current?.()
+      keydownCleanupRef.current = null
       pendingDragCleanupRef.current = null
       setIsDeleting(false)
       closeShadowPicker()
@@ -785,6 +814,38 @@ export const BlocklyEditor = ({
       workspaceRef.current = null
     }
   }, [closeShadowPicker, detachWorkspaceListener, unregisterToolboxDeleteArea])
+
+  useEffect(() => {
+    const originalConfirm = window.confirm
+
+    window.confirm = (message?: string): boolean => {
+      const workspace = workspaceRef.current
+      setConfirmDialog({
+        message: message ?? 'Are you sure?',
+        onConfirm: () => {
+          setConfirmDialog(null)
+          if (workspace) {
+            Blockly.Events.setGroup(true)
+            try {
+              workspace
+                .getAllBlocks(false)
+                .filter((b) => !b.isShadow() && !b.getParent())
+                .forEach((b) => b.dispose(false))
+            } finally {
+              Blockly.Events.setGroup(false)
+            }
+            syncHistoryState(workspace)
+          }
+        },
+        onCancel: () => setConfirmDialog(null),
+      })
+      return false
+    }
+
+    return () => {
+      window.confirm = originalConfirm
+    }
+  }, [syncHistoryState])
 
   const handleSelectShadowItem = useCallback(
     (item: ShadowPickerItem) => {
@@ -1073,6 +1134,54 @@ export const BlocklyEditor = ({
       workspace.addChangeListener(listener)
       workspaceChangeListenerRef.current = listener
 
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return
+
+        // Controlla tutti gli injectionDiv nel documento, non solo quello del workspace principale
+        const active = document.activeElement
+        if (!active) return
+
+        const allInjectionDivs = document.querySelectorAll('.injectionDiv')
+        const isInsideAnyWorkspace = Array.from(allInjectionDivs).some(
+          (div) => div === active || div.contains(active),
+        )
+        if (!isInsideAnyWorkspace) return
+
+        const selected = Blockly.common.getSelected?.()
+        if (!selected || !(selected instanceof Blockly.BlockSvg)) return
+        if (selected.isShadow()) return
+
+        const ownDescendants = getOwnBodyDescendants(selected)
+        const totalCount = 1 + ownDescendants.length
+        if (totalCount <= 1) return
+
+        e.preventDefault()
+        e.stopImmediatePropagation()
+
+        setConfirmDialog({
+          message: `Delete ${totalCount} blocks?`,
+          onConfirm: () => {
+            setConfirmDialog(null)
+            Blockly.Events.setGroup(true)
+            try {
+              selected.dispose(true)
+            } finally {
+              Blockly.Events.setGroup(false)
+            }
+            syncHistoryState(workspace)
+          },
+          onCancel: () => setConfirmDialog(null),
+        })
+      }
+
+      document.addEventListener('keydown', handleKeyDown, { capture: true })
+
+      keydownCleanupRef.current = () => {
+        document.removeEventListener('keydown', handleKeyDown, {
+          capture: true,
+        })
+      }
+
       syncHistoryState(workspace)
       registerToolboxDeleteArea(workspace, toolboxRootRef.current)
     },
@@ -1084,6 +1193,7 @@ export const BlocklyEditor = ({
       syncHistoryState,
       unregisterToolboxDeleteArea,
       setTargetShadowBlock,
+      setConfirmDialog,
     ],
   )
 
@@ -1133,17 +1243,40 @@ export const BlocklyEditor = ({
 
   const handleContextMenuItemClick = useCallback(
     (option: ContextMenuAction) => {
+      const currentMenu = contextMenu
       setContextMenu(null)
 
-      if (typeof option?.callback !== 'function') {
-        return
+      if (typeof option?.callback !== 'function') return
+
+      const label = getMenuOptionText(option.text).toLowerCase()
+      const isDelete =
+        label.includes('delete') ||
+        label.includes('remove') ||
+        label.includes('elimina')
+
+      if (isDelete && currentMenu?.blockId) {
+        const workspace = workspaceRef.current
+        const block = workspace?.getBlockById(currentMenu.blockId)
+        if (block instanceof Blockly.BlockSvg && !block.isShadow()) {
+          const ownDescendants = getOwnBodyDescendants(block)
+          const totalCount = 1 + ownDescendants.length
+          if (totalCount > 1) {
+            setConfirmDialog({
+              message: `Delete ${totalCount} blocks?`,
+              onConfirm: () => {
+                setConfirmDialog(null)
+                window.setTimeout(() => option.callback(), 50)
+              },
+              onCancel: () => setConfirmDialog(null),
+            })
+            return
+          }
+        }
       }
 
-      window.setTimeout(() => {
-        option.callback()
-      }, 50)
+      window.setTimeout(() => option.callback(), 50)
     },
-    [],
+    [contextMenu, setConfirmDialog],
   )
 
   const handleBlockPointerDown = useCallback(
@@ -1234,7 +1367,6 @@ export const BlocklyEditor = ({
           onExternalTaskStateApplied={onExternalTaskStateApplied}
           onWorkspaceReady={handleWorkspaceReady}
         />
-
         <div className="workspace-controls-overlay">
           <div className="workspace-controls-group workspace-controls-group--top-right">
             <IconButton
@@ -1287,7 +1419,6 @@ export const BlocklyEditor = ({
             </IconButton>
           </div>
         </div>
-
         <Menu
           open={
             shadowPickerPosition !== null &&
@@ -1526,7 +1657,7 @@ export const BlocklyEditor = ({
                               <Typography
                                 sx={{
                                   mt: 0.2,
-                                  fontSize: '0.75rem',
+                                  fontSize: '1rem',
                                   color: '#64748B',
                                   lineHeight: 1.4,
                                 }}
@@ -1539,7 +1670,7 @@ export const BlocklyEditor = ({
                               <Typography
                                 sx={{
                                   mt: 0.2,
-                                  fontSize: '0.75rem',
+                                  fontSize: '1rem',
                                   color: '#64748B',
                                 }}
                               >
@@ -1556,17 +1687,13 @@ export const BlocklyEditor = ({
             )}
           </Box>
         </Menu>
-
         <Menu
           open={contextMenu !== null}
           onClose={handleCloseContextMenu}
           anchorReference="anchorPosition"
           anchorPosition={
             contextMenu
-              ? {
-                  top: contextMenu.mouseY,
-                  left: contextMenu.mouseX,
-                }
+              ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
               : undefined
           }
           transformOrigin={{ vertical: 'top', horizontal: 'left' }}
@@ -1583,15 +1710,24 @@ export const BlocklyEditor = ({
                   '0 10px 30px rgba(15, 23, 42, 0.08), 0 3px 8px rgba(15, 23, 42, 0.06)',
               },
             },
-            list: {
-              dense: true,
-              sx: {
-                p: 0,
-              },
-            },
+            list: { dense: true, sx: { p: 0 } },
           }}
         >
-          {(contextMenu?.options || []).map((option) => {
+          {(contextMenu?.options ?? []).map((entry, idx) => {
+            if ('separator' in entry && entry.separator) {
+              return (
+                <Divider
+                  key={`sep-${idx}`}
+                  sx={{
+                    my: 0.5,
+                    mx: 0.5,
+                    borderColor: 'rgba(148,163,184,0.18)',
+                  }}
+                />
+              )
+            }
+
+            const option = entry as ContextMenuAction
             const label = getMenuOptionText(option.text)
             const { Icon, color } = getMenuIconInfo(label)
             const isDisabled = option.enabled === false
@@ -1633,6 +1769,192 @@ export const BlocklyEditor = ({
             )
           })}
         </Menu>
+        {/* confirmation modal "Inline Task"*/}
+        {inlineTaskConfirm && (
+          <Dialog
+            open
+            onClose={() => setInlineTaskConfirm(null)}
+            slotProps={{
+              paper: {
+                elevation: 0,
+                sx: {
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow:
+                    '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
+                  p: 1.5,
+                  maxWidth: 400,
+                },
+              },
+            }}
+          >
+            <DialogTitle
+              sx={{
+                fontWeight: 600,
+                fontSize: '1.3rem',
+                color: '#0F172A',
+                pb: 1,
+              }}
+            >
+              Inline Task
+            </DialogTitle>
+            <DialogContent>
+              <Typography
+                variant="body2"
+                sx={{ color: '#475569', lineHeight: 1.5 }}
+              >
+                This will replace the{' '}
+                <strong style={{ color: '#0F172A' }}>
+                  {inlineTaskConfirm.macroName}
+                </strong>{' '}
+                block with its individual steps.
+              </Typography>
+
+              <Box
+                sx={{
+                  mt: 1.5,
+                  p: 1,
+                  backgroundColor: '#FFF7ED',
+                  borderRadius: '6px',
+                  border: '1px solid #FFEDD5',
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: '#C2410C',
+                    lineHeight: 1.4,
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  Note: You can undo this right away, but making changes to the
+                  expanded blocks will prevent you from easily reverting to the
+                  single block.
+                </Typography>
+              </Box>
+            </DialogContent>
+            <DialogActions sx={{ px: 2, pb: 1.5, pt: 1, gap: 1 }}>
+              <Button
+                variant="text"
+                disableElevation
+                onClick={() => setInlineTaskConfirm(null)}
+                sx={{
+                  textTransform: 'none',
+                  color: '#64748B',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: '#F1F5F9',
+                    color: '#0F172A',
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => {
+                  inlineTaskConfirm.onConfirm()
+                  setInlineTaskConfirm(null)
+                }}
+                sx={{
+                  textTransform: 'none',
+                  backgroundColor: '#E15930',
+                  color: '#FFFFFF',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: '#C84D28',
+                  },
+                }}
+              >
+                Inline Task
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )}
+
+        {/* confirmation modal "Delete / Confirm" */}
+        {confirmDialog && (
+          <Dialog
+            open
+            onClose={confirmDialog.onCancel}
+            slotProps={{
+              paper: {
+                elevation: 0,
+                sx: {
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  boxShadow:
+                    '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
+                  p: 1.5,
+                  maxWidth: 400,
+                },
+              },
+            }}
+          >
+            <DialogTitle
+              sx={{
+                fontWeight: 600,
+                fontSize: '1.3rem',
+                color: '#0F172A',
+                pb: 1,
+              }}
+            >
+              Confirm
+            </DialogTitle>
+            <DialogContent>
+              <Typography
+                variant="body2"
+                sx={{ color: '#475569', lineHeight: 1.5 }}
+              >
+                {confirmDialog.message}
+              </Typography>
+            </DialogContent>
+            <DialogActions sx={{ px: 2, pb: 1.5, pt: 1, gap: 1 }}>
+              <Button
+                variant="text"
+                disableElevation
+                onClick={confirmDialog.onCancel}
+                sx={{
+                  textTransform: 'none',
+                  color: '#64748B',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: '#F1F5F9',
+                    color: '#0F172A',
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={confirmDialog.onConfirm}
+                sx={{
+                  textTransform: 'none',
+                  backgroundColor: '#E15930',
+                  color: '#FFFFFF',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: '#C84D28',
+                  },
+                }}
+              >
+                Delete
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )}
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ import * as locale from 'blockly/msg/en'
 import 'blockly/blocks'
 
 import { BlockState } from 'utils/blocklyTypes'
+import { getOwnBodyDescendants } from 'utils/blocklySelection'
 
 import {
   injectAllGhostBlocks,
@@ -24,13 +25,9 @@ for (const [key, value] of Object.entries(locale)) {
 
 Blockly.setLocale(localeMessages)
 
-/**
- * Read the root serialized block currently mounted in the main Blockly workspace.
- */
 export const getBlocklyStructure = (): BlockState | null => {
   const workspace = Blockly.getMainWorkspace()
   if (!workspace) return null
-
   const blocklyTaskStructure = saveWorkspaceWithoutGhosts(
     workspace as Blockly.WorkspaceSvg,
   ).blocks?.blocks
@@ -43,42 +40,27 @@ const disableContextMenuItems = () => {
     Blockly.ContextMenuRegistry.registry.unregister('blockHelp')
 }
 
-// Enables "chain selection"
 const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
   let syncingSelection = false
 
   const listener = (event: Blockly.Events.Abstract) => {
-    // selection events
     if (`${event.type}` !== `${Blockly.Events.SELECTED}`) return
     if (syncingSelection) return
 
     const selectedEvent = event as Blockly.Events.Selected
-
     syncingSelection = true
+
     try {
-      // 1. deselection
       if (selectedEvent.oldElementId) {
         const oldBlock = workspace.getBlockById(selectedEvent.oldElementId)
-        if (oldBlock && oldBlock instanceof Blockly.BlockSvg) {
-          const oldChain = oldBlock.getDescendants(true)
-          oldChain.forEach((child) => {
-            if (child.id !== oldBlock.id && child instanceof Blockly.BlockSvg) {
-              child.removeSelect()
-            }
-          })
+        if (oldBlock instanceof Blockly.BlockSvg) {
+          getOwnBodyDescendants(oldBlock).forEach((b) => b.removeSelect())
         }
       }
-
-      // 2. new selection
       if (selectedEvent.newElementId) {
         const newBlock = workspace.getBlockById(selectedEvent.newElementId)
-        if (newBlock && newBlock instanceof Blockly.BlockSvg) {
-          const newChain = newBlock.getDescendants(true)
-          newChain.forEach((child) => {
-            if (child.id !== newBlock.id && child instanceof Blockly.BlockSvg) {
-              child.addSelect()
-            }
-          })
+        if (newBlock instanceof Blockly.BlockSvg) {
+          getOwnBodyDescendants(newBlock).forEach((b) => b.addSelect())
         }
       }
     } finally {
@@ -101,9 +83,6 @@ interface BlocklyComponentProps {
 const DEFAULT_X_AXIS = 200
 const DEFAULT_Y_AXIS = 100
 
-/**
- * Interactive Blockly workspace used by both graphic and multimodal layouts.
- */
 export const BlocklyWorkspace = ({
   dataTask,
   editMode,
@@ -114,8 +93,17 @@ export const BlocklyWorkspace = ({
   const blocklyDivRef = useRef<HTMLDivElement | null>(null)
   const primaryWorkspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
 
+  const onWorkspaceReadyRef = useRef(onWorkspaceReady)
   useEffect(() => {
-    // cleanup workspace div before injection
+    onWorkspaceReadyRef.current = onWorkspaceReady
+  })
+
+  const onExternalTaskStateAppliedRef = useRef(onExternalTaskStateApplied)
+  useEffect(() => {
+    onExternalTaskStateAppliedRef.current = onExternalTaskStateApplied
+  })
+
+  useEffect(() => {
     if (blocklyDivRef.current) {
       blocklyDivRef.current.innerHTML = ''
     }
@@ -130,7 +118,6 @@ export const BlocklyWorkspace = ({
       ...workspaceConfig,
     })
 
-    // observer variables
     let resizeObserver: ResizeObserver | null = null
     let detachChainSelection: (() => void) | null = null
     let detachGhostListener: (() => void) | null = null
@@ -139,18 +126,15 @@ export const BlocklyWorkspace = ({
       disableContextMenuItems()
       const workspace = primaryWorkspaceRef.current
       detachChainSelection = enableChainSelection(workspace)
-
       detachGhostListener = registerGhostRestoreListener(workspace)
 
-      onWorkspaceReady?.(workspace)
+      onWorkspaceReadyRef.current?.(workspace)
 
       if (isValidBlockState(dataTask)) {
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = dataTask?.x || DEFAULT_X_AXIS
         defaultDataTask.y = dataTask?.y || DEFAULT_Y_AXIS
-
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
-
         injectAllGhostBlocks(workspace)
       }
 
@@ -164,19 +148,18 @@ export const BlocklyWorkspace = ({
       }
     }
 
-    // Cleanup phase
     return () => {
       resizeObserver?.disconnect()
       detachChainSelection?.()
       detachGhostListener?.()
-      onWorkspaceReady?.(null)
+      onWorkspaceReadyRef.current?.(null)
 
       if (primaryWorkspaceRef.current) {
         primaryWorkspaceRef.current.dispose()
         primaryWorkspaceRef.current = null
       }
     }
-  }, [editMode, dataTask, onWorkspaceReady])
+  }, [editMode, dataTask])
 
   useEffect(() => {
     if (!primaryWorkspaceRef.current || !applyExternalTaskState) return
@@ -192,11 +175,10 @@ export const BlocklyWorkspace = ({
     defaultDataTask.y = y_axis
 
     updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
-
     injectAllGhostBlocks(workspace)
 
-    onExternalTaskStateApplied?.()
-  }, [applyExternalTaskState, dataTask, onExternalTaskStateApplied])
+    onExternalTaskStateAppliedRef.current?.()
+  }, [applyExternalTaskState, dataTask])
 
   return (
     <div

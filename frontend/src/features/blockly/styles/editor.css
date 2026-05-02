@@ -178,11 +178,11 @@
 }
 
 .custom-dashed-shadow-sequence > .blocklyPath {
-  fill: rgba(151, 134, 118, 0.06) !important;
-  stroke: rgba(151, 134, 118, 0.35) !important;
+  fill: rgba(128, 138, 157, 0.06) !important;
+  stroke: rgba(128, 138, 157, 0.35) !important;
 }
 .custom-dashed-shadow-sequence text.blocklyText {
-  fill: rgba(151, 134, 118, 0.45) !important;
+  fill: rgba(128, 138, 157, 0.45) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -216,10 +216,10 @@
 
 .shadow-block--drag-target.custom-dashed-shadow-sequence > .blocklyPath,
 .shadow-block--selected.custom-dashed-shadow-sequence > .blocklyPath {
-  fill: rgba(151, 134, 118, 0.15) !important;
-  stroke: #978676 !important;
+  fill: rgba(128, 138, 157, 0.15) !important;
+  stroke: #808A9D !important;
 }
 .shadow-block--drag-target.custom-dashed-shadow-sequence text.blocklyText,
 .shadow-block--selected.custom-dashed-shadow-sequence text.blocklyText {
-  fill: #978676 !important;
+  fill: #808A9D !important;
 }
