@@ -38,6 +38,7 @@ import {
   explodeMacro as expandMacroTask,
   getMacroIdFromBlockData,
 } from './macroExplosion'
+import { SHADOW_ICON_URIS } from '../blocks/definitions'
 
 const DRAG_THRESHOLD_PX = 5
 
@@ -493,6 +494,8 @@ interface BlocklyEditorProps {
   onTaskStructureChange?: (task: AbstractStep[] | null) => void
 }
 
+const STRUCTURE_CHANGING_TYPES = new Set(['create', 'delete', 'move', 'change'])
+
 /**
  * Full Blockly editor: custom toolbox, interactive workspace, controls and context-menu bridge.
  */
@@ -517,6 +520,11 @@ export const BlocklyEditor = ({
   >(null)
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
   const contextMenuOptionIdRef = useRef(0)
+  const onTaskStructureChangeRef = useRef(onTaskStructureChange)
+  useEffect(() => {
+    onTaskStructureChangeRef.current = onTaskStructureChange
+  }, [onTaskStructureChange])
+  const targetShadowBlockIdRef = useRef<string | null>(null)
 
   const [isDeleting, setIsDeleting] = useState(false)
   const [historyState, setHistoryState] = useState({
@@ -530,6 +538,10 @@ export const BlocklyEditor = ({
   const [targetShadowBlockId, setTargetShadowBlockId] = useState<string | null>(
     null,
   )
+  const setTargetShadowBlock = useCallback((id: string | null) => {
+    targetShadowBlockIdRef.current = id
+    setTargetShadowBlockId(id)
+  }, [])
 
   // Search query used by the shadow picker menu.
   const [searchQuery, setSearchQuery] = useState('')
@@ -578,13 +590,39 @@ export const BlocklyEditor = ({
     [filteredShadowItems],
   )
 
+  function getShadowPlusImageEl(
+    block: Blockly.BlockSvg,
+  ): SVGImageElement | null {
+    const svgRoot = block.getSvgRoot?.()
+    if (!svgRoot) return null
+    return svgRoot.querySelector<SVGImageElement>('image') ?? null
+  }
+
   // Reset all shadow-picker state together when it closes.
   const closeShadowPicker = useCallback(() => {
+    const id = targetShadowBlockIdRef.current
+    if (id && workspaceRef.current) {
+      const block = workspaceRef.current.getBlockById(id)
+      const blockSvg = block as Blockly.BlockSvg | null
+      if (blockSvg) {
+        blockSvg.getSvgRoot?.()?.classList.remove('shadow-block--selected')
+        const cssClass = blockSvg.getSvgRoot()?.classList
+        const type = cssClass?.contains('custom-dashed-shadow-trigger')
+          ? 'trigger'
+          : cssClass?.contains('custom-dashed-shadow-sequence')
+            ? 'sequence'
+            : 'workspace'
+        getShadowPlusImageEl(blockSvg)?.setAttribute(
+          'href',
+          SHADOW_ICON_URIS[type].base,
+        )
+      }
+    }
     setShadowPickerPosition(null)
     setPopoverType(null)
-    setTargetShadowBlockId(null)
+    setTargetShadowBlock(null)
     setSearchQuery('')
-  }, [])
+  }, [setTargetShadowBlock])
 
   const resolveShadowPickerPosition = useCallback(
     (workspace: Blockly.WorkspaceSvg, block: Blockly.Block) => {
@@ -870,8 +908,79 @@ export const BlocklyEditor = ({
       // Tracks the group id of the current drag operation (set on BLOCK_DRAG isStart).
       let activeDragGroup: string | null = null
 
+      // highlight helpers
+      function setShadowIconState(block: Blockly.BlockSvg, lit: boolean) {
+        const cssClass = block.getSvgRoot()?.classList
+        const type = cssClass?.contains('custom-dashed-shadow-trigger')
+          ? 'trigger'
+          : cssClass?.contains('custom-dashed-shadow-sequence')
+            ? 'sequence'
+            : 'workspace'
+        const uri = lit
+          ? SHADOW_ICON_URIS[type].lit
+          : SHADOW_ICON_URIS[type].base
+        getShadowPlusImageEl(block)?.setAttribute('href', uri)
+      }
+
+      function getShadowBlocks(ws: Blockly.WorkspaceSvg): Blockly.BlockSvg[] {
+        return ws
+          .getAllBlocks(false)
+          .filter((b) => b.isShadow()) as Blockly.BlockSvg[]
+      }
+
+      function getDescendantIds(block: Blockly.Block): Set<string> {
+        const ids = new Set<string>()
+        const queue = [...block.getChildren(false)]
+        while (queue.length > 0) {
+          const child = queue.pop()!
+          ids.add(child.id)
+          queue.push(...child.getChildren(false))
+        }
+        return ids
+      }
+
+      function highlightCompatibleShadowBlocks(
+        ws: Blockly.WorkspaceSvg,
+        draggedBlock: Blockly.Block,
+        draggedBlockId: string,
+      ) {
+        const checker = ws.connectionChecker
+        const excludedIds = getDescendantIds(draggedBlock)
+        excludedIds.add(draggedBlockId)
+
+        getShadowBlocks(ws).forEach((block) => {
+          if (excludedIds.has(block.id)) return
+
+          const shadowConn =
+            block.outputConnection ?? block.previousConnection ?? null
+          if (!shadowConn) return
+          const parentConn = shadowConn.targetConnection
+          if (!parentConn) return
+          const draggedConn =
+            draggedBlock.outputConnection ??
+            draggedBlock.previousConnection ??
+            null
+          if (!draggedConn) return
+
+          const compatible = checker.doTypeChecks(draggedConn, parentConn)
+          const svgRoot = block.getSvgRoot?.()
+          if (!svgRoot) return
+          svgRoot.classList.toggle('shadow-block--drag-target', compatible)
+          setShadowIconState(block, compatible)
+        })
+      }
+
+      function clearShadowBlockHighlights(ws: Blockly.WorkspaceSvg) {
+        getShadowBlocks(ws).forEach((block) => {
+          const svgRoot = block.getSvgRoot?.()
+          if (!svgRoot) return
+          svgRoot.classList.remove('shadow-block--drag-target')
+          svgRoot.classList.remove('shadow-block--drag-incompatible')
+          setShadowIconState(block, false)
+        })
+      }
+
       const listener = (event: Blockly.Events.Abstract) => {
-        // Drag tracking
         if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
           const dragEvent = event as Blockly.Events.Abstract & {
             isStart?: boolean
@@ -879,8 +988,20 @@ export const BlocklyEditor = ({
           if (dragEvent.isStart === true) {
             activeDragGroup = event.group || null
             setIsDeleting(true)
+            const draggedBlockId = (event as any).blockId as string | undefined
+            const draggedBlock = draggedBlockId
+              ? workspace.getBlockById(draggedBlockId)
+              : null
+            if (draggedBlock && draggedBlockId) {
+              highlightCompatibleShadowBlocks(
+                workspace,
+                draggedBlock,
+                draggedBlockId,
+              )
+            }
           } else if (dragEvent.isStart === false) {
             setIsDeleting(false)
+            clearShadowBlockHighlights(workspace)
           }
           syncHistoryState(workspace)
           return
@@ -923,24 +1044,29 @@ export const BlocklyEditor = ({
           }
           workspace.hideChaff()
           setContextMenu(null)
+
+          const svgRoot = (clickedBlock as Blockly.BlockSvg).getSvgRoot?.()
+          svgRoot?.classList.add('shadow-block--selected')
+          setShadowIconState(clickedBlock as Blockly.BlockSvg, true)
+
           setShadowPickerPosition(
             resolveShadowPickerPosition(workspace, clickedBlock),
           )
           setPopoverType(nextPopoverType)
-          setTargetShadowBlockId(clickedBlock.id)
+          setTargetShadowBlock(clickedBlock.id)
           return
         }
         syncHistoryState(workspace)
 
         if (
-          `${event.type}` !== `${Blockly.Events.UI}` &&
-          onTaskStructureChange
+          STRUCTURE_CHANGING_TYPES.has(event.type) &&
+          onTaskStructureChangeRef.current
         ) {
           const blocklyTaskStructure = getBlocklyStructure()
           const abstractTask = blocklyToAbstract(
             blocklyTaskStructure as CustomBlock | null,
           )
-          onTaskStructureChange(abstractTask)
+          onTaskStructureChangeRef.current(abstractTask)
         }
       }
 
@@ -953,11 +1079,11 @@ export const BlocklyEditor = ({
     [
       closeShadowPicker,
       detachWorkspaceListener,
-      onTaskStructureChange,
       registerToolboxDeleteArea,
       resolveShadowPickerPosition,
       syncHistoryState,
       unregisterToolboxDeleteArea,
+      setTargetShadowBlock,
     ],
   )
 

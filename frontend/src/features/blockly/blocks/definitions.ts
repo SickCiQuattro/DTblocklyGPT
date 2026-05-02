@@ -40,19 +40,32 @@ const USER_ICON_URI = createLucideIconURI(
   '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 )
 
-const CIRCLE_PLUS_ICON_URI = createLucideIconURI(
+const CIRCLE_PLUS_ICON_URI_BASE = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  'rgba(1, 189, 86, 0.45)',
+)
+const CIRCLE_PLUS_TRIGGER_ICON_URI_BASE = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  'rgba(225, 89, 48, 0.45)',
+)
+const CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  'rgba(151, 134, 118, 0.45)',
+)
+
+const CIRCLE_PLUS_ICON_URI_LIT = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   blocksColours.objectsPositions,
 )
 
-const CIRCLE_PLUS_TRIGGER_ICON_URI = createLucideIconURI(
+const CIRCLE_PLUS_TRIGGER_ICON_URI_LIT = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   blocksColours.eventsConditions,
 )
 
-const CIRCLE_PLUS_SEQUENCE_ICON_URI = createLucideIconURI(
+const CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT = createLucideIconURI(
   '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  '#9E9E9E',
+  blocksColours.logicControl,
 )
 
 const TAG_ICON_URI = createLucideIconURI(
@@ -76,7 +89,7 @@ const SCAN_EYE_ICON_URI = createLucideIconURI(
 )
 
 const sequencePlusFieldConfig = () =>
-  iconConfig(CIRCLE_PLUS_SEQUENCE_ICON_URI, '+', 14, 14)
+  iconConfig(CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE, '+', 14, 14)
 
 const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
   type: 'field_image',
@@ -87,9 +100,21 @@ const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
   flipRtl: false,
 })
 
-const plusFieldConfig = () => iconConfig(CIRCLE_PLUS_ICON_URI, '+', 14, 14)
+const plusFieldConfig = () => iconConfig(CIRCLE_PLUS_ICON_URI_BASE, '+', 14, 14)
 const triggerPlusFieldConfig = () =>
-  iconConfig(CIRCLE_PLUS_TRIGGER_ICON_URI, '+', 14, 14)
+  iconConfig(CIRCLE_PLUS_TRIGGER_ICON_URI_BASE, '+', 14, 14)
+
+export const SHADOW_ICON_URIS = {
+  workspace: { base: CIRCLE_PLUS_ICON_URI_BASE, lit: CIRCLE_PLUS_ICON_URI_LIT },
+  trigger: {
+    base: CIRCLE_PLUS_TRIGGER_ICON_URI_BASE,
+    lit: CIRCLE_PLUS_TRIGGER_ICON_URI_LIT,
+  },
+  sequence: {
+    base: CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE,
+    lit: CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT,
+  },
+}
 
 // ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
 const parseBlockData = (rawData: unknown) => {
@@ -168,7 +193,10 @@ Blockly.Extensions.register('shadow_placeholder_extension', function () {
   block.initSvg = function (this: Blockly.Block) {
     originalInitSvg?.call(this)
     const svgRoot = (this as BlockWithSvgHooks).getSvgRoot?.()
-    if (svgRoot) svgRoot.classList.add(cssClass)
+    if (svgRoot) {
+      svgRoot.classList.add(cssClass)
+      svgRoot.classList.add('shadow-block--base')
+    }
   }
 })
 
@@ -614,27 +642,6 @@ const createShadowTriggerBlock = () => ({
   tooltip: 'Insert a Conditions block here.',
 })
 
-Blockly.defineBlocksWithJsonArray([
-  createShadowEntityBlock(
-    'shadow_object_block',
-    'object_block',
-    'Select Object',
-  ),
-  createShadowEntityBlock(
-    'shadow_location_block',
-    'location_block',
-    'Select Destination',
-  ),
-  createShadowEntityBlock(
-    'shadow_action_block',
-    'action_block',
-    'Select Procedure',
-  ),
-  createShadowTriggerBlock(),
-])
-
-// Aggiungi in fondo alla sezione "SHADOW PLACEHOLDERS WITH '+' ICON"
-
 const createShadowSequenceBlock = () => ({
   type: 'shadow_sequence_block',
   message0: '%1 %2',
@@ -642,7 +649,6 @@ const createShadowSequenceBlock = () => ({
     { type: 'field_label_serializable', name: 'name', text: 'Add a step' },
     sequencePlusFieldConfig(),
   ],
-  // Fondamentale: previousStatement + nextStatement, NON output
   previousStatement: ['robot_sequence', 'logic_sequence'],
   nextStatement: ['robot_sequence', 'logic_sequence'],
   colour: '#7A7A8A',
@@ -667,5 +673,5 @@ Blockly.defineBlocksWithJsonArray([
     'Select Procedure',
   ),
   createShadowTriggerBlock(),
-  createShadowSequenceBlock(), // ← nuovo
+  createShadowSequenceBlock(),
 ])

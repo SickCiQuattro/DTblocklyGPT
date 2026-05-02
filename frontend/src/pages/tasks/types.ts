@@ -61,29 +61,30 @@ export type AbstractStep =
   | AbstractRepeatStep
   | AbstractWhenStep
   | AbstractHumanActionStep
+  | AbstractWaitForHumanStep
 
 export type AbstractPickStep = {
   type: 'pick'
-  objectId: number | string
+  objectId: number | string | null
   objectName: string
 }
 
 export type AbstractPlaceStep = {
   type: 'place'
-  locationId: number | string
+  locationId: number | string | null
   locationName: string
 }
 
 export type AbstractProcessingStep = {
   type: 'processing'
-  actionId: number | string
+  actionId: number | string | null
   actionName: string
 }
 
 export type AbstractMoveToStep = {
   type: 'move_to'
   motionType: 'LINEAR' | 'JOINT'
-  locationId: number | string
+  locationId: number | string | null
   locationName: string
 }
 
@@ -128,7 +129,7 @@ export type AbstractCondition =
   | { type: 'find_object'; objectId: number | string; objectName: string }
   | { type: 'human_feedback' }
   | { type: 'touch_detect' }
-  | { type: 'gesture'; gestureType: 'THUMBS_UP' | 'STOP' }
+  | { type: 'gesture'; gestureType: 'THUMBS_UP' | 'STOP' | 'OPEN_HAND' }
   | { type: 'timer'; seconds: number }
   | { type: 'and'; left: AbstractCondition; right: AbstractCondition }
   | { type: 'or'; left: AbstractCondition; right: AbstractCondition }

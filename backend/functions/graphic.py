@@ -95,6 +95,9 @@ def find_and_modify(json_data, key_to_find, modification_function, user, branche
 
 
 def search_library_data(branch, user, key_to_find):
+    # fix: shadow block not linked
+    if not branch[key_to_find] or "block" not in branch[key_to_find]:
+        return
     library_type = None
     if key_to_find == "OBJECT":
         library_type = Object

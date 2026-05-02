@@ -146,53 +146,80 @@
    BLOCKLY CUSTOM SHADOW BLOCKS
    ========================================================================== */
 
-.custom-dashed-shadow-workspace > .blocklyPath {
-  fill: rgba(0, 189, 86, 0.15) !important;
-
-  stroke: #01BD56 !important;
+/* ── Base ── */
+.custom-dashed-shadow-workspace > .blocklyPath,
+.custom-dashed-shadow-trigger > .blocklyPath,
+.custom-dashed-shadow-sequence > .blocklyPath {
   stroke-width: 2px !important;
   stroke-dasharray: 6, 5 !important;
-
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
+  transition: fill 0.18s ease, stroke 0.18s ease;
 }
 
+.custom-dashed-shadow-workspace > .blocklyPath {
+  fill: rgba(0, 189, 86, 0.06) !important;
+  stroke: rgba(1, 189, 86, 0.35) !important;
+}
 .custom-dashed-shadow-workspace text.blocklyText {
-  fill: #01BD56 !important;
+  fill: rgba(1, 189, 86, 0.45) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
 
 .custom-dashed-shadow-trigger > .blocklyPath {
-  fill: rgba(225, 89, 48, 0.15) !important;
-
-  stroke: #E15930 !important;
-  stroke-width: 2px !important;
-  stroke-dasharray: 6, 5 !important;
-
-  fill-opacity: 1 !important;
-  stroke-opacity: 1 !important;
+  fill: rgba(225, 89, 48, 0.06) !important;
+  stroke: rgba(225, 89, 48, 0.35) !important;
 }
-
 .custom-dashed-shadow-trigger text.blocklyText {
-  fill: #E15930 !important;
+  fill: rgba(225, 89, 48, 0.45) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
 
 .custom-dashed-shadow-sequence > .blocklyPath {
-  fill: rgba(151, 134, 118, 0.15) !important;
+  fill: rgba(151, 134, 118, 0.06) !important;
+  stroke: rgba(151, 134, 118, 0.35) !important;
+}
+.custom-dashed-shadow-sequence text.blocklyText {
+  fill: rgba(151, 134, 118, 0.45) !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+}
 
-  stroke: #978676 !important;
-  stroke-width: 2px !important;
-  stroke-dasharray: 6, 5 !important;
-
+/* ── Highlight ── */
+.shadow-block--drag-target > .blocklyPath,
+.shadow-block--selected > .blocklyPath {
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
 }
 
-.custom-dashed-shadow-sequence text.blocklyText {
+.shadow-block--drag-target.custom-dashed-shadow-workspace > .blocklyPath,
+.shadow-block--selected.custom-dashed-shadow-workspace > .blocklyPath {
+  fill: rgba(0, 189, 86, 0.15) !important;
+  stroke: #01BD56 !important;
+}
+.shadow-block--drag-target.custom-dashed-shadow-workspace text.blocklyText,
+.shadow-block--selected.custom-dashed-shadow-workspace text.blocklyText {
+  fill: #01BD56 !important;
+}
+
+.shadow-block--drag-target.custom-dashed-shadow-trigger > .blocklyPath,
+.shadow-block--selected.custom-dashed-shadow-trigger > .blocklyPath {
+  fill: rgba(225, 89, 48, 0.15) !important;
+  stroke: #E15930 !important;
+}
+.shadow-block--drag-target.custom-dashed-shadow-trigger text.blocklyText,
+.shadow-block--selected.custom-dashed-shadow-trigger text.blocklyText {
+  fill: #E15930 !important;
+}
+
+.shadow-block--drag-target.custom-dashed-shadow-sequence > .blocklyPath,
+.shadow-block--selected.custom-dashed-shadow-sequence > .blocklyPath {
+  fill: rgba(151, 134, 118, 0.15) !important;
+  stroke: #978676 !important;
+}
+.shadow-block--drag-target.custom-dashed-shadow-sequence text.blocklyText,
+.shadow-block--selected.custom-dashed-shadow-sequence text.blocklyText {
   fill: #978676 !important;
-  font-weight: 700 !important;
-  font-size: 13px !important;
 }
