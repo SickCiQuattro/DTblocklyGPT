@@ -53,7 +53,8 @@ export const startSyntheticBlockDrag = (
       screenCoordinates,
     )
 
-    // Crea il blocco silenziosamente — nessun evento
+    const dragGroupId = Blockly.utils.idGenerator.genUid()
+
     Blockly.Events.disable()
     let block: Blockly.BlockSvg | null = null
     try {
@@ -77,21 +78,64 @@ export const startSyntheticBlockDrag = (
 
     const capturedBlock = block
 
-    // Apri il gruppo PRIMA di fare fire del CREATE
-    Blockly.Events.setGroup(true)
-    const currentGroup = Blockly.Events.getGroup()
-
-    // Registra manualmente il CREATE nello stack undo
+    Blockly.Events.setGroup(dragGroupId)
     Blockly.Events.fire(new Blockly.Events.BlockCreate(capturedBlock))
 
-    // Listener che chiude il gruppo dopo il drop
+    const capturedBlockId = capturedBlock.id
+
     const dragEndListener = (event: Blockly.Events.Abstract) => {
+      if (event.type !== 'drag') return
       const dragEvent = event as Blockly.Events.Abstract & { isStart?: boolean }
-      if (`${event.type}` !== `${Blockly.Events.BLOCK_DRAG}`) return
       if (dragEvent.isStart !== false) return
 
-      Blockly.Events.setGroup(false)
       workspace.removeChangeListener(dragEndListener)
+
+      let lastStackLength = -1
+      let checkCount = 0
+      const MAX_CHECKS = 10
+
+      const waitForStableStack = () => {
+        const stack = (workspace as any).undoStack_ as Blockly.Events.Abstract[]
+        if (!stack) return
+
+        const currentLength = stack.length
+
+        if (currentLength === lastStackLength || checkCount >= MAX_CHECKS) {
+          for (const entry of stack) {
+            const e = entry as any
+            if (
+              e.blockId === capturedBlockId ||
+              e.newElementId === capturedBlockId
+            ) {
+              entry.group = dragGroupId
+            }
+          }
+
+          const ourMoves = stack
+            .map((e: any, i: number) => ({ e, i }))
+            .filter(
+              ({ e }: any) =>
+                (e.blockId === capturedBlockId ||
+                  e.newElementId === capturedBlockId) &&
+                e.type === 'move',
+            )
+
+          if (ourMoves.length > 1) {
+            ourMoves
+              .slice(0, -1)
+              .map(({ i }: any) => i)
+              .sort((a: number, b: number) => b - a)
+              .forEach((i: number) => stack.splice(i, 1))
+          }
+          return
+        }
+
+        lastStackLength = currentLength
+        checkCount++
+        requestAnimationFrame(waitForStableStack)
+      }
+
+      requestAnimationFrame(waitForStableStack)
     }
 
     workspace.addChangeListener(dragEndListener)

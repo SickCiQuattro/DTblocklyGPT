@@ -527,6 +527,7 @@ export const BlocklyEditor = ({
   const workspaceChangeListenerRef = useRef<
     ((event: Blockly.Events.Abstract) => void) | null
   >(null)
+
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
   const contextMenuOptionIdRef = useRef(0)
   const keydownCleanupRef = useRef<(() => void) | null>(null)
@@ -535,6 +536,8 @@ export const BlocklyEditor = ({
     onTaskStructureChangeRef.current = onTaskStructureChange
   }, [onTaskStructureChange])
   const targetShadowBlockIdRef = useRef<string | null>(null)
+  const lastDragEndTimeRef = useRef<number>(0)
+  const lastDragGroupRef = useRef<string>('')
 
   const [isDeleting, setIsDeleting] = useState(false)
   const [historyState, setHistoryState] = useState({
@@ -885,7 +888,8 @@ export const BlocklyEditor = ({
 
       const isMacroBlock = selectedBlockType === 'macro_task_block'
 
-      Blockly.Events.setGroup(true)
+      const groupId = Blockly.utils.idGenerator.genUid()
+      Blockly.Events.setGroup(groupId)
       try {
         const displayName =
           item.name.trim().length > 0 ? item.name.trim() : `${item.id}`
@@ -921,20 +925,12 @@ export const BlocklyEditor = ({
                   : {}),
               }
 
-        Blockly.Events.disable()
-        let newBlock: Blockly.BlockSvg
-        try {
-          newBlock = Blockly.serialization.blocks.append(
-            baseState,
-            workspace,
-          ) as Blockly.BlockSvg
-          newBlock.initSvg()
-          newBlock.render()
-        } finally {
-          Blockly.Events.enable()
-        }
-
-        Blockly.Events.fire(new Blockly.Events.BlockCreate(newBlock))
+        const newBlock = Blockly.serialization.blocks.append(
+          baseState,
+          workspace,
+        ) as Blockly.BlockSvg
+        newBlock.initSvg()
+        newBlock.render()
 
         if (isSequence) {
           if (newBlock.previousConnection) {
@@ -965,9 +961,6 @@ export const BlocklyEditor = ({
         syncHistoryState(null)
         return
       }
-
-      // Tracks the group id of the current drag operation (set on BLOCK_DRAG isStart).
-      let activeDragGroup: string | null = null
 
       // highlight helpers
       function setShadowIconState(block: Blockly.BlockSvg, lit: boolean) {
@@ -1042,13 +1035,25 @@ export const BlocklyEditor = ({
       }
 
       const listener = (event: Blockly.Events.Abstract) => {
+        // DEBUG: log drag/move events with group and undo-stack info to help troubleshoot drag-related edge cases.
+        // if (['drag', 'move'].includes(event.type)) {
+        //   const e = event as any
+        //   const stack = (workspace as any).undoStack_ as any[]
+        //   console.log(
+        //     `[NATIVE DRAG] type=${event.type} | g=${event.group?.slice(0, 6)} | isStart=${e.isStart ?? '—'} | stackLen=${stack?.length}`,
+        //   )
+        // }
         if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
           const dragEvent = event as Blockly.Events.Abstract & {
             isStart?: boolean
           }
           if (dragEvent.isStart === true) {
-            activeDragGroup = event.group || null
+            lastDragGroupRef.current =
+              event.group || Blockly.utils.idGenerator.genUid()
+            lastDragEndTimeRef.current = 0
+
             setIsDeleting(true)
+            deleteAreaRef.current?.setActiveDragGroup(lastDragGroupRef.current)
             const draggedBlockId = (event as any).blockId as string | undefined
             const draggedBlock = draggedBlockId
               ? workspace.getBlockById(draggedBlockId)
@@ -1061,23 +1066,35 @@ export const BlocklyEditor = ({
               )
             }
           } else if (dragEvent.isStart === false) {
+            lastDragEndTimeRef.current = Date.now()
+
             setIsDeleting(false)
             clearShadowBlockHighlights(workspace)
+            deleteAreaRef.current?.setActiveDragGroup(null)
           }
-          syncHistoryState(workspace)
-          return
         }
 
         if (
-          activeDragGroup &&
-          `${event.type}` === `${Blockly.Events.BLOCK_MOVE}` &&
-          !event.group
+          ['move', 'drag', 'delete', 'create', 'change'].includes(
+            `${event.type}`,
+          ) &&
+          !(event as any).group &&
+          lastDragGroupRef.current &&
+          lastDragEndTimeRef.current > 0 &&
+          Date.now() - lastDragEndTimeRef.current < 300
         ) {
-          ;(event as any).group = activeDragGroup
+          const undoStack = (workspace as any).undoStack_ as any[]
+          if (undoStack && undoStack.length > 0) {
+            const top = undoStack[undoStack.length - 1]
+            if (!top.group) {
+              top.group = lastDragGroupRef.current
+            }
+          }
         }
 
-        if (activeDragGroup && event.group && event.group !== activeDragGroup) {
-          activeDragGroup = null
+        if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
+          setIsDeleting(false)
+          clearShadowBlockHighlights(workspace)
         }
 
         // Click: open shadow picker
@@ -1137,7 +1154,6 @@ export const BlocklyEditor = ({
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key !== 'Delete' && e.key !== 'Backspace') return
 
-        // Controlla tutti gli injectionDiv nel documento, non solo quello del workspace principale
         const active = document.activeElement
         if (!active) return
 
@@ -1208,14 +1224,53 @@ export const BlocklyEditor = ({
   const handleUndo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
+
+    const stack = workspace.getUndoStack()
+    if (stack.length === 0) return
+
+    // take the group of the first event to undo, and keep undoing while the events belong to the same group
+    const topGroup = stack[stack.length - 1].group
+
+    // Undo first event
     workspace.undo(false)
+
+    // If it had a group, keep undoing until the group changes
+    if (topGroup) {
+      let remaining = workspace.getUndoStack()
+      while (
+        remaining.length > 0 &&
+        remaining[remaining.length - 1].group === topGroup
+      ) {
+        workspace.undo(false)
+        remaining = workspace.getUndoStack()
+      }
+    }
+
     syncHistoryState(workspace)
   }, [syncHistoryState])
 
   const handleRedo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
+
+    const redoStack = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
+    if (!redoStack || redoStack.length === 0) return
+
+    const topGroup = redoStack[redoStack.length - 1].group
+
     workspace.undo(true)
+
+    if (topGroup) {
+      let remaining = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
+      while (
+        remaining.length > 0 &&
+        remaining[remaining.length - 1].group === topGroup
+      ) {
+        workspace.undo(true)
+        remaining = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
+      }
+    }
+
     syncHistoryState(workspace)
   }, [syncHistoryState])
 

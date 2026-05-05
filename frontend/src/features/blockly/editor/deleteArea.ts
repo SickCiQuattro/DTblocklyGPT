@@ -1,10 +1,8 @@
 import * as Blockly from 'blockly/core'
 
-/**
- * Delete area mapped to the custom React toolbox sidebar.
- */
 export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
   private readonly toolboxElement: HTMLElement
+  private activeDragGroup: string | null = null
 
   constructor(toolboxElement: HTMLElement) {
     super()
@@ -12,37 +10,40 @@ export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
     this.id = 'custom-toolbox-delete-area'
   }
 
-  override getClientRect(): Blockly.utils.Rect | null {
-    if (!this.toolboxElement.isConnected) {
-      return null
-    }
-
-    const toolboxRect = this.toolboxElement.getBoundingClientRect()
-    if (toolboxRect.width <= 0 || toolboxRect.height <= 0) {
-      return null
-    }
-
-    const BIG_NUM = 10000000
-    return new Blockly.utils.Rect(
-      toolboxRect.top,
-      toolboxRect.bottom,
-      -BIG_NUM,
-      toolboxRect.right,
-    )
+  setActiveDragGroup(group: string | null) {
+    this.activeDragGroup = group
   }
 
-  override onDragEnter(dragElement: Blockly.IDraggable) {
-    super.onDragEnter(dragElement)
+  override getClientRect(): Blockly.utils.Rect | null {
+    if (!this.toolboxElement.isConnected) return null
+    const r = this.toolboxElement.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) return null
+    const BIG = 10000000
+    return new Blockly.utils.Rect(r.top, r.bottom, -BIG, r.right)
+  }
+
+  override onDragEnter(e: Blockly.IDraggable) {
+    super.onDragEnter(e)
     this.toolboxElement.classList.add('custom-toolbox--delete-over')
   }
 
-  override onDragExit(dragElement: Blockly.IDraggable) {
-    super.onDragExit(dragElement)
+  override onDragExit(e: Blockly.IDraggable) {
+    super.onDragExit(e)
     this.toolboxElement.classList.remove('custom-toolbox--delete-over')
   }
 
-  override onDrop(dragElement: Blockly.IDraggable) {
-    super.onDrop(dragElement)
+  override onDrop(dragElement: Blockly.IDraggable): void {
     this.toolboxElement.classList.remove('custom-toolbox--delete-over')
+    const block = dragElement as Blockly.BlockSvg
+    if (!block?.dispose) return
+
+    const group = this.activeDragGroup ?? Blockly.utils.idGenerator.genUid()
+    Blockly.Events.setGroup(group)
+    try {
+      block.dispose(false, true)
+    } finally {
+      Blockly.Events.setGroup(false)
+      this.activeDragGroup = null
+    }
   }
 }
