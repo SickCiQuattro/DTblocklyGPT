@@ -1,5 +1,24 @@
 import * as Blockly from 'blockly/core'
 
+export function filterRealBlocks<T extends Blockly.Block>(
+  blocks: T[],
+  excludeType?: string,
+): T[] {
+  return blocks.filter(
+    (b) =>
+      !b.isShadow() &&
+      !b.isInsertionMarker() &&
+      (excludeType ? b.type !== excludeType : true),
+  )
+}
+
+export function countRealBlocks(
+  blocks: Blockly.Block[],
+  excludeType?: string,
+): number {
+  return filterRealBlocks(blocks, excludeType).length
+}
+
 /**
  * Returns all blocks that logically "belong" to the given root block:
  * blocks connected via inputList (the body), recursively.
@@ -28,5 +47,5 @@ export const getOwnBodyDescendants = (
     if (next) queue.push(next)
   }
 
-  return result
+  return filterRealBlocks(result)
 }

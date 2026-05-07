@@ -16,6 +16,8 @@ export const blocksColours = {
   eventsConditions: '#E15930',
   /** Macro-tasks / predefined sub-routines */
   macroTasks: '#3B97F4',
+  /** Start block */
+  start: '#0F766E',
 } as const
 
 // ─── ICON HELPERS ────────────────────────────────────────────────────────
@@ -68,6 +70,19 @@ const CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT = createLucideIconURI(
   'rgba(128, 138, 157, 1)',
 )
 
+const CIRCLE_PLUS_START_ICON_URI_BASE = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  'rgba(15, 118, 110, 0.45)',
+)
+
+const CIRCLE_PLUS_START_ICON_URI_LIT = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  blocksColours.start,
+)
+
+const startPlusFieldConfig = () =>
+  iconConfig(CIRCLE_PLUS_START_ICON_URI_BASE, '+', 14, 14)
+
 const TAG_ICON_URI = createLucideIconURI(
   '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
 )
@@ -86,6 +101,10 @@ const WORKFLOW_ICON_URI = createLucideIconURI(
 
 const SCAN_EYE_ICON_URI = createLucideIconURI(
   '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
+)
+
+const FLAG_ICON_URI = createLucideIconURI(
+  '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',
 )
 
 const sequencePlusFieldConfig = () =>
@@ -114,7 +133,11 @@ export const SHADOW_ICON_URIS = {
     base: CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE,
     lit: CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT,
   },
-}
+  start: {
+    base: CIRCLE_PLUS_START_ICON_URI_BASE,
+    lit: CIRCLE_PLUS_START_ICON_URI_LIT,
+  },
+} as const
 
 // ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
 const parseBlockData = (rawData: unknown) => {
@@ -188,7 +211,9 @@ Blockly.Extensions.register('shadow_placeholder_extension', function () {
       ? 'custom-dashed-shadow-trigger'
       : block.type === 'shadow_sequence_block'
         ? 'custom-dashed-shadow-sequence'
-        : 'custom-dashed-shadow-workspace'
+        : block.type === 'shadow_start_sequence_block'
+          ? 'custom-dashed-shadow-start'
+          : 'custom-dashed-shadow-workspace'
 
   block.initSvg = function (this: Blockly.Block) {
     originalInitSvg?.call(this)
@@ -198,9 +223,7 @@ Blockly.Extensions.register('shadow_placeholder_extension', function () {
       svgRoot.classList.add('shadow-block--base')
     }
   }
-})
-
-// ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
+}) // ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'object_block',
@@ -608,6 +631,18 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
+// ─── WHEN_START — chiamata separata ───────────────────────────────────────
+Blockly.defineBlocksWithJsonArray([
+  {
+    type: 'when_start',
+    message0: '%1 Start of Task',
+    args0: [iconConfig(FLAG_ICON_URI, 'START:', 18, 18)],
+    nextStatement: null,
+    colour: '#0F766E',
+    tooltip: blockDescriptionsByType.when_start,
+  },
+])
+
 // ─── SHADOW PLACEHOLDERS WITH "+" ICON ────────────────────────────────────
 const createShadowEntityBlock = (
   type: 'shadow_object_block' | 'shadow_location_block' | 'shadow_action_block',
@@ -656,6 +691,24 @@ const createShadowSequenceBlock = () => ({
   tooltip: 'Drop a block here to add a step.',
 })
 
+const createShadowStartSequenceBlock = () => ({
+  type: 'shadow_start_sequence_block',
+  message0: '%1 %2',
+  args0: [
+    {
+      type: 'field_label_serializable',
+      name: 'name',
+      text: 'Add first step',
+    },
+    startPlusFieldConfig(),
+  ],
+  previousStatement: ['robot_sequence', 'logic_sequence'],
+  nextStatement: ['robot_sequence', 'logic_sequence'],
+  colour: blocksColours.start,
+  extensions: ['shadow_placeholder_extension'],
+  tooltip: 'Connect the first block of your program here.',
+})
+
 Blockly.defineBlocksWithJsonArray([
   createShadowEntityBlock(
     'shadow_object_block',
@@ -674,4 +727,5 @@ Blockly.defineBlocksWithJsonArray([
   ),
   createShadowTriggerBlock(),
   createShadowSequenceBlock(),
+  createShadowStartSequenceBlock(),
 ])

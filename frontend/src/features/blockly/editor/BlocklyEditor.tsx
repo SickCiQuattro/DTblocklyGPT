@@ -26,7 +26,7 @@ import { ObjectListType } from 'pages/objects/types'
 import { AbstractStep, TaskType } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
-import { getOwnBodyDescendants } from 'utils/blocklySelection'
+import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
 import { CustomToolbox, ToolboxBlockItem } from '../toolbox'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
@@ -48,6 +48,127 @@ import {
   getMacroIdFromBlockData,
 } from './macroExplosion'
 import { SHADOW_ICON_URIS } from '../blocks/definitions'
+
+const START_BLOCK_TYPE = 'when_start' as const
+
+function resolveShadowIconType(
+  classList: DOMTokenList | undefined,
+): keyof typeof SHADOW_ICON_URIS {
+  if (classList?.contains('custom-dashed-shadow-trigger')) return 'trigger'
+  if (classList?.contains('custom-dashed-shadow-sequence')) return 'sequence'
+  if (classList?.contains('custom-dashed-shadow-start')) return 'start'
+  return 'workspace'
+}
+
+const getRedoStack = (
+  workspace: Blockly.WorkspaceSvg,
+): Blockly.Events.Abstract[] => {
+  return (
+    workspace.getRedoStack?.() ??
+    ((workspace as any).redoStack_ as Blockly.Events.Abstract[] | undefined) ??
+    ((workspace as any).redoStack as Blockly.Events.Abstract[] | undefined) ??
+    []
+  )
+}
+
+// when_start top-left
+function insertStartBlock(
+  workspace: Blockly.WorkspaceSvg,
+): Blockly.BlockSvg | null {
+  if (!Blockly.Blocks[START_BLOCK_TYPE]) {
+    console.warn(
+      `insertStartBlock: Block type ${START_BLOCK_TYPE} not registered yet.`,
+    )
+    return null
+  }
+
+  const block = Blockly.serialization.blocks.append(
+    { type: START_BLOCK_TYPE },
+    workspace,
+  ) as Blockly.BlockSvg
+
+  block.initSvg()
+  block.render()
+
+  block.setDeletable(false)
+  block.setMovable(false)
+  block.moveBy(24, 24)
+
+  // shadow via API
+  if (block.nextConnection) {
+    const shadow = workspace.newBlock(
+      'shadow_start_sequence_block',
+    ) as Blockly.BlockSvg
+    shadow.setShadow(true)
+    shadow.initSvg()
+    shadow.render()
+    block.nextConnection.connect(shadow.previousConnection!)
+  }
+
+  return block
+}
+
+const ORPHAN_SYNC_TYPES = new Set<string>([
+  Blockly.Events.BLOCK_CREATE,
+  Blockly.Events.BLOCK_DELETE,
+  Blockly.Events.BLOCK_MOVE,
+  Blockly.Events.BLOCK_CHANGE,
+])
+
+function findStartBlock(
+  workspace: Blockly.WorkspaceSvg,
+): Blockly.BlockSvg | null {
+  return (
+    (workspace.getBlocksByType(
+      START_BLOCK_TYPE,
+      false,
+    )[0] as Blockly.BlockSvg) ?? null
+  )
+}
+
+function ensureStartBlock(workspace: Blockly.WorkspaceSvg): void {
+  if (findStartBlock(workspace)) return
+  Blockly.Events.disable()
+  try {
+    const inserted = insertStartBlock(workspace)
+    if (!inserted)
+      console.warn('[ensureStartBlock] when_start not yet registered')
+  } finally {
+    Blockly.Events.enable()
+  }
+}
+
+function syncOrphanState(workspace: Blockly.WorkspaceSvg): void {
+  const startBlock = findStartBlock(workspace)
+  const startId = startBlock?.id
+  const connectedIds = new Set<string>()
+
+  if (startBlock) {
+    const queue: Blockly.Block[] = [startBlock]
+    while (queue.length > 0) {
+      const b = queue.pop()!
+      connectedIds.add(b.id)
+
+      const next = b.getNextBlock()
+      if (next) queue.push(next)
+
+      for (const input of b.inputList) {
+        const targetBlock = input.connection?.targetBlock()
+        if (targetBlock) queue.push(targetBlock)
+      }
+    }
+  }
+
+  for (const block of workspace.getAllBlocks(false)) {
+    if (block.id === startId) continue
+    if (block.isShadow()) continue
+    if (block.isInsertionMarker()) continue
+    const isConnected = connectedIds.has(block.id)
+    ;(block as Blockly.BlockSvg)
+      .getSvgRoot?.()
+      ?.classList.toggle('blockly-orphan', !isConnected)
+  }
+}
 
 const DRAG_THRESHOLD_PX = 5
 
@@ -95,6 +216,7 @@ type ShadowEntityBlockType =
   | 'shadow_action_block'
   | 'shadow_trigger_block'
   | 'shadow_sequence_block'
+  | 'shadow_start_sequence_block'
 
 // Block types that can be selected directly from the shadow picker.
 const DIRECT_BLOCK_TYPES = new Set<SelectableShadowBlockType>([
@@ -175,6 +297,7 @@ const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
   shadow_action_block: 'action',
   shadow_trigger_block: 'trigger',
   shadow_sequence_block: 'sequence',
+  shadow_start_sequence_block: 'sequence',
 }
 
 const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
@@ -192,6 +315,11 @@ const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   trigger: 'No conditions available.',
   sequence: 'No steps available.',
 }
+
+const normalizeKeywords = (keywords: string[]) =>
+  keywords
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => keyword.length > 0)
 
 const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
   {
@@ -412,7 +540,9 @@ const buildShadowPickerItems = (
     id: entity.id,
     name: entity.name?.trim() || `${fallbackPrefix} ${entity.id}`,
     group: entity.group?.trim() || group,
-    keywords: Array.isArray(entity.keywords) ? entity.keywords : [],
+    keywords: normalizeKeywords(
+      Array.isArray(entity.keywords) ? entity.keywords : [],
+    ),
   }))
 }
 
@@ -503,8 +633,12 @@ interface BlocklyEditorProps {
   onTaskStructureChange?: (task: AbstractStep[] | null) => void
 }
 
-const STRUCTURE_CHANGING_TYPES = new Set(['create', 'delete', 'move', 'change'])
-
+const STRUCTURE_CHANGING_TYPES = new Set<string>([
+  Blockly.Events.BLOCK_CREATE,
+  Blockly.Events.BLOCK_DELETE,
+  Blockly.Events.BLOCK_MOVE,
+  Blockly.Events.BLOCK_CHANGE,
+])
 /**
  * Full Blockly editor: custom toolbox, interactive workspace, controls and context-menu bridge.
  */
@@ -619,12 +753,7 @@ export const BlocklyEditor = ({
       const blockSvg = block as Blockly.BlockSvg | null
       if (blockSvg) {
         blockSvg.getSvgRoot?.()?.classList.remove('shadow-block--selected')
-        const cssClass = blockSvg.getSvgRoot()?.classList
-        const type = cssClass?.contains('custom-dashed-shadow-trigger')
-          ? 'trigger'
-          : cssClass?.contains('custom-dashed-shadow-sequence')
-            ? 'sequence'
-            : 'workspace'
+        const type = resolveShadowIconType(blockSvg.getSvgRoot?.()?.classList)
         getShadowPlusImageEl(blockSvg)?.setAttribute(
           'href',
           SHADOW_ICON_URIS[type].base,
@@ -823,22 +952,48 @@ export const BlocklyEditor = ({
 
     window.confirm = (message?: string): boolean => {
       const workspace = workspaceRef.current
+
+      const realCount = workspace
+        ? countRealBlocks(workspace.getAllBlocks(false), START_BLOCK_TYPE)
+        : 0
+
       setConfirmDialog({
-        message: message ?? 'Are you sure?',
+        message: `Delete all ${realCount} block${realCount !== 1 ? 's' : ''}?`,
         onConfirm: () => {
           setConfirmDialog(null)
-          if (workspace) {
-            Blockly.Events.setGroup(true)
-            try {
-              workspace
-                .getAllBlocks(false)
-                .filter((b) => !b.isShadow() && !b.getParent())
-                .forEach((b) => b.dispose(false))
-            } finally {
-              Blockly.Events.setGroup(false)
+          if (!workspace) return
+
+          Blockly.Events.setGroup(true)
+          try {
+            const startBlock = findStartBlock(workspace)
+
+            // Disconnect all blocks from the start block to avoid triggering ondelete events on dispose.
+            if (startBlock?.nextConnection?.targetBlock()) {
+              startBlock.nextConnection.disconnect()
             }
-            syncHistoryState(workspace)
+
+            // Snapshot array
+            const toDispose = workspace.getAllBlocks(false).filter(
+              (b) =>
+                !b.isShadow() &&
+                !b.isInsertionMarker() &&
+                b.type !== START_BLOCK_TYPE &&
+                !b.getParent(), // top-level after disconnect
+            )
+
+            // children in reverse order
+            for (let i = toDispose.length - 1; i >= 0; i--) {
+              const b = toDispose[i]
+              if (!b.disposed) {
+                b.dispose(false)
+              }
+            }
+          } finally {
+            Blockly.Events.setGroup(false)
           }
+
+          syncOrphanState(workspace)
+          syncHistoryState(workspace)
         },
         onCancel: () => setConfirmDialog(null),
       })
@@ -853,47 +1008,38 @@ export const BlocklyEditor = ({
   const handleSelectShadowItem = useCallback(
     (item: ShadowPickerItem) => {
       const workspace = workspaceRef.current
-      if (!workspace || !targetShadowBlockId) {
-        closeShadowPicker()
-        return
-      }
+      const shadowBlockId = targetShadowBlockIdRef.current
 
-      const shadowBlock = workspace.getBlockById(targetShadowBlockId)
-      if (!shadowBlock || !shadowBlock.isShadow()) {
-        closeShadowPicker()
-        return
-      }
+      if (!workspace || !shadowBlockId) return
+      const shadowBlock = workspace.getBlockById(shadowBlockId)
+      if (!shadowBlock || !shadowBlock.isShadow()) return
+      const isSequence =
+        shadowBlock.type === 'shadow_sequence_block' ||
+        shadowBlock.type === 'shadow_start_sequence_block'
 
-      const isSequence = shadowBlock.type === 'shadow_sequence_block'
       const parentConnection = isSequence
         ? shadowBlock.previousConnection?.targetConnection
         : shadowBlock.outputConnection?.targetConnection
-
-      if (!parentConnection) {
-        closeShadowPicker()
-        return
-      }
+      if (!parentConnection) return
 
       const selectedBlockType =
         item.blockType ?? resolveRealBlockTypeFromShadow(shadowBlock.type)
-      if (!selectedBlockType) {
-        closeShadowPicker()
-        return
-      }
+      if (!selectedBlockType) return
 
       const isEntityBlock =
         selectedBlockType === 'object_block' ||
         selectedBlockType === 'location_block' ||
         selectedBlockType === 'action_block'
-
       const isMacroBlock = selectedBlockType === 'macro_task_block'
+
+      closeShadowPicker()
 
       const groupId = Blockly.utils.idGenerator.genUid()
       Blockly.Events.setGroup(groupId)
+
       try {
         const displayName =
           item.name.trim().length > 0 ? item.name.trim() : `${item.id}`
-
         const baseState: State = isMacroBlock
           ? {
               type: 'macro_task_block',
@@ -932,22 +1078,32 @@ export const BlocklyEditor = ({
         newBlock.initSvg()
         newBlock.render()
 
+        Blockly.Events.fire(new Blockly.Events.BlockCreate(newBlock))
+
         if (isSequence) {
-          if (newBlock.previousConnection) {
+          if (newBlock.previousConnection)
             parentConnection.connect(newBlock.previousConnection)
-          }
         } else {
-          if (newBlock.outputConnection) {
+          if (newBlock.outputConnection)
             parentConnection.connect(newBlock.outputConnection)
-          }
         }
       } finally {
         Blockly.Events.setGroup(false)
-        closeShadowPicker()
       }
     },
-    [closeShadowPicker, targetShadowBlockId],
+    [closeShadowPicker],
   )
+
+  const taskLoadedRef = useRef(false)
+  const handleTaskLoaded = useCallback(() => {
+    taskLoadedRef.current = true
+    const workspace = workspaceRef.current
+    if (!workspace) return
+
+    ensureStartBlock(workspace)
+
+    syncOrphanState(workspace)
+  }, [])
 
   const handleWorkspaceReady = useCallback(
     (workspace: Blockly.WorkspaceSvg | null) => {
@@ -956,20 +1112,15 @@ export const BlocklyEditor = ({
       workspaceRef.current = workspace
 
       if (!workspace) {
+        taskLoadedRef.current = false
         setIsDeleting(false)
         closeShadowPicker()
         syncHistoryState(null)
         return
       }
 
-      // highlight helpers
       function setShadowIconState(block: Blockly.BlockSvg, lit: boolean) {
-        const cssClass = block.getSvgRoot()?.classList
-        const type = cssClass?.contains('custom-dashed-shadow-trigger')
-          ? 'trigger'
-          : cssClass?.contains('custom-dashed-shadow-sequence')
-            ? 'sequence'
-            : 'workspace'
+        const type = resolveShadowIconType(block.getSvgRoot?.()?.classList)
         const uri = lit
           ? SHADOW_ICON_URIS[type].lit
           : SHADOW_ICON_URIS[type].base
@@ -1001,10 +1152,8 @@ export const BlocklyEditor = ({
         const checker = ws.connectionChecker
         const excludedIds = getDescendantIds(draggedBlock)
         excludedIds.add(draggedBlockId)
-
         getShadowBlocks(ws).forEach((block) => {
           if (excludedIds.has(block.id)) return
-
           const shadowConn =
             block.outputConnection ?? block.previousConnection ?? null
           if (!shadowConn) return
@@ -1015,7 +1164,6 @@ export const BlocklyEditor = ({
             draggedBlock.previousConnection ??
             null
           if (!draggedConn) return
-
           const compatible = checker.doTypeChecks(draggedConn, parentConn)
           const svgRoot = block.getSvgRoot?.()
           if (!svgRoot) return
@@ -1035,14 +1183,8 @@ export const BlocklyEditor = ({
       }
 
       const listener = (event: Blockly.Events.Abstract) => {
-        // DEBUG: log drag/move events with group and undo-stack info to help troubleshoot drag-related edge cases.
-        // if (['drag', 'move'].includes(event.type)) {
-        //   const e = event as any
-        //   const stack = (workspace as any).undoStack_ as any[]
-        //   console.log(
-        //     `[NATIVE DRAG] type=${event.type} | g=${event.group?.slice(0, 6)} | isStart=${e.isStart ?? '—'} | stackLen=${stack?.length}`,
-        //   )
-        // }
+        ensureStartBlock(workspace)
+
         if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
           const dragEvent = event as Blockly.Events.Abstract & {
             isStart?: boolean
@@ -1051,7 +1193,6 @@ export const BlocklyEditor = ({
             lastDragGroupRef.current =
               event.group || Blockly.utils.idGenerator.genUid()
             lastDragEndTimeRef.current = 0
-
             setIsDeleting(true)
             deleteAreaRef.current?.setActiveDragGroup(lastDragGroupRef.current)
             const draggedBlockId = (event as any).blockId as string | undefined
@@ -1067,7 +1208,6 @@ export const BlocklyEditor = ({
             }
           } else if (dragEvent.isStart === false) {
             lastDragEndTimeRef.current = Date.now()
-
             setIsDeleting(false)
             clearShadowBlockHighlights(workspace)
             deleteAreaRef.current?.setActiveDragGroup(null)
@@ -1083,12 +1223,14 @@ export const BlocklyEditor = ({
           lastDragEndTimeRef.current > 0 &&
           Date.now() - lastDragEndTimeRef.current < 300
         ) {
-          const undoStack = (workspace as any).undoStack_ as any[]
-          if (undoStack && undoStack.length > 0) {
+          const undoStack = (workspace as any).undoStack_ as any[] | undefined
+          if (!undoStack) {
+            console.warn(
+              '[drag-group patch] undoStack_ not found — Blockly API may have changed',
+            )
+          } else if (undoStack.length > 0) {
             const top = undoStack[undoStack.length - 1]
-            if (!top.group) {
-              top.group = lastDragGroupRef.current
-            }
+            if (!top.group) top.group = lastDragGroupRef.current
           }
         }
 
@@ -1097,7 +1239,6 @@ export const BlocklyEditor = ({
           clearShadowBlockHighlights(workspace)
         }
 
-        // Click: open shadow picker
         if (`${event.type}` === `${Blockly.Events.CLICK}`) {
           if (workspace.options.readOnly) {
             closeShadowPicker()
@@ -1122,11 +1263,9 @@ export const BlocklyEditor = ({
           }
           workspace.hideChaff()
           setContextMenu(null)
-
           const svgRoot = (clickedBlock as Blockly.BlockSvg).getSvgRoot?.()
           svgRoot?.classList.add('shadow-block--selected')
           setShadowIconState(clickedBlock as Blockly.BlockSvg, true)
-
           setShadowPickerPosition(
             resolveShadowPickerPosition(workspace, clickedBlock),
           )
@@ -1134,17 +1273,21 @@ export const BlocklyEditor = ({
           setTargetShadowBlock(clickedBlock.id)
           return
         }
+
+        if (ORPHAN_SYNC_TYPES.has(event.type)) {
+          if (taskLoadedRef.current) syncOrphanState(workspace)
+        }
+
         syncHistoryState(workspace)
 
-        if (
-          STRUCTURE_CHANGING_TYPES.has(event.type) &&
-          onTaskStructureChangeRef.current
-        ) {
-          const blocklyTaskStructure = getBlocklyStructure()
-          const abstractTask = blocklyToAbstract(
-            blocklyTaskStructure as CustomBlock | null,
-          )
-          onTaskStructureChangeRef.current(abstractTask)
+        if (STRUCTURE_CHANGING_TYPES.has(event.type)) {
+          if (onTaskStructureChangeRef.current) {
+            const blocklyTaskStructure = getBlocklyStructure()
+            const abstractTask = blocklyToAbstract(
+              blocklyTaskStructure as CustomBlock | null,
+            )
+            onTaskStructureChangeRef.current(abstractTask)
+          }
         }
       }
 
@@ -1153,27 +1296,24 @@ export const BlocklyEditor = ({
 
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key !== 'Delete' && e.key !== 'Backspace') return
-
         const active = document.activeElement
         if (!active) return
-
         const allInjectionDivs = document.querySelectorAll('.injectionDiv')
         const isInsideAnyWorkspace = Array.from(allInjectionDivs).some(
           (div) => div === active || div.contains(active),
         )
         if (!isInsideAnyWorkspace) return
-
         const selected = Blockly.common.getSelected?.()
         if (!selected || !(selected instanceof Blockly.BlockSvg)) return
         if (selected.isShadow()) return
-
-        const ownDescendants = getOwnBodyDescendants(selected)
+        if (selected.type === START_BLOCK_TYPE) return
+        const ownDescendants = getOwnBodyDescendants(selected).filter(
+          (b) => !b.isShadow() && !b.isInsertionMarker(),
+        )
         const totalCount = 1 + ownDescendants.length
         if (totalCount <= 1) return
-
         e.preventDefault()
         e.stopImmediatePropagation()
-
         setConfirmDialog({
           message: `Delete ${totalCount} blocks?`,
           onConfirm: () => {
@@ -1191,7 +1331,6 @@ export const BlocklyEditor = ({
       }
 
       document.addEventListener('keydown', handleKeyDown, { capture: true })
-
       keydownCleanupRef.current = () => {
         document.removeEventListener('keydown', handleKeyDown, {
           capture: true,
@@ -1224,26 +1363,33 @@ export const BlocklyEditor = ({
   const handleUndo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
-
     const stack = workspace.getUndoStack()
     if (stack.length === 0) return
 
-    // take the group of the first event to undo, and keep undoing while the events belong to the same group
-    const topGroup = stack[stack.length - 1].group
-
-    // Undo first event
-    workspace.undo(false)
-
-    // If it had a group, keep undoing until the group changes
-    if (topGroup) {
-      let remaining = workspace.getUndoStack()
-      while (
-        remaining.length > 0 &&
-        remaining[remaining.length - 1].group === topGroup
-      ) {
-        workspace.undo(false)
-        remaining = workspace.getUndoStack()
+    const undoGroup = (group: string | undefined) => {
+      workspace.undo(false)
+      if (group) {
+        let remaining = workspace.getUndoStack()
+        while (
+          remaining.length > 0 &&
+          remaining[remaining.length - 1].group === group
+        ) {
+          workspace.undo(false)
+          remaining = workspace.getUndoStack()
+        }
       }
+    }
+
+    const topGroup = stack[stack.length - 1].group
+    undoGroup(topGroup)
+
+    let afterStack = workspace.getUndoStack()
+    while (
+      afterStack.length > 0 &&
+      afterStack[afterStack.length - 1].group === 'ghost-restore'
+    ) {
+      undoGroup('ghost-restore')
+      afterStack = workspace.getUndoStack()
     }
 
     syncHistoryState(workspace)
@@ -1252,23 +1398,33 @@ export const BlocklyEditor = ({
   const handleRedo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
+    const redoStack = getRedoStack(workspace)
+    if (redoStack.length === 0) return
 
-    const redoStack = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
-    if (!redoStack || redoStack.length === 0) return
+    const redoGroup = (group: string | undefined) => {
+      workspace.undo(true)
+      if (group) {
+        let remaining = getRedoStack(workspace)
+        while (
+          remaining.length > 0 &&
+          remaining[remaining.length - 1].group === group
+        ) {
+          workspace.undo(true)
+          remaining = getRedoStack(workspace)
+        }
+      }
+    }
 
     const topGroup = redoStack[redoStack.length - 1].group
+    redoGroup(topGroup)
 
-    workspace.undo(true)
-
-    if (topGroup) {
-      let remaining = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
-      while (
-        remaining.length > 0 &&
-        remaining[remaining.length - 1].group === topGroup
-      ) {
-        workspace.undo(true)
-        remaining = (workspace as any).redoStack_ as Blockly.Events.Abstract[]
-      }
+    let afterStack = getRedoStack(workspace)
+    while (
+      afterStack.length > 0 &&
+      afterStack[afterStack.length - 1].group === 'ghost-restore'
+    ) {
+      redoGroup('ghost-restore')
+      afterStack = getRedoStack(workspace)
     }
 
     syncHistoryState(workspace)
@@ -1312,8 +1468,14 @@ export const BlocklyEditor = ({
       if (isDelete && currentMenu?.blockId) {
         const workspace = workspaceRef.current
         const block = workspace?.getBlockById(currentMenu.blockId)
-        if (block instanceof Blockly.BlockSvg && !block.isShadow()) {
-          const ownDescendants = getOwnBodyDescendants(block)
+        if (
+          block instanceof Blockly.BlockSvg &&
+          !block.isShadow() &&
+          block.type !== START_BLOCK_TYPE
+        ) {
+          const ownDescendants = getOwnBodyDescendants(block).filter(
+            (b) => !b.isShadow(),
+          )
           const totalCount = 1 + ownDescendants.length
           if (totalCount > 1) {
             setConfirmDialog({
@@ -1421,6 +1583,7 @@ export const BlocklyEditor = ({
           applyExternalTaskState={applyExternalTaskState}
           onExternalTaskStateApplied={onExternalTaskStateApplied}
           onWorkspaceReady={handleWorkspaceReady}
+          onTaskLoaded={handleTaskLoaded}
         />
         <div className="workspace-controls-overlay">
           <div className="workspace-controls-group workspace-controls-group--top-right">
@@ -1640,8 +1803,6 @@ export const BlocklyEditor = ({
 
                     {items.map((item) => {
                       const keywords = item.keywords
-                        .map((keyword) => keyword.trim())
-                        .filter((keyword) => keyword.length > 0)
 
                       return (
                         <MenuItem
@@ -1911,6 +2072,8 @@ export const BlocklyEditor = ({
               <Button
                 variant="contained"
                 disableElevation
+                disableFocusRipple
+                autoFocus
                 onClick={() => {
                   inlineTaskConfirm.onConfirm()
                   setInlineTaskConfirm(null)
@@ -1938,6 +2101,12 @@ export const BlocklyEditor = ({
           <Dialog
             open
             onClose={confirmDialog.onCancel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                confirmDialog.onConfirm()
+              }
+            }}
             slotProps={{
               paper: {
                 elevation: 0,
@@ -1992,6 +2161,8 @@ export const BlocklyEditor = ({
               <Button
                 variant="contained"
                 disableElevation
+                disableFocusRipple
+                autoFocus
                 onClick={confirmDialog.onConfirm}
                 sx={{
                   textTransform: 'none',

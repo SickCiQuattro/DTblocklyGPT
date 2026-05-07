@@ -10,6 +10,11 @@ import { parseJson } from '../utils/serialization'
 
 type WorkspaceSnapshot = Record<string, unknown>
 
+const MACRO_EXCLUDED_TYPES = new Set([
+  'when_start',
+  'shadow_start_sequence_block',
+])
+
 const cloneWorkspaceSnapshot = (
   snapshot: WorkspaceSnapshot,
 ): WorkspaceSnapshot => {
@@ -43,6 +48,21 @@ const isBlockStateLike = (value: unknown): value is State => {
     'type' in value &&
     typeof (value as { type?: unknown }).type === 'string'
   )
+}
+
+const stripStartBlock = (state: State): State | null => {
+  if (!MACRO_EXCLUDED_TYPES.has(state.type as string)) {
+    return state
+  }
+
+  let current: State | null =
+    (state.next as { block?: State } | undefined)?.block ?? null
+
+  while (current && MACRO_EXCLUDED_TYPES.has(current.type as string)) {
+    current = (current.next as { block?: State } | undefined)?.block ?? null
+  }
+
+  return current
 }
 
 /**
@@ -192,8 +212,11 @@ export const explodeMacro = ({
 
       block.dispose(false)
 
+      const cleanedState = stripStartBlock(blockState)
+      if (!cleanedState) return
+
       const newFirstBlock = Blockly.serialization.blocks.append(
-        blockState,
+        cleanedState,
         workspace,
       ) as Blockly.BlockSvg | null
 

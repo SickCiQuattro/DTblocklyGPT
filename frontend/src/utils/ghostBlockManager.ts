@@ -9,6 +9,9 @@ export const GHOST_INPUT_MAP: Record<
   string,
   Record<string, { type: string; label: string }>
 > = {
+  when_start: {
+    __next__: { type: 'shadow_start_sequence_block', label: 'Add first step' },
+  },
   processing_block: {
     ACTION: { type: 'shadow_action_block', label: 'Select Procedure...' },
   },
@@ -72,6 +75,7 @@ export const GHOST_BLOCK_TYPES = new Set([
   'shadow_action_block',
   'shadow_trigger_block',
   'shadow_sequence_block',
+  'shadow_start_sequence_block',
 ])
 
 // --- UTILITY 1: STRIP GHOSTS FOR STORAGE --------------------------------------
@@ -101,9 +105,10 @@ function stripGhostsFromBlock(block: AnyBlockState): AnyBlockState {
      * 2. Recursively clean the real block if it exists.
      */
     cleanedInputs[inputName] = {
+      ...inputState,
       ...(shadow && !GHOST_BLOCK_TYPES.has(shadow.type as string)
         ? { shadow }
-        : {}),
+        : { shadow: undefined }),
       ...(realBlock ? { block: stripGhostsFromBlock(realBlock) } : {}),
     }
   }
@@ -152,34 +157,44 @@ function injectGhostBlock(
   inputName: string,
   ghostDef: { type: string; label: string },
 ): void {
-  const input = parentBlock.getInput(inputName)
-  if (!input?.connection) return
-  if (input.connection.targetBlock()) return // Already occupied, skip injection
+  const connection =
+    inputName === '__next__'
+      ? parentBlock.nextConnection
+      : parentBlock.getInput(inputName)?.connection
 
-  // Disable events to prevent the injection from triggering undo/redo or change listeners
+  if (!connection || connection.targetBlock()) return
+
   Blockly.Events.disable()
   try {
     const ghost = workspace.newBlock(ghostDef.type) as Blockly.BlockSvg
     ghost.setFieldValue(ghostDef.label, 'name')
-    ghost.setShadow(true) // Marks the block as a native shadow block
+    ghost.setShadow(true)
     ghost.initSvg()
     ghost.render()
 
-    const ghostConnection = ghost.outputConnection ?? ghost.previousConnection
+    // shadow_sequence_block → previousConnection (statement input)
+    // shadow_*_block (object/location/etc.) → outputConnection (value input)
+    const ghostConnection =
+      inputName === '__next__'
+        ? ghost.previousConnection
+        : (ghost.outputConnection ?? ghost.previousConnection)
+
     if (ghostConnection) {
-      input.connection.connect(ghostConnection)
+      connection.connect(ghostConnection)
     }
   } finally {
     Blockly.Events.enable()
   }
 }
-
 /**
  * Scans all blocks in the workspace and injects ghost blocks
  * wherever required inputs are empty. Call this after loading a task.
  */
 export function injectAllGhostBlocks(workspace: Blockly.WorkspaceSvg): void {
   workspace.getAllBlocks(false).forEach((block) => {
+    // Note: getAllBlocks may return children before parents.
+    // injectGhostBlock performs a targetBlock() check that makes it idempotent,
+    // but in rare cases with nested structures, it might require a second pass.
     const inputMap = GHOST_INPUT_MAP[block.type]
     if (!inputMap) return
     Object.entries(inputMap).forEach(([inputName, ghostDef]) => {
@@ -211,7 +226,7 @@ export function registerGhostRestoreListener(
     const moveEvent = event as Blockly.Events.BlockMove
     if (moveEvent.blockId) {
       const movedBlock = workspace.getBlockById(moveEvent.blockId)
-      if (movedBlock?.isShadow()) return // ← nuovo: ignora MOVE dei shadow
+      if (movedBlock?.isShadow()) return // Ignore moves of shadow blocks themselves
     }
 
     // Use a small debounce to avoid performance issues during rapid changes

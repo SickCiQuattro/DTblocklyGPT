@@ -78,6 +78,7 @@ interface BlocklyComponentProps {
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
+  onTaskLoaded?: () => void
 }
 
 const DEFAULT_X_AXIS = 200
@@ -89,6 +90,7 @@ export const BlocklyWorkspace = ({
   onWorkspaceReady,
   applyExternalTaskState = false,
   onExternalTaskStateApplied,
+  onTaskLoaded,
 }: BlocklyComponentProps) => {
   const blocklyDivRef = useRef<HTMLDivElement | null>(null)
   const primaryWorkspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
@@ -101,6 +103,11 @@ export const BlocklyWorkspace = ({
   const onExternalTaskStateAppliedRef = useRef(onExternalTaskStateApplied)
   useEffect(() => {
     onExternalTaskStateAppliedRef.current = onExternalTaskStateApplied
+  })
+
+  const onTaskLoadedRef = useRef(onTaskLoaded)
+  useEffect(() => {
+    onTaskLoadedRef.current = onTaskLoaded
   })
 
   useEffect(() => {
@@ -116,6 +123,7 @@ export const BlocklyWorkspace = ({
 
     primaryWorkspaceRef.current = Blockly.inject(blocklyDivCurrent, {
       ...workspaceConfig,
+      disable: true,
     })
 
     let resizeObserver: ResizeObserver | null = null
@@ -134,8 +142,18 @@ export const BlocklyWorkspace = ({
         const defaultDataTask = { ...dataTask }
         defaultDataTask.x = dataTask?.x || DEFAULT_X_AXIS
         defaultDataTask.y = dataTask?.y || DEFAULT_Y_AXIS
-        Blockly.serialization.blocks.append(defaultDataTask, workspace)
-        injectAllGhostBlocks(workspace)
+
+        Blockly.Events.disable()
+        try {
+          Blockly.serialization.blocks.append(defaultDataTask, workspace)
+          injectAllGhostBlocks(workspace)
+        } finally {
+          Blockly.Events.enable()
+        }
+
+        onTaskLoadedRef.current?.()
+      } else {
+        onTaskLoadedRef.current?.()
       }
 
       if (blocklyDivCurrent) {
@@ -174,9 +192,15 @@ export const BlocklyWorkspace = ({
     defaultDataTask.x = x_axis
     defaultDataTask.y = y_axis
 
-    updateStructureAndFireFakeChangeEvent(workspace, defaultDataTask)
-    injectAllGhostBlocks(workspace)
+    Blockly.Events.disable()
+    try {
+      Blockly.serialization.blocks.append(defaultDataTask, workspace)
+      injectAllGhostBlocks(workspace)
+    } finally {
+      Blockly.Events.enable()
+    }
 
+    onTaskLoadedRef.current?.()
     onExternalTaskStateAppliedRef.current?.()
   }, [applyExternalTaskState, dataTask])
 

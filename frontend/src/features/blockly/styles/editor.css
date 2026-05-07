@@ -149,7 +149,8 @@
 /* ── Base ── */
 .custom-dashed-shadow-workspace > .blocklyPath,
 .custom-dashed-shadow-trigger > .blocklyPath,
-.custom-dashed-shadow-sequence > .blocklyPath {
+.custom-dashed-shadow-sequence > .blocklyPath,
+.custom-dashed-shadow-start > .blocklyPath {
   stroke-width: 2px !important;
   stroke-dasharray: 6, 5 !important;
   fill-opacity: 1 !important;
@@ -187,6 +188,33 @@
   font-size: 13px !important;
 }
 
+/* ── Base: shadow start (teal, stessa struttura degli altri) ── */
+.custom-dashed-shadow-start > .blocklyPath {
+  stroke-width: 2px !important;
+  stroke-dasharray: 6, 5 !important;
+  fill-opacity: 1 !important;
+  stroke-opacity: 1 !important;
+  transition: fill 0.18s ease, stroke 0.18s ease;
+  fill: rgba(15, 118, 110, 0.06) !important;
+  stroke: rgba(15, 118, 110, 0.45) !important;
+}
+.custom-dashed-shadow-start text.blocklyText {
+  fill: rgba(15, 118, 110, 0.55) !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+}
+
+/* ── Highlight: drag-target e selected ── */
+.shadow-block--drag-target.custom-dashed-shadow-start > .blocklyPath,
+.shadow-block--selected.custom-dashed-shadow-start > .blocklyPath {
+  fill: rgba(15, 118, 110, 0.15) !important;
+  stroke: #0F766E !important;
+}
+.shadow-block--drag-target.custom-dashed-shadow-start text.blocklyText,
+.shadow-block--selected.custom-dashed-shadow-start text.blocklyText {
+  fill: #0F766E !important;
+}
+
 /* ── Highlight ── */
 .shadow-block--drag-target > .blocklyPath,
 .shadow-block--selected > .blocklyPath {
@@ -222,4 +250,13 @@
 .shadow-block--drag-target.custom-dashed-shadow-sequence text.blocklyText,
 .shadow-block--selected.custom-dashed-shadow-sequence text.blocklyText {
   fill: #808A9D !important;
+}
+
+.blockly-orphan > .blocklyPath {
+  opacity: 0.7;
+}
+
+.blockly-orphan > .blocklyLabelField text,
+.blockly-orphan > .blocklyImageField image {
+  opacity: 0.8;
 }

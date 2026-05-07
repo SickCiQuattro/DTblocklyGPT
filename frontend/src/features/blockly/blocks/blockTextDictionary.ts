@@ -35,4 +35,6 @@ export const blockDescriptionsByType = {
   logic_not_block:
     'Reverses the result: true becomes false, false becomes true.',
   wait_block: 'Pauses the robot for a set number of seconds before continuing.',
+  when_start:
+    'This is the starting point of the program. Connect the first block below.',
 } as const

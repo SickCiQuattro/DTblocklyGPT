@@ -21,6 +21,8 @@ import {
   Undo2,
 } from 'lucide-react'
 
+import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
+
 export interface ContextMenuAction {
   id: number
   text: string
@@ -261,8 +263,34 @@ export const installContextMenuBridge = ({
       .map((option): ContextMenuAction | null => {
         if (isSeparatorOption(option)) return null
 
-        const rawLabel = getMenuOptionText(option.text)
+        let rawLabel = getMenuOptionText(option.text)
+        if (/^delete \d+ blocks?$/i.test(rawLabel)) {
+          const ws = workspaceRef.current
+          if (ws) {
+            const realCount = countRealBlocks(
+              ws.getAllBlocks(false),
+              'when_start',
+            )
+            rawLabel =
+              realCount > 1
+                ? `Delete ${realCount} blocks`
+                : realCount === 1
+                  ? 'Delete block'
+                  : 'Delete blocks'
+          }
+        }
+
         if (!rawLabel || typeof option.callback !== 'function') return null
+
+        const actionScope =
+          'scope' in option ? option.scope : resolveScope(fallbackScope)
+
+        if (rawLabel.toLowerCase().includes('delete') && actionScope?.block) {
+          const block = actionScope.block as Blockly.BlockSvg
+          const bodyCount = getOwnBodyDescendants(block).length
+          const count = 1 + bodyCount
+          rawLabel = count > 1 ? `Delete ${count} blocks` : `Delete block`
+        }
 
         // rewrite technical Blockly labels to user-friendly language
         const label = rewriteLabel(rawLabel)
