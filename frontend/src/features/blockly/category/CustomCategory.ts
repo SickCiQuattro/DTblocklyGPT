@@ -1,3 +1,13 @@
+/**
+ * CustomCategory.ts
+ *
+ * Registers a custom Blockly toolbox category renderer (`CustomCategory`) that
+ * renders the category header as a plain element without Blockly's default
+ * expand/collapse button. This keeps the toolbox visually consistent with the
+ * React accordion panel (`CustomToolbox`) that drives the visible UI.
+ *
+ * Imported as a side effect: `import '../category/CustomCategory'`
+ */
 import * as Blockly from 'blockly/core'
 
 /**

@@ -27,6 +27,7 @@ import {
   ToolboxBlockItem,
 } from './toolboxRegistry'
 import { BlockPreviewTooltip } from './BlockPreviewTooltip'
+import { buildEntityData } from '../utils/keywords'
 import './CustomToolbox.css'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -46,6 +47,11 @@ interface CustomToolboxProps {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Expand each dynamic block template in a category into one concrete
+ * `ToolboxBlockItem` per data entity (object, location, action, or macro).
+ * Static (non-dynamic) items are passed through unchanged.
+ */
 const resolveDynamicBlocks = (
   blocks: ToolboxBlockItem[],
   dataObjects: ObjectListType[],
@@ -53,29 +59,6 @@ const resolveDynamicBlocks = (
   dataActions: ActionListType[],
   dataMacros: TaskType[],
 ): ToolboxBlockItem[] => {
-  const toKeywordsCsvOrNull = (keywords: string[] | null | undefined) => {
-    if (!Array.isArray(keywords) || keywords.length === 0) {
-      return null
-    }
-
-    const normalized = keywords
-      .map((keyword) => keyword.trim())
-      .filter((keyword) => keyword.length > 0)
-
-    return normalized.length > 0 ? normalized.join(',') : null
-  }
-
-  const buildEntityData = (
-    id: number,
-    name: string,
-    keywords: string[] | null | undefined,
-  ) => {
-    return JSON.stringify({
-      id,
-      name,
-      keywords: toKeywordsCsvOrNull(keywords),
-    })
-  }
 
   const resolved: ToolboxBlockItem[] = []
 

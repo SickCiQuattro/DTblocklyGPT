@@ -1,3 +1,18 @@
+/**
+ * contextMenu.ts
+ *
+ * Bridges Blockly's internal right-click context menu with the React UI layer.
+ *
+ * Blockly fires context menu options as synchronous callbacks inside its own
+ * SVG layer. This module monkey-patches `Blockly.ContextMenu.show` via
+ * `installContextMenuBridge` to intercept those options and forward them to
+ * React state (`setContextMenu`), where they are rendered as an MUI `<Menu>`.
+ *
+ * Also exports:
+ *  - `getMenuOptionText`  — normalises option label to a plain string.
+ *  - `getMenuIconInfo`    — maps option labels to Lucide icon + colour.
+ *  - Type aliases for `ContextMenuState`, `ContextMenuAction`, `ContextMenuSeparator`.
+ */
 import * as Blockly from 'blockly/core'
 import {
   ArrowLeftRight,

@@ -1,229 +1,53 @@
+/**
+ * definitions.ts
+ *
+ * Registers all Blockly block types used in the robot-task editor.
+ * Block types are grouped by their semantic role:
+ *
+ *  1. Entity blocks   — object, location, action (user-defined data)
+ *  2. Conditions      — sensor, find-object, touch, gesture, timer, logic
+ *  3. Robot actions   — pick, place, move, gripper, wait, perform
+ *  4. Human steps     — pause-and-show, show-message
+ *  5. Task flow       — repeat, loop, repeat-until, when, when/otherwise
+ *  6. Macro tasks     — reference to a saved sub-task
+ *  7. Entry point     — when_start (mandatory program start block)
+ *  8. Shadow blocks   — placeholder "+" blocks for empty connection slots
+ *
+ * This module is imported for its side-effects only: every `defineBlocksWithJsonArray`
+ * and `Extensions.register` call registers types globally in Blockly's runtime.
+ */
+
 import * as Blockly from 'blockly/core'
 
 import { blockDescriptionsByType } from './blockTextDictionary'
+import { blocksColours } from './palette'
+import {
+  BOT_ICON_URI,
+  FLAG_ICON_URI,
+  MAP_PIN_ICON_URI,
+  SCAN_EYE_ICON_URI,
+  TAG_ICON_URI,
+  WRENCH_ICON_URI,
+  WORKFLOW_ICON_URI,
+  USER_ICON_URI,
+  iconConfig,
+  plusFieldConfig,
+  triggerPlusFieldConfig,
+  sequencePlusFieldConfig,
+  startPlusFieldConfig,
+} from './icons'
+import './mutators'
 
-// ─── COLOR PALETTE ────────────────────────────────────────────────────────
-export const blocksColours = {
-  /** Logic/Control flow blocks (repeat, when, loop) */
-  logicControl: '#978676',
-  /** Robot manipulation actions (pick, place, move, gripper) */
-  robotActions: '#3153D3',
-  /** Human operator actions (wait for human, human action) */
-  humanActions: '#F58C00',
-  /** User-defined entities: objects, locations, robot actions */
-  objectsPositions: '#00BD56',
-  /** Conditions and event triggers (sensors, find object, touch, timer) */
-  eventsConditions: '#E15930',
-  /** Macro-tasks / predefined sub-routines */
-  macroTasks: '#3B97F4',
-  /** Start block */
-  start: '#0F766E',
-} as const
+// Re-export palette and icons for consumers that import from this file directly.
+// Prefer importing from './palette' or './icons' in new code.
+export { blocksColours } from './palette'
+export { SHADOW_ICON_URIS } from './icons'
 
-// ─── ICON HELPERS ────────────────────────────────────────────────────────
+// ─── 1. ENTITY BLOCKS (OBJECTS, DESTINATIONS, PROCEDURES) ────────────────────
+// These blocks carry a reference to a user-defined entity (object, location,
+// or robot action). Their `data` field stores a JSON string with { id, name, keywords }.
+// The entity mutators (registered in mutators.ts) keep tooltip/warning in sync.
 
-/**
- * Generates a Blockly-friendly Data URI from raw Lucide-like SVG inner markup.
- * Paste the inner tags (<path>, <circle>, <rect>, ...) directly from the source icon.
- *
- * @param svgContent Inner SVG nodes as a string
- * @param color Stroke color. Defaults to white.
- */
-const createLucideIconURI = (svgContent: string, color: string = 'white') => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgContent}</svg>`
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`
-}
-
-const BOT_ICON_URI = createLucideIconURI(
-  '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
-)
-
-const USER_ICON_URI = createLucideIconURI(
-  '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-)
-
-const CIRCLE_PLUS_ICON_URI_BASE = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(1, 189, 86, 0.45)',
-)
-const CIRCLE_PLUS_TRIGGER_ICON_URI_BASE = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(225, 89, 48, 0.45)',
-)
-const CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(128, 138, 157, 0.45)',
-)
-
-const CIRCLE_PLUS_ICON_URI_LIT = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  blocksColours.objectsPositions,
-)
-
-const CIRCLE_PLUS_TRIGGER_ICON_URI_LIT = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  blocksColours.eventsConditions,
-)
-
-const CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(128, 138, 157, 1)',
-)
-
-const CIRCLE_PLUS_START_ICON_URI_BASE = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  'rgba(15, 118, 110, 0.45)',
-)
-
-const CIRCLE_PLUS_START_ICON_URI_LIT = createLucideIconURI(
-  '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
-  blocksColours.start,
-)
-
-const startPlusFieldConfig = () =>
-  iconConfig(CIRCLE_PLUS_START_ICON_URI_BASE, '+', 14, 14)
-
-const TAG_ICON_URI = createLucideIconURI(
-  '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
-)
-
-const MAP_PIN_ICON_URI = createLucideIconURI(
-  '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
-)
-
-const WRENCH_ICON_URI = createLucideIconURI(
-  '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/>',
-)
-
-const WORKFLOW_ICON_URI = createLucideIconURI(
-  '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
-)
-
-const SCAN_EYE_ICON_URI = createLucideIconURI(
-  '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
-)
-
-const FLAG_ICON_URI = createLucideIconURI(
-  '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',
-)
-
-const sequencePlusFieldConfig = () =>
-  iconConfig(CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE, '+', 14, 14)
-
-const iconConfig = (src: string, alt: string, width = 18, height = 18) => ({
-  type: 'field_image',
-  src,
-  width,
-  height,
-  alt: alt,
-  flipRtl: false,
-})
-
-const plusFieldConfig = () => iconConfig(CIRCLE_PLUS_ICON_URI_BASE, '+', 14, 14)
-const triggerPlusFieldConfig = () =>
-  iconConfig(CIRCLE_PLUS_TRIGGER_ICON_URI_BASE, '+', 14, 14)
-
-export const SHADOW_ICON_URIS = {
-  workspace: { base: CIRCLE_PLUS_ICON_URI_BASE, lit: CIRCLE_PLUS_ICON_URI_LIT },
-  trigger: {
-    base: CIRCLE_PLUS_TRIGGER_ICON_URI_BASE,
-    lit: CIRCLE_PLUS_TRIGGER_ICON_URI_LIT,
-  },
-  sequence: {
-    base: CIRCLE_PLUS_SEQUENCE_ICON_URI_BASE,
-    lit: CIRCLE_PLUS_SEQUENCE_ICON_URI_LIT,
-  },
-  start: {
-    base: CIRCLE_PLUS_START_ICON_URI_BASE,
-    lit: CIRCLE_PLUS_START_ICON_URI_LIT,
-  },
-} as const
-
-// ─── UTILS & MUTATORS ─────────────────────────────────────────────────────
-const parseBlockData = (rawData: unknown) => {
-  if (typeof rawData !== 'string' || rawData.length === 0) return null
-
-  try {
-    const parsed = JSON.parse(rawData) as unknown
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as { id?: unknown; keywords?: unknown })
-      : null
-  } catch {
-    return null
-  }
-}
-
-const applyEntityMetadata = (block: Blockly.Block, missingWarning: string) => {
-  const data = parseBlockData(block.data)
-
-  const keywords =
-    typeof data?.keywords === 'string'
-      ? data.keywords
-          .split(',')
-          .map((keyword) => keyword.trim())
-          .filter((keyword) => keyword.length > 0)
-          .join(', ')
-      : ''
-
-  const tooltipText = keywords.length > 0 ? `Keywords: ${keywords}` : ''
-
-  block.setTooltip(tooltipText)
-  block.setWarningText(data?.id ? null : missingWarning)
-}
-
-const registerEntityMutator = (id: string, missingWarning: string) => {
-  Blockly.Extensions.registerMutator(id, {
-    mutationToDom(this: Blockly.Block) {
-      applyEntityMetadata(this, missingWarning)
-      return Blockly.utils.xml.createElement('mutation')
-    },
-    domToMutation(this: Blockly.Block) {
-      applyEntityMetadata(this, missingWarning)
-    },
-    saveExtraState() {
-      return null
-    },
-    loadExtraState(this: Blockly.Block) {
-      applyEntityMetadata(this, missingWarning)
-    },
-  })
-}
-
-registerEntityMutator('object_block_mutation', 'Object not defined')
-registerEntityMutator('location_block_mutation', 'Destination not defined')
-registerEntityMutator('action_block_mutation', 'Procedure not defined')
-registerEntityMutator('macro_block_mutation', 'Task not defined')
-
-// ─── EXTENSION: CUSTOM DASHED SHADOW BLOCKS ──────────────────────────────
-type BlockWithSvgHooks = Blockly.Block & {
-  initSvg?: () => void
-  getSvgRoot?: () => SVGGElement | null
-}
-
-Blockly.Extensions.register('shadow_placeholder_extension', function () {
-  const block = this as BlockWithSvgHooks
-  block.setShadow(true)
-
-  const originalInitSvg = block.initSvg
-
-  const cssClass =
-    block.type === 'shadow_trigger_block'
-      ? 'custom-dashed-shadow-trigger'
-      : block.type === 'shadow_sequence_block'
-        ? 'custom-dashed-shadow-sequence'
-        : block.type === 'shadow_start_sequence_block'
-          ? 'custom-dashed-shadow-start'
-          : 'custom-dashed-shadow-workspace'
-
-  block.initSvg = function (this: Blockly.Block) {
-    originalInitSvg?.call(this)
-    const svgRoot = (this as BlockWithSvgHooks).getSvgRoot?.()
-    if (svgRoot) {
-      svgRoot.classList.add(cssClass)
-      svgRoot.classList.add('shadow-block--base')
-    }
-  }
-}) // ─── 1. ENTITIES (OBJECTS, POSITIONS, ACTIONS) ────────────────────────────
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'object_block',
@@ -260,7 +84,10 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── 2. EVENTS & CONDITIONS ───────────────────────────────────────────────
+// ─── 2. CONDITIONS & EVENTS ───────────────────────────────────────────────────
+// Condition blocks output a Boolean value consumed by control-flow blocks
+// (when_block, repeat_until_block) and the human_action_block's resume trigger.
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'sensor_signal_block',
@@ -353,7 +180,11 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── 3. ROBOT ACTIONS ─────────────────────────────────────────────────────
+// ─── 3. ROBOT ACTIONS ────────────────────────────────────────────────────────
+// Statement blocks that produce robot motion or gripper commands.
+// All accept `robot_sequence` or `logic_sequence` as their statement type
+// so they can appear inside both the main chain and inside control-flow bodies.
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'pick_block',
@@ -418,7 +249,6 @@ Blockly.defineBlocksWithJsonArray([
     colour: blocksColours.robotActions,
     tooltip: blockDescriptionsByType.move_to_block,
   },
-
   {
     type: 'gripper_block',
     message0: '%1 %2 Gripper',
@@ -452,7 +282,9 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── 4. HUMAN ACTIONS ─────────────────────────────────────────────────────
+// ─── 4. HUMAN STEPS ──────────────────────────────────────────────────────────
+// Blocks that pause execution and involve a human operator.
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'human_action_block',
@@ -479,9 +311,6 @@ Blockly.defineBlocksWithJsonArray([
     colour: blocksColours.humanActions,
     tooltip: blockDescriptionsByType.human_action_block,
   },
-])
-
-Blockly.defineBlocksWithJsonArray([
   {
     type: 'notify_action_block',
     message0: '%1 Show message and continue: \n%2',
@@ -500,7 +329,11 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── 5. LOGIC & CONTROL ───────────────────────────────────────────────────
+// ─── 5. TASK FLOW (LOGIC & CONTROL) ──────────────────────────────────────────
+// Control-flow blocks that wrap sequences: loops, conditionals.
+// Only the block types listed in `BLOCKS_WITH_COLLAPSIBLE_BODY` in contextMenu.ts
+// expose the "collapse/expand" context-menu option.
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
@@ -614,7 +447,12 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── 6. MACRO TASKS ────────────────────────────────────────────────────────────
+// ─── 6. MACRO TASKS ──────────────────────────────────────────────────────────
+// A macro_task_block references another saved task by ID.
+// Its `data` field stores { id, name } and the macro_block_mutation
+// (registered in mutators.ts) shows a warning when the referenced task
+// is no longer available.
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'macro_task_block',
@@ -631,7 +469,10 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── WHEN_START — chiamata separata ───────────────────────────────────────
+// ─── 7. ENTRY POINT — when_start ─────────────────────────────────────────────
+// The mandatory start block inserted automatically by `ensureStartBlock`.
+// It is set non-deletable and non-movable at runtime (see startBlock.ts).
+
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'when_start',
@@ -643,7 +484,58 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-// ─── SHADOW PLACEHOLDERS WITH "+" ICON ────────────────────────────────────
+// ─── 8. SHADOW PLACEHOLDER BLOCKS ────────────────────────────────────────────
+// Shadow blocks are interactive "empty slot" indicators with a "+" icon.
+// Clicking one opens the shadow picker (ShadowPickerMenu) so the user can
+// select a real block to connect without drag-and-drop.
+//
+// The `shadow_placeholder_extension` adds a CSS class to each shadow block
+// based on its connection context, enabling distinct styling per slot type.
+
+/** Internal type augment for blocks that expose Blockly SVG lifecycle methods. */
+type BlockWithSvgHooks = Blockly.Block & {
+  initSvg?: () => void
+  getSvgRoot?: () => SVGGElement | null
+}
+
+/**
+ * Blockly extension registered on every shadow placeholder block.
+ * Marks the block as a shadow, then patches `initSvg` to add a CSS class
+ * reflecting the shadow type (trigger / sequence / start / workspace).
+ */
+Blockly.Extensions.register('shadow_placeholder_extension', function () {
+  const block = this as BlockWithSvgHooks
+  block.setShadow(true)
+
+  const originalInitSvg = block.initSvg
+
+  // Determine the CSS class by block type so different slot contexts can be
+  // styled independently (colour, border, icon tint).
+  const cssClass =
+    block.type === 'shadow_trigger_block'
+      ? 'custom-dashed-shadow-trigger'
+      : block.type === 'shadow_sequence_block'
+        ? 'custom-dashed-shadow-sequence'
+        : block.type === 'shadow_start_sequence_block'
+          ? 'custom-dashed-shadow-start'
+          : 'custom-dashed-shadow-workspace'
+
+  block.initSvg = function (this: Blockly.Block) {
+    originalInitSvg?.call(this)
+    const svgRoot = (this as BlockWithSvgHooks).getSvgRoot?.()
+    if (svgRoot) {
+      svgRoot.classList.add(cssClass)
+      svgRoot.classList.add('shadow-block--base')
+    }
+  }
+})
+
+// ─── Shadow block factory helpers ─────────────────────────────────────────────
+
+/**
+ * Build the JSON definition for an entity shadow block (object / location / action).
+ * The output type matches the corresponding real block so Blockly validates connections.
+ */
 const createShadowEntityBlock = (
   type: 'shadow_object_block' | 'shadow_location_block' | 'shadow_action_block',
   output: 'object_block' | 'location_block' | 'action_block',
@@ -660,6 +552,7 @@ const createShadowEntityBlock = (
   extensions: ['shadow_placeholder_extension'],
 })
 
+/** Build the JSON definition for the condition/trigger shadow block. */
 const createShadowTriggerBlock = () => ({
   type: 'shadow_trigger_block',
   message0: '%1 %2',
@@ -677,6 +570,7 @@ const createShadowTriggerBlock = () => ({
   tooltip: 'Insert a Conditions block here.',
 })
 
+/** Build the JSON definition for the sequence (next-step) shadow block. */
 const createShadowSequenceBlock = () => ({
   type: 'shadow_sequence_block',
   message0: '%1 %2',
@@ -691,6 +585,10 @@ const createShadowSequenceBlock = () => ({
   tooltip: 'Drop a block here to add a step.',
 })
 
+/**
+ * Build the JSON definition for the first-step shadow block, placed
+ * directly below `when_start`. Uses the start-accent colour.
+ */
 const createShadowStartSequenceBlock = () => ({
   type: 'shadow_start_sequence_block',
   message0: '%1 %2',

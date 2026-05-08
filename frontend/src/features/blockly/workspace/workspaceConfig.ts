@@ -1,3 +1,15 @@
+/**
+ * workspaceConfig.ts
+ *
+ * Centralised Blockly workspace configuration objects used across the editor,
+ * viewer, and preview workspaces.
+ *
+ * Exports four named configurations:
+ *  - `INTERACTIVE_WORKSPACE_CONFIG` — full-featured editable workspace.
+ *  - `READONLY_WORKSPACE_CONFIG`    — non-editable viewer (e.g. task review page).
+ *  - `MODAL_VIEWER_CONFIG`          — compact read-only workspace for dialogs.
+ *  - `PREVIEW_WORKSPACE_CONFIG`     — minimal workspace for tooltip block previews.
+ */
 import * as Blockly from 'blockly/core'
 import ModernTheme from '@blockly/theme-modern'
 import './customRender'

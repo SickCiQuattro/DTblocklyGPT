@@ -1,3 +1,21 @@
+/**
+ * BlockPreviewTooltip.tsx
+ *
+ * Hover tooltip for toolbox block pills that shows:
+ *  - A live read-only Blockly block preview (rendered in a singleton workspace)
+ *  - Category badge, description text, and input/output metadata
+ *  - For macro tasks: a button to open `MacroPreviewModal` with the full routine
+ *
+ * ### Singleton workspace pattern
+ * A single hidden Blockly workspace is shared across all tooltip instances.
+ * When a tooltip opens, the workspace host element is moved ("mounted") into
+ * the tooltip container DOM node. When it closes, the host is moved back to an
+ * off-screen "parking root" so the workspace stays alive between hovers.
+ *
+ * This avoids the cost of creating and destroying a Blockly workspace on every
+ * tooltip open/close event.
+ */
+
 import {
   type MouseEvent,
   type ReactElement,
@@ -7,13 +25,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  Dialog,
-  DialogTitle,
-  IconButton,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+import { Tooltip, Typography } from '@mui/material'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import {
@@ -29,46 +41,64 @@ import {
   User,
   Wrench,
   Workflow,
-  X,
 } from 'lucide-react'
 
-import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
-import { type AbstractStep } from 'pages/tasks/types'
 
-import { BlocklyViewerWithControls } from '../workspace'
-import { isValidBlockState, parseJson } from '../utils/serialization'
 import { PREVIEW_WORKSPACE_CONFIG } from '../workspace/workspaceConfig'
 import '../styles/editor.css'
 
 import { ToolboxBlockItem } from './toolboxRegistry'
+import { MacroPreviewModal } from './MacroPreviewModal'
 import './BlockPreviewTooltip.css'
 
-interface BlockPreviewTooltipProps {
-  item: ToolboxBlockItem
-  categoryName?: string
-  categoryColour?: string
-  children: ReactElement
-}
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
+/** Width of the tooltip card's block preview area in pixels. */
 const PREVIEW_WIDTH = 260
+/** Height of the tooltip card's block preview area in pixels. */
 const PREVIEW_HEIGHT = 140
+/** Delay in ms before the singleton workspace attempts to render the block. */
 const PREVIEW_RENDER_DELAY_MS = 24
+/** Maximum number of render retries if the container is not ready yet. */
 const PREVIEW_RENDER_MAX_ATTEMPTS = 3
 
+// ─── SINGLETON WORKSPACE STATE ────────────────────────────────────────────────
+// Module-level variables that survive across React renders. Only one tooltip
+// can be "active" at a time; switching tooltips moves the shared host element.
+
+/** Off-screen container that keeps the workspace alive between tooltip opens. */
 let singletonParkingRoot: HTMLDivElement | null = null
+/** The div element injected into the active tooltip's preview mount point. */
 let singletonHost: HTMLDivElement | null = null
+/** The shared read-only Blockly workspace used for all block previews. */
 let singletonWorkspace: Blockly.WorkspaceSvg | null = null
+/** ID of the pending render timeout, used for cancellation. */
 let singletonRenderTimeout: number | null = null
+/** ID of the pending requestAnimationFrame call, used for cancellation. */
 let singletonRenderRaf: number | null = null
+/**
+ * Monotonically increasing counter that invalidates stale render callbacks.
+ * Incremented every time `cancelSingletonRender` is called.
+ */
 let singletonRenderRequestId = 0
+/** Symbol identifying which tooltip instance currently owns the workspace. */
 let activeTooltipOwner: symbol | null = null
 
+// ─── CATEGORY BADGE METADATA ──────────────────────────────────────────────────
+
+/**
+ * Resolve the category badge label and icon for the tooltip card header.
+ * First tries an exact match on the block type, then falls back to hints
+ * derived from the category display name.
+ *
+ * @param itemType            Blockly block type string of the hovered pill.
+ * @param fallbackCategoryName Human-readable category name from the toolbox accordion.
+ */
 const getPreviewCategoryBadgeMeta = (
   itemType: string,
   fallbackCategoryName?: string,
 ) => {
-  // First try exact block-type matches (covers dynamic entity pills)
   switch (itemType) {
     case 'object_block':
       return { label: 'Objects', Icon: Tag }
@@ -103,7 +133,7 @@ const getPreviewCategoryBadgeMeta = (
       break
   }
 
-  // Fallback: try to infer from category display name if provided
+  // Fallback: derive from the category display name
   const hint = (fallbackCategoryName || '').toLowerCase()
   if (hint.includes('block'))
     return { label: fallbackCategoryName ?? 'Task Flow', Icon: Repeat2 }
@@ -124,6 +154,12 @@ const getPreviewCategoryBadgeMeta = (
   return { label: fallbackCategoryName ?? 'Toolbox', Icon: null }
 }
 
+// ─── COLOUR HELPERS ───────────────────────────────────────────────────────────
+
+/**
+ * Parse a 3- or 6-digit hex colour string into { r, g, b } components.
+ * Returns `null` for invalid inputs.
+ */
 const parseHexColor = (hexColor: string) => {
   const normalized = hexColor.replace('#', '').trim()
   const expanded =
@@ -145,6 +181,10 @@ const parseHexColor = (hexColor: string) => {
   }
 }
 
+/**
+ * Darken an RGB colour by a `factor` in [0, 1].
+ * A factor of 0 leaves the colour unchanged; 1 produces black.
+ */
 const darkenRgb = (
   rgb: { r: number; g: number; b: number },
   factor: number,
@@ -157,208 +197,12 @@ const darkenRgb = (
   }
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null
-}
+// ─── SINGLETON WORKSPACE LIFECYCLE ───────────────────────────────────────────
 
-const isAbstractStepLike = (value: unknown): value is AbstractStep => {
-  return (
-    isRecord(value) && typeof (value as { type?: unknown }).type === 'string'
-  )
-}
-
-const isAbstractStepArray = (value: unknown): value is AbstractStep[] => {
-  return Array.isArray(value) && value.every(isAbstractStepLike)
-}
-
-const hasAbstractStepsArray = (
-  value: unknown,
-): value is { steps: AbstractStep[] } => {
-  return (
-    isRecord(value) && isAbstractStepArray((value as { steps?: unknown }).steps)
-  )
-}
-
-const hasWorkspaceBlocksPayload = (
-  value: unknown,
-): value is { blocks: { blocks: unknown[] } } => {
-  return (
-    isRecord(value) &&
-    isRecord(value.blocks) &&
-    Array.isArray((value.blocks as { blocks?: unknown }).blocks)
-  )
-}
-
-const hasTopLevelBlocksArray = (
-  value: unknown,
-): value is { blocks: unknown[] } => {
-  return (
-    isRecord(value) && Array.isArray((value as { blocks?: unknown }).blocks)
-  )
-}
-
-const toMacroRootState = (macroCode: string): State | null => {
-  try {
-    const parsed = parseJson<unknown>(macroCode)
-    if (!parsed) return null
-
-    if (isAbstractStepArray(parsed) || hasAbstractStepsArray(parsed)) {
-      const steps = isAbstractStepArray(parsed) ? parsed : parsed.steps
-      const converted = abstractToBlockly(steps, [], [], [])
-      return isValidBlockState(converted) ? converted : null
-    }
-
-    if (isValidBlockState(parsed)) {
-      return parsed
-    }
-
-    if (hasWorkspaceBlocksPayload(parsed)) {
-      const blocks = parsed.blocks.blocks
-      if (blocks.length > 0 && isValidBlockState(blocks[0])) {
-        return blocks[0]
-      }
-    }
-
-    if (hasTopLevelBlocksArray(parsed) && parsed.blocks.length > 0) {
-      const firstBlock = parsed.blocks[0]
-      return isValidBlockState(firstBlock) ? firstBlock : null
-    }
-  } catch (e) {
-    console.error('Failed to parse macro code for preview:', e)
-  }
-  return null
-}
-
-interface MacroPreviewModalProps {
-  isOpen: boolean
-  onClose: () => void
-  macroName: string
-  macroDescription?: string
-  macroCode: string
-}
-
-const MacroPreviewModal = ({
-  isOpen,
-  onClose,
-  macroName,
-  macroDescription,
-  macroCode,
-}: MacroPreviewModalProps) => {
-  const macroState = toMacroRootState(macroCode)
-  const resolvedMacroDescription =
-    typeof macroDescription === 'string' && macroDescription.trim().length > 0
-      ? macroDescription.trim()
-      : 'No description available for this routine.'
-
-  return (
-    <Dialog
-      open={isOpen}
-      onClose={onClose}
-      fullWidth
-      maxWidth="sm"
-      aria-labelledby="macro-preview-dialog-title"
-      slotProps={{
-        paper: {
-          sx: {
-            overflow: 'hidden',
-            borderRadius: 2,
-            border: '1px solid #E2E8F0',
-            boxShadow:
-              '0 20px 50px rgba(15, 23, 42, 0.2), 0 6px 16px rgba(15, 23, 42, 0.12)',
-          },
-        },
-      }}
-    >
-      <DialogTitle
-        id="macro-preview-dialog-title"
-        sx={{
-          px: 2,
-          py: 1.5,
-          borderBottom: '1px solid #E2E8F0',
-          background:
-            'linear-gradient(180deg, #FFFFFF 0%, rgba(248, 250, 252, 0.92) 100%)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            width: '100%',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              minWidth: 0,
-            }}
-          >
-            <Typography
-              component="h2"
-              sx={{
-                m: 0,
-                fontSize: '1.08rem',
-                fontWeight: 800,
-                lineHeight: 1.2,
-                color: '#0F172A',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Saved Routine: {macroName}
-            </Typography>
-            <Typography
-              component="p"
-              sx={{
-                m: 0,
-                fontSize: '0.78rem',
-                fontWeight: 500,
-                lineHeight: 1.4,
-                color: '#475569',
-                display: '-webkit-box',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: 2,
-                overflow: 'hidden',
-              }}
-            >
-              {resolvedMacroDescription}
-            </Typography>
-          </div>
-          <IconButton
-            aria-label="Close"
-            onClick={onClose}
-            size="small"
-            className="workspace-control-button"
-          >
-            <X size={18} />
-          </IconButton>
-        </div>
-      </DialogTitle>
-      <div
-        style={{
-          width: '100%',
-          height: '450px',
-          backgroundColor: '#F8FAFC',
-          padding: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <BlocklyViewerWithControls
-          blockState={macroState}
-          height="450px"
-          startScale={1.2}
-          autoCenter
-          autoFit
-        />
-      </div>
-    </Dialog>
-  )
-}
-
+/**
+ * Lazily create and attach the off-screen parking root element to `document.body`.
+ * The parking root keeps the workspace host element alive between tooltip opens.
+ */
 const ensureParkingRoot = () => {
   if (singletonParkingRoot) return singletonParkingRoot
 
@@ -378,6 +222,7 @@ const ensureParkingRoot = () => {
   return root
 }
 
+/** Lazily create the host `<div>` that wraps the singleton Blockly workspace. */
 const ensureHost = () => {
   if (singletonHost) return singletonHost
 
@@ -391,6 +236,7 @@ const ensureHost = () => {
   return host
 }
 
+/** Lazily inject the singleton Blockly workspace if it doesn't exist yet. */
 const ensureWorkspace = () => {
   if (singletonWorkspace) return singletonWorkspace
 
@@ -400,6 +246,7 @@ const ensureWorkspace = () => {
   return singletonWorkspace
 }
 
+/** Move the workspace host back to the parking root (tooltip closed). */
 const parkPreviewHost = () => {
   if (!singletonHost || !singletonParkingRoot) return
 
@@ -408,6 +255,10 @@ const parkPreviewHost = () => {
   }
 }
 
+/**
+ * Move the workspace host into `container` (tooltip opened) and return the
+ * workspace, creating it lazily if this is the first ever tooltip open.
+ */
 const mountPreviewHost = (container: HTMLElement) => {
   const host = ensureHost()
   if (host.parentElement !== container) {
@@ -417,6 +268,12 @@ const mountPreviewHost = (container: HTMLElement) => {
   return ensureWorkspace()
 }
 
+// ─── BLOCK PREVIEW RENDERING ─────────────────────────────────────────────────
+
+/**
+ * Build a minimal Blockly serialisation state from a toolbox item so the
+ * singleton workspace can render a preview of the block.
+ */
 const createPreviewState = (item: ToolboxBlockItem): State => ({
   type: item.type,
   x: 0,
@@ -425,6 +282,13 @@ const createPreviewState = (item: ToolboxBlockItem): State => ({
   data: item.data,
 })
 
+/**
+ * Scale and centre the top-most block in the workspace so it fills the
+ * preview container without overflowing or being cropped.
+ *
+ * @param workspace The singleton preview workspace.
+ * @param container The DOM element whose dimensions define the preview bounds.
+ */
 const fitAndCenterTopBlock = (
   workspace: Blockly.WorkspaceSvg,
   container: HTMLElement,
@@ -459,6 +323,11 @@ const fitAndCenterTopBlock = (
   workspace.resizeContents()
 }
 
+/**
+ * Clear the singleton workspace, append the block, resize the SVG, then
+ * use two consecutive `requestAnimationFrame` calls to let Blockly finish
+ * its async layout pass before scaling to fit.
+ */
 const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
   const workspace = mountPreviewHost(container)
   workspace.clear()
@@ -466,6 +335,7 @@ const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
   try {
     Blockly.serialization.blocks.append(createPreviewState(item), workspace)
   } catch {
+    // Fall back to a bare block state if the full state fails to deserialise.
     Blockly.serialization.blocks.append(
       { type: item.type, x: 0, y: 0 },
       workspace,
@@ -483,6 +353,12 @@ const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
   })
 }
 
+// ─── RENDER SCHEDULER ────────────────────────────────────────────────────────
+
+/**
+ * Cancel any pending render timeout or animation frame and increment the
+ * request ID so in-flight callbacks self-invalidate.
+ */
 const cancelSingletonRender = () => {
   singletonRenderRequestId += 1
   if (singletonRenderTimeout !== null) {
@@ -495,6 +371,17 @@ const cancelSingletonRender = () => {
   }
 }
 
+/**
+ * Schedule a block preview render, retrying up to `PREVIEW_RENDER_MAX_ATTEMPTS`
+ * times if the target container is not yet visible in the DOM.
+ *
+ * The `owner` symbol and `requestId` snapshot prevent stale callbacks from
+ * rendering into the wrong tooltip after rapid mouse movements.
+ *
+ * @param owner           Symbol of the currently active tooltip instance.
+ * @param item            The toolbox block item to preview.
+ * @param resolveContainer Getter that returns the current mount point `<div>`.
+ */
 const scheduleSingletonRender = (
   owner: symbol,
   item: ToolboxBlockItem,
@@ -534,6 +421,20 @@ const scheduleSingletonRender = (
   tryRender(0)
 }
 
+// ─── COMPONENT ───────────────────────────────────────────────────────────────
+
+interface BlockPreviewTooltipProps {
+  item: ToolboxBlockItem
+  categoryName?: string
+  categoryColour?: string
+  children: ReactElement
+}
+
+/**
+ * Wraps a toolbox pill with a rich hover tooltip that renders a live block
+ * preview and shows descriptive metadata. For macro task pills an additional
+ * "View Routine Blocks" button opens `MacroPreviewModal`.
+ */
 export const BlockPreviewTooltip = ({
   item,
   categoryName,
@@ -541,6 +442,7 @@ export const BlockPreviewTooltip = ({
   children,
 }: BlockPreviewTooltipProps) => {
   const previewMountRef = useRef<HTMLDivElement | null>(null)
+  /** Unique symbol identifying this tooltip instance as the active owner. */
   const ownerRef = useRef(Symbol('block-preview-tooltip-owner'))
 
   const [isOpen, setIsOpen] = useState(false)
@@ -557,6 +459,7 @@ export const BlockPreviewTooltip = ({
   const inputText = item.inputs ?? 'None'
   const outputText = item.outputs ?? 'None'
 
+  /** Derive category-tinted accent colours for the pill and "View" button. */
   const categoryAccentColors = useMemo(() => {
     const fallback = {
       pillBackgroundColor: '#EFF6FF',
@@ -595,6 +498,7 @@ export const BlockPreviewTooltip = ({
     [categoryName, item.type],
   )
 
+  /** Claim ownership of the singleton workspace and schedule a render. */
   const handleOpen = () => {
     setIsOpen(true)
     activeTooltipOwner = ownerRef.current
@@ -605,6 +509,7 @@ export const BlockPreviewTooltip = ({
     )
   }
 
+  /** Release ownership and park the singleton workspace off-screen. */
   const handleClose = () => {
     setIsOpen(false)
     if (activeTooltipOwner !== ownerRef.current) return
@@ -626,6 +531,8 @@ export const BlockPreviewTooltip = ({
     setIsModalOpen(false)
   }, [])
 
+  // When a drag starts from the toolbox, close the tooltip immediately so it
+  // does not linger over the workspace during the drag gesture.
   useEffect(() => {
     const owner = ownerRef.current
     const handleDragStart = () => {
@@ -642,6 +549,7 @@ export const BlockPreviewTooltip = ({
     }
   }, [])
 
+  // Release singleton ownership when the component unmounts.
   useEffect(() => {
     const owner = ownerRef.current
     return () => {

@@ -1,3 +1,14 @@
+/**
+ * macroExplosion.ts
+ *
+ * Implements the "Inline Task" operation: replaces a `macro_task_block` with the
+ * full block chain it encodes, inserting the expanded blocks at the same position
+ * in the statement sequence.
+ *
+ * Exported helpers:
+ *  - `explodeMacro`           — main entry point; expands a macro block in-place.
+ *  - `getMacroIdFromBlockData` — reads the macro ID from a block's serialised `data`.
+ */
 import * as Blockly from 'blockly/core'
 
 import { ActionListType } from 'pages/actions/types'

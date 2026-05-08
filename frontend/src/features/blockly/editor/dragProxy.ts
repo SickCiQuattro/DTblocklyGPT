@@ -1,3 +1,15 @@
+/**
+ * dragProxy.ts
+ *
+ * Converts a React pointer event (from a custom toolbox pill) into a native
+ * Blockly block-drag gesture without relying on the standard Blockly toolbox DOM.
+ *
+ * Entry point: `startSyntheticBlockDrag` — called by `BlocklyEditor` when the
+ * pointer has moved past the drag threshold while pressing a toolbox block pill.
+ *
+ * The proxy creates a temporary "ghost" block in the workspace, hands pointer
+ * capture to Blockly's gesture system, and cleans up when the drag ends.
+ */
 import * as Blockly from 'blockly/core'
 
 import { BlockState as State, ConnectionState } from 'utils/blocklyTypes'

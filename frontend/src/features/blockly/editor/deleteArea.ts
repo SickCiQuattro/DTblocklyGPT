@@ -1,3 +1,14 @@
+/**
+ * deleteArea.ts
+ *
+ * Registers the custom React toolbox container as a Blockly `DeleteArea` so
+ * that blocks dragged over the toolbox panel are deleted rather than snapping
+ * back to their original position.
+ *
+ * `CustomToolboxDeleteArea` extends `Blockly.DeleteArea` and adds a CSS class
+ * to the toolbox element during an active drag so the UI can highlight the
+ * drop zone visually.
+ */
 import * as Blockly from 'blockly/core'
 
 export class CustomToolboxDeleteArea extends Blockly.DeleteArea {

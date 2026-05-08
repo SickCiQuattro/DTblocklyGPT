@@ -1,3 +1,17 @@
+/**
+ * BlocklyWorkspace.tsx
+ *
+ * React wrapper that manages the lifecycle of the main interactive Blockly
+ * workspace: injection, task loading, external state application, and teardown.
+ *
+ * Calls:
+ *  - `onWorkspaceReady(workspace)` once the workspace is injected and ready.
+ *  - `onTaskLoaded()` after the initial `dataTask` has been deserialised.
+ *  - `onExternalTaskStateApplied()` after a programmatic state update completes.
+ *
+ * Also exports `getBlocklyStructure()` — a module-level helper that returns the
+ * top-most block in the active workspace (used by serialisation helpers).
+ */
 import { useEffect, useRef } from 'react'
 import * as Blockly from 'blockly/core'
 import * as locale from 'blockly/msg/en'
