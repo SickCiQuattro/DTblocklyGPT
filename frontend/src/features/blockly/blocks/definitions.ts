@@ -22,6 +22,7 @@ import * as Blockly from 'blockly/core'
 import { blockDescriptionsByType } from './blockTextDictionary'
 import { blocksColours } from './palette'
 import {
+  REPEAT2_ICON_URI,
   BOT_ICON_URI,
   FLAG_ICON_URI,
   MAP_PIN_ICON_URI,
@@ -337,8 +338,11 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
-    message0: 'Repeat %1 times',
-    args0: [{ type: 'field_number', name: 'times', value: 2, min: 1, max: 99 }],
+    message0: '%1 Repeat %2 times',
+    args0: [
+      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
+      { type: 'field_number', name: 'times', value: 2, min: 1, max: 99 },
+    ],
     message1: 'Do %1',
     args1: [
       {
@@ -354,7 +358,8 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'loop_block',
-    message0: 'Repeat forever',
+    message0: '%1 Repeat forever',
+    args0: [iconConfig(REPEAT2_ICON_URI, 'TASK:')],
     message1: 'Do %1',
     args1: [
       {
@@ -370,8 +375,9 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'repeat_until_block',
-    message0: 'Repeat until %1',
+    message0: '%1 Repeat until %2',
     args0: [
+      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
       {
         type: 'input_value',
         name: 'CONDITION',
@@ -393,8 +399,9 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_block',
-    message0: 'When %1',
+    message0: '%1 When %2',
     args0: [
+      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
       {
         type: 'input_value',
         name: 'WHEN',
@@ -416,8 +423,9 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_otherwise_block',
-    message0: 'When %1',
+    message0: '%1 When %2',
     args0: [
+      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
       {
         type: 'input_value',
         name: 'WHEN',

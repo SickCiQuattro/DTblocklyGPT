@@ -34,6 +34,11 @@ export const createLucideIconURI = (
 
 // ─── NAMED ICON URIs (white stroke, for use inside coloured blocks) ───────────
 
+/** Repeat2 icon - used on task flow blocks. */
+export const REPEAT2_ICON_URI = createLucideIconURI(
+  '<path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/>',
+)
+
 /** Robot / Bot icon — used on all robot-action blocks. */
 export const BOT_ICON_URI = createLucideIconURI(
   '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',

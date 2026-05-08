@@ -750,8 +750,6 @@ export const BlocklyEditor = ({
           capture: true,
         })
 
-      ensureStartBlock(workspace)
-
       syncHistoryState(workspace)
       registerToolboxDeleteArea(workspace, toolboxRootRef.current)
     },
