@@ -36,6 +36,10 @@ import { BlockState as State } from 'utils/blocklyTypes'
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
 
 import { CustomToolbox, ToolboxBlockItem } from '../toolbox'
+import {
+  type BlockViewMode,
+  type DeleteConfirmMode,
+} from '../utils/useViewSettings'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
 // Side-effect import: registers all Blockly block types (when_start, repeat_block, etc.)
@@ -69,6 +73,7 @@ import {
 
 /** Block type identifier for the mandatory program entry-point block. */
 const START_BLOCK_TYPE = 'when_start' as const
+const SHADOW_START_BLOCK_TYPE = 'shadow_start_sequence_block' as const
 
 /** Minimum pointer movement (px) before a toolbox pill triggers a block drag. */
 const DRAG_THRESHOLD_PX = 5
@@ -93,6 +98,15 @@ const ORPHAN_SYNC_TYPES = new Set<string>([
   Blockly.Events.BLOCK_DELETE,
   Blockly.Events.BLOCK_MOVE,
   Blockly.Events.BLOCK_CHANGE,
+])
+
+const SHADOW_PLACEHOLDER_TYPES = new Set<string>([
+  'shadow_object_block',
+  'shadow_location_block',
+  'shadow_action_block',
+  'shadow_trigger_block',
+  'shadow_sequence_block',
+  SHADOW_START_BLOCK_TYPE,
 ])
 
 // ─── START BLOCK HELPERS ──────────────────────────────────────────────────────
@@ -167,6 +181,195 @@ function ensureStartBlock(workspace: Blockly.WorkspaceSvg): void {
   }
 }
 
+function removeStartBlock(workspace: Blockly.WorkspaceSvg): void {
+  const startBlocks = workspace.getBlocksByType(
+    START_BLOCK_TYPE,
+    false,
+  ) as Blockly.BlockSvg[]
+
+  Blockly.Events.disable()
+  try {
+    for (const startBlock of startBlocks) {
+      const target = startBlock.nextConnection?.targetBlock() as
+        | Blockly.BlockSvg
+        | null
+      if (target) {
+        startBlock.nextConnection?.disconnect()
+        if (target.type === SHADOW_START_BLOCK_TYPE) {
+          if (target.nextConnection?.targetBlock()) {
+            target.nextConnection.disconnect()
+          }
+          if (!target.disposed) {
+            target.dispose(false)
+          }
+        }
+      }
+      if (!startBlock.disposed) {
+        startBlock.dispose(false)
+      }
+    }
+
+    const detachedStartShadows = workspace
+      .getBlocksByType(SHADOW_START_BLOCK_TYPE, false)
+      .filter((block) => !block.getParent()) as Blockly.BlockSvg[]
+
+    for (const shadow of detachedStartShadows) {
+      if (shadow.nextConnection?.targetBlock()) {
+        shadow.nextConnection.disconnect()
+      }
+      if (!shadow.disposed) {
+        shadow.dispose(false)
+      }
+    }
+  } finally {
+    Blockly.Events.enable()
+  }
+}
+
+function clearOrphanState(workspace: Blockly.WorkspaceSvg): void {
+  for (const block of workspace.getAllBlocks(false)) {
+    if (block.isShadow()) continue
+    if (block.isInsertionMarker()) continue
+    ;(block as Blockly.BlockSvg)
+      .getSvgRoot?.()
+      ?.classList.remove('blockly-orphan')
+  }
+}
+
+function normalizeVisibleStartBlock(workspace: Blockly.WorkspaceSvg): void {
+  const startBlocks = workspace.getBlocksByType(
+    START_BLOCK_TYPE,
+    false,
+  ) as Blockly.BlockSvg[]
+  if (startBlocks.length === 0) return
+
+  Blockly.Events.disable()
+  try {
+    const [primaryStart, ...extraStarts] = startBlocks
+    primaryStart.setDeletable(false)
+    primaryStart.setMovable(false)
+
+    for (const extraStart of extraStarts) {
+      if (extraStart.nextConnection?.targetBlock()) {
+        extraStart.nextConnection.disconnect()
+      }
+      if (!extraStart.disposed) {
+        extraStart.dispose(false)
+      }
+    }
+
+    const detachedStartShadows = workspace
+      .getBlocksByType(SHADOW_START_BLOCK_TYPE, false)
+      .filter((block) => !block.getParent()) as Blockly.BlockSvg[]
+    for (const shadow of detachedStartShadows) {
+      if (shadow.nextConnection?.targetBlock()) {
+        shadow.nextConnection.disconnect()
+      }
+      if (!shadow.disposed) {
+        shadow.dispose(false)
+      }
+    }
+
+    const startTarget = primaryStart.nextConnection?.targetBlock() as
+      | Blockly.BlockSvg
+      | null
+    if (startTarget?.type !== SHADOW_START_BLOCK_TYPE) return
+
+    const chainedBlock = startTarget.nextConnection?.targetBlock() as
+      | Blockly.BlockSvg
+      | null
+    if (chainedBlock?.previousConnection) {
+      startTarget.nextConnection?.disconnect()
+      primaryStart.nextConnection?.disconnect()
+      if (!startTarget.disposed) {
+        startTarget.dispose(false)
+      }
+      primaryStart.nextConnection?.connect(chainedBlock.previousConnection)
+      return
+    }
+
+    const candidate = workspace
+      .getTopBlocks(true)
+      .find(
+        (block) =>
+          !block.disposed &&
+          !block.isShadow() &&
+          !block.isInsertionMarker() &&
+          !block.getParent() &&
+          block.type !== START_BLOCK_TYPE &&
+          block.type !== SHADOW_START_BLOCK_TYPE &&
+          Boolean(block.previousConnection),
+      ) as Blockly.BlockSvg | undefined
+
+    if (!candidate?.previousConnection) return
+
+    primaryStart.nextConnection?.disconnect()
+    if (!startTarget.disposed) {
+      startTarget.dispose(false)
+    }
+    primaryStart.nextConnection?.connect(candidate.previousConnection)
+  } finally {
+    Blockly.Events.enable()
+  }
+}
+
+function applyBlockViewMode(
+  workspace: Blockly.WorkspaceSvg,
+  blockViewMode: BlockViewMode,
+): void {
+  const showBlockIcons = blockViewMode === 'complete'
+  const showShadowLabel = blockViewMode !== 'minimal'
+
+  Blockly.Events.disable()
+  try {
+    for (const block of workspace.getAllBlocks(false)) {
+      if (block.isInsertionMarker()) continue
+
+      let changed = false
+      for (const input of block.inputList) {
+        for (const field of input.fieldRow) {
+          if (field instanceof Blockly.FieldImage) {
+            const isShadowPlaceholder = SHADOW_PLACEHOLDER_TYPES.has(block.type)
+            const visible = isShadowPlaceholder ? true : showBlockIcons
+            if (field.isVisible() !== visible) {
+              field.setVisible(visible)
+              changed = true
+            }
+            continue
+          }
+
+          const isShadowNameField =
+            field.name === 'name' && SHADOW_PLACEHOLDER_TYPES.has(block.type)
+          if (!isShadowNameField) continue
+
+          if (field.isVisible() !== showShadowLabel) {
+            field.setVisible(showShadowLabel)
+            changed = true
+          }
+        }
+      }
+
+      if (changed && block instanceof Blockly.BlockSvg && !block.disposed) {
+        block.render()
+      }
+    }
+  } finally {
+    Blockly.Events.enable()
+  }
+}
+
+function syncStartBlockVisibility(
+  workspace: Blockly.WorkspaceSvg,
+  showStartBlock: boolean,
+): void {
+  if (showStartBlock) {
+    ensureStartBlock(workspace)
+    normalizeVisibleStartBlock(workspace)
+  } else {
+    removeStartBlock(workspace)
+  }
+}
+
 // ─── ORPHAN SYNC ──────────────────────────────────────────────────────────────
 
 /**
@@ -235,6 +438,10 @@ interface BlocklyEditorProps {
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
   onTaskStructureChange?: (task: AbstractStep[] | null) => void
+  onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
+  blockViewMode?: BlockViewMode
+  deleteConfirmMode?: DeleteConfirmMode
+  showStartBlock?: boolean
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -259,6 +466,10 @@ export const BlocklyEditor = ({
   applyExternalTaskState = false,
   onExternalTaskStateApplied,
   onTaskStructureChange,
+  onWorkspaceReady,
+  blockViewMode = 'complete',
+  deleteConfirmMode = 'multiple',
+  showStartBlock = true,
 }: BlocklyEditorProps) => {
   // ── Workspace refs ─────────────────────────────────────────────────────────
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
@@ -275,6 +486,14 @@ export const BlocklyEditor = ({
   useEffect(() => {
     onTaskStructureChangeRef.current = onTaskStructureChange
   }, [onTaskStructureChange])
+  const blockViewModeRef = useRef(blockViewMode)
+  useEffect(() => {
+    blockViewModeRef.current = blockViewMode
+  }, [blockViewMode])
+  const showStartBlockRef = useRef(showStartBlock)
+  useEffect(() => {
+    showStartBlockRef.current = showStartBlock
+  }, [showStartBlock])
   const lastDragEndTimeRef = useRef<number>(0)
   const lastDragGroupRef = useRef<string>('')
   const taskLoadedRef = useRef(false)
@@ -327,6 +546,63 @@ export const BlocklyEditor = ({
       })
     },
     [],
+  )
+
+  const shouldConfirmDelete = useCallback(
+    (count: number) => {
+      if (deleteConfirmMode === 'never') return false
+      if (deleteConfirmMode === 'always') return count >= 1
+      return count > 1
+    },
+    [deleteConfirmMode],
+  )
+  const shouldConfirmDeleteRef = useRef(shouldConfirmDelete)
+  useEffect(() => {
+    shouldConfirmDeleteRef.current = shouldConfirmDelete
+  }, [shouldConfirmDelete])
+
+  const syncWorkspacePresentation = useCallback(
+    (workspace: Blockly.WorkspaceSvg) => {
+      applyBlockViewMode(workspace, blockViewModeRef.current)
+      if (showStartBlockRef.current) {
+        syncOrphanState(workspace)
+      } else {
+        clearOrphanState(workspace)
+      }
+    },
+    [],
+  )
+
+  const executeDeleteAll = useCallback(
+    (workspace: Blockly.WorkspaceSvg) => {
+      Blockly.Events.setGroup(true)
+      try {
+        const startBlock = findStartBlock(workspace)
+        if (startBlock?.nextConnection?.targetBlock()) {
+          startBlock.nextConnection.disconnect()
+        }
+
+        const toDispose = workspace
+          .getAllBlocks(false)
+          .filter(
+            (b) =>
+              !b.isShadow() &&
+              !b.isInsertionMarker() &&
+              b.type !== START_BLOCK_TYPE &&
+              !b.getParent(),
+          )
+
+        for (let i = toDispose.length - 1; i >= 0; i--) {
+          if (!toDispose[i].disposed) toDispose[i].dispose(false)
+        }
+      } finally {
+        Blockly.Events.setGroup(false)
+      }
+
+      syncWorkspacePresentation(workspace)
+      syncHistoryState(workspace)
+    },
+    [syncHistoryState, syncWorkspacePresentation],
   )
 
   // ── Delete area registration ───────────────────────────────────────────────
@@ -432,47 +708,35 @@ export const BlocklyEditor = ({
   // it to show our own React modal instead of the browser's native dialog.
   useEffect(() => {
     const originalConfirm = window.confirm
+
     window.confirm = (_message?: string): boolean => {
       const workspace = workspaceRef.current
       const realCount = workspace
         ? countRealBlocks(workspace.getAllBlocks(false), START_BLOCK_TYPE)
         : 0
+
+      if (!workspace) return false
+
+      if (!shouldConfirmDelete(realCount)) {
+        executeDeleteAll(workspace)
+        return false
+      }
+
       setConfirmDialog({
         message: `Delete all ${realCount} block${realCount !== 1 ? 's' : ''}?`,
         onConfirm: () => {
           setConfirmDialog(null)
-          if (!workspace) return
-          Blockly.Events.setGroup(true)
-          try {
-            const startBlock = findStartBlock(workspace)
-            if (startBlock?.nextConnection?.targetBlock())
-              startBlock.nextConnection.disconnect()
-            const toDispose = workspace
-              .getAllBlocks(false)
-              .filter(
-                (b) =>
-                  !b.isShadow() &&
-                  !b.isInsertionMarker() &&
-                  b.type !== START_BLOCK_TYPE &&
-                  !b.getParent(),
-              )
-            for (let i = toDispose.length - 1; i >= 0; i--) {
-              if (!toDispose[i].disposed) toDispose[i].dispose(false)
-            }
-          } finally {
-            Blockly.Events.setGroup(false)
-          }
-          syncOrphanState(workspace)
-          syncHistoryState(workspace)
+          executeDeleteAll(workspace)
         },
         onCancel: () => setConfirmDialog(null),
       })
       return false
     }
+
     return () => {
       window.confirm = originalConfirm
     }
-  }, [syncHistoryState])
+  }, [executeDeleteAll, shouldConfirmDelete])
 
   // ── Shadow picker position resolver ───────────────────────────────────────
   const resolveShadowPickerPosition = useCallback(
@@ -515,9 +779,24 @@ export const BlocklyEditor = ({
     taskLoadedRef.current = true
     const workspace = workspaceRef.current
     if (!workspace) return
-    ensureStartBlock(workspace)
-    syncOrphanState(workspace)
-  }, [])
+
+    syncStartBlockVisibility(workspace, showStartBlock)
+    syncWorkspacePresentation(workspace)
+  }, [showStartBlock, syncWorkspacePresentation])
+
+  useEffect(() => {
+    const workspace = workspaceRef.current
+    if (!workspace || !taskLoadedRef.current) return
+    syncWorkspacePresentation(workspace)
+  }, [blockViewMode, syncWorkspacePresentation])
+
+  useEffect(() => {
+    const workspace = workspaceRef.current
+    if (!workspace || !taskLoadedRef.current) return
+
+    syncStartBlockVisibility(workspace, showStartBlock)
+    syncWorkspacePresentation(workspace)
+  }, [showStartBlock, syncWorkspacePresentation])
 
   // ── Workspace ready callback ───────────────────────────────────────────────
   // This is the main workspace lifecycle hook. It attaches the change listener
@@ -528,6 +807,7 @@ export const BlocklyEditor = ({
       detachWorkspaceListener()
       unregisterToolboxDeleteArea()
       workspaceRef.current = workspace
+      onWorkspaceReady?.(workspace)
 
       if (!workspace) {
         taskLoadedRef.current = false
@@ -596,7 +876,7 @@ export const BlocklyEditor = ({
       // ── Main workspace event listener ──────────────────────────────────────
       const listener = (event: Blockly.Events.Abstract) => {
         if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
-          ensureStartBlock(workspace)
+          syncStartBlockVisibility(workspace, showStartBlockRef.current)
           setIsDeleting(false)
           clearShadowBlockHighlights(workspace)
         }
@@ -627,6 +907,9 @@ export const BlocklyEditor = ({
             setIsDeleting(false)
             clearShadowBlockHighlights(workspace)
             deleteAreaRef.current?.setActiveDragGroup(null)
+            if (taskLoadedRef.current) {
+              syncWorkspacePresentation(workspace)
+            }
           }
         }
 
@@ -691,7 +974,9 @@ export const BlocklyEditor = ({
         }
 
         if (ORPHAN_SYNC_TYPES.has(event.type)) {
-          if (taskLoadedRef.current) syncOrphanState(workspace)
+          if (taskLoadedRef.current) {
+            syncWorkspacePresentation(workspace)
+          }
         }
 
         syncHistoryState(workspace)
@@ -725,7 +1010,7 @@ export const BlocklyEditor = ({
           (b) => !b.isShadow() && !b.isInsertionMarker(),
         )
         const totalCount = 1 + ownDescendants.length
-        if (totalCount <= 1) return
+        if (!shouldConfirmDeleteRef.current(totalCount)) return
         e.preventDefault()
         e.stopImmediatePropagation()
         setConfirmDialog({
@@ -760,6 +1045,8 @@ export const BlocklyEditor = ({
       resolveShadowPickerPosition,
       syncHistoryState,
       shadowPicker,
+      onWorkspaceReady,
+      syncWorkspacePresentation,
     ],
   )
 
@@ -886,7 +1173,7 @@ export const BlocklyEditor = ({
             (b) => !b.isShadow(),
           )
           const totalCount = 1 + ownDescendants.length
-          if (totalCount > 1) {
+          if (shouldConfirmDelete(totalCount)) {
             setConfirmDialog({
               message: `Delete ${totalCount} blocks?`,
               onConfirm: () => {
@@ -902,7 +1189,7 @@ export const BlocklyEditor = ({
 
       window.setTimeout(() => option.callback(), 50)
     },
-    [contextMenu],
+    [contextMenu, shouldConfirmDelete],
   )
 
   // ── Toolbox block drag initiator ───────────────────────────────────────────
@@ -956,13 +1243,20 @@ export const BlocklyEditor = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="custom-dragdrop-layout">
+    <div
+      className={[
+        'custom-dragdrop-layout',
+        `workspace-view--${blockViewMode}`,
+        showStartBlock ? 'workspace-start--visible' : 'workspace-start--hidden',
+      ].join(' ')}
+    >
       <CustomToolbox
         dataObjects={dataObjects}
         dataLocations={dataLocations}
         dataActions={dataActions}
         dataMacros={availableMacros}
         isDeleting={isDeleting}
+        blockViewMode={blockViewMode}
         onRootRefChange={handleToolboxRootRefChange}
         onBlockPointerDown={handleBlockPointerDown}
       />
@@ -1124,7 +1418,7 @@ export const BlocklyEditor = ({
           })}
         </Menu>
 
-        {/* Inline Task confirmation dialog */}
+        {/* Break into steps confirmation dialog */}
         {inlineTaskConfirm && (
           <InlineTaskDialog
             open

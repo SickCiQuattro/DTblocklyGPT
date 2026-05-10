@@ -1,9 +1,22 @@
 import React from 'react'
 import { Collapse, Divider } from 'antd'
-import { Button, useTheme } from '@mui/material'
+import {
+  Box,
+  Button,
+  Chip,
+  Paper,
+  Stack,
+  Switch,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+  useTheme,
+} from '@mui/material'
 import { useDispatch, useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
 import { useParams } from 'react-router-dom'
+import * as Blockly from 'blockly/core'
 import {
   CopyOutlined,
   EditOutlined,
@@ -15,6 +28,12 @@ import {
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { getBlocklyStructure } from 'features/blockly'
+import { useConformance } from 'features/blockly/utils/useConformance'
+import {
+  type BlockViewMode,
+  type DeleteConfirmMode,
+  type ViewSettings,
+} from 'features/blockly/utils/useViewSettings'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
@@ -23,14 +42,27 @@ import { RootState } from 'store/reducers'
 interface RightPanelProps {
   backFunction: () => void
   dataTask: State | null
+  workspace: Blockly.WorkspaceSvg | null
+  viewSettings: ViewSettings
+  onViewSettingsChange: (patch: Partial<ViewSettings>) => void
+  onResetViewSettings: () => void
 }
 
-export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
+export const RightPanel = ({
+  backFunction,
+  dataTask,
+  workspace,
+  viewSettings,
+  onViewSettingsChange,
+  onResetViewSettings,
+}: RightPanelProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
   const { id } = useParams()
   const theme = useTheme()
   const dispatch = useDispatch()
   const [actualTask, setActualTask] = React.useState<State | null>(dataTask)
+
+  const { isReady, formattedIssues } = useConformance(workspace)
 
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
@@ -50,6 +82,27 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
 
   const handleCancel = () => {
     void dispatch(toggleEditMode())
+  }
+
+  const draftTooltip =
+    formattedIssues.length > 0
+      ? formattedIssues[0]
+      : 'Complete all blocks before saving.'
+
+  const handleBlockViewModeChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    value: BlockViewMode | null,
+  ) => {
+    if (!value) return
+    onViewSettingsChange({ blockViewMode: value })
+  }
+
+  const handleDeleteConfirmModeChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    value: DeleteConfirmMode | null,
+  ) => {
+    if (!value) return
+    onViewSettingsChange({ deleteConfirmMode: value })
   }
 
   return (
@@ -74,16 +127,53 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
           Edit
         </Button>
       )}
+
       {editMode && (
         <>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<SaveOutlined />}
-            onClick={handleSave}
+          <Tooltip
+            title={
+              isReady
+                ? 'All blocks are configured — ready to save.'
+                : draftTooltip
+            }
+            arrow
+            placement="left"
           >
-            Save
-          </Button>
+            <Chip
+              label={isReady ? 'Ready' : 'Draft'}
+              size="small"
+              color={isReady ? 'success' : 'default'}
+              variant={isReady ? 'filled' : 'outlined'}
+              sx={{
+                mb: 1,
+                width: '100%',
+                fontWeight: 600,
+                cursor: 'default',
+                letterSpacing: '0.04em',
+              }}
+            />
+          </Tooltip>
+
+          <Tooltip
+            title={isReady ? '' : draftTooltip}
+            arrow
+            placement="left"
+            disableHoverListener={isReady}
+            disableFocusListener={isReady}
+          >
+            <span style={{ display: 'block' }}>
+              <Button
+                fullWidth
+                variant="contained"
+                startIcon={<SaveOutlined />}
+                onClick={handleSave}
+                disabled={!isReady}
+              >
+                Save
+              </Button>
+            </span>
+          </Tooltip>
+
           <Button
             fullWidth
             onClick={handleCancel}
@@ -93,7 +183,114 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
           </Button>
         </>
       )}
+
       <Divider />
+
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 2,
+          mr: 2,
+          borderRadius: 2,
+          borderColor: 'rgba(148, 163, 184, 0.25)',
+        }}
+      >
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="h6" sx={{ fontSize: 16, fontWeight: 700 }}>
+              Workspace settings
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ color: 'text.secondary', mt: 0.5 }}
+            >
+              Adjust the editor for beginners or expert users.
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography
+              variant="subtitle2"
+              sx={{ mb: 1, fontWeight: 700, color: 'text.primary' }}
+            >
+              Block visualization
+            </Typography>
+
+            <ToggleButtonGroup
+              exclusive
+              fullWidth
+              size="small"
+              value={viewSettings.blockViewMode}
+              onChange={handleBlockViewModeChange}
+            >
+              <ToggleButton value="complete">Complete</ToggleButton>
+              <ToggleButton value="essential">Essential</ToggleButton>
+              <ToggleButton value="minimal">Minimal</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          <Box>
+            <Typography
+              variant="subtitle2"
+              sx={{ mb: 1, fontWeight: 700, color: 'text.primary' }}
+            >
+              Delete confirmations
+            </Typography>
+
+            <ToggleButtonGroup
+              exclusive
+              fullWidth
+              size="small"
+              value={viewSettings.deleteConfirmMode}
+              onChange={handleDeleteConfirmModeChange}
+            >
+              <ToggleButton value="always">Always</ToggleButton>
+              <ToggleButton value="multiple">Only multiple</ToggleButton>
+              <ToggleButton value="never">Never</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          <Box>
+            <Typography
+              variant="subtitle2"
+              sx={{ mb: 1, fontWeight: 700, color: 'text.primary' }}
+            >
+              Start block
+            </Typography>
+
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Show start block
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  When disabled, orphan highlighting is also disabled.
+                </Typography>
+              </Box>
+
+              <Switch
+                checked={viewSettings.showStartBlock}
+                onChange={(_, checked) =>
+                  onViewSettingsChange({ showStartBlock: checked })
+                }
+              />
+            </Stack>
+          </Box>
+
+          <Button variant="outlined" onClick={onResetViewSettings}>
+            Restore defaults
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Divider />
+
       <h2>
         <QuestionCircleOutlined /> Instructions & FAQ
       </h2>
@@ -113,7 +310,9 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
           button.
         </li>
       </ul>
+
       <Divider />
+
       <Collapse
         key="task-collapse-debug"
         style={{ marginTop: '1rem', marginRight: '1rem' }}
@@ -122,14 +321,7 @@ export const RightPanel = ({ backFunction, dataTask }: RightPanelProps) => {
             label: 'Task JSON',
             key: 'task-json',
             children: actualTask ? (
-              <pre>
-                {JSON.stringify(
-                  // blocklyToAbstract(actualTask as CustomBlock),
-                  actualTask,
-                  null,
-                  2,
-                )}
-              </pre>
+              <pre>{JSON.stringify(actualTask, null, 2)}</pre>
             ) : (
               <i>None</i>
             ),

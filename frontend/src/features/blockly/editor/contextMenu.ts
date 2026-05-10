@@ -15,7 +15,7 @@
  */
 import * as Blockly from 'blockly/core'
 import {
-  ArrowLeftRight,
+  SquareSplitVertical,
   CircleHelp,
   ClipboardPaste,
   Copy,
@@ -60,12 +60,12 @@ export interface ContextMenuState {
 }
 
 /**
- * Called when the user clicks "Inline Task" on a macro block.
+ * Called when the user clicks "Break into steps" on a macro block.
  * The caller is responsible for showing a confirmation modal before
  * invoking the actual onExpandMacro handler.
  *
  * @param macroName   Human-readable name of the macro (for modal copy).
- * @param onConfirm   Execute the inline operation if the user confirms.
+ * @param onConfirm   Execute the break into steps operation if the user confirms.
  */
 export type RequestInlineTaskConfirmation = (
   macroName: string,
@@ -82,7 +82,7 @@ interface InstallContextMenuBridgeParams {
   ) => void
   resolveMacroId: (rawData: unknown) => string | null
   /**
-   * Optional — when provided, clicking "Inline Task" will invoke this callback
+   * Optional — when provided, clicking "Break into steps" will invoke this callback
    * so the caller can show a confirmation modal before committing.
    */
   requestInlineTaskConfirmation?: RequestInlineTaskConfirmation
@@ -107,20 +107,20 @@ export const getMenuOptionText = (
 
 const LABEL_MAP: Record<string, string> = {
   // Block layout
-  'expand block': 'Show Block Details',
-  'collapse block': 'Compact Block',
+  'expand block': 'Show block details',
+  'collapse block': 'Compact block',
   // Input layout
-  'inline inputs': 'Compact Layout',
-  'external inputs': 'Expanded Layout',
+  'inline inputs': 'Compact layout',
+  'external inputs': 'Expanded layout',
   // Block state
-  'enable block': 'Include This Step',
-  'disable block': 'Skip This Step',
+  'enable block': 'Include this step',
+  'disable block': 'Skip this step',
   // Workspace
-  'clean up workspace': 'Arrange Blocks',
-  'clean up': 'Arrange Blocks',
+  'clean up workspace': 'Arrange blocks',
+  'clean up': 'Arrange blocks',
   // Comment
-  'add comment': 'Add Note',
-  'remove comment': 'Remove Note',
+  'add comment': 'Add note',
+  'remove comment': 'Remove note',
 }
 
 /**
@@ -145,7 +145,8 @@ export const getMenuIconInfo = (text: string) => {
   if (has(['paste'])) return { Icon: ClipboardPaste, color: NEUTRAL }
   if (has(['undo'])) return { Icon: Undo2, color: NEUTRAL }
   if (has(['redo'])) return { Icon: Redo2, color: NEUTRAL }
-  if (has(['inline task'])) return { Icon: ArrowLeftRight, color: DESTRUCTIVE }
+  if (has(['break into steps']))
+    return { Icon: SquareSplitVertical, color: DESTRUCTIVE }
   if (has(['show block details'])) return { Icon: Maximize2, color: NEUTRAL }
   if (has(['compact block'])) return { Icon: Minimize2, color: NEUTRAL }
   if (has(['compact layout'])) return { Icon: Minimize2, color: NEUTRAL }
@@ -166,11 +167,11 @@ export const getMenuIconInfo = (text: string) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // OPTION ORDERING
 //
-// Destructive actions (delete, inline task) are always moved to the bottom,
+// Destructive actions (delete, Break into steps) are always moved to the bottom,
 // separated from editing actions by a divider.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DESTRUCTIVE_LABELS = ['delete', 'inline task']
+const DESTRUCTIVE_LABELS = ['delete', 'break into steps']
 
 const isDestructiveLabel = (label: string) => {
   const n = label.toLowerCase()
@@ -381,7 +382,7 @@ export const installContextMenuBridge = ({
       const sourceBlock = this
       const sourceWorkspace = toWorkspaceSvg(sourceBlock.workspace)
 
-      // "Inline Task" option for macro_task_block
+      // "Break into steps" option for macro_task_block
       if (sourceBlock.type === 'macro_task_block') {
         const macroId = resolveMacroId(sourceBlock.data)
         const isEnabled = !!sourceWorkspace && !!macroId
@@ -399,7 +400,7 @@ export const installContextMenuBridge = ({
         }
 
         const inlineOption = {
-          text: 'Inline Task',
+          text: 'Break into steps',
           enabled: isEnabled,
           scope: {
             block: sourceBlock,

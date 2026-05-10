@@ -1,7 +1,7 @@
 /**
  * macroExplosion.ts
  *
- * Implements the "Inline Task" operation: replaces a `macro_task_block` with the
+ * Implements the "Break into steps" operation: replaces a `macro_task_block` with the
  * full block chain it encodes, inserting the expanded blocks at the same position
  * in the statement sequence.
  *

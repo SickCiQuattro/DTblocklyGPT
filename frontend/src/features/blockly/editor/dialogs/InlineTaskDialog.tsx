@@ -1,7 +1,7 @@
 /**
  * InlineTaskDialog.tsx
  *
- * Confirmation dialog shown before the "Inline Task" operation that replaces
+ * Confirmation dialog shown before the "Break into steps" operation that replaces
  * a `macro_task_block` with its constituent block chain.
  *
  * The operation is irreversible in practical terms (an undo is technically
@@ -31,7 +31,7 @@ interface InlineTaskDialogProps {
 }
 
 /**
- * Warning dialog for the irreversible "Inline Task" context-menu action.
+ * Warning dialog for the irreversible "Break into steps" context-menu action.
  * Shows the macro name and an amber caution notice before proceeding.
  */
 export const InlineTaskDialog = ({
@@ -65,7 +65,7 @@ export const InlineTaskDialog = ({
         pb: 1,
       }}
     >
-      Inline Task
+      Break into steps
     </DialogTitle>
     <DialogContent>
       <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.5 }}>
@@ -135,7 +135,7 @@ export const InlineTaskDialog = ({
           },
         }}
       >
-        Inline Task
+        Break into steps
       </Button>
     </DialogActions>
   </Dialog>

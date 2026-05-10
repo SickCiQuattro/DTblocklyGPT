@@ -20,6 +20,7 @@ import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskType } from 'pages/tasks/types'
+import { type BlockViewMode } from '../utils/useViewSettings'
 
 import {
   TOOLBOX_CATEGORIES,
@@ -38,6 +39,7 @@ interface CustomToolboxProps {
   dataActions: ActionListType[]
   dataMacros: TaskType[]
   isDeleting: boolean
+  blockViewMode?: BlockViewMode
   onRootRefChange?: (element: HTMLElement | null) => void
   onBlockPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
@@ -59,7 +61,6 @@ const resolveDynamicBlocks = (
   dataActions: ActionListType[],
   dataMacros: TaskType[],
 ): ToolboxBlockItem[] => {
-
   const resolved: ToolboxBlockItem[] = []
 
   for (const block of blocks) {
@@ -234,6 +235,8 @@ const CategoryPanel: React.FC<{
     ? pills.filter((pill) => activeTabConfig.blockTypes.includes(pill.type))
     : pills
 
+  const showCategoryIcons = true
+
   return (
     <Accordion
       expanded={expanded}
@@ -258,9 +261,11 @@ const CategoryPanel: React.FC<{
             className="toolbox-category__accent"
             style={{ backgroundColor: category.colour }}
           />
-          <span className="toolbox-category__icon" aria-hidden="true">
-            {getCategoryIcon(category.key, category.colour)}
-          </span>
+          {showCategoryIcons && (
+            <span className="toolbox-category__icon" aria-hidden="true">
+              {getCategoryIcon(category.key, category.colour)}
+            </span>
+          )}
           <Typography className="toolbox-category__name" title={category.name}>
             {category.name}
           </Typography>
@@ -339,6 +344,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   dataActions,
   dataMacros,
   isDeleting,
+  blockViewMode = 'complete',
   onRootRefChange,
   onBlockPointerDown,
 }) => {
@@ -349,7 +355,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   }
 
   return (
-    <aside className="custom-toolbox" ref={onRootRefChange}>
+    <aside
+      className="custom-toolbox"
+      data-view-mode={blockViewMode}
+      ref={onRootRefChange}
+    >
       <header
         className="custom-toolbox__header"
         style={
