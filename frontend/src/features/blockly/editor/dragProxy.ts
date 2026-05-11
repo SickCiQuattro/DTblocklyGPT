@@ -56,6 +56,7 @@ export const startSyntheticBlockDrag = (
   }
 
   try {
+    Blockly.svgResize(workspace)
     const screenCoordinates = new Blockly.utils.Coordinate(
       pointerEvent.clientX,
       pointerEvent.clientY,

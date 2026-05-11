@@ -156,13 +156,13 @@ function injectGhostBlock(
   parentBlock: Blockly.Block,
   inputName: string,
   ghostDef: { type: string; label: string },
-): void {
+): boolean {
   const connection =
     inputName === '__next__'
       ? parentBlock.nextConnection
       : parentBlock.getInput(inputName)?.connection
 
-  if (!connection || connection.targetBlock()) return
+  if (!connection || connection.targetBlock()) return false
 
   Blockly.Events.disable()
   try {
@@ -179,9 +179,9 @@ function injectGhostBlock(
         ? ghost.previousConnection
         : (ghost.outputConnection ?? ghost.previousConnection)
 
-    if (ghostConnection) {
-      connection.connect(ghostConnection)
-    }
+    if (!ghostConnection) return false
+    connection.connect(ghostConnection)
+    return true
   } finally {
     Blockly.Events.enable()
   }
@@ -190,7 +190,8 @@ function injectGhostBlock(
  * Scans all blocks in the workspace and injects ghost blocks
  * wherever required inputs are empty. Call this after loading a task.
  */
-export function injectAllGhostBlocks(workspace: Blockly.WorkspaceSvg): void {
+export function injectAllGhostBlocks(workspace: Blockly.WorkspaceSvg): number {
+  let injectedCount = 0
   workspace.getAllBlocks(false).forEach((block) => {
     // Note: getAllBlocks may return children before parents.
     // injectGhostBlock performs a targetBlock() check that makes it idempotent,
@@ -198,9 +199,12 @@ export function injectAllGhostBlocks(workspace: Blockly.WorkspaceSvg): void {
     const inputMap = GHOST_INPUT_MAP[block.type]
     if (!inputMap) return
     Object.entries(inputMap).forEach(([inputName, ghostDef]) => {
-      injectGhostBlock(workspace, block, inputName, ghostDef)
+      if (injectGhostBlock(workspace, block, inputName, ghostDef)) {
+        injectedCount += 1
+      }
     })
   })
+  return injectedCount
 }
 
 // --- UTILITY 3: AUTOMATIC RESTORATION LISTENER -------------------------------
@@ -234,7 +238,22 @@ export function registerGhostRestoreListener(
     debounce = setTimeout(() => {
       Blockly.Events.setGroup('ghost-restore')
       try {
-        injectAllGhostBlocks(workspace)
+        const injectedCount = injectAllGhostBlocks(workspace)
+        if (injectedCount > 0) {
+          const anchorBlock = workspace.getTopBlocks(false)[0] ?? null
+          if (anchorBlock) {
+            const syntheticChange = new Blockly.Events.BlockChange(
+              anchorBlock,
+              'mutation',
+              null,
+              0,
+              injectedCount,
+            )
+            syntheticChange.recordUndo = false
+            syntheticChange.group = 'ghost-restore'
+            workspace.fireChangeListener(syntheticChange)
+          }
+        }
       } finally {
         Blockly.Events.setGroup(false)
         debounce = null

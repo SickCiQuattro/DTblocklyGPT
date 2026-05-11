@@ -61,6 +61,20 @@ export interface ConformanceResult {
 const isUnresolvedShadow = (block: Blockly.Block): boolean =>
   SHADOW_BLOCK_TYPES.has(block.type)
 
+const toShadowIssue = (block: Blockly.Block): ConformanceIssue => {
+  const nameField = block.getField('name')
+  const humanLabel = nameField
+    ? String(nameField.getValue())
+    : block.type.replace(/_/g, ' ')
+
+  return {
+    type: 'UNRESOLVED_SHADOW',
+    blockId: block.id,
+    blockType: block.type,
+    humanLabel,
+  }
+}
+
 /**
  * Recursively walks every block reachable from `root` via:
  *  - value inputs (e.g. OBJECT slot in pick_block)
@@ -80,17 +94,7 @@ const collectUnresolvedShadows = (
     if (!connected) continue
 
     if (isUnresolvedShadow(connected)) {
-      const nameField = connected.getField('name')
-      const humanLabel = nameField
-        ? String(nameField.getValue())
-        : connected.type.replace(/_/g, ' ')
-
-      found.push({
-        type: 'UNRESOLVED_SHADOW',
-        blockId: connected.id,
-        blockType: connected.type,
-        humanLabel,
-      })
+      found.push(toShadowIssue(connected))
     } else {
       // Recurse into real connected blocks (handles nested repeat, when, etc.)
       collectUnresolvedShadows(connected, found)
@@ -148,6 +152,10 @@ export const computeConformance = (
   // start block itself is never misidentified as an unresolved slot.
   const traversalRoot =
     root.type === START_BLOCK_TYPE ? (root.getNextBlock() ?? root) : root
+
+  if (isUnresolvedShadow(traversalRoot)) {
+    return { status: 'draft', issues: [toShadowIssue(traversalRoot)] }
+  }
 
   const shadowIssues = collectUnresolvedShadows(traversalRoot)
   if (shadowIssues.length > 0) {

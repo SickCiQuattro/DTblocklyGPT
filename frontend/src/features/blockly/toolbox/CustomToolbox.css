@@ -12,6 +12,7 @@
   overflow: hidden;
   box-sizing: border-box;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 
 .custom-toolbox.is-deleting {
@@ -78,17 +79,18 @@
 }
 
 .custom-toolbox__header-delete-icon {
-  color: #DC2626;
+  color: #E1592F;
   font-size: 1.14rem !important;
   flex-shrink: 0;
 }
 
 .custom-toolbox.is-deleting .custom-toolbox__header-label,
 .custom-toolbox.is-deleting .custom-toolbox__header-subtitle {
-  color: #991B1B;
+  color: #E1592F;
 }
 
 .custom-toolbox__scroll {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: 10px 8px;
@@ -447,4 +449,78 @@
   font-size: 0.68rem;
   font-weight: 500;
   line-height: 1.2;
+}
+
+/* ─── Toolbox - Delete Zone ─────────────────────────────────────── */
+.custom-toolbox__delete-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    backdrop-filter 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(0px);
+}
+
+.custom-toolbox__delete-overlay--drag-intent {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.custom-toolbox__delete-overlay--hover-confirm {
+  opacity: 1;
+  background-color: rgba(200, 77, 40, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.custom-toolbox__delete-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.custom-toolbox__delete-overlay-icon {
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 0.22s ease;
+}
+
+.custom-toolbox__delete-overlay-text {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.3px;
+  transition: color 0.22s ease;
+}
+
+.custom-toolbox__delete-overlay--drag-intent .custom-toolbox__delete-overlay-icon,
+.custom-toolbox__delete-overlay--drag-intent .custom-toolbox__delete-overlay-text {
+  color: #475569;
+}
+
+.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-icon,
+.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-text {
+  color: #FFFFFF;
+}
+
+.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-icon {
+  transform: scale(1.18) translateY(-3px);
 }

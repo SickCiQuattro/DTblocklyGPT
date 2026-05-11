@@ -39,6 +39,7 @@ interface CustomToolboxProps {
   dataActions: ActionListType[]
   dataMacros: TaskType[]
   isDeleting: boolean
+  deleteZoneState?: 'idle' | 'drag-intent' | 'hover-confirm'
   blockViewMode?: BlockViewMode
   onRootRefChange?: (element: HTMLElement | null) => void
   onBlockPointerDown: (
@@ -344,6 +345,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   dataActions,
   dataMacros,
   isDeleting,
+  deleteZoneState = 'idle',
   blockViewMode = 'complete',
   onRootRefChange,
   onBlockPointerDown,
@@ -363,29 +365,29 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
       <header
         className="custom-toolbox__header"
         style={
-          isDeleting
+          /*isDeleting
             ? {
                 backgroundColor: '#FEF2F2',
-                borderBottom: '2px dashed #EF4444',
+                borderBottom: '2px dashed #C84D28',
                 transition: 'all 0.2s ease-in-out',
                 paddingBottom: '4px',
               }
-            : {
-                transition: 'all 0.2s ease-in-out',
-                borderBottom: '1px solid #E2E8F0',
-              }
+            : */ {
+            transition: 'all 0.2s ease-in-out',
+            borderBottom: '1px solid #E2E8F0',
+          }
         }
       >
         <div className="custom-toolbox__header-content">
           <div className="custom-toolbox__header-title-row">
             <span
               className="custom-toolbox__header-label"
-              style={isDeleting ? { color: '#991B1B' } : {}}
+              style={isDeleting ? { color: '#C84D28' } : {}}
             >
               {isDeleting ? 'DELETE ZONE' : 'TOOLBOX'}
             </span>
 
-            {isDeleting && (
+            {/*isDeleting && (
               <span
                 className="custom-toolbox__header-delete-badge"
                 aria-hidden="true"
@@ -397,9 +399,8 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                   boxShadow: 'none',
                 }}
               >
-                {/* Space */}
                 <Trash2
-                  color="#DC2626"
+                  color="#C84D28"
                   size={22}
                   style={{
                     background: 'transparent',
@@ -407,16 +408,14 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                   }}
                 />
               </span>
-            )}
+            )*/}
           </div>
 
           <span
             className="custom-toolbox__header-subtitle"
-            style={isDeleting ? { color: '#B91C1C', fontWeight: 600 } : {}}
+            style={isDeleting ? { color: '#C84D28', fontWeight: 600 } : {}}
           >
-            {isDeleting
-              ? 'Drop block here to remove'
-              : 'Drag blocks into workspace'}
+            {isDeleting ? 'Drop block to remove' : 'Drag blocks into workspace'}
           </span>
         </div>
       </header>
@@ -442,8 +441,26 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
             />
           )
         })}
-        {/* Space */}
-        <div style={{ height: '32px', flexShrink: 0, width: '100%' }} />
+        {isDeleting && (
+          <div
+            className={`custom-toolbox__delete-overlay custom-toolbox__delete-overlay--${deleteZoneState}`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="custom-toolbox__delete-overlay-content">
+              <Trash2
+                size={48}
+                className="custom-toolbox__delete-overlay-icon"
+                aria-hidden="true"
+              />
+              <p className="custom-toolbox__delete-overlay-text">
+                {deleteZoneState === 'hover-confirm'
+                  ? 'Release to delete'
+                  : 'Drop here to remove'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   )

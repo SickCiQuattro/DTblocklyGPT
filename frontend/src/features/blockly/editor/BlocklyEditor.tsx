@@ -55,7 +55,7 @@ import {
   getMenuOptionText,
   installContextMenuBridge,
 } from './contextMenu'
-import { CustomToolboxDeleteArea } from './deleteArea'
+import { CustomToolboxDeleteArea, type DeleteZoneState } from './deleteArea'
 import { startSyntheticBlockDrag } from './dragProxy'
 import {
   explodeMacro as expandMacroTask,
@@ -190,9 +190,8 @@ function removeStartBlock(workspace: Blockly.WorkspaceSvg): void {
   Blockly.Events.disable()
   try {
     for (const startBlock of startBlocks) {
-      const target = startBlock.nextConnection?.targetBlock() as
-        | Blockly.BlockSvg
-        | null
+      const target =
+        startBlock.nextConnection?.targetBlock() as Blockly.BlockSvg | null
       if (target) {
         startBlock.nextConnection?.disconnect()
         if (target.type === SHADOW_START_BLOCK_TYPE) {
@@ -270,14 +269,12 @@ function normalizeVisibleStartBlock(workspace: Blockly.WorkspaceSvg): void {
       }
     }
 
-    const startTarget = primaryStart.nextConnection?.targetBlock() as
-      | Blockly.BlockSvg
-      | null
+    const startTarget =
+      primaryStart.nextConnection?.targetBlock() as Blockly.BlockSvg | null
     if (startTarget?.type !== SHADOW_START_BLOCK_TYPE) return
 
-    const chainedBlock = startTarget.nextConnection?.targetBlock() as
-      | Blockly.BlockSvg
-      | null
+    const chainedBlock =
+      startTarget.nextConnection?.targetBlock() as Blockly.BlockSvg | null
     if (chainedBlock?.previousConnection) {
       startTarget.nextConnection?.disconnect()
       primaryStart.nextConnection?.disconnect()
@@ -480,6 +477,8 @@ export const BlocklyEditor = ({
     ((e: Blockly.Events.Abstract) => void) | null
   >(null)
   const pendingDragCleanupRef = useRef<(() => void) | null>(null)
+  const suppressDeleteZoneForNextDragRef = useRef(false)
+  const toolboxHoverTrackingCleanupRef = useRef<(() => void) | null>(null)
   const contextMenuOptionIdRef = useRef(0)
   const keydownCleanupRef = useRef<(() => void) | null>(null)
   const onTaskStructureChangeRef = useRef(onTaskStructureChange)
@@ -500,6 +499,8 @@ export const BlocklyEditor = ({
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [isDeleting, setIsDeleting] = useState(false)
+  const [toolboxDeleteZoneState, setToolboxDeleteZoneState] =
+    useState<DeleteZoneState>('idle')
   const [historyState, setHistoryState] = useState({
     canUndo: false,
     canRedo: false,
@@ -619,6 +620,32 @@ export const BlocklyEditor = ({
     deleteAreaWorkspaceRef.current = null
   }, [])
 
+  const stopToolboxHoverTracking = useCallback(() => {
+    toolboxHoverTrackingCleanupRef.current?.()
+    toolboxHoverTrackingCleanupRef.current = null
+  }, [])
+
+  const startToolboxHoverTracking = useCallback(() => {
+    stopToolboxHoverTracking()
+
+    const onPointerMove = (event: PointerEvent) => {
+      const toolboxRect = toolboxRootRef.current?.getBoundingClientRect()
+      const isOverToolbox = Boolean(
+        toolboxRect &&
+        event.clientX >= toolboxRect.left &&
+        event.clientX <= toolboxRect.right &&
+        event.clientY >= toolboxRect.top &&
+        event.clientY <= toolboxRect.bottom,
+      )
+      setToolboxDeleteZoneState(isOverToolbox ? 'hover-confirm' : 'drag-intent')
+    }
+
+    window.addEventListener('pointermove', onPointerMove, true)
+    toolboxHoverTrackingCleanupRef.current = () => {
+      window.removeEventListener('pointermove', onPointerMove, true)
+    }
+  }, [stopToolboxHoverTracking])
+
   const registerToolboxDeleteArea = useCallback(
     (
       workspace: Blockly.WorkspaceSvg | null,
@@ -655,8 +682,14 @@ export const BlocklyEditor = ({
   // ── Context menu inline-task confirmation ──────────────────────────────────
   const handleRequestInlineTaskConfirmation =
     useCallback<RequestInlineTaskConfirmation>(
-      (macroName, onConfirm) => setInlineTaskConfirm({ macroName, onConfirm }),
-      [],
+      (macroName, onConfirm) => {
+        if (deleteConfirmMode === 'never') {
+          onConfirm()
+          return
+        }
+        setInlineTaskConfirm({ macroName, onConfirm })
+      },
+      [deleteConfirmMode],
     )
 
   // ── Macro explosion ────────────────────────────────────────────────────────
@@ -693,9 +726,12 @@ export const BlocklyEditor = ({
       keydownCleanupRef.current?.()
       keydownCleanupRef.current = null
       pendingDragCleanupRef.current = null
+      suppressDeleteZoneForNextDragRef.current = false
       setIsDeleting(false)
+      setToolboxDeleteZoneState('idle')
       shadowPicker.close()
       setContextMenu(null)
+      stopToolboxHoverTracking()
       detachWorkspaceListener()
       unregisterToolboxDeleteArea()
       workspaceRef.current = null
@@ -806,12 +842,15 @@ export const BlocklyEditor = ({
     (workspace: Blockly.WorkspaceSvg | null) => {
       detachWorkspaceListener()
       unregisterToolboxDeleteArea()
+      stopToolboxHoverTracking()
       workspaceRef.current = workspace
       onWorkspaceReady?.(workspace)
 
       if (!workspace) {
         taskLoadedRef.current = false
+        suppressDeleteZoneForNextDragRef.current = false
         setIsDeleting(false)
+        setToolboxDeleteZoneState('idle')
         shadowPicker.close()
         syncHistoryState(null)
         return
@@ -877,7 +916,10 @@ export const BlocklyEditor = ({
       const listener = (event: Blockly.Events.Abstract) => {
         if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
           syncStartBlockVisibility(workspace, showStartBlockRef.current)
+          stopToolboxHoverTracking()
           setIsDeleting(false)
+          setToolboxDeleteZoneState('idle')
+          deleteAreaRef.current?.reset()
           clearShadowBlockHighlights(workspace)
         }
 
@@ -890,12 +932,34 @@ export const BlocklyEditor = ({
             lastDragGroupRef.current =
               event.group || Blockly.utils.idGenerator.genUid()
             lastDragEndTimeRef.current = 0
-            setIsDeleting(true)
-            deleteAreaRef.current?.setActiveDragGroup(lastDragGroupRef.current)
-            const draggedBlockId = (event as any).blockId as string | undefined
+
+            const selected = Blockly.common.getSelected?.()
+            const selectedBlockId =
+              selected instanceof Blockly.BlockSvg ? selected.id : undefined
+            const draggedBlockId =
+              ((event as any).blockId as string | undefined) ?? selectedBlockId
             const draggedBlock = draggedBlockId
               ? workspace.getBlockById(draggedBlockId)
               : null
+            const isToolboxOriginDrag = suppressDeleteZoneForNextDragRef.current
+            if (isToolboxOriginDrag) {
+              suppressDeleteZoneForNextDragRef.current = false
+            }
+
+            // Only show delete zone if dragging from workspace (not from toolbox)
+            if (
+              draggedBlock &&
+              !draggedBlock.isInFlyout &&
+              !isToolboxOriginDrag
+            ) {
+              setIsDeleting(true)
+              setToolboxDeleteZoneState('drag-intent')
+              startToolboxHoverTracking()
+              deleteAreaRef.current?.setActiveDragGroup(
+                lastDragGroupRef.current,
+              )
+            }
+
             if (draggedBlock && draggedBlockId)
               highlightCompatibleShadowBlocks(
                 workspace,
@@ -904,9 +968,12 @@ export const BlocklyEditor = ({
               )
           } else if (dragEvent.isStart === false) {
             lastDragEndTimeRef.current = Date.now()
+            suppressDeleteZoneForNextDragRef.current = false
+            stopToolboxHoverTracking()
             setIsDeleting(false)
+            setToolboxDeleteZoneState('idle')
             clearShadowBlockHighlights(workspace)
-            deleteAreaRef.current?.setActiveDragGroup(null)
+            deleteAreaRef.current?.reset()
             if (taskLoadedRef.current) {
               syncWorkspacePresentation(workspace)
             }
@@ -933,7 +1000,9 @@ export const BlocklyEditor = ({
         }
 
         if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
+          stopToolboxHoverTracking()
           setIsDeleting(false)
+          setToolboxDeleteZoneState('idle')
           clearShadowBlockHighlights(workspace)
         }
 
@@ -1042,6 +1111,8 @@ export const BlocklyEditor = ({
       detachWorkspaceListener,
       unregisterToolboxDeleteArea,
       registerToolboxDeleteArea,
+      startToolboxHoverTracking,
+      stopToolboxHoverTracking,
       resolveShadowPickerPosition,
       syncHistoryState,
       shadowPicker,
@@ -1223,6 +1294,7 @@ export const BlocklyEditor = ({
           moveEvent.clientY - startY,
         )
         if (distance < DRAG_THRESHOLD_PX) return
+        suppressDeleteZoneForNextDragRef.current = true
         window.dispatchEvent(new Event('toolboxDragStart'))
         cleanup()
         startSyntheticBlockDrag(moveEvent, sourceElement, item, workspace)
@@ -1256,6 +1328,7 @@ export const BlocklyEditor = ({
         dataActions={dataActions}
         dataMacros={availableMacros}
         isDeleting={isDeleting}
+        deleteZoneState={toolboxDeleteZoneState}
         blockViewMode={blockViewMode}
         onRootRefChange={handleToolboxRootRefChange}
         onBlockPointerDown={handleBlockPointerDown}

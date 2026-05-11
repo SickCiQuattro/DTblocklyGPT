@@ -5,11 +5,12 @@
  * that blocks dragged over the toolbox panel are deleted rather than snapping
  * back to their original position.
  *
- * `CustomToolboxDeleteArea` extends `Blockly.DeleteArea` and adds a CSS class
- * to the toolbox element during an active drag so the UI can highlight the
- * drop zone visually.
+ * Visual state (idle / drag-intent / hover-confirm) is handled in the parent
+ * editor component; this class only defines delete hit-testing and drop logic.
  */
 import * as Blockly from 'blockly/core'
+
+export type DeleteZoneState = 'idle' | 'drag-intent' | 'hover-confirm'
 
 export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
   private readonly toolboxElement: HTMLElement
@@ -33,18 +34,7 @@ export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
     return new Blockly.utils.Rect(r.top, r.bottom, -BIG, r.right)
   }
 
-  override onDragEnter(e: Blockly.IDraggable) {
-    super.onDragEnter(e)
-    this.toolboxElement.classList.add('custom-toolbox--delete-over')
-  }
-
-  override onDragExit(e: Blockly.IDraggable) {
-    super.onDragExit(e)
-    this.toolboxElement.classList.remove('custom-toolbox--delete-over')
-  }
-
   override onDrop(dragElement: Blockly.IDraggable): void {
-    this.toolboxElement.classList.remove('custom-toolbox--delete-over')
     const block = dragElement as Blockly.BlockSvg
     if (!block?.dispose) return
 
@@ -56,5 +46,9 @@ export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
       Blockly.Events.setGroup(false)
       this.activeDragGroup = null
     }
+  }
+
+  reset() {
+    this.activeDragGroup = null
   }
 }
