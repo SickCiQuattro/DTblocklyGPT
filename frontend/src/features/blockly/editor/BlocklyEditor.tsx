@@ -27,7 +27,11 @@ import {
 } from '@mui/material'
 import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 
-import { AbstractStep, TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+} from 'pages/tasks/types'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -517,13 +521,12 @@ export const BlocklyEditor = ({
   } | null>(null)
 
   // ── Exclude current task from macro list ───────────────────────────────────
-  const availableMacros = useMemo(
-    () =>
-      currentTaskId === undefined
-        ? dataMacros
-        : dataMacros.filter((m) => m.id !== currentTaskId),
-    [currentTaskId, dataMacros],
-  )
+  const availableMacros = useMemo(() => {
+    const publishedMacros = dataMacros.filter(isPublished)
+    return currentTaskId === undefined
+      ? publishedMacros
+      : publishedMacros.filter((m) => m.id !== currentTaskId)
+  }, [currentTaskId, dataMacros])
 
   // ── Shadow picker ──────────────────────────────────────────────────────────
   const shadowPicker = useShadowPicker({

@@ -15,16 +15,29 @@ from copy import deepcopy
 
 
 def save_graphic_task(request: HttpRequest) -> HttpResponse:
+    """
+    Saves the editor workspace.
+
+    Transient write path: writes to both `workspace` (JSONField, new)
+    and `code` (serialized TextField, legacy) until all consumers
+    have migrated to read `workspace`.
+    """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.PUT.value:
                 data = loads(request.body)
                 task_id = data.get("id")
                 taskStructure = data.get("taskStructure")
-                taskStrcutureDump = None
-                if taskStructure is not None:
-                    taskStrcutureDump = dumps(taskStructure)
-                Task.objects.filter(id=task_id).update(code=taskStrcutureDump)
+
+                # taskStructure is already a dict (the frontend sends parsed JSON).
+                # code remains a serialized string for legacy compatibility.
+                # workspace receives the dict directly (JSONField).
+                # code_value = dumps(taskStructure) if taskStructure is not None else None
+                workspace_value = taskStructure  # None or dict
+                # code = code_value,
+                Task.objects.filter(id=task_id).update(
+                    workspace=workspace_value,
+                )
                 return success_response()
             else:
                 return invalid_request_method()
@@ -35,6 +48,17 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
 
 
 def get_graphic_task(request: HttpRequest) -> HttpResponse:
+    """
+    Returns the editor workspace for a task.
+
+    Read path with fallback:
+    1. Use `workspace` (JSONField) if set  →  new path
+    2. Fallback to `loads(code)` if workspace is None  →  legacy path
+    3. If both are None  →  returns code: None
+
+    The find_and_modify entity reconciliation always operates on a dict,
+    regardless of the path used for loading.
+    """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
@@ -43,26 +67,33 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return success_response()
 
-                if task.code is None:
-                    response = {}
-                    response["name"] = task.name
-                    response["code"] = None
-                    return success_response(response)
+                # ── Read path with fallback ───────────────────────────────────
+                raw_workspace = task.workspace
 
-                _, updated_task_code = find_and_modify(
-                    loads(task.code), "OBJECT", search_library_data, request.user.id
+                if raw_workspace is None:
+                    # Fallback to the legacy TextField
+                    if task.code:
+                        try:
+                            raw_workspace = loads(task.code)
+                        except Exception:
+                            raw_workspace = None
+
+                if raw_workspace is None:
+                    return success_response({"name": task.name, "code": None})
+
+                # ── Entity reconciliation (unchanged) ─────────────────────────
+                _, updated = find_and_modify(
+                    raw_workspace, "OBJECT", search_library_data, request.user.id
                 )
-                _, updated_task_code = find_and_modify(
-                    updated_task_code, "LOCATION", search_library_data, request.user.id
+                _, updated = find_and_modify(
+                    updated, "LOCATION", search_library_data, request.user.id
                 )
-                _, updated_task_code = find_and_modify(
-                    updated_task_code, "ACTION", search_library_data, request.user.id
+                _, updated = find_and_modify(
+                    updated, "ACTION", search_library_data, request.user.id
                 )
 
-                response = {}
-                response["name"] = task.name
-                response["code"] = dumps(updated_task_code)
-                return success_response(response)
+                return success_response({"name": task.name, "code": updated})
+
             else:
                 return invalid_request_method()
         else:

@@ -29,6 +29,8 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
                         "owner",
                         "owner__username",
                         "shared",
+                        "task_type",
+                        "status",
                         "code",
                     )
                     .order_by("-last_modified")
@@ -50,15 +52,17 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                 task = Task.objects.filter(id=task_id).first()
                 if task is None:
                     return success_response()
-                task_fields = task.to_dict(
-                    [
-                        "id",
-                        "name",
-                        "description",
-                        "shared",
-                        "code",
-                    ]
-                )
+
+                # Serialize workspace with fallback (legacy)
+                raw_workspace = task.workspace
+
+                task_fields = {
+                    "id": task.id,
+                    "name": task.name,
+                    "description": task.description,
+                    "shared": task.shared,
+                    "code": raw_workspace,
+                }
                 return success_response(task_fields)
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)

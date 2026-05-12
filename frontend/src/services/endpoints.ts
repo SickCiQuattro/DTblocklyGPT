@@ -11,6 +11,7 @@ const HOME_API = `${SERVER_API}/home`
 const GRAPHIC_API = `${SERVER_API}/graphic`
 const CHAT_API = `${SERVER_API}/chat`
 const TASK_API = `${SERVER_API}/task`
+const MACRO_API = `${SERVER_API}/macro`
 
 export const endpoints = {
   auth: {
@@ -63,5 +64,10 @@ export const endpoints = {
     run: `${TASK_API}/run/`,
     simulate: `${TASK_API}/simulate/`,
     analyze: `${TASK_API}/analyze/`,
+  },
+  macro: {
+    publish: `${MACRO_API}/publish/`,
+    saveDraft: `${MACRO_API}/saveDraft/`,
+    discardDraft: `${MACRO_API}/discardDraft/`,
   },
 }

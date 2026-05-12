@@ -6,8 +6,9 @@ from django.utils.timezone import now
 import json
 
 
-# For update the database and create table
-# poetry run python manage.py makemigrations backend && poetry run python manage.py migrate --run-syncdb
+# ─── Schema update workflow ─────────────────────
+# poetry run python manage.py makemigrations backend --name <name>
+# poetry run python manage.py migrate backend
 
 
 class Action(models.Model):
@@ -152,6 +153,27 @@ class Location(models.Model):
         return response_data
 
 
+# ─── Constants lifecycle ───────────────────────────────────────────────────────
+
+TASK_TYPE_TASK = "task"
+TASK_TYPE_MACRO = "macro_task"
+
+TASK_TYPE_CHOICES = [
+    (TASK_TYPE_TASK, "Task"),
+    (TASK_TYPE_MACRO, "Macro Task"),
+]
+
+STATUS_DRAFT = "draft"
+STATUS_PUBLISHED = "published"
+STATUS_PUBLISHED_WITH_DRAFT = "published_with_draft"
+
+STATUS_CHOICES = [
+    (STATUS_DRAFT, "Draft"),
+    (STATUS_PUBLISHED, "Published"),
+    (STATUS_PUBLISHED_WITH_DRAFT, "Published with Draft"),
+]
+
+
 class Task(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200)
@@ -160,6 +182,36 @@ class Task(models.Model):
     description = models.CharField(max_length=200, default=None, null=True, blank=True)
     last_modified = models.DateTimeField(default=now)
     shared = models.BooleanField(default=False)
+
+    task_type = models.CharField(
+        max_length=20,
+        choices=TASK_TYPE_CHOICES,
+        default=TASK_TYPE_TASK,
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+    )
+
+    # Transient workspace (current editor read/write)
+    # Read path: workspace if set, fallback to loads(code)
+    # Write path: dual write to workspace + code during transition
+    workspace = models.JSONField(null=True, blank=True)
+
+    # Immutable snapshot of the last published version (macro_task only)
+    published_workspace = models.JSONField(null=True, blank=True)
+
+    # Isolated working draft (macro_task only)
+    draft_workspace = models.JSONField(null=True, blank=True)
+
+    # SHA-256 (16 char hex) of the serialized published_workspace.
+    # Used to detect mismatches in referenced macro_task_block blocks.
+    signature = models.CharField(max_length=64, blank=True, default="")
+
+    # List of IDs (int) of the macros this task directly depends on.
+    # Populated by the frontend at publish time; used for DAG check.
+    dependencies = models.JSONField(default=list, blank=True)
 
     def to_dict(self, keys):
         response_data = {}
@@ -178,7 +230,47 @@ class Task(models.Model):
                 response_data[key] = self.last_modified
             elif key == "shared":
                 response_data[key] = self.shared
+            elif key == "task_type":
+                response_data[key] = self.task_type
+            elif key == "status":
+                response_data[key] = self.status
+            elif key == "workspace":
+                response_data[key] = self.workspace
+            elif key == "published_workspace":
+                response_data[key] = self.published_workspace
+            elif key == "draft_workspace":
+                response_data[key] = self.draft_workspace
+            elif key == "signature":
+                response_data[key] = self.signature
+            elif key == "dependencies":
+                response_data[key] = self.dependencies
         return response_data
+
+    @property
+    def effective_workspace(self):
+        """
+        Unified read path: returns the workspace as a dict.
+        Uses workspace if set, otherwise deserializes code (legacy).
+        """
+        if self.workspace is not None:
+            return self.workspace
+        if self.code:
+            try:
+                return json.loads(self.code)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return None
+
+    @property
+    def is_macro(self):
+        return self.task_type == TASK_TYPE_MACRO
+
+    @property
+    def is_published(self):
+        return self.status in (STATUS_PUBLISHED, STATUS_PUBLISHED_WITH_DRAFT)
+
+    class Meta:
+        ordering = ["-last_modified"]
 
 
 class Robot(models.Model):

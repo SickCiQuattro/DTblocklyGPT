@@ -74,6 +74,9 @@ export const fetchApi = async <
           case 0:
             toast.error(MessageText.noConnection)
             break
+          case 202:
+            // Breaking changes
+            return error.response.data.payload as TResponse
           case 400:
             toast.error(err.message)
             return error.response.data.payload as TResponse
@@ -86,6 +89,10 @@ export const fetchApi = async <
             Cookies.remove('csrftoken')
             Cookies.remove('sessionid')
             break
+          case 409:
+            // DAG cycle
+            toast.error(err.message)
+            return error.response.data.payload as TResponse
           case 500:
             toast.error(err.message)
             break

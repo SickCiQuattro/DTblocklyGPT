@@ -74,7 +74,7 @@ export const SplittedLayout = ({
     void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
-      body: { taskStructure: abstractTask, id },
+      body: { taskStructure: blocklyTaskStructure, id },
     }).then(() => {
       toast.success(MessageText.success)
       void dispatch(toggleEditMode())

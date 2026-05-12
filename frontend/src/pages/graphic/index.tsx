@@ -10,10 +10,13 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+} from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
-import { AbstractStep } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 
 import { SplittedLayout } from './splittedLayout'
@@ -30,7 +33,7 @@ const Graphic = () => {
   const dispatch = useDispatch()
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
-    { name: string; code: string },
+    { name: string; code: Record<string, unknown> | null },
     Error
   >({
     url: endpoints.graphic.getGraphicTask,
@@ -58,12 +61,12 @@ const Graphic = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
-    TaskType[],
-    Error
-  >({
-    url: endpoints.home.libraries.tasks,
-  })
+  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
+    {
+      url: endpoints.home.libraries.tasks,
+    },
+  )
+  const dataMacros = (tasks ?? []).filter(isPublished)
 
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
@@ -76,8 +79,7 @@ const Graphic = () => {
     void navigate('/tasks')
   }
 
-  const data =
-    dataTask && dataObjects && dataActions && dataLocations && dataMacros
+  const data = dataTask && dataObjects && dataActions && dataLocations && tasks
 
   const isLoading =
     isLoadingTask ||
@@ -86,15 +88,7 @@ const Graphic = () => {
     isLoadingLocations ||
     isLoadingMacros
 
-  const parseTaskCode = (taskCode: string): unknown => {
-    try {
-      return JSON.parse(taskCode) as unknown
-    } catch {
-      return null
-    }
-  }
-
-  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const parsedTaskCode = dataTask?.code ?? null
   const currentTaskId =
     id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
 

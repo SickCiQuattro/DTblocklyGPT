@@ -67,12 +67,11 @@ export const RightPanel = ({
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
     // const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
-    const abstractTask = blocklyTaskStructure
 
     void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
-      body: { taskStructure: abstractTask, id },
+      body: { taskStructure: blocklyTaskStructure, id },
     }).then(() => {
       toast.success(MessageText.success)
       void dispatch(toggleEditMode())

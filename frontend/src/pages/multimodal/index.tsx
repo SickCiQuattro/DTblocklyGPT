@@ -10,11 +10,20 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+} from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
-import { AbstractStep } from 'pages/tasks/types'
 
 import { SplittedLayout } from './splittedLayout'
+
+const isCustomBlock = (value: unknown): value is CustomBlock =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string'
 
 const Multimodal = () => {
   const { id } = useParams()
@@ -22,7 +31,7 @@ const Multimodal = () => {
   const dispatch = useDispatch()
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
-    { name: string; code: string },
+    { name: string; code: Record<string, unknown> | null },
     Error
   >({
     url: endpoints.graphic.getGraphicTask,
@@ -50,12 +59,12 @@ const Multimodal = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
-    TaskType[],
-    Error
-  >({
-    url: endpoints.home.libraries.tasks,
-  })
+  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
+    {
+      url: endpoints.home.libraries.tasks,
+    },
+  )
+  const dataMacros = (tasks ?? []).filter(isPublished)
 
   const title = dataTask
     ? `Multimodal interface for the task: "${dataTask.name}"`
@@ -67,8 +76,7 @@ const Multimodal = () => {
     void navigate('/tasks')
   }
 
-  const data =
-    dataTask && dataObjects && dataActions && dataLocations && dataMacros
+  const data = dataTask && dataObjects && dataActions && dataLocations && tasks
   const isLoading =
     isLoadingTask ||
     isLoadingObjects ||
@@ -76,15 +84,7 @@ const Multimodal = () => {
     isLoadingLocations ||
     isLoadingMacros
 
-  const parseTaskCode = (taskCode: string): unknown => {
-    try {
-      return JSON.parse(taskCode) as unknown
-    } catch {
-      return null
-    }
-  }
-
-  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const parsedTaskCode = dataTask?.code ?? null
   const currentTaskId =
     id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const abstractTaskCode: AbstractStep[] =
@@ -92,7 +92,9 @@ const Multimodal = () => {
       ? []
       : Array.isArray(parsedTaskCode)
         ? (parsedTaskCode as AbstractStep[])
-        : (blocklyToAbstract(parsedTaskCode as CustomBlock) ?? [])
+        : isCustomBlock(parsedTaskCode)
+          ? (blocklyToAbstract(parsedTaskCode) ?? [])
+          : []
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))
