@@ -10,7 +10,12 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { AbstractStep, TaskType, isPublished } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+  isMacroTask,
+} from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
@@ -25,6 +30,8 @@ const isBlockState = (value: unknown): value is State =>
 
 const Graphic = () => {
   const { id } = useParams()
+  const currentTaskId =
+    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -62,7 +69,10 @@ const Graphic = () => {
       url: endpoints.home.libraries.tasks,
     },
   )
-  const dataMacros = (tasks ?? []).filter(isPublished)
+
+  const dataMacros = (tasks ?? []).filter(
+    (t) => isMacroTask(t) && isPublished(t) && t.id !== currentTaskId,
+  )
 
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
@@ -85,8 +95,6 @@ const Graphic = () => {
     isLoadingMacros
 
   const parsedTaskCode = dataTask?.code ?? null
-  const currentTaskId =
-    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
 
   const normalizedTaskCode: State | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)

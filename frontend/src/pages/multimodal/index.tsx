@@ -10,7 +10,12 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { AbstractStep, TaskType, isPublished } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+  isMacroTask,
+} from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 import { SplittedLayout } from './splittedLayout'
@@ -60,7 +65,7 @@ const Multimodal = () => {
       url: endpoints.home.libraries.tasks,
     },
   )
-  const dataMacros = (tasks ?? []).filter(isPublished)
+  const dataMacros = (tasks ?? []).filter(isMacroTask).filter(isPublished)
 
   const title = dataTask
     ? `Multimodal interface for the task: "${dataTask.name}"`

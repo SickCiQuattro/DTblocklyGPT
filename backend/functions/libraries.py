@@ -31,7 +31,7 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
                         "shared",
                         "task_type",
                         "status",
-                        "code",
+                        "signature",
                     )
                     .order_by("-last_modified")
                 )
@@ -75,6 +75,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                 task_name = data.get("name")
                 task_shared = data.get("shared")
                 task_description = data.get("description")
+                task_type = data.get("task_type", "task")
                 task_owner = User.objects.get(id=request.user.id)
                 date = getDateTimeNow()
                 # check if the name already exists
@@ -95,6 +96,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     description=task_description,
                     shared=task_shared,
                     last_modified=date,
+                    task_type=task_type,
                 )
                 response = {"id": task_created.id}
                 return success_response(response)
@@ -120,11 +122,13 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"nameAlreadyExists": True}
                     return bad_request("Name already exists", data_result)
 
+                task_type = data.get("task_type")
                 Task.objects.filter(id=task_id).update(
                     name=task_name,
                     description=task_description,
                     shared=task_shared,
                     last_modified=date,
+                    task_type=task_type,
                 )
                 return success_response()
             else:

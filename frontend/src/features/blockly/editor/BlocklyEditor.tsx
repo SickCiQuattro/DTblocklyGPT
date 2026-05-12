@@ -913,7 +913,7 @@ export const BlocklyEditor = ({
 
       // ── Main workspace event listener ──────────────────────────────────────
       const listener = (event: Blockly.Events.Abstract) => {
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
+        if (event.type === Blockly.Events.BLOCK_DELETE) {
           syncStartBlockVisibility(workspace, showStartBlockRef.current)
           stopToolboxHoverTracking()
           setIsDeleting(false)
@@ -923,7 +923,7 @@ export const BlocklyEditor = ({
         }
 
         // Drag start / end: toggle "delete zone" mode and shadow highlighting
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
+        if (event.type === Blockly.Events.BLOCK_DRAG) {
           const dragEvent = event as Blockly.Events.Abstract & {
             isStart?: boolean
           }
@@ -996,13 +996,6 @@ export const BlocklyEditor = ({
             const top = undoStack[undoStack.length - 1]
             if (!top.group) top.group = lastDragGroupRef.current
           }
-        }
-
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
-          stopToolboxHoverTracking()
-          setIsDeleting(false)
-          setToolboxDeleteZoneState('idle')
-          clearShadowBlockHighlights(workspace)
         }
 
         // Shadow block click: open the picker

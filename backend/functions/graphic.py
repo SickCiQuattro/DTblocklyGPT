@@ -37,6 +37,8 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 # code = code_value,
                 Task.objects.filter(id=task_id).update(
                     workspace=workspace_value,
+                    task_type='macro_task',
+                    status='published',
                 )
                 return success_response()
             else:

@@ -22,7 +22,7 @@ import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 
-import { TaskDetailType } from './types'
+import { TaskDetailType, TaskTypeField } from './types'
 
 export enum TypeNewTask {
   CHAT = 'chat',
@@ -34,6 +34,7 @@ interface FormTaskProps {
   data: TaskDetailType | undefined
   insertMode: boolean
   backFunction: () => void
+  taskType?: TaskTypeField
 }
 
 interface SaveTaskResponse {
@@ -41,18 +42,27 @@ interface SaveTaskResponse {
   id?: number
 }
 
-export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
+type FormValues = Omit<TaskDetailType, 'code'> & {
+  code: Record<string, unknown> | null
+}
+
+export const FormTask = ({
+  data,
+  insertMode,
+  backFunction,
+  taskType = 'task',
+}: FormTaskProps) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type')
 
   const onSubmit = async (
-    values: TaskDetailType,
+    values: FormValues,
     { setStatus, setSubmitting, setFieldError, setFieldTouched },
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    void fetchApi<SaveTaskResponse, TaskDetailType>({
+    void fetchApi<SaveTaskResponse, FormValues>({
       url: endpoints.home.libraries.task,
       method,
       body: values,
@@ -90,13 +100,16 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
   }
 
   return (
-    <Formik
+    <Formik<FormValues>
       initialValues={{
-        id: data?.id || -1,
-        name: data?.name || '',
-        description: data?.description || '',
-        code: data?.code || '',
-        shared: data?.shared || false,
+        id: data?.id ?? -1,
+        name: data?.name ?? '',
+        description: data?.description ?? '',
+        code: data?.code ?? null,
+        shared: data?.shared ?? false,
+        task_type: data?.task_type ?? taskType,
+        status: data?.status ?? 'draft',
+        signature: data?.signature ?? '',
       }}
       validationSchema={YupObject().shape({
         name: YupString()
@@ -147,7 +160,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
               <Stack spacing={1}>
                 <TextField
                   id="name"
-                  value={values.name || ''}
+                  value={values.name}
                   name="name"
                   label="Name"
                   onBlur={handleBlur}
@@ -166,7 +179,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
               <Stack spacing={1}>
                 <TextField
                   id="description"
-                  value={values.description || ''}
+                  value={values.description}
                   name="description"
                   label="Description"
                   onBlur={handleBlur}
@@ -206,7 +219,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                         children: (
                           <pre>
                             {values.code
-                              ? JSON.stringify(JSON.parse(values.code), null, 2)
+                              ? JSON.stringify(values.code, null, 2)
                               : ''}
                           </pre>
                         ),
