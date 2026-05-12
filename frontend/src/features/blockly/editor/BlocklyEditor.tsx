@@ -27,11 +27,7 @@ import {
 } from '@mui/material'
 import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 
-import {
-  AbstractStep,
-  TaskType,
-  isPublished,
-} from 'pages/tasks/types'
+import { AbstractStep, TaskType, isPublished } from 'pages/tasks/types'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
