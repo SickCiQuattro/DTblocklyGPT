@@ -8,7 +8,7 @@ import { useViewSettings } from 'features/blockly/utils/useViewSettings'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskDetailType, TaskStatus, TaskType } from 'pages/tasks/types'
+import { TaskDetailType, TaskStatus, TaskType, TaskTypeField } from 'pages/tasks/types'
 import { RootState } from 'store/reducers'
 import { BlockState as State } from 'utils/blocklyTypes'
 
@@ -24,6 +24,7 @@ interface SplittedLayoutProps {
   backFunction: () => void
   macroDetailsById: Record<number, TaskDetailType>
   taskStatus: TaskStatus
+  taskType: TaskTypeField
   onLifecycleChange: () => void
 }
 
@@ -37,6 +38,7 @@ export const SplittedLayout = ({
   backFunction,
   macroDetailsById,
   taskStatus,
+  taskType,
   onLifecycleChange,
 }: SplittedLayoutProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
@@ -72,6 +74,7 @@ export const SplittedLayout = ({
         onViewSettingsChange={updateViewSettings}
         onResetViewSettings={resetViewSettings}
         taskStatus={taskStatus}
+        taskType={taskType}
         onLifecycleChange={onLifecycleChange}
       />
     </div>

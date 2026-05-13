@@ -7,7 +7,7 @@ from backend.utils.response import (
     unauthorized_request,
 )
 from backend.functions.chat import search_existing_libraries
-from backend.models import Task, Object, Action, Location
+from backend.models import Task, Object, Action, Location, TASK_TYPE_MACRO
 from django.db.models import Q
 from json import loads, dumps
 from django.contrib.auth.models import User
@@ -21,13 +21,13 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
     Body: { id, taskStructure: dict | null, publish?: bool }
 
     Behavior:
-    - publish=True  → workspace = taskStructure, status = 'published'
+    - publish=True  -> workspace = taskStructure, status = 'published'
     - publish=False (default):
-        - status == 'draft'     → stays 'draft'
-        - status == 'published' → status unchanged (no regression)
+        - status == 'draft'     -> stays 'draft'
+        - status == 'published' -> status unchanged (no regression)
 
     Never writes task_type (immutable after creation).
-    Never writes published_workspace / draft_workspace (managed by macro endpoints).
+    Never writes published_workspace / draft_workspace (managed by task_lifecycle).
     """
     try:
         if request.user.is_authenticated:
@@ -49,8 +49,6 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                         status="published",
                     )
                 else:
-                    # Save draft: update workspace, set 'draft' only if
-                    # task is not already published (no status regression)
                     update_fields = {"workspace": workspace_value}
                     if task.status == "draft":
                         update_fields["status"] = "draft"
@@ -69,10 +67,17 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
     """
     Returns the editor workspace for a task.
 
-    Read path:
-    - macro_task  → published_workspace  (never exposes draft_workspace)
-    - task        → workspace
-    Fallback to loads(code) if the primary field is None (legacy).
+    Read path per task_type:
+      macro_task:
+        - If draft_workspace is set (status == published_with_draft or first
+          open after a draft save) -> return draft_workspace so the editor
+          shows the in-progress version.
+        - Otherwise (status == published, no pending draft yet) -> return
+          published_workspace so the editor opens the last published version
+          ready to be modified.
+      task (regular):
+        - Return workspace.
+        - Legacy fallback: loads(code) if workspace is None.
 
     Response includes task_type and status so the frontend can render
     the correct toolbar (publish / save-draft / discard).
@@ -85,20 +90,20 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return success_response()
 
-                # ── Read path ─────────────────────────────────────────────────
-                raw_workspace = task.draft_workspace
-
-                if raw_workspace is None:
-                    # Legacy tasks pre-lifecycle: try the old monolithic workspace field
+                # ── Read path ──────────────────────────────────────────────
+                if task.task_type == TASK_TYPE_MACRO:
+                    # Prefer the in-progress draft; fall back to the published
+                    # snapshot when no draft has been saved yet.
+                    raw_workspace = task.draft_workspace or task.published_workspace
+                else:
                     raw_workspace = task.workspace
 
-                if raw_workspace is None:
-                    # Oldest legacy: workspace was stored as JSON string in code TextField
-                    if task.code:
-                        try:
-                            raw_workspace = loads(task.code)
-                        except Exception:
-                            raw_workspace = None
+                # Legacy fallback: workspace stored as JSON string in code field
+                if raw_workspace is None and task.code:
+                    try:
+                        raw_workspace = loads(task.code)
+                    except Exception:
+                        raw_workspace = None
 
                 if raw_workspace is None:
                     return success_response({
@@ -108,7 +113,7 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                         "status": task.status,
                     })
 
-                # ── Entity reconciliation (unchanged) ─────────────────────────
+                # ── Entity reconciliation (unchanged) ──────────────────────
                 _, updated = find_and_modify(
                     raw_workspace, "OBJECT", search_library_data, request.user.id
                 )
@@ -158,7 +163,6 @@ def find_and_modify(json_data, key_to_find, modification_function, user, branche
 
 
 def search_library_data(branch, user, key_to_find):
-    # fix: shadow block not linked
     if not branch[key_to_find] or "block" not in branch[key_to_find]:
         return
     library_type = None
@@ -170,7 +174,6 @@ def search_library_data(branch, user, key_to_find):
         library_type = Location
 
     library_data = loads(branch[key_to_find]["block"]["data"])
-    # Retrieving library data
     if library_data["id"] is None:
         (
             library_id,
@@ -188,8 +191,6 @@ def search_library_data(branch, user, key_to_find):
             library_data["keywords"] = library_keywords
             branch[key_to_find]["block"]["data"] = dumps(library_data)
             branch[key_to_find]["block"]["fields"]["name"] = library_name
-
-    # In case of renaming
     else:
         item = library_type.objects.filter(id=library_data["id"]).first()
         if item:
@@ -250,16 +251,20 @@ def get_location_graphic_list(request: HttpRequest) -> HttpResponse:
     except Exception as e:
         return error_response(str(e))
 
+
 def get_macro_list(request: HttpRequest) -> HttpResponse:
     """
+    GET api/graphic/macroList/
+
     Returns all published macro_tasks visible to the current user,
     with only the fields needed by the toolbox (id, name, status, task_type).
+    Excludes tasks in 'draft' status (not yet usable in the toolbox).
     """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
                 macros = Task.objects.filter(
-                    task_type="macro_task",
+                    task_type=TASK_TYPE_MACRO,
                     status__in=["published", "published_with_draft"],
                 ).values("id", "name", "status", "task_type")
                 return success_response(macros)

@@ -16,8 +16,7 @@ import {
   TaskDetailType,
   TaskStatus,
   TaskType,
-  isPublished,
-  isMacroTask,
+  TaskTypeField,
 } from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
@@ -43,7 +42,12 @@ const Graphic = () => {
     isLoading: isLoadingTask,
     mutate: mutateTask,
   } = useSWR<
-    { name: string; code: Record<string, unknown> | null; status: TaskStatus },
+    {
+      name: string
+      code: Record<string, unknown> | null
+      status: TaskStatus
+      task_type: TaskTypeField
+    },
     Error
   >({ url: endpoints.graphic.getGraphicTask, body: { id } })
 
@@ -68,22 +72,24 @@ const Graphic = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
-    {
-      url: endpoints.home.libraries.tasks,
-    },
-  )
+  // Use the dedicated macroList endpoint: returns only published macro_tasks,
+  // already filtered server-side. Much more efficient than loading all tasks.
+  const { data: dataMacros = [], isLoading: isLoadingMacros } = useSWR<
+    TaskType[],
+    Error
+  >({
+    url: endpoints.graphic.macroList,
+  })
 
-  const dataMacros = (tasks ?? []).filter(
-    (t) => isPublished(t) && t.id !== currentTaskId,
-  )
+  // Exclude the task currently being edited from the toolbox
+  const filteredMacros = dataMacros.filter((m) => m.id !== currentTaskId)
 
   const [macroDetailsById, setMacroDetailsById] = useState<
     Record<number, TaskDetailType>
   >({})
 
-  const macroIds = dataMacros.map((m) => m.id)
-  const macroIdsKey = macroIds.join(',')
+  const macroIds = filteredMacros.map((m) => m.id)
+  const macroIdsKey = [...macroIds].sort((a, b) => a - b).join(',')
 
   useEffect(() => {
     if (macroIds.length === 0) {
@@ -104,6 +110,7 @@ const Graphic = () => {
       })
       setMacroDetailsById(map)
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [macroIdsKey])
 
   const title = dataTask
@@ -121,8 +128,7 @@ const Graphic = () => {
     dataTask !== undefined &&
     dataObjects !== undefined &&
     dataActions !== undefined &&
-    dataLocations !== undefined &&
-    tasks !== undefined
+    dataLocations !== undefined
 
   const isLoading =
     isLoadingTask ||
@@ -163,12 +169,13 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataMacros={dataMacros}
+          dataMacros={filteredMacros}
           currentTaskId={currentTaskId}
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
           macroDetailsById={macroDetailsById}
           taskStatus={dataTask?.status ?? 'draft'}
+          taskType={dataTask?.task_type ?? 'task'}
           onLifecycleChange={() => void mutateTask()}
         />
       )}

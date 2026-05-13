@@ -44,16 +44,11 @@ from .functions.graphic import (
     get_action_graphic_list,
     get_location_graphic_list,
     get_object_graphic_list,
+    get_macro_list,
 )
 
 from .functions.task import run_task, analyze_task
 from .functions.simulate import simulate_task
-
-from .functions.macro import (
-    publish_macro_task,
-    save_macro_draft,
-    discard_macro_draft,
-)
 
 from .functions.task_lifecycle import (
     save_draft,
@@ -67,7 +62,6 @@ HOME = API + "home/"
 GRAPHIC = API + "graphic/"
 CHAT = API + "chat/"
 TASK = API + "task/"
-MACRO = API + "macro/"
 
 
 urlpatterns = [
@@ -144,6 +138,11 @@ urlpatterns = [
         get_action_graphic_list,
         name="get_action_graphic_list",
     ),
+    path(
+        GRAPHIC + "macroList/",
+        get_macro_list,
+        name="get_macro_list",
+    ),
     # TASK
     path(TASK + "run/",           run_task,      name="run_task"),
     path(TASK + "simulate/",      simulate_task, name="simulate_task"),
@@ -151,12 +150,7 @@ urlpatterns = [
     path(TASK + "save-draft/",    save_draft,    name="save_draft"),
     path(TASK + "publish/",       publish_task,  name="publish_task"),
     path(TASK + "discard-draft/", discard_draft, name="discard_draft"),
-    # Views
+    # Static + SPA catch-all (must be LAST)
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
     re_path(r"^.*$", TemplateView.as_view(template_name="base.html")),
-
-    # MACRO
-    path(MACRO + "publish/",      publish_macro_task,  name="publish_macro_task"),
-    path(MACRO + "saveDraft/",    save_macro_draft,    name="save_macro_draft"),
-    path(MACRO + "discardDraft/", discard_macro_draft, name="discard_macro_draft"),
 ]

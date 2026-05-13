@@ -39,7 +39,7 @@ import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { RootState } from 'store/reducers'
-import { TaskStatus } from 'pages/tasks/types'
+import { TaskStatus, TaskTypeField } from 'pages/tasks/types'
 
 interface RightPanelProps {
   backFunction: () => void
@@ -49,6 +49,7 @@ interface RightPanelProps {
   onViewSettingsChange: (patch: Partial<ViewSettings>) => void
   onResetViewSettings: () => void
   taskStatus: TaskStatus
+  taskType: TaskTypeField
   onLifecycleChange: () => void
 }
 
@@ -60,6 +61,7 @@ export const RightPanel = ({
   onViewSettingsChange,
   onResetViewSettings,
   taskStatus,
+  taskType,
   onLifecycleChange,
 }: RightPanelProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
@@ -95,25 +97,26 @@ export const RightPanel = ({
       body: {
         id,
         taskStructure: getBlocklyStructure(),
-        dependencies: [],
       },
-    }).then((res, status?: number) => {
-      if (status === 409) {
-        toast.error('Circular dependency detected.')
-        return
-      }
-      if (status === 202) {
-        toast.warning('Published, but some dependent tasks are outdated.')
+    })
+      .then(() => {
+        // 200 OK — published successfully
+        toast.success(MessageText.success)
         onLifecycleChange()
         void dispatch(toggleEditMode())
         backFunction()
-        return
-      }
-      toast.success(MessageText.success)
-      onLifecycleChange()
-      void dispatch(toggleEditMode())
-      backFunction()
-    })
+      })
+      .catch((err: Error) => {
+        // fetchApi encodes the HTTP status in err.name for non-2xx responses.
+        // 409 and 400 are already toasted by fetchApi; we only need to handle
+        // cases where post-publish navigation should still occur.
+        const status = Number(err.name)
+        if (status === 409) {
+          // Circular dependency — toast already shown by fetchApi, stay on page.
+          return
+        }
+        // Any other error: toast already shown by fetchApi.
+      })
   }
 
   const handleDiscardDraft = () => {
@@ -204,7 +207,12 @@ export const RightPanel = ({
         </span>
       </Tooltip>
 
-      {taskStatus === 'published_with_draft' && (
+      {/*
+        "Discard changes" is only meaningful for macro_task:
+        regular tasks have a single workspace field and no separate
+        published_workspace snapshot to revert to.
+      */}
+      {taskStatus === 'published_with_draft' && taskType === 'macro_task' && (
         <Button
           fullWidth
           variant="outlined"
