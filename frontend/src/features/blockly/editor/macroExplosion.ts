@@ -14,12 +14,19 @@ import * as Blockly from 'blockly/core'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { TaskType } from 'pages/tasks/types'
+import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { parseJson } from '../utils/serialization'
+import { AbstractStep } from 'pages/tasks/types'
 
 type WorkspaceSnapshot = Record<string, unknown>
+
+type BlocklyWorkspaceState = {
+  blocks?: {
+    blocks?: unknown[]
+  }
+}
 
 const MACRO_EXCLUDED_TYPES = new Set([
   'when_start',
@@ -59,6 +66,10 @@ const isBlockStateLike = (value: unknown): value is State => {
     'type' in value &&
     typeof (value as { type?: unknown }).type === 'string'
   )
+}
+
+const isWorkspaceState = (value: unknown): value is BlocklyWorkspaceState => {
+  return typeof value === 'object' && value !== null && 'blocks' in value
 }
 
 const stripStartBlock = (state: State): State | null => {
@@ -148,6 +159,7 @@ interface ExplodeMacroParams {
   block: Blockly.BlockSvg
   workspace: Blockly.WorkspaceSvg
   dataMacros: TaskType[]
+  macroDetailsById: Record<number, TaskDetailType>
   dataObjects: ObjectListType[]
   dataLocations: LocationListType[]
   dataActions: ActionListType[]
@@ -160,6 +172,7 @@ export const explodeMacro = ({
   block,
   workspace,
   dataMacros,
+  macroDetailsById,
   dataObjects,
   dataLocations,
   dataActions,
@@ -167,32 +180,40 @@ export const explodeMacro = ({
   if (!block || block.type !== 'macro_task_block') return
 
   const macroId = getMacroIdFromBlockData(block.data)
-  if (!macroId) {
-    return
-  }
+  if (!macroId) return
 
   const macro = dataMacros.find((task) => `${task.id}` === macroId)
-  if (!macro) {
-    return
-  }
+  if (!macro) return
 
-  const parsedCode = parseJson<unknown>(macro.code)
-  if (!parsedCode) {
-    return
-  }
+  const numericMacroId = Number(macroId)
+  if (Number.isNaN(numericMacroId)) return
+
+  const macroDetail = macroDetailsById[numericMacroId]
+  if (!macroDetail?.code) return
+
+  const parsedCode = macroDetail.code
 
   let blockState: State | null = null
 
   if (Array.isArray(parsedCode) || hasMacroStepsArray(parsedCode)) {
-    const abstractSteps = Array.isArray(parsedCode)
-      ? parsedCode
-      : parsedCode.steps
+    const rawSteps = Array.isArray(parsedCode) ? parsedCode : parsedCode.steps
+    const abstractSteps = rawSteps as AbstractStep[]
+
     blockState = abstractToBlockly(
       abstractSteps,
       dataObjects,
       dataLocations,
       dataActions,
     ) as State | null
+  } else if (isWorkspaceState(parsedCode)) {
+    const topBlocks = parsedCode.blocks?.blocks ?? []
+    const firstRealBlock = topBlocks.find(
+      (candidate) =>
+        isBlockStateLike(candidate) &&
+        !MACRO_EXCLUDED_TYPES.has(candidate.type),
+    )
+
+    blockState = isBlockStateLike(firstRealBlock) ? firstRealBlock : null
   } else if (isBlockStateLike(parsedCode)) {
     blockState = parsedCode
   }

@@ -1,4 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { fetchApi } from 'services/api'
+import { TaskDetailType } from 'pages/tasks/types'
 import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -74,6 +76,29 @@ const Graphic = () => {
     (t) => isMacroTask(t) && isPublished(t) && t.id !== currentTaskId,
   )
 
+  const [macroDetailsById, setMacroDetailsById] = useState<
+    Record<number, TaskDetailType>
+  >({})
+
+  useEffect(() => {
+    if (dataMacros.length === 0) return
+    const ids = dataMacros.map((m) => m.id)
+    Promise.all(
+      ids.map((macroId) =>
+        fetchApi<TaskDetailType>({
+          url: endpoints.home.libraries.task,
+          body: { id: macroId },
+        }),
+      ),
+    ).then((results) => {
+      const map: Record<number, TaskDetailType> = {}
+      results.forEach((detail, i) => {
+        if (detail) map[ids[i]] = detail
+      })
+      setMacroDetailsById(map)
+    })
+  }, [dataMacros.length])
+
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
     : ''
@@ -130,6 +155,7 @@ const Graphic = () => {
           currentTaskId={currentTaskId}
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
+          macroDetailsById={macroDetailsById}
         />
       )}
     </MainCard>

@@ -19,7 +19,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { TaskType } from 'pages/tasks/types'
+import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { type BlockViewMode } from '../utils/useViewSettings'
 
 import {
@@ -41,6 +41,7 @@ interface CustomToolboxProps {
   isDeleting: boolean
   deleteZoneState?: 'idle' | 'drag-intent' | 'hover-confirm'
   blockViewMode?: BlockViewMode
+  macroDetailsById: Record<number, TaskDetailType>
   onRootRefChange?: (element: HTMLElement | null) => void
   onBlockPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
@@ -61,6 +62,7 @@ const resolveDynamicBlocks = (
   dataLocations: LocationListType[],
   dataActions: ActionListType[],
   dataMacros: TaskType[],
+  macroDetailsById: Record<number, TaskDetailType>,
 ): ToolboxBlockItem[] => {
   const resolved: ToolboxBlockItem[] = []
 
@@ -113,6 +115,7 @@ const resolveDynamicBlocks = (
       case 'macro_task_block':
         dataMacros.forEach((macro) => {
           const displayName = macro.name?.trim() || `Task ${macro.id}`
+          const detail = macroDetailsById[macro.id]
           const summary =
             macro.description?.trim() && macro.description.trim().length > 0
               ? macro.description.trim()
@@ -124,7 +127,7 @@ const resolveDynamicBlocks = (
             colour: block.colour,
             fields: { name: displayName },
             data: JSON.stringify({ id: macro.id, name: displayName }),
-            macroCode: macro.code,
+            macroCode: detail?.code != null ? JSON.stringify(detail.code) : undefined,
             description: summary,
             inputs: 'None',
             outputs: 'Sequence Execution',
@@ -349,6 +352,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   blockViewMode = 'complete',
   onRootRefChange,
   onBlockPointerDown,
+  macroDetailsById,
 }) => {
   const [expandedKey, setExpandedKey] = useState<string | null>('logic-control')
 
@@ -428,6 +432,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
             dataLocations,
             dataActions,
             dataMacros,
+            macroDetailsById,
           )
 
           return (

@@ -27,7 +27,12 @@ import {
 } from '@mui/material'
 import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 
-import { AbstractStep, TaskType, isPublished } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskDetailType,
+  TaskType,
+  isPublished,
+} from 'pages/tasks/types'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -429,6 +434,7 @@ interface BlocklyEditorProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros?: TaskType[]
+  macroDetailsById?: Record<number, TaskDetailType>
   currentTaskId?: number
   dataTask: State | null
   editMode?: boolean
@@ -457,6 +463,7 @@ export const BlocklyEditor = ({
   dataObjects,
   dataActions,
   dataMacros = [],
+  macroDetailsById = {},
   currentTaskId,
   dataTask,
   editMode = true,
@@ -698,12 +705,19 @@ export const BlocklyEditor = ({
         block,
         workspace,
         dataMacros: availableMacros,
+        macroDetailsById,
         dataObjects,
         dataLocations,
         dataActions,
       })
     },
-    [availableMacros, dataActions, dataLocations, dataObjects],
+    [
+      availableMacros,
+      macroDetailsById,
+      dataActions,
+      dataLocations,
+      dataObjects,
+    ],
   )
 
   // ── Context menu bridge ────────────────────────────────────────────────────
@@ -1324,6 +1338,7 @@ export const BlocklyEditor = ({
         blockViewMode={blockViewMode}
         onRootRefChange={handleToolboxRootRefChange}
         onBlockPointerDown={handleBlockPointerDown}
+        macroDetailsById={macroDetailsById}
       />
       <div
         className="custom-dragdrop-workspace-wrapper"

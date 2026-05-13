@@ -8,7 +8,7 @@ import { useViewSettings } from 'features/blockly/utils/useViewSettings'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType } from 'pages/tasks/types'
+import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { RootState } from 'store/reducers'
 import { BlockState as State } from 'utils/blocklyTypes'
 
@@ -22,6 +22,7 @@ interface SplittedLayoutProps {
   currentTaskId?: number
   dataTask: State | null
   backFunction: () => void
+  macroDetailsById: Record<number, TaskDetailType>
 }
 
 export const SplittedLayout = ({
@@ -32,6 +33,7 @@ export const SplittedLayout = ({
   currentTaskId,
   dataTask,
   backFunction,
+  macroDetailsById,
 }: SplittedLayoutProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
   const isBigScreen = useMediaQuery('(min-width: 1700px)')
@@ -55,6 +57,7 @@ export const SplittedLayout = ({
         blockViewMode={viewSettings.blockViewMode}
         deleteConfirmMode={viewSettings.deleteConfirmMode}
         showStartBlock={viewSettings.showStartBlock}
+        macroDetailsById={macroDetailsById}
       />
 
       <RightPanel
