@@ -16,11 +16,16 @@ from copy import deepcopy
 
 def save_graphic_task(request: HttpRequest) -> HttpResponse:
     """
-    Saves the editor workspace.
+    Saves the editor workspace for a regular task.
 
-    Transient write path: writes to both `workspace` (JSONField, new)
-    and `code` (serialized TextField, legacy) until all consumers
-    have migrated to read `workspace`.
+    Body: { id, taskStructure: dict | null, publish?: bool }
+
+    Behavior:
+    - publish=True  → workspace = taskStructure, status = 'published'
+    - publish=False (default) → workspace = taskStructure, status unchanged
+
+    Never writes task_type (immutable after creation).
+    Never writes published_workspace / draft_workspace (managed by macro endpoints).
     """
     try:
         if request.user.is_authenticated:
@@ -28,18 +33,15 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 data = loads(request.body)
                 task_id = data.get("id")
                 taskStructure = data.get("taskStructure")
+                publish = bool(data.get("publish", False))
 
-                # taskStructure is already a dict (the frontend sends parsed JSON).
-                # code remains a serialized string for legacy compatibility.
-                # workspace receives the dict directly (JSONField).
-                # code_value = dumps(taskStructure) if taskStructure is not None else None
                 workspace_value = taskStructure  # None or dict
-                # code = code_value,
-                Task.objects.filter(id=task_id).update(
-                    workspace=workspace_value,
-                    task_type='macro_task',
-                    status='published',
-                )
+
+                update_fields = {"workspace": workspace_value}
+                if publish:
+                    update_fields["status"] = "published"
+
+                Task.objects.filter(id=task_id).update(**update_fields)
                 return success_response()
             else:
                 return invalid_request_method()
@@ -53,13 +55,13 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
     """
     Returns the editor workspace for a task.
 
-    Read path with fallback:
-    1. Use `workspace` (JSONField) if set  →  new path
-    2. Fallback to `loads(code)` if workspace is None  →  legacy path
-    3. If both are None  →  returns code: None
+    Read path:
+    - macro_task  → published_workspace  (never exposes draft_workspace)
+    - task        → workspace
+    Fallback to loads(code) if the primary field is None (legacy).
 
-    The find_and_modify entity reconciliation always operates on a dict,
-    regardless of the path used for loading.
+    Response includes task_type and status so the frontend can render
+    the correct toolbar (publish / save-draft / discard).
     """
     try:
         if request.user.is_authenticated:
@@ -69,8 +71,13 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return success_response()
 
-                # ── Read path with fallback ───────────────────────────────────
-                raw_workspace = task.workspace
+                # ── Read path ─────────────────────────────────────────────────
+                if task.task_type == "macro_task":
+                    # Always serve the published version; the draft is only
+                    # visible inside the macro's own editor session.
+                    raw_workspace = task.published_workspace
+                else:
+                    raw_workspace = task.workspace
 
                 if raw_workspace is None:
                     # Fallback to the legacy TextField
@@ -81,7 +88,12 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                             raw_workspace = None
 
                 if raw_workspace is None:
-                    return success_response({"name": task.name, "code": None})
+                    return success_response({
+                        "name": task.name,
+                        "code": None,
+                        "task_type": task.task_type,
+                        "status": task.status,
+                    })
 
                 # ── Entity reconciliation (unchanged) ─────────────────────────
                 _, updated = find_and_modify(
@@ -94,7 +106,12 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                     updated, "ACTION", search_library_data, request.user.id
                 )
 
-                return success_response({"name": task.name, "code": updated})
+                return success_response({
+                    "name": task.name,
+                    "code": updated,
+                    "task_type": task.task_type,
+                    "status": task.status,
+                })
 
             else:
                 return invalid_request_method()

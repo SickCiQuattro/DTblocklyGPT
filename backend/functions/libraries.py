@@ -16,6 +16,10 @@ from django.contrib.auth.models import User
 
 
 def get_task_list(request: HttpRequest) -> HttpResponse:
+    """Returns all tasks (and macro tasks) owned by or shared with the user.
+    Used by the management UI — no status filter applied here.
+    For the toolbox use get_published_macro_list instead.
+    """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
@@ -36,6 +40,47 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
                     .order_by("-last_modified")
                 )
                 return success_response(tasks)
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))
+
+
+def get_published_macro_list(request: HttpRequest) -> HttpResponse:
+    """
+    GET api/macro/list/
+    Returns only Macro Tasks that are visible in the toolbox:
+    status IN ('published', 'published_with_draft').
+
+    The response intentionally omits draft_workspace and workspace;
+    published_workspace is served by get_graphic_task when the block
+    is resolved inside the editor.
+    """
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.GET.value:
+                macros = (
+                    Task.objects.filter(
+                        Q(owner=request.user) | Q(shared=True),
+                        task_type="macro_task",
+                        status__in=["published", "published_with_draft"],
+                    )
+                    .values(
+                        "id",
+                        "name",
+                        "description",
+                        "last_modified",
+                        "owner",
+                        "owner__username",
+                        "shared",
+                        "status",
+                        "signature",
+                    )
+                    .order_by("-last_modified")
+                )
+                return success_response(macros)
             else:
                 return invalid_request_method()
         else:
@@ -122,13 +167,12 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"nameAlreadyExists": True}
                     return bad_request("Name already exists", data_result)
 
-                task_type = data.get("task_type")
+                # task_type is immutable after creation — never updated here.
                 Task.objects.filter(id=task_id).update(
                     name=task_name,
                     description=task_description,
                     shared=task_shared,
                     last_modified=date,
-                    task_type=task_type,
                 )
                 return success_response()
             else:
