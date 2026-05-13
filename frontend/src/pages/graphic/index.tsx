@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { fetchApi } from 'services/api'
-import { TaskDetailType } from 'pages/tasks/types'
 import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -14,6 +13,8 @@ import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import {
   AbstractStep,
+  TaskDetailType,
+  TaskStatus,
   TaskType,
   isPublished,
   isMacroTask,
@@ -37,13 +38,14 @@ const Graphic = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const { data: dataTask, isLoading: isLoadingTask } = useSWR<
-    { name: string; code: Record<string, unknown> | null },
+  const {
+    data: dataTask,
+    isLoading: isLoadingTask,
+    mutate: mutateTask,
+  } = useSWR<
+    { name: string; code: Record<string, unknown> | null; status: TaskStatus },
     Error
-  >({
-    url: endpoints.graphic.getGraphicTask,
-    body: { id },
-  })
+  >({ url: endpoints.graphic.getGraphicTask, body: { id } })
 
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
@@ -66,11 +68,9 @@ const Graphic = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
-    {
-      url: endpoints.home.libraries.tasks,
-    },
-  )
+  const { data: tasks } = useSWR<TaskType[], Error>({
+    url: endpoints.home.libraries.tasks,
+  })
 
   const dataMacros = (tasks ?? []).filter(
     (t) => isMacroTask(t) && isPublished(t) && t.id !== currentTaskId,
@@ -110,14 +110,14 @@ const Graphic = () => {
     void navigate('/tasks')
   }
 
-  const data = dataTask && dataObjects && dataActions && dataLocations && tasks
+  const data =
+    dataTask !== undefined &&
+    dataObjects !== undefined &&
+    dataActions !== undefined &&
+    dataLocations !== undefined
 
   const isLoading =
-    isLoadingTask ||
-    isLoadingObjects ||
-    isLoadingActions ||
-    isLoadingLocations ||
-    isLoadingMacros
+    isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
 
   const parsedTaskCode = dataTask?.code ?? null
 
@@ -156,6 +156,8 @@ const Graphic = () => {
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
           macroDetailsById={macroDetailsById}
+          taskStatus={dataTask?.status ?? 'draft'}
+          onLifecycleChange={() => void mutateTask()}
         />
       )}
     </MainCard>

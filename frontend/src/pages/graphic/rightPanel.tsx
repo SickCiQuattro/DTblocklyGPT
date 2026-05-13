@@ -1,6 +1,7 @@
 import React from 'react'
 import { Collapse, Divider } from 'antd'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -38,6 +39,7 @@ import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { RootState } from 'store/reducers'
+import { TaskStatus } from 'pages/tasks/types'
 
 interface RightPanelProps {
   backFunction: () => void
@@ -46,6 +48,8 @@ interface RightPanelProps {
   viewSettings: ViewSettings
   onViewSettingsChange: (patch: Partial<ViewSettings>) => void
   onResetViewSettings: () => void
+  taskStatus: TaskStatus
+  onLifecycleChange: () => void
 }
 
 export const RightPanel = ({
@@ -55,6 +59,8 @@ export const RightPanel = ({
   viewSettings,
   onViewSettingsChange,
   onResetViewSettings,
+  taskStatus,
+  onLifecycleChange,
 }: RightPanelProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
   const { id } = useParams()
@@ -64,16 +70,60 @@ export const RightPanel = ({
 
   const { isReady, formattedIssues } = useConformance(workspace)
 
-  const handleSave = () => {
-    const blocklyTaskStructure = getBlocklyStructure()
-    // const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
+  const draftTooltip =
+    formattedIssues.length > 0
+      ? formattedIssues[0]
+      : 'Complete all blocks before saving.'
 
+  // ── Lifecycle handlers ────────────────────────────────────────────────────
+
+  const handleSaveDraft = () => {
     void fetchApi({
-      url: endpoints.graphic.saveGraphicTask,
-      method: MethodHTTP.PUT,
-      body: { taskStructure: blocklyTaskStructure, id },
+      url: endpoints.task.saveDraft,
+      method: MethodHTTP.POST,
+      body: { id, taskStructure: getBlocklyStructure() },
     }).then(() => {
+      toast.success('Draft saved.')
+      onLifecycleChange()
+    })
+  }
+
+  const handlePublish = () => {
+    void fetchApi<{ stale_deps?: number[] }>({
+      url: endpoints.task.publish,
+      method: MethodHTTP.POST,
+      body: {
+        id,
+        taskStructure: getBlocklyStructure(),
+        dependencies: [],
+      },
+    }).then((res, status?: number) => {
+      if (status === 409) {
+        toast.error('Circular dependency detected.')
+        return
+      }
+      if (status === 202) {
+        toast.warning('Published, but some dependent tasks are outdated.')
+        onLifecycleChange()
+        void dispatch(toggleEditMode())
+        backFunction()
+        return
+      }
       toast.success(MessageText.success)
+      onLifecycleChange()
+      void dispatch(toggleEditMode())
+      backFunction()
+    })
+  }
+
+  const handleDiscardDraft = () => {
+    void fetchApi({
+      url: endpoints.task.discardDraft,
+      method: MethodHTTP.POST,
+      body: { id },
+    }).then(() => {
+      toast.success('Changes discarded.')
+      onLifecycleChange()
       void dispatch(toggleEditMode())
       backFunction()
     })
@@ -83,10 +133,7 @@ export const RightPanel = ({
     void dispatch(toggleEditMode())
   }
 
-  const draftTooltip =
-    formattedIssues.length > 0
-      ? formattedIssues[0]
-      : 'Complete all blocks before saving.'
+  // ── View settings handlers ────────────────────────────────────────────────
 
   const handleBlockViewModeChange = (
     _event: React.MouseEvent<HTMLElement>,
@@ -104,6 +151,79 @@ export const RightPanel = ({
     onViewSettingsChange({ deleteConfirmMode: value })
   }
 
+  // ── Edit actions ──────────────────────────────────────────────────────────
+
+  const renderEditActions = () => (
+    <>
+      {taskStatus === 'published_with_draft' && (
+        <Alert severity="info" sx={{ mb: 1, fontSize: 12 }}>
+          You have unpublished changes. The previous version is still available
+          to others.
+        </Alert>
+      )}
+
+      <Tooltip
+        title={
+          isReady ? 'All blocks are configured — ready to save.' : draftTooltip
+        }
+        arrow
+        placement="left"
+      >
+        <Chip
+          label={isReady ? 'Ready' : 'Draft'}
+          size="small"
+          color={isReady ? 'success' : 'default'}
+          variant={isReady ? 'filled' : 'outlined'}
+          sx={{
+            mb: 1,
+            width: '100%',
+            fontWeight: 600,
+            cursor: 'default',
+            letterSpacing: '0.04em',
+          }}
+        />
+      </Tooltip>
+
+      <Tooltip
+        title={isReady ? '' : draftTooltip}
+        arrow
+        placement="left"
+        disableHoverListener={isReady}
+        disableFocusListener={isReady}
+      >
+        <span style={{ display: 'block' }}>
+          <Button
+            fullWidth
+            variant={isReady ? 'contained' : 'outlined'}
+            color={isReady ? 'success' : 'primary'}
+            startIcon={<SaveOutlined />}
+            onClick={isReady ? handlePublish : handleSaveDraft}
+          >
+            {isReady ? 'Save' : 'Save draft'}
+          </Button>
+        </span>
+      </Tooltip>
+
+      {taskStatus === 'published_with_draft' && (
+        <Button
+          fullWidth
+          variant="outlined"
+          color="warning"
+          onClick={handleDiscardDraft}
+          sx={{ mt: 1 }}
+        >
+          Discard changes
+        </Button>
+      )}
+
+      <Button fullWidth onClick={handleCancel} sx={{ mt: 1 }}>
+        Close without saving
+      </Button>
+    </>
+  )
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div
       style={{
@@ -118,70 +238,14 @@ export const RightPanel = ({
           fullWidth
           variant="contained"
           startIcon={<EditOutlined />}
-          onClick={() => {
-            void dispatch(toggleEditMode())
-          }}
+          onClick={() => void dispatch(toggleEditMode())}
           color="warning"
         >
           Edit
         </Button>
       )}
 
-      {editMode && (
-        <>
-          <Tooltip
-            title={
-              isReady
-                ? 'All blocks are configured — ready to save.'
-                : draftTooltip
-            }
-            arrow
-            placement="left"
-          >
-            <Chip
-              label={isReady ? 'Ready' : 'Draft'}
-              size="small"
-              color={isReady ? 'success' : 'default'}
-              variant={isReady ? 'filled' : 'outlined'}
-              sx={{
-                mb: 1,
-                width: '100%',
-                fontWeight: 600,
-                cursor: 'default',
-                letterSpacing: '0.04em',
-              }}
-            />
-          </Tooltip>
-
-          <Tooltip
-            title={isReady ? '' : draftTooltip}
-            arrow
-            placement="left"
-            disableHoverListener={isReady}
-            disableFocusListener={isReady}
-          >
-            <span style={{ display: 'block' }}>
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<SaveOutlined />}
-                onClick={handleSave}
-                disabled={!isReady}
-              >
-                Save
-              </Button>
-            </span>
-          </Tooltip>
-
-          <Button
-            fullWidth
-            onClick={handleCancel}
-            style={{ marginTop: '1rem' }}
-          >
-            Cancel
-          </Button>
-        </>
-      )}
+      {editMode && renderEditActions()}
 
       <Divider />
 
@@ -214,7 +278,6 @@ export const RightPanel = ({
             >
               Block visualization
             </Typography>
-
             <ToggleButtonGroup
               exclusive
               fullWidth
@@ -235,7 +298,6 @@ export const RightPanel = ({
             >
               Delete confirmations
             </Typography>
-
             <ToggleButtonGroup
               exclusive
               fullWidth
@@ -256,13 +318,9 @@ export const RightPanel = ({
             >
               Start block
             </Typography>
-
             <Stack
               direction="row"
-              sx={{
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
+              sx={{ alignItems: 'center', justifyContent: 'space-between' }}
             >
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
@@ -272,7 +330,6 @@ export const RightPanel = ({
                   When disabled, orphan highlighting is also disabled.
                 </Typography>
               </Box>
-
               <Switch
                 checked={viewSettings.showStartBlock}
                 onChange={(_, checked) =>
@@ -291,7 +348,7 @@ export const RightPanel = ({
       <Divider />
 
       <h2>
-        <QuestionCircleOutlined /> Instructions & FAQ
+        <QuestionCircleOutlined /> Instructions &amp; FAQ
       </h2>
       <p>In this graphic interface you can edit your task.</p>
       <ul>

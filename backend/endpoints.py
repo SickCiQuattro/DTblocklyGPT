@@ -55,6 +55,12 @@ from .functions.macro import (
     discard_macro_draft,
 )
 
+from .functions.task_lifecycle import (
+    save_draft,
+    publish_task,
+    discard_draft,
+)
+
 API = "api/"
 AUTH = API + "auth/"
 HOME = API + "home/"
@@ -139,9 +145,12 @@ urlpatterns = [
         name="get_action_graphic_list",
     ),
     # TASK
-    path(TASK + "run/", run_task, name="run_task"),
-    path(TASK + "simulate/", simulate_task, name="simulate_task"),
-    path(TASK + "analyze/", analyze_task, name="analyze_task"),
+    path(TASK + "run/",           run_task,      name="run_task"),
+    path(TASK + "simulate/",      simulate_task, name="simulate_task"),
+    path(TASK + "analyze/",       analyze_task,  name="analyze_task"),
+    path(TASK + "save-draft/",    save_draft,    name="save_draft"),
+    path(TASK + "publish/",       publish_task,  name="publish_task"),
+    path(TASK + "discard-draft/", discard_draft, name="discard_draft"),
     # Views
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
     re_path(r"^.*$", TemplateView.as_view(template_name="base.html")),

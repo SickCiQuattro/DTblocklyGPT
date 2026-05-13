@@ -22,7 +22,9 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
 
     Behavior:
     - publish=True  → workspace = taskStructure, status = 'published'
-    - publish=False (default) → workspace = taskStructure, status unchanged
+    - publish=False (default):
+        - status == 'draft'     → stays 'draft'
+        - status == 'published' → status unchanged (no regression)
 
     Never writes task_type (immutable after creation).
     Never writes published_workspace / draft_workspace (managed by macro endpoints).
@@ -33,15 +35,27 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 data = loads(request.body)
                 task_id = data.get("id")
                 taskStructure = data.get("taskStructure")
-                publish = bool(data.get("publish", False))
+                publish = data.get("publish", False)
+
+                task = Task.objects.filter(id=task_id).first()
+                if task is None:
+                    return error_response("Task not found")
 
                 workspace_value = taskStructure  # None or dict
 
-                update_fields = {"workspace": workspace_value}
                 if publish:
-                    update_fields["status"] = "published"
+                    Task.objects.filter(id=task_id).update(
+                        workspace=workspace_value,
+                        status="published",
+                    )
+                else:
+                    # Save draft: update workspace, set 'draft' only if
+                    # task is not already published (no status regression)
+                    update_fields = {"workspace": workspace_value}
+                    if task.status == "draft":
+                        update_fields["status"] = "draft"
+                    Task.objects.filter(id=task_id).update(**update_fields)
 
-                Task.objects.filter(id=task_id).update(**update_fields)
                 return success_response()
             else:
                 return invalid_request_method()
@@ -72,15 +86,14 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                     return success_response()
 
                 # ── Read path ─────────────────────────────────────────────────
-                if task.task_type == "macro_task":
-                    # Always serve the published version; the draft is only
-                    # visible inside the macro's own editor session.
-                    raw_workspace = task.published_workspace
-                else:
+                raw_workspace = task.draft_workspace
+
+                if raw_workspace is None:
+                    # Legacy tasks pre-lifecycle: try the old monolithic workspace field
                     raw_workspace = task.workspace
 
                 if raw_workspace is None:
-                    # Fallback to the legacy TextField
+                    # Oldest legacy: workspace was stored as JSON string in code TextField
                     if task.code:
                         try:
                             raw_workspace = loads(task.code)
@@ -230,6 +243,26 @@ def get_location_graphic_list(request: HttpRequest) -> HttpResponse:
                     Q(owner=user) | Q(shared=True)
                 ).values("id", "name", "keywords")
                 return success_response(locations)
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))
+
+def get_macro_list(request: HttpRequest) -> HttpResponse:
+    """
+    Returns all published macro_tasks visible to the current user,
+    with only the fields needed by the toolbox (id, name, status, task_type).
+    """
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.GET.value:
+                macros = Task.objects.filter(
+                    task_type="macro_task",
+                    status__in=["published", "published_with_draft"],
+                ).values("id", "name", "status", "task_type")
+                return success_response(macros)
             else:
                 return invalid_request_method()
         else:

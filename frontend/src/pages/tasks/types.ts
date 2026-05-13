@@ -52,6 +52,12 @@ export const isMacroTask = (t: TaskType): t is MacroTaskType =>
 export const isPublished = (t: TaskType): boolean =>
   t.status === 'published' || t.status === 'published_with_draft'
 
+export const isDraft = (task: TaskType | TaskDetailType): boolean =>
+  task.status === 'draft'
+
+export const hasUnpublishedDraft = (task: TaskType | TaskDetailType): boolean =>
+  task.status === 'published_with_draft'
+
 // ─── Macro publish payload ────────────────────────────────────────────────────
 
 export interface PublishMacroPayload {
