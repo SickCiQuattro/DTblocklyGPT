@@ -80,7 +80,7 @@ export const RightPanel = ({
   const handleSaveDraft = () => {
     void fetchApi({
       url: endpoints.task.saveDraft,
-      method: MethodHTTP.POST,
+      method: MethodHTTP.PUT,
       body: { id, taskStructure: getBlocklyStructure() },
     }).then(() => {
       toast.success('Draft saved.')

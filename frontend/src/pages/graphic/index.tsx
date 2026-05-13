@@ -68,23 +68,30 @@ const Graphic = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: tasks } = useSWR<TaskType[], Error>({
-    url: endpoints.home.libraries.tasks,
-  })
+  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
+    {
+      url: endpoints.home.libraries.tasks,
+    },
+  )
 
   const dataMacros = (tasks ?? []).filter(
-    (t) => isMacroTask(t) && isPublished(t) && t.id !== currentTaskId,
+    (t) => isPublished(t) && t.id !== currentTaskId,
   )
 
   const [macroDetailsById, setMacroDetailsById] = useState<
     Record<number, TaskDetailType>
   >({})
 
+  const macroIds = dataMacros.map((m) => m.id)
+  const macroIdsKey = macroIds.join(',')
+
   useEffect(() => {
-    if (dataMacros.length === 0) return
-    const ids = dataMacros.map((m) => m.id)
+    if (macroIds.length === 0) {
+      setMacroDetailsById({})
+      return
+    }
     Promise.all(
-      ids.map((macroId) =>
+      macroIds.map((macroId) =>
         fetchApi<TaskDetailType>({
           url: endpoints.home.libraries.task,
           body: { id: macroId },
@@ -93,11 +100,11 @@ const Graphic = () => {
     ).then((results) => {
       const map: Record<number, TaskDetailType> = {}
       results.forEach((detail, i) => {
-        if (detail) map[ids[i]] = detail
+        if (detail) map[macroIds[i]] = detail
       })
       setMacroDetailsById(map)
     })
-  }, [dataMacros.length])
+  }, [macroIdsKey])
 
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
@@ -114,10 +121,15 @@ const Graphic = () => {
     dataTask !== undefined &&
     dataObjects !== undefined &&
     dataActions !== undefined &&
-    dataLocations !== undefined
+    dataLocations !== undefined &&
+    tasks !== undefined
 
   const isLoading =
-    isLoadingTask || isLoadingObjects || isLoadingActions || isLoadingLocations
+    isLoadingTask ||
+    isLoadingObjects ||
+    isLoadingActions ||
+    isLoadingLocations ||
+    isLoadingMacros
 
   const parsedTaskCode = dataTask?.code ?? null
 

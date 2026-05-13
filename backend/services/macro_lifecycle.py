@@ -70,14 +70,15 @@ def publish_macro(
     if not force and task.signature and task.signature != new_signature:
         # Find macros that depend on this one and still have a signature aligned
         # to the old signature (they might be impacted)
-        stale = list(
-            Task.objects.filter(
-                task_type="macro_task",
-                dependencies__contains=task.id,
-            )
-            .exclude(signature="")
-            .values_list("id", flat=True)
-        )
+        all_macros = Task.objects.filter(
+            task_type="macro_task",
+        ).exclude(signature="").only("id", "dependencies")
+
+        stale = [
+            m.id
+            for m in all_macros
+            if isinstance(m.dependencies, list) and task.id in m.dependencies
+        ]
         if stale:
             return PublishResult(
                 ok=False,
