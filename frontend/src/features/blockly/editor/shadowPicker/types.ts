@@ -8,14 +8,11 @@
  * without having to drag from the toolbox.
  *
  * ## Terminology
- *  - **ShadowPopoverType** — the semantic context of the slot being filled:
- *    entity (object/location/action), trigger (Boolean condition), or sequence (statement).
- *  - **SelectableShadowBlockType** — the set of real block types that can be
- *    created via the picker (as opposed to via toolbox drag).
- *  - **ShadowEntityBlockType** — block types (real and shadow) that map to a
- *    specific `ShadowPopoverType` when clicked.
- *  - **ShadowPickerItem** — a single row in the picker menu.
- *  - **ShadowPickerPosition** — screen coordinates at which to anchor the menu.
+ *  - **ShadowPopoverType**        — semantic context of the slot being filled.
+ *  - **SelectableShadowBlockType** — real block types creatable via the picker.
+ *  - **ShadowEntityBlockType**    — block types that map to a ShadowPopoverType.
+ *  - **ShadowPickerItem**         — a single row in the picker menu.
+ *  - **ShadowPickerPosition**     — screen coordinates for the menu anchor.
  */
 
 // ─── POPOVER CONTEXT TYPES ────────────────────────────────────────────────────
@@ -48,7 +45,6 @@ export type SelectableShadowBlockType =
   | 'logic_and_block'
   | 'logic_or_block'
   | 'logic_not_block'
-  // Sequence blocks
   | 'pick_block'
   | 'processing_block'
   | 'place_block'
@@ -81,9 +77,6 @@ export type ShadowEntityBlockType =
 
 // ─── MENU ITEM TYPES ─────────────────────────────────────────────────────────
 
-/**
- * A single selectable item in the shadow picker popover menu.
- */
 export interface ShadowPickerItem {
   /** Unique numeric ID used as the React key and for entity lookup. */
   id: number
@@ -102,21 +95,21 @@ export interface ShadowPickerItem {
    * When absent, the picker falls back to `resolveRealBlockTypeFromShadow`.
    */
   blockType?: SelectableShadowBlockType
+  /**
+   * For items backed by a macro_task, signals that the macro has a published
+   * workspace available. Items with `isMacroReady = false` are shown as
+   * disabled in the menu (the task exists but is still a draft).
+   *
+   * Undefined for non-macro items (not applicable).
+   */
+  isMacroReady?: boolean
 }
 
-/**
- * Screen coordinates (pixels) used to position the picker `<Menu>` popover.
- * Usually derived from the bounding rect of the clicked shadow block.
- */
 export interface ShadowPickerPosition {
   top: number
   left: number
 }
 
-/**
- * Shape of a backend entity object (object, location, or robot action)
- * used to build `ShadowPickerItem` entries for entity slots.
- */
 export interface ShadowEntitySource {
   id: number
   name: string

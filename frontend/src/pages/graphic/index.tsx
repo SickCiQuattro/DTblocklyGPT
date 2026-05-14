@@ -74,10 +74,11 @@ const Graphic = () => {
 
   // Use the dedicated macroList endpoint: returns only published macro_tasks,
   // already filtered server-side. Much more efficient than loading all tasks.
-  const { data: dataMacros = [], isLoading: isLoadingMacros } = useSWR<
-    TaskType[],
-    Error
-  >({
+  const {
+    data: dataMacros = [],
+    isLoading: isLoadingMacros,
+    mutate: mutateMacros,
+  } = useSWR<TaskType[], Error>({
     url: endpoints.graphic.macroList,
   })
 
@@ -99,8 +100,7 @@ const Graphic = () => {
     Promise.all(
       macroIds.map((macroId) =>
         fetchApi<TaskDetailType>({
-          url: endpoints.home.libraries.task,
-          body: { id: macroId },
+          url: `${endpoints.home.libraries.task}?id=${macroId}`,
         }),
       ),
     ).then((results) => {
@@ -110,7 +110,7 @@ const Graphic = () => {
       })
       setMacroDetailsById(map)
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [macroIdsKey])
 
   const title = dataTask
@@ -176,7 +176,10 @@ const Graphic = () => {
           macroDetailsById={macroDetailsById}
           taskStatus={dataTask?.status ?? 'draft'}
           taskType={dataTask?.task_type ?? 'task'}
-          onLifecycleChange={() => void mutateTask()}
+          onLifecycleChange={() => {
+            void mutateTask()
+            void mutateMacros()
+          }}
         />
       )}
     </MainCard>

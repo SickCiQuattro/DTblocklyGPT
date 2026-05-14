@@ -264,9 +264,10 @@ def get_macro_list(request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
                 macros = Task.objects.filter(
+                    Q(owner=request.user) | Q(shared=True),
                     task_type=TASK_TYPE_MACRO,
                     status__in=["published", "published_with_draft"],
-                ).values("id", "name", "status", "task_type")
+                ).values("id", "name", "description", "status", "task_type")
                 return success_response(macros)
             else:
                 return invalid_request_method()

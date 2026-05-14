@@ -38,9 +38,7 @@ import {
 } from './catalog'
 import {
   DIRECT_BLOCK_TYPES,
-  SHADOW_POPOVER_BY_BLOCK_TYPE,
   type SelectableShadowBlockType,
-  type ShadowEntityBlockType,
   type ShadowPickerItem,
   type ShadowPickerPosition,
   type ShadowPopoverType,
@@ -91,7 +89,7 @@ export const setShadowIconState = (
 
 interface UseShadowPickerParams {
   /** Ref to the active Blockly workspace (may be null when unmounted). */
-  workspaceRef: React.MutableRefObject<Blockly.WorkspaceSvg | null>
+  workspaceRef: React.RefObject<Blockly.WorkspaceSvg | null>
   /** Backend objects for the "object" picker context. */
   dataObjects: ObjectListType[]
   /** Backend locations for the "location" picker context. */
@@ -116,7 +114,7 @@ export interface ShadowPickerAPI {
   filteredItems: ShadowPickerItem[]
   groupedItems: Record<string, ShadowPickerItem[]>
   /** Ref kept in sync with `targetBlockId` for use outside React render cycles. */
-  targetBlockIdRef: React.MutableRefObject<string | null>
+  targetBlockIdRef: React.RefObject<string | null>
 
   // ── Actions ──
   /**
@@ -228,11 +226,7 @@ export const useShadowPicker = ({
    * @param pos         Screen coordinates at which to anchor the `<Menu>`.
    */
   const open = useCallback(
-    (
-      blockId: string,
-      type: ShadowPopoverType,
-      pos: ShadowPickerPosition,
-    ) => {
+    (blockId: string, type: ShadowPopoverType, pos: ShadowPickerPosition) => {
       setTargetBlockId(blockId)
       setPopoverType(type)
       setPosition(pos)

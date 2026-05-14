@@ -104,14 +104,17 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
 // ─── SEQUENCE ITEMS ───────────────────────────────────────────────────────────
 
 /**
- * Build the full list of items shown in the picker when the user clicks a
- * `shadow_sequence_block` or `shadow_start_sequence_block` slot.
+ * Build the full list of items shown when the user clicks a sequence shadow slot.
  *
- * Static robot / human / flow items are combined with one dynamic item per
- * macro task available to the current editor instance. The current task is
- * excluded from the macro list (cannot reference itself).
+ * Static robot/human/flow items are combined with one dynamic item per available
+ * macro task. The `isMacroReady` flag is set to `true` only for tasks with a
+ * `status` of `'published'` or `'published_with_draft'`, meaning a stable
+ * `published_workspace` exists that `explodeMacro` can expand.
  *
- * @param macros Filtered list of available macro tasks (current task excluded).
+ * Tasks still in `'draft'` state are filtered out entirely: they have no
+ * published workspace and cannot be used in other tasks.
+ *
+ * @param macros Available macro tasks (current task already excluded upstream).
  */
 export const buildSequencePickerItems = (
   macros: TaskType[],
@@ -223,14 +226,21 @@ export const buildSequencePickerItems = (
     },
   ]
 
-  const macroItems: ShadowPickerItem[] = macros.map((macro) => ({
-    id: macro.id,
-    name: macro.name?.trim() || `Task ${macro.id}`,
-    description: macro.description?.trim() || undefined,
-    keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
-    blockType: 'macro_task_block',
-    group: 'My Tasks',
-  }))
+  const macroItems: ShadowPickerItem[] = macros
+    .filter(
+      (macro) =>
+        macro.status === 'published' || macro.status === 'published_with_draft',
+    )
+    .map((macro) => ({
+      id: macro.id,
+      name: macro.name?.trim() || `Task ${macro.id}`,
+      description: macro.description?.trim() || undefined,
+      keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
+      blockType: 'macro_task_block' as const,
+      group: 'My Tasks',
+      // Signal to the picker UI that this item has a stable published workspace.
+      isMacroReady: true,
+    }))
 
   return [...staticItems, ...macroItems]
 }
@@ -415,5 +425,8 @@ export const resolveShadowPopoverType = (
     shadow_start_sequence_block: 'sequence',
   } as const
 
-  return (map as Record<string, import('./types').ShadowPopoverType>)[blockType] ?? null
+  return (
+    (map as Record<string, import('./types').ShadowPopoverType>)[blockType] ??
+    null
+  )
 }

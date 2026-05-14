@@ -98,14 +98,18 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return success_response()
 
-                # Serialize workspace with fallback (legacy)
-                raw_workspace = task.workspace
+                if task.task_type == "macro_task":
+                    raw_workspace = task.published_workspace   # il contenuto stabile
+                else:
+                    raw_workspace = task.workspace
 
                 task_fields = {
                     "id": task.id,
                     "name": task.name,
                     "description": task.description,
                     "shared": task.shared,
+                    "task_type": task.task_type,
+                    "status": task.status,
                     "code": raw_workspace,
                 }
                 return success_response(task_fields)

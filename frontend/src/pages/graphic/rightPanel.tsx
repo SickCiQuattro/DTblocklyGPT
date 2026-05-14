@@ -94,28 +94,19 @@ export const RightPanel = ({
     void fetchApi<{ stale_deps?: number[] }>({
       url: endpoints.task.publish,
       method: MethodHTTP.POST,
-      body: {
-        id,
-        taskStructure: getBlocklyStructure(),
-      },
+      body: { id, taskStructure: getBlocklyStructure() },
     })
       .then(() => {
-        // 200 OK — published successfully
         toast.success(MessageText.success)
         onLifecycleChange()
         void dispatch(toggleEditMode())
-        backFunction()
+        if (taskType !== 'macro_task') {
+          backFunction()
+        }
       })
       .catch((err: Error) => {
-        // fetchApi encodes the HTTP status in err.name for non-2xx responses.
-        // 409 and 400 are already toasted by fetchApi; we only need to handle
-        // cases where post-publish navigation should still occur.
         const status = Number(err.name)
-        if (status === 409) {
-          // Circular dependency — toast already shown by fetchApi, stay on page.
-          return
-        }
-        // Any other error: toast already shown by fetchApi.
+        if (status === 409) return
       })
   }
 
