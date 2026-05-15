@@ -68,4 +68,8 @@ export const endpoints = {
     publish: `${TASK_API}/publish/`,
     discardDraft: `${TASK_API}/discard-draft/`,
   },
+  // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
+  get macro() {
+    return this.task
+  },
 }

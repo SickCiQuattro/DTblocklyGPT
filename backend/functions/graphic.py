@@ -7,7 +7,7 @@ from backend.utils.response import (
     unauthorized_request,
 )
 from backend.functions.chat import search_existing_libraries
-from backend.models import Task, Object, Action, Location, TASK_TYPE_MACRO
+from backend.models import Task, Object, Action, Location
 from django.db.models import Q
 from json import loads, dumps
 from django.contrib.auth.models import User
@@ -67,17 +67,11 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
     """
     Returns the editor workspace for a task.
 
-    Read path per task_type:
-      macro_task:
-        - If draft_workspace is set (status == published_with_draft or first
-          open after a draft save) -> return draft_workspace so the editor
-          shows the in-progress version.
-        - Otherwise (status == published, no pending draft yet) -> return
-          published_workspace so the editor opens the last published version
-          ready to be modified.
-      task (regular):
-        - Return workspace.
-        - Legacy fallback: loads(code) if workspace is None.
+    Unified read path (task_type is ignored):
+      1. draft_workspace       — in-progress draft (status == published_with_draft)
+      2. published_workspace   — last published snapshot
+      3. workspace             — legacy write target (pre-lifecycle migration)
+      4. loads(code)           — legacy JSON string (very old records)
 
     Response includes task_type and status so the frontend can render
     the correct toolbar (publish / save-draft / discard).
@@ -90,20 +84,20 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return success_response()
 
-                # ── Read path ──────────────────────────────────────────────
-                if task.task_type == TASK_TYPE_MACRO:
-                    # Prefer the in-progress draft; fall back to the published
-                    # snapshot when no draft has been saved yet.
-                    raw_workspace = task.draft_workspace or task.published_workspace
-                else:
+                # ── Unified read path ──────────────────────────────────────
+                if task.draft_workspace is not None:
+                    raw_workspace = task.draft_workspace
+                elif task.published_workspace is not None:
+                    raw_workspace = task.published_workspace
+                elif task.workspace is not None:
                     raw_workspace = task.workspace
-
-                # Legacy fallback: workspace stored as JSON string in code field
-                if raw_workspace is None and task.code:
+                elif task.code:
                     try:
                         raw_workspace = loads(task.code)
                     except Exception:
                         raw_workspace = None
+                else:
+                    raw_workspace = None
 
                 if raw_workspace is None:
                     return success_response({
@@ -256,18 +250,23 @@ def get_macro_list(request: HttpRequest) -> HttpResponse:
     """
     GET api/graphic/macroList/
 
-    Returns all published macro_tasks visible to the current user,
-    with only the fields needed by the toolbox (id, name, status, task_type).
+    Returns all published tasks visible to the current user that can be used
+    as macro blocks in the toolbox (task_type is intentionally NOT filtered —
+    all published tasks are eligible as macro blocks).
     Excludes tasks in 'draft' status (not yet usable in the toolbox).
+    Includes published_workspace so the frontend can perform block
+    explosion (break-into-steps) and tooltip preview without a second fetch.
     """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
                 macros = Task.objects.filter(
                     Q(owner=request.user) | Q(shared=True),
-                    task_type=TASK_TYPE_MACRO,
                     status__in=["published", "published_with_draft"],
-                ).values("id", "name", "description", "status", "task_type")
+                ).values(
+                    "id", "name", "description", "status",
+                    "task_type", "signature", "published_workspace",
+                )
                 return success_response(macros)
             else:
                 return invalid_request_method()

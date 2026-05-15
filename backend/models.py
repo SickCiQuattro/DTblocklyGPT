@@ -194,22 +194,25 @@ class Task(models.Model):
         default=STATUS_DRAFT,
     )
 
-    # Transient workspace (current editor read/write)
-    # Read path: workspace if set, fallback to loads(code)
-    # Write path: dual write to workspace + code during transition
+    # Legacy workspace field (pre-lifecycle). Kept for backward compatibility.
+    # Read path fallback only: draft_workspace > published_workspace > workspace > loads(code)
     workspace = models.JSONField(null=True, blank=True)
 
-    # Immutable snapshot of the last published version (macro_task only)
+    # Immutable snapshot of the last published version (all task types)
+    # Written by publish_task. Used as the stable source for toolbox preview
+    # and block explosion (break-into-steps).
     published_workspace = models.JSONField(null=True, blank=True)
 
-    # Isolated working draft (macro_task only)
+    # Isolated working draft (all task types)
+    # Written by save_draft. Cleared on publish or discard.
+    # When set, status transitions to published_with_draft.
     draft_workspace = models.JSONField(null=True, blank=True)
 
     # SHA-256 (16 char hex) of the serialized published_workspace.
     # Used to detect mismatches in referenced macro_task_block blocks.
     signature = models.CharField(max_length=64, blank=True, default="")
 
-    # List of IDs (int) of the macros this task directly depends on.
+    # List of IDs (int) of the tasks this task directly depends on.
     # Populated by the frontend at publish time; used for DAG check.
     dependencies = models.JSONField(default=list, blank=True)
 

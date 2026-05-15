@@ -54,7 +54,13 @@ const ListTasks = () => {
     data: dataTasks,
     mutate,
     isLoading: isLoadingTasks,
-  } = useSWR<TaskType[], Error>({ url: endpoints.home.libraries.tasks })
+  } = useSWR<TaskType[], Error>(
+    { url: endpoints.home.libraries.tasks },
+    {
+      revalidateOnFocus: true,
+      revalidateOnMount: true,
+    },
+  )
   const { data: dataMyRobots, isLoading: isLoadingMyRobots } = useSWR<
     MyRobotType[],
     Error
@@ -297,7 +303,6 @@ const ListTasks = () => {
   const PaginationConfig: TablePaginationConfig = {
     pageSize: tablePageSize,
     current: tableCurrentPage,
-    total: dataTasks?.length || 0,
     onChange: (page: number, pageSize: number) => {
       setTableCurrentPage(page)
       setTablePageSize(pageSize)

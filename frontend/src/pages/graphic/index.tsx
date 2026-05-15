@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { fetchApi } from 'services/api'
+import { useMemo, useEffect } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -54,64 +53,56 @@ const Graphic = () => {
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
-  >({
-    url: endpoints.graphic.objectsGraphic,
-  })
+  >({ url: endpoints.graphic.objectsGraphic })
 
   const { data: dataActions, isLoading: isLoadingActions } = useSWR<
     ActionListType[],
     Error
-  >({
-    url: endpoints.graphic.actionsGraphic,
-  })
+  >({ url: endpoints.graphic.actionsGraphic })
 
   const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
     LocationListType[],
     Error
-  >({
-    url: endpoints.graphic.locationsGraphic,
-  })
+  >({ url: endpoints.graphic.locationsGraphic })
 
-  // Use the dedicated macroList endpoint: returns only published macro_tasks,
-  // already filtered server-side. Much more efficient than loading all tasks.
   const {
     data: dataMacros = [],
     isLoading: isLoadingMacros,
     mutate: mutateMacros,
-  } = useSWR<TaskType[], Error>({
-    url: endpoints.graphic.macroList,
-  })
+  } = useSWR<(TaskType & { published_workspace: Record<string, unknown> | null })[], Error>(
+    { url: endpoints.graphic.macroList },
+  )
 
-  // Exclude the task currently being edited from the toolbox
-  const filteredMacros = dataMacros.filter((m) => m.id !== currentTaskId)
+  // Derive macroDetailsById directly from dataMacros — no second fetch needed.
+  // published_workspace is returned by macroList and used for block explosion
+  // (break-into-steps) and tooltip preview.
+  const filteredMacros = useMemo(
+    () => dataMacros.filter((m) => m.id !== currentTaskId),
+    [dataMacros, currentTaskId],
+  )
 
-  const [macroDetailsById, setMacroDetailsById] = useState<
-    Record<number, TaskDetailType>
-  >({})
-
-  const macroIds = filteredMacros.map((m) => m.id)
-  const macroIdsKey = [...macroIds].sort((a, b) => a - b).join(',')
-
-  useEffect(() => {
-    if (macroIds.length === 0) {
-      setMacroDetailsById({})
-      return
-    }
-    Promise.all(
-      macroIds.map((macroId) =>
-        fetchApi<TaskDetailType>({
-          url: `${endpoints.home.libraries.task}?id=${macroId}`,
-        }),
+  const macroDetailsById = useMemo(
+    (): Record<number, TaskDetailType> =>
+      Object.fromEntries(
+        filteredMacros.map((m) => [
+          m.id,
+          {
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            shared: m.shared,
+            status: m.status,
+            task_type: m.task_type,
+            signature: m.signature,
+            // published_workspace is returned by get_macro_list and used for
+            // block explosion + preview. Cast via unknown as TaskDetailType
+            // code field to avoid a schema change in TaskDetailType.
+            code: (m as any).published_workspace ?? null,
+          } satisfies TaskDetailType,
+        ]),
       ),
-    ).then((results) => {
-      const map: Record<number, TaskDetailType> = {}
-      results.forEach((detail, i) => {
-        if (detail) map[macroIds[i]] = detail
-      })
-      setMacroDetailsById(map)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [macroIdsKey])
+    [filteredMacros],
+  )
 
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
@@ -142,13 +133,13 @@ const Graphic = () => {
   const normalizedTaskCode: State | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)
       ? (() => {
-          const convertedTaskCode = abstractToBlockly(
+          const converted = abstractToBlockly(
             parsedTaskCode as AbstractStep[],
-            dataObjects || [],
-            dataLocations || [],
-            dataActions || [],
+            dataObjects ?? [],
+            dataLocations ?? [],
+            dataActions ?? [],
           )
-          return isBlockState(convertedTaskCode) ? convertedTaskCode : null
+          return isBlockState(converted) ? converted : null
         })()
       : isBlockState(parsedTaskCode)
         ? parsedTaskCode
@@ -175,7 +166,6 @@ const Graphic = () => {
           backFunction={backFunction}
           macroDetailsById={macroDetailsById}
           taskStatus={dataTask?.status ?? 'draft'}
-          taskType={dataTask?.task_type ?? 'task'}
           onLifecycleChange={() => {
             void mutateTask()
             void mutateMacros()

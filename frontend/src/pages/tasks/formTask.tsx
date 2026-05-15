@@ -137,9 +137,9 @@ export const FormTask = ({
     setLifecycleLoading(true)
     try {
       await fetchApi({
-        url: endpoints.macro.publish,
+        url: endpoints.task.publish,
         method: MethodHTTP.POST,
-        body: { id: data.id, dependencies: [] },
+        body: { id: data.id, taskStructure: data.code ?? null },
       })
       toast.success('Task published successfully')
       await onLifecycleChange?.()
@@ -148,16 +148,16 @@ export const FormTask = ({
     } finally {
       setLifecycleLoading(false)
     }
-  }, [data?.id, onLifecycleChange])
+  }, [data?.id, data?.code, onLifecycleChange])
 
   const handleSaveDraft = useCallback(async () => {
     if (!data?.id) return
     setLifecycleLoading(true)
     try {
       await fetchApi({
-        url: endpoints.macro.saveDraft,
-        method: MethodHTTP.POST,
-        body: { id: data.id },
+        url: endpoints.task.saveDraft,
+        method: MethodHTTP.PUT,
+        body: { id: data.id, taskStructure: data.code ?? null },
       })
       toast.success('Draft saved')
       await onLifecycleChange?.()
@@ -166,14 +166,14 @@ export const FormTask = ({
     } finally {
       setLifecycleLoading(false)
     }
-  }, [data?.id, onLifecycleChange])
+  }, [data?.id, data?.code, onLifecycleChange])
 
   const handleDiscardDraft = useCallback(async () => {
     if (!data?.id) return
     setLifecycleLoading(true)
     try {
       await fetchApi({
-        url: endpoints.macro.discardDraft,
+        url: endpoints.task.discardDraft,
         method: MethodHTTP.POST,
         body: { id: data.id },
       })

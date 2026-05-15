@@ -39,7 +39,7 @@ import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { RootState } from 'store/reducers'
-import { TaskStatus, TaskTypeField } from 'pages/tasks/types'
+import { TaskStatus } from 'pages/tasks/types'
 
 interface RightPanelProps {
   backFunction: () => void
@@ -49,7 +49,6 @@ interface RightPanelProps {
   onViewSettingsChange: (patch: Partial<ViewSettings>) => void
   onResetViewSettings: () => void
   taskStatus: TaskStatus
-  taskType: TaskTypeField
   onLifecycleChange: () => void
 }
 
@@ -61,7 +60,6 @@ export const RightPanel = ({
   onViewSettingsChange,
   onResetViewSettings,
   taskStatus,
-  taskType,
   onLifecycleChange,
 }: RightPanelProps) => {
   const { editMode } = useSelector((state: RootState) => state.task)
@@ -69,7 +67,6 @@ export const RightPanel = ({
   const theme = useTheme()
   const dispatch = useDispatch()
   const [actualTask, setActualTask] = React.useState<State | null>(dataTask)
-
   const { isReady, formattedIssues } = useConformance(workspace)
 
   const draftTooltip =
@@ -84,7 +81,7 @@ export const RightPanel = ({
       url: endpoints.task.saveDraft,
       method: MethodHTTP.PUT,
       body: { id, taskStructure: getBlocklyStructure() },
-    }).then(() => {
+    }).then(async () => {
       toast.success('Draft saved.')
       onLifecycleChange()
     })
@@ -96,13 +93,10 @@ export const RightPanel = ({
       method: MethodHTTP.POST,
       body: { id, taskStructure: getBlocklyStructure() },
     })
-      .then(() => {
+      .then(async () => {
         toast.success(MessageText.success)
         onLifecycleChange()
         void dispatch(toggleEditMode())
-        if (taskType !== 'macro_task') {
-          backFunction()
-        }
       })
       .catch((err: Error) => {
         const status = Number(err.name)
@@ -198,12 +192,9 @@ export const RightPanel = ({
         </span>
       </Tooltip>
 
-      {/*
-        "Discard changes" is only meaningful for macro_task:
-        regular tasks have a single workspace field and no separate
-        published_workspace snapshot to revert to.
-      */}
-      {taskStatus === 'published_with_draft' && taskType === 'macro_task' && (
+      {/* Show Discard whenever there is a draft (status === published_with_draft).
+          All tasks now store published_workspace so reverting is always possible. */}
+      {taskStatus === 'published_with_draft' && (
         <Button
           fullWidth
           variant="outlined"

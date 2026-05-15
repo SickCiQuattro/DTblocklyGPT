@@ -9,8 +9,10 @@ import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
+import { fetchApi, MethodHTTP } from 'services/api'
+import { endpoints } from 'services/endpoints'
 
-import { AbstractRobot, AbstractTask, TaskType } from './types'
+import { AbstractRobot, AbstractTask, TaskDetailType, TaskType } from './types'
 
 interface AnalyzeTaskModalProps {
   task: TaskType | null
@@ -46,9 +48,15 @@ export const AnalyzeTaskModal = ({
     }
 
     try {
-      const code = task?.code
+      const response = await fetchApi<TaskDetailType>({
+        url: endpoints.home.libraries.task,
+        method: MethodHTTP.GET,
+        body: { id: task.id },
+      })
+      const code = response?.code
       if (!code) {
         toast.error('No task code found for analysis')
+        setAnalyzing(false)
         return
       }
       const taskCode = typeof code === 'string' ? JSON.parse(code) : code

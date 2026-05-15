@@ -706,18 +706,9 @@ export const BlocklyEditor = ({
         workspace,
         dataMacros: availableMacros,
         macroDetailsById,
-        dataObjects,
-        dataLocations,
-        dataActions,
       })
     },
-    [
-      availableMacros,
-      macroDetailsById,
-      dataActions,
-      dataLocations,
-      dataObjects,
-    ],
+    [availableMacros, macroDetailsById],
   )
 
   // ── Context menu bridge ────────────────────────────────────────────────────

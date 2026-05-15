@@ -11,9 +11,6 @@
  */
 import * as Blockly from 'blockly/core'
 
-import { ActionListType } from 'pages/actions/types'
-import { LocationListType } from 'pages/locations/types'
-import { ObjectListType } from 'pages/objects/types'
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { parseJson } from '../utils/serialization'
@@ -166,15 +163,10 @@ export const getMacroIdFromBlockData = (rawData: unknown): string | null => {
  */
 const resolveMacroBlockState = (
   macroDetail: TaskDetailType,
-  dataObjects: ObjectListType[],
-  dataLocations: LocationListType[],
-  dataActions: ActionListType[],
 ): State | null => {
-  // Prefer published_workspace (new lifecycle field).
-  // Fall back to `code` which may hold the workspace JSON for older records.
-  const source =
-    (macroDetail as { published_workspace?: unknown }).published_workspace ??
-    macroDetail.code
+  // macroDetail.code is populated from published_workspace by the macroList
+  // endpoint (see index.tsx macroDetailsById mapping).
+  const source = macroDetail.code
 
   if (!source) return null
 
@@ -203,9 +195,6 @@ interface ExplodeMacroParams {
   workspace: Blockly.WorkspaceSvg
   dataMacros: TaskType[]
   macroDetailsById: Record<number, TaskDetailType>
-  dataObjects: ObjectListType[]
-  dataLocations: LocationListType[]
-  dataActions: ActionListType[]
 }
 
 /**
@@ -217,9 +206,6 @@ export const explodeMacro = ({
   workspace,
   dataMacros,
   macroDetailsById,
-  dataObjects,
-  dataLocations,
-  dataActions,
 }: ExplodeMacroParams): void => {
   if (!block || block.type !== 'macro_task_block') return
 
@@ -238,12 +224,7 @@ export const explodeMacro = ({
   // Resolve the published block state. If it is null the macro has no stable
   // published version yet (e.g. still in draft) — abort with a clear guard
   // rather than silently doing nothing.
-  const blockState = resolveMacroBlockState(
-    macroDetail,
-    dataObjects,
-    dataLocations,
-    dataActions,
-  )
+  const blockState = resolveMacroBlockState(macroDetail)
   if (!isBlockStateLike(blockState)) return
 
   // Snapshot all connections before touching the DOM.
