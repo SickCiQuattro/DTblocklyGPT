@@ -12,7 +12,8 @@ import { ActionListType } from 'pages/actions/types'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 
-import { AbstractRobot, AbstractTask, TaskDetailType, TaskType } from './types'
+import { AbstractRobot, AbstractStep, AbstractTask, TaskDetailType, TaskType } from './types'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 interface AnalyzeTaskModalProps {
   task: TaskType | null
@@ -61,10 +62,28 @@ export const AnalyzeTaskModal = ({
       }
       const taskCode = typeof code === 'string' ? JSON.parse(code) : code
 
+      let abstractSteps: AbstractStep[] = []
+      if (Array.isArray(taskCode) && taskCode.length > 0) {
+        // If the first item's type ends with '_block' or is 'when_start', it's a Blockly payload
+        const isBlockly = taskCode.some((b: any) => 
+          typeof b.type === 'string' && (b.type === 'when_start' || b.type.endsWith('_block'))
+        )
+        
+        if (isBlockly) {
+          const mainBlock = taskCode.find((b: any) => b.type === 'when_start') || taskCode[0]
+          abstractSteps = blocklyToAbstract(mainBlock as CustomBlock) || []
+        } else {
+          // Otherwise, assume it is already an AbstractStep[]
+          abstractSteps = taskCode as AbstractStep[]
+        }
+      } else if (taskCode && typeof taskCode.type === 'string') {
+        abstractSteps = blocklyToAbstract(taskCode as CustomBlock) || []
+      }
+
       const analyzingTask: AbstractTask = {
         taskName: task.name,
         description: task.description,
-        steps: taskCode,
+        steps: abstractSteps,
       }
 
       // Map objects, locations, actions to analyzer types

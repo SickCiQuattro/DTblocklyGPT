@@ -43,7 +43,7 @@ import { TaskStatus } from 'pages/tasks/types'
 
 interface RightPanelProps {
   backFunction: () => void
-  dataTask: State | null
+  dataTask: State | State[] | null
   workspace: Blockly.WorkspaceSvg | null
   viewSettings: ViewSettings
   onViewSettingsChange: (patch: Partial<ViewSettings>) => void
@@ -66,7 +66,9 @@ export const RightPanel = ({
   const { id } = useParams()
   const theme = useTheme()
   const dispatch = useDispatch()
-  const [actualTask, setActualTask] = React.useState<State | null>(dataTask)
+  const [actualTask, setActualTask] = React.useState<State | State[] | null>(
+    dataTask,
+  )
   const { isReady, formattedIssues } = useConformance(workspace)
 
   const draftTooltip =

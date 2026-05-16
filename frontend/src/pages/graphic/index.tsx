@@ -27,7 +27,11 @@ const isBlockState = (value: unknown): value is State =>
   typeof value === 'object' &&
   value !== null &&
   'type' in value &&
-  typeof (value as { type?: unknown }).type === 'string'
+  typeof (value as { type?: unknown }).type === 'string' &&
+  (String((value as any).type).endsWith('_block') || String((value as any).type) === 'when_start')
+
+const isBlockStateArray = (value: unknown): value is State[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isBlockState)
 
 const Graphic = () => {
   const { id } = useParams()
@@ -130,9 +134,12 @@ const Graphic = () => {
 
   const parsedTaskCode = dataTask?.code ?? null
 
-  const normalizedTaskCode: State | null =
+  const normalizedTaskCode: State | State[] | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)
       ? (() => {
+          if (isBlockStateArray(parsedTaskCode)) {
+            return parsedTaskCode
+          }
           const converted = abstractToBlockly(
             parsedTaskCode as AbstractStep[],
             dataObjects ?? [],

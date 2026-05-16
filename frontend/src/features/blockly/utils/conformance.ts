@@ -171,22 +171,17 @@ export const computeConformance = (
 
   // ── Identify the main flow root ──────────────────────────────────────────
   // Prefer the when_start block as root; otherwise take the first top block.
-  // All remaining top blocks are treated as floating (warning), not as
-  // MULTIPLE_FLOWS errors — this is friendlier UX while editing.
   const startBlock = topBlocks.find((b) => b.type === START_BLOCK_TYPE)
   const root = startBlock ?? topBlocks[0]
 
-  // ── Rule 2: floating/orphan blocks (warning, non-blocking) ───────────────
-  const floatingWarnings: ConformanceIssue[] = topBlocks
-    .filter((b) => b !== root)
-    .map(
-      (b): ConformanceIssue => ({
-        type: 'FLOATING_BLOCK',
-        severity: 'warning',
-        blockId: b.id,
-        blockType: b.type,
-      }),
-    )
+  // ── Rule 2: multiple flows (error) ───────────────────────────────────────
+  // If there are multiple disconnected top-level blocks, the workspace is
+  // ambiguous. We enforce a single flow to consider the task 'ready'.
+  if (topBlocks.length > 1) {
+    return buildResult([
+      { type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length },
+    ], [])
+  }
 
   // ── Rule 3: unresolved shadow blocks in the main flow ────────────────────
   // When the root is when_start, begin traversal from its first child so the
@@ -195,16 +190,16 @@ export const computeConformance = (
     root.type === START_BLOCK_TYPE ? (root.getNextBlock() ?? root) : root
 
   if (isUnresolvedShadow(traversalRoot)) {
-    return buildResult([toShadowIssue(traversalRoot)], floatingWarnings)
+    return buildResult([toShadowIssue(traversalRoot)], [])
   }
 
   const shadowErrors = collectUnresolvedShadows(traversalRoot)
   if (shadowErrors.length > 0) {
-    return buildResult(shadowErrors, floatingWarnings)
+    return buildResult(shadowErrors, [])
   }
 
   // ── All errors resolved ───────────────────────────────────────────────────
-  return buildResult([], floatingWarnings)
+  return buildResult([], [])
 }
 
 /**

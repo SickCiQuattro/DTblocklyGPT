@@ -13,7 +13,8 @@ import * as Blockly from 'blockly/core'
 
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
-import { parseJson } from '../utils/serialization'
+import { parseJson, isAbstractStepArray, isValidBlockState } from '../utils/serialization'
+import { abstractToBlockly } from 'utils/blocklyParser'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -166,17 +167,34 @@ const resolveMacroBlockState = (
 ): State | null => {
   // macroDetail.code is populated from published_workspace by the macroList
   // endpoint (see index.tsx macroDetailsById mapping).
-  const source = macroDetail.code
+  const rawSource = macroDetail.code
+  const source = typeof rawSource === 'string' ? parseJson<unknown>(rawSource) : rawSource
 
   if (!source) return null
+
+  // If the payload is abstract steps, convert them to Blockly format first.
+  if (isAbstractStepArray(source)) {
+    const converted = abstractToBlockly(source, [], [], [])
+    if (isValidBlockState(converted)) {
+      // It returns an array of blocks or a single root. In abstractToBlockly it returns the root.
+      // Actually abstractToBlockly returns the root block, wait, let's verify.
+      // `abstractToBlockly` returns the first block (which is `{ type: '...', next: ... }`).
+      // So `converted` is a single block state (the root of the chain).
+      return isBlockStateLike(converted) ? converted : null
+    }
+  }
 
   // Native Blockly workspace JSON: { blocks: { blocks: [...] } }
   if (isWorkspaceState(source)) {
     const topBlocks = source.blocks?.blocks ?? []
-    const firstReal = topBlocks.find(
-      (b) => isBlockStateLike(b) && !MACRO_EXCLUDED_TYPES.has(b.type),
-    )
-    return isBlockStateLike(firstReal) ? firstReal : null
+    const firstRoot = topBlocks.find((b) => isBlockStateLike(b))
+    return isBlockStateLike(firstRoot) ? firstRoot : null
+  }
+
+  // Top-level block array: [ { type: "when_start" }, ... ]
+  if (Array.isArray(source)) {
+    const firstRoot = source.find((b) => isBlockStateLike(b))
+    return isBlockStateLike(firstRoot) ? firstRoot : null
   }
 
   // Single block state serialised directly at the root level.

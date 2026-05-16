@@ -436,7 +436,7 @@ interface BlocklyEditorProps {
   dataMacros?: TaskType[]
   macroDetailsById?: Record<number, TaskDetailType>
   currentTaskId?: number
-  dataTask: State | null
+  dataTask: State | State[] | null
   editMode?: boolean
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
@@ -1050,7 +1050,11 @@ export const BlocklyEditor = ({
         if (STRUCTURE_CHANGING_TYPES.has(event.type)) {
           if (onTaskStructureChangeRef.current) {
             const structure = getBlocklyStructure()
-            const abstract = blocklyToAbstract(structure as CustomBlock | null)
+            const mainBlock = Array.isArray(structure)
+              ? structure.find((b: any) => b.type === 'when_start') ||
+                structure[0]
+              : structure
+            const abstract = blocklyToAbstract(mainBlock as CustomBlock | null)
             onTaskStructureChangeRef.current(abstract)
           }
         }

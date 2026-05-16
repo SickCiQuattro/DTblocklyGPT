@@ -20,11 +20,15 @@ import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 import { SplittedLayout } from './splittedLayout'
 
-const isCustomBlock = (value: unknown): value is CustomBlock =>
+const isBlockState = (value: unknown): value is CustomBlock =>
   typeof value === 'object' &&
   value !== null &&
   'type' in value &&
-  typeof (value as { type?: unknown }).type === 'string'
+  typeof (value as { type?: unknown }).type === 'string' &&
+  (String((value as any).type).endsWith('_block') || String((value as any).type) === 'when_start')
+
+const isBlockStateArray = (value: unknown): value is CustomBlock[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isBlockState)
 
 const Multimodal = () => {
   const { id } = useParams()
@@ -91,11 +95,16 @@ const Multimodal = () => {
   const abstractTaskCode: AbstractStep[] =
     parsedTaskCode === null
       ? []
-      : Array.isArray(parsedTaskCode)
-        ? (parsedTaskCode as AbstractStep[])
-        : isCustomBlock(parsedTaskCode)
-          ? (blocklyToAbstract(parsedTaskCode) ?? [])
-          : []
+      : isBlockStateArray(parsedTaskCode)
+        ? (() => {
+            const mainBlock = parsedTaskCode.find((b: any) => b.type === 'when_start') || parsedTaskCode[0]
+            return blocklyToAbstract(mainBlock as CustomBlock) ?? []
+          })()
+        : Array.isArray(parsedTaskCode)
+          ? (parsedTaskCode as AbstractStep[])
+          : isBlockState(parsedTaskCode)
+            ? (blocklyToAbstract(parsedTaskCode) ?? [])
+            : []
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))

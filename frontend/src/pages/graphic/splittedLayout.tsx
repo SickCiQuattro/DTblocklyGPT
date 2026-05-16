@@ -20,7 +20,7 @@ interface SplittedLayoutProps {
   dataActions: ActionListType[]
   dataMacros: TaskType[]
   currentTaskId?: number
-  dataTask: State | null
+  dataTask: State | State[] | null
   backFunction: () => void
   macroDetailsById: Record<number, TaskDetailType>
   taskStatus: TaskStatus
