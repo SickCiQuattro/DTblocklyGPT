@@ -366,56 +366,6 @@ export const FormTask = ({
                       color={chipColor}
                       variant="outlined"
                     />
-
-                    {/* Save draft — only if the task is already published */}
-                    {!isDraft(currentStatus) && (
-                      <Tooltip title="Save changes as draft without publishing them">
-                        <span>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<FileEdit size={15} />}
-                            onClick={handleSaveDraft}
-                            disabled={lifecycleLoading || isSubmitting}
-                          >
-                            Save draft
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    )}
-
-                    {/* Discard draft — only if there is a pending draft */}
-                    {hasUnpublishedDraft(currentStatus) && (
-                      <Tooltip title="Discard unpublished changes and restore published version">
-                        <span>
-                          <Button
-                            variant="text"
-                            size="small"
-                            color="error"
-                            startIcon={<Trash2 size={15} />}
-                            onClick={handleDiscardDraft}
-                            disabled={lifecycleLoading || isSubmitting}
-                          >
-                            Discard draft
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    )}
-
-                    {/* Publish — first publication or draft promotion */}
-                    {(isDraft(currentStatus) ||
-                      hasUnpublishedDraft(currentStatus)) && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        color="primary"
-                        startIcon={<CheckCircle size={15} />}
-                        onClick={handlePublish}
-                        disabled={lifecycleLoading || isSubmitting}
-                      >
-                        {isDraft(currentStatus) ? 'Publish' : 'Publish draft'}
-                      </Button>
-                    )}
                   </Stack>
                 </Grid>
               </>

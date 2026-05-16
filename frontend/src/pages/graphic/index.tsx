@@ -73,7 +73,7 @@ const Graphic = () => {
     data: dataMacros = [],
     isLoading: isLoadingMacros,
     mutate: mutateMacros,
-  } = useSWR<(TaskType & { published_workspace: Record<string, unknown> | null })[], Error>(
+  } = useSWR<TaskType[], Error>(
     { url: endpoints.graphic.macroList },
   )
 
@@ -99,9 +99,8 @@ const Graphic = () => {
             task_type: m.task_type,
             signature: m.signature,
             // published_workspace is returned by get_macro_list and used for
-            // block explosion + preview. Cast via unknown as TaskDetailType
-            // code field to avoid a schema change in TaskDetailType.
-            code: (m as any).published_workspace ?? null,
+            // block explosion + preview.
+            code: m.published_workspace ?? null,
           } satisfies TaskDetailType,
         ]),
       ),

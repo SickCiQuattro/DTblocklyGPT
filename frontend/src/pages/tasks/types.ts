@@ -16,6 +16,7 @@ export interface BaseTaskType {
   task_type: TaskTypeField
   status: TaskStatus
   signature: string
+  published_workspace?: Record<string, unknown> | null
 }
 
 export interface RegularTaskType extends BaseTaskType {

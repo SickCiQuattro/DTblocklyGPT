@@ -43,16 +43,33 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
 
                 workspace_value = taskStructure  # None or dict
 
+                from backend.utils.date import getDateTimeNow
+
                 if publish:
+                    import hashlib
+                    import json
+                    
+                    sig_input = json.dumps(workspace_value, sort_keys=True, separators=(',', ':'))
+                    sig = hashlib.sha256(sig_input.encode()).hexdigest()[:16]
+                    
                     Task.objects.filter(id=task_id).update(
-                        workspace=workspace_value,
+                        published_workspace=workspace_value,
+                        draft_workspace=None,
                         status="published",
+                        signature=sig,
+                        last_modified=getDateTimeNow()
                     )
                 else:
-                    update_fields = {"workspace": workspace_value}
-                    if task.status == "draft":
-                        update_fields["status"] = "draft"
-                    Task.objects.filter(id=task_id).update(**update_fields)
+                    new_status = (
+                        "published_with_draft"
+                        if task.status == "published"
+                        else task.status
+                    )
+                    Task.objects.filter(id=task_id).update(
+                        draft_workspace=workspace_value,
+                        status=new_status,
+                        last_modified=getDateTimeNow()
+                    )
 
                 return success_response()
             else:
@@ -264,7 +281,7 @@ def get_macro_list(request: HttpRequest) -> HttpResponse:
                     Q(owner=request.user) | Q(shared=True),
                     status__in=["published", "published_with_draft"],
                 ).values(
-                    "id", "name", "description", "status",
+                    "id", "name", "description", "status", "shared",
                     "task_type", "signature", "published_workspace",
                 )
                 return success_response(macros)

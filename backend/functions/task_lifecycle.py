@@ -92,12 +92,19 @@ def publish_task(request: HttpRequest) -> HttpResponse:
         if task is None:
             return error_response("Task not found")
 
+        import hashlib
+        import json
+
         task.published_workspace = task_structure
         task.draft_workspace = None
         task.status = STATUS_PUBLISHED
         task.last_modified = getDateTimeNow()
+
+        sig_input = json.dumps(task_structure, sort_keys=True, separators=(',', ':'))
+        task.signature = hashlib.sha256(sig_input.encode()).hexdigest()[:16]
+
         task.save(update_fields=[
-            "published_workspace", "draft_workspace", "status", "last_modified"
+            "published_workspace", "draft_workspace", "status", "last_modified", "signature"
         ])
 
         return success_response()
@@ -142,7 +149,8 @@ def discard_draft(request: HttpRequest) -> HttpResponse:
 
         task.draft_workspace = None
         task.status = STATUS_PUBLISHED
-        task.save(update_fields=["draft_workspace", "status"])
+        task.last_modified = getDateTimeNow()
+        task.save(update_fields=["draft_workspace", "status", "last_modified"])
 
         return success_response()
 

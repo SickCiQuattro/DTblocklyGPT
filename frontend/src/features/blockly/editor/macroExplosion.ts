@@ -11,6 +11,9 @@
  */
 import * as Blockly from 'blockly/core'
 
+import { ActionListType } from 'pages/actions/types'
+import { LocationListType } from 'pages/locations/types'
+import { ObjectListType } from 'pages/objects/types'
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { parseJson, isAbstractStepArray, isValidBlockState } from '../utils/serialization'
@@ -164,6 +167,9 @@ export const getMacroIdFromBlockData = (rawData: unknown): string | null => {
  */
 const resolveMacroBlockState = (
   macroDetail: TaskDetailType,
+  dataObjects: ObjectListType[],
+  dataLocations: LocationListType[],
+  dataActions: ActionListType[],
 ): State | null => {
   // macroDetail.code is populated from published_workspace by the macroList
   // endpoint (see index.tsx macroDetailsById mapping).
@@ -174,11 +180,9 @@ const resolveMacroBlockState = (
 
   // If the payload is abstract steps, convert them to Blockly format first.
   if (isAbstractStepArray(source)) {
-    const converted = abstractToBlockly(source, [], [], [])
+    const converted = abstractToBlockly(source, dataObjects, dataLocations, dataActions)
     if (isValidBlockState(converted)) {
-      // It returns an array of blocks or a single root. In abstractToBlockly it returns the root.
-      // Actually abstractToBlockly returns the root block, wait, let's verify.
-      // `abstractToBlockly` returns the first block (which is `{ type: '...', next: ... }`).
+      // It returns an array of blocks or a single root.
       // So `converted` is a single block state (the root of the chain).
       return isBlockStateLike(converted) ? converted : null
     }
@@ -213,6 +217,9 @@ interface ExplodeMacroParams {
   workspace: Blockly.WorkspaceSvg
   dataMacros: TaskType[]
   macroDetailsById: Record<number, TaskDetailType>
+  dataObjects: ObjectListType[]
+  dataLocations: LocationListType[]
+  dataActions: ActionListType[]
 }
 
 /**
@@ -224,6 +231,9 @@ export const explodeMacro = ({
   workspace,
   dataMacros,
   macroDetailsById,
+  dataObjects,
+  dataLocations,
+  dataActions,
 }: ExplodeMacroParams): void => {
   if (!block || block.type !== 'macro_task_block') return
 
@@ -242,7 +252,12 @@ export const explodeMacro = ({
   // Resolve the published block state. If it is null the macro has no stable
   // published version yet (e.g. still in draft) — abort with a clear guard
   // rather than silently doing nothing.
-  const blockState = resolveMacroBlockState(macroDetail)
+  const blockState = resolveMacroBlockState(
+    macroDetail,
+    dataObjects,
+    dataLocations,
+    dataActions,
+  )
   if (!isBlockStateLike(blockState)) return
 
   // Snapshot all connections before touching the DOM.
