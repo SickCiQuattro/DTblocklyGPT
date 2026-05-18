@@ -20,6 +20,8 @@ import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
+
+import { buildEntityData } from '../utils/keywords'
 import { type BlockViewMode } from '../utils/useViewSettings'
 
 import {
@@ -28,7 +30,6 @@ import {
   ToolboxBlockItem,
 } from './toolboxRegistry'
 import { BlockPreviewTooltip } from './BlockPreviewTooltip'
-import { buildEntityData } from '../utils/keywords'
 import './CustomToolbox.css'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -172,15 +173,17 @@ const BlockPill: React.FC<{
   item: ToolboxBlockItem
   categoryName: string
   categoryColour: string
+  blockViewMode: BlockViewMode
   onPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ item, categoryName, categoryColour, onPointerDown }) => (
+}> = ({ item, categoryName, categoryColour, blockViewMode, onPointerDown }) => (
   <BlockPreviewTooltip
     item={item}
     categoryName={categoryName}
     categoryColour={categoryColour}
+    blockViewMode={blockViewMode}
   >
     <div
       className="toolbox-pill"
@@ -222,13 +225,21 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
 const CategoryPanel: React.FC<{
   category: ToolboxCategory
   pills: ToolboxBlockItem[]
+  blockViewMode: BlockViewMode
   expanded: boolean
   onChange: (key: string) => void
   onBlockPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ category, pills, expanded, onChange, onBlockPointerDown }) => {
+}> = ({
+  category,
+  pills,
+  blockViewMode,
+  expanded,
+  onChange,
+  onBlockPointerDown,
+}) => {
   const isObjectsPositionsCategory = category.key === 'objects-positions'
   const [activeTab, setActiveTab] = useState<CategoryTabKey>('objects')
 
@@ -329,6 +340,7 @@ const CategoryPanel: React.FC<{
                 item={pill}
                 categoryName={category.name}
                 categoryColour={category.colour}
+                blockViewMode={blockViewMode}
                 onPointerDown={onBlockPointerDown}
               />
             ))}
@@ -441,33 +453,34 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
               key={category.key}
               category={category}
               pills={pills}
+              blockViewMode={blockViewMode}
               expanded={expandedKey === category.key}
               onChange={handleAccordionChange}
               onBlockPointerDown={onBlockPointerDown}
             />
           )
         })}
-        {isDeleting && (
-          <div
-            className={`custom-toolbox__delete-overlay custom-toolbox__delete-overlay--${deleteZoneState}`}
-            role="status"
-            aria-live="polite"
-          >
-            <div className="custom-toolbox__delete-overlay-content">
-              <Trash2
-                size={48}
-                className="custom-toolbox__delete-overlay-icon"
-                aria-hidden="true"
-              />
-              <p className="custom-toolbox__delete-overlay-text">
-                {deleteZoneState === 'hover-confirm'
-                  ? 'Release to delete'
-                  : 'Drop here to remove'}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
+      {isDeleting && (
+        <div
+          className={`custom-toolbox__delete-overlay custom-toolbox__delete-overlay--${deleteZoneState}`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="custom-toolbox__delete-overlay-content">
+            <Trash2
+              size={48}
+              className="custom-toolbox__delete-overlay-icon"
+              aria-hidden="true"
+            />
+            <p className="custom-toolbox__delete-overlay-text">
+              {deleteZoneState === 'hover-confirm'
+                ? 'Release to delete'
+                : 'Drop here to remove'}
+            </p>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

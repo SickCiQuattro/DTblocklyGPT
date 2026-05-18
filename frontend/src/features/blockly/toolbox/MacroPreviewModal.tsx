@@ -10,7 +10,6 @@
  */
 
 import { Dialog, DialogTitle, IconButton, Typography } from '@mui/material'
-import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import { X } from 'lucide-react'
 
@@ -20,6 +19,7 @@ import { type AbstractStep } from 'pages/tasks/types'
 
 import { BlocklyViewerWithControls } from '../workspace'
 import { isValidBlockState, parseJson } from '../utils/serialization'
+import { type BlockViewMode } from '../utils/useViewSettings'
 
 // ─── TYPE GUARDS ─────────────────────────────────────────────────────────────
 // Narrow unknown JSON payloads to the shapes we know how to convert.
@@ -125,6 +125,8 @@ interface MacroPreviewModalProps {
   macroDescription?: string
   /** Raw serialised macro code string used to build the block preview. */
   macroCode: string
+  /** Active block visualization mode used in the editor. */
+  blockViewMode?: BlockViewMode
 }
 
 /**
@@ -137,6 +139,7 @@ export const MacroPreviewModal = ({
   macroName,
   macroDescription,
   macroCode,
+  blockViewMode = 'complete',
 }: MacroPreviewModalProps) => {
   const macroState = toMacroRootState(macroCode)
   const resolvedMacroDescription =
@@ -247,6 +250,7 @@ export const MacroPreviewModal = ({
           startScale={1.2}
           autoCenter
           autoFit
+          blockViewMode={blockViewMode}
         />
       </div>
     </Dialog>

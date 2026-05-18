@@ -5,6 +5,9 @@ import 'blockly/blocks'
 import { BlockState } from 'utils/blocklyTypes'
 
 import { isValidBlockState } from '../utils/serialization'
+import { type BlockViewMode } from '../utils/useViewSettings'
+import { applyBlockViewMode } from '../utils/viewModePresentation'
+
 import { READONLY_WORKSPACE_CONFIG } from './workspaceConfig'
 
 interface BlocklyViewerProps {
@@ -14,6 +17,7 @@ interface BlocklyViewerProps {
   autoCenter?: boolean
   autoFit?: boolean
   workspaceConfig?: Blockly.BlocklyOptions
+  blockViewMode?: BlockViewMode
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
 }
 
@@ -27,6 +31,7 @@ export const BlocklyViewer = ({
   autoCenter = true,
   autoFit = false,
   workspaceConfig,
+  blockViewMode = 'complete',
   onWorkspaceReady,
 }: BlocklyViewerProps) => {
   const mountRef = useRef<HTMLDivElement | null>(null)
@@ -96,6 +101,8 @@ export const BlocklyViewer = ({
       Blockly.serialization.blocks.append({ ...blockState }, workspace)
     }
 
+    applyBlockViewMode(workspace, blockViewMode)
+
     window.requestAnimationFrame(() => {
       if (!workspaceRef.current) {
         return
@@ -109,7 +116,7 @@ export const BlocklyViewer = ({
         workspaceRef.current.scrollCenter()
       }
     })
-  }, [autoCenter, autoFit, blockState])
+  }, [autoCenter, autoFit, blockState, blockViewMode])
 
   return <div ref={mountRef} style={{ width: '100%', height }} />
 }

@@ -5,6 +5,8 @@ import { Maximize, Minus, Plus } from 'lucide-react'
 
 import { BlockState } from 'utils/blocklyTypes'
 
+import { type BlockViewMode } from '../utils/useViewSettings'
+
 import { BlocklyViewer } from './BlocklyViewer'
 import { MODAL_VIEWER_CONFIG } from './workspaceConfig'
 import '../styles/editor.css'
@@ -16,6 +18,7 @@ interface BlocklyViewerWithControlsProps {
   autoCenter?: boolean
   autoFit?: boolean
   workspaceConfig?: Blockly.BlocklyOptions
+  blockViewMode?: BlockViewMode
 }
 
 /**
@@ -28,6 +31,7 @@ export const BlocklyViewerWithControls = ({
   autoCenter = true,
   autoFit = true,
   workspaceConfig = MODAL_VIEWER_CONFIG,
+  blockViewMode = 'complete',
 }: BlocklyViewerWithControlsProps) => {
   const [workspace, setWorkspace] = useState<Blockly.WorkspaceSvg | null>(null)
 
@@ -59,6 +63,7 @@ export const BlocklyViewerWithControls = ({
         autoCenter={autoCenter}
         autoFit={autoFit}
         workspaceConfig={workspaceConfig}
+        blockViewMode={blockViewMode}
         onWorkspaceReady={handleWorkspaceReady}
       />
 

@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Tooltip, Typography } from '@mui/material'
+import { Tooltip } from '@mui/material'
 import * as Blockly from 'blockly/core'
 import 'blockly/blocks'
 import {
@@ -45,6 +45,8 @@ import {
 
 import { BlockState as State } from 'utils/blocklyTypes'
 
+import { type BlockViewMode } from '../utils/useViewSettings'
+import { applyBlockViewMode } from '../utils/viewModePresentation'
 import { PREVIEW_WORKSPACE_CONFIG } from '../workspace/workspaceConfig'
 import '../styles/editor.css'
 
@@ -328,7 +330,11 @@ const fitAndCenterTopBlock = (
  * use two consecutive `requestAnimationFrame` calls to let Blockly finish
  * its async layout pass before scaling to fit.
  */
-const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
+const renderPreviewBlock = (
+  item: ToolboxBlockItem,
+  container: HTMLElement,
+  blockViewMode: BlockViewMode,
+) => {
   const workspace = mountPreviewHost(container)
   workspace.clear()
 
@@ -342,6 +348,7 @@ const renderPreviewBlock = (item: ToolboxBlockItem, container: HTMLElement) => {
     )
   }
 
+  applyBlockViewMode(workspace, blockViewMode)
   Blockly.svgResize(workspace)
 
   singletonRenderRaf = window.requestAnimationFrame(() => {
@@ -386,6 +393,7 @@ const scheduleSingletonRender = (
   owner: symbol,
   item: ToolboxBlockItem,
   resolveContainer: () => HTMLDivElement | null,
+  blockViewMode: BlockViewMode,
 ) => {
   cancelSingletonRender()
   const requestId = singletonRenderRequestId
@@ -413,7 +421,7 @@ const scheduleSingletonRender = (
           return
         }
 
-        renderPreviewBlock(item, container)
+        renderPreviewBlock(item, container, blockViewMode)
       })
     }, PREVIEW_RENDER_DELAY_MS)
   }
@@ -427,6 +435,7 @@ interface BlockPreviewTooltipProps {
   item: ToolboxBlockItem
   categoryName?: string
   categoryColour?: string
+  blockViewMode?: BlockViewMode
   children: ReactElement
 }
 
@@ -439,6 +448,7 @@ export const BlockPreviewTooltip = ({
   item,
   categoryName,
   categoryColour,
+  blockViewMode = 'complete',
   children,
 }: BlockPreviewTooltipProps) => {
   const previewMountRef = useRef<HTMLDivElement | null>(null)
@@ -506,6 +516,7 @@ export const BlockPreviewTooltip = ({
       ownerRef.current,
       item,
       () => previewMountRef.current,
+      blockViewMode,
     )
   }
 
@@ -548,6 +559,17 @@ export const BlockPreviewTooltip = ({
       window.removeEventListener('toolboxDragStart', handleDragStart)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isOpen || activeTooltipOwner !== ownerRef.current) return
+
+    scheduleSingletonRender(
+      ownerRef.current,
+      item,
+      () => previewMountRef.current,
+      blockViewMode,
+    )
+  }, [blockViewMode, isOpen, item])
 
   // Release singleton ownership when the component unmounts.
   useEffect(() => {
@@ -640,7 +662,15 @@ export const BlockPreviewTooltip = ({
                     (e.currentTarget.style.backgroundColor =
                       categoryAccentColors.buttonHoverBackgroundColor)
                   }
+                  onFocus={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      categoryAccentColors.buttonHoverBackgroundColor)
+                  }
                   onMouseOut={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      categoryAccentColors.buttonBackgroundColor)
+                  }
+                  onBlur={(e) =>
                     (e.currentTarget.style.backgroundColor =
                       categoryAccentColors.buttonBackgroundColor)
                   }
@@ -689,6 +719,7 @@ export const BlockPreviewTooltip = ({
           macroName={item.label}
           macroDescription={item.description}
           macroCode={item.macroCode}
+          blockViewMode={blockViewMode}
         />
       )}
     </>
