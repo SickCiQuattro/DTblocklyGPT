@@ -1,5 +1,5 @@
 from enum import Enum
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.db.models.query import QuerySet
 from collections.abc import Sequence
 from json import loads, dumps
@@ -51,7 +51,7 @@ def error_response(error, status=500):
     )
 
 
-def bad_request(error, payload, status=400):
+def bad_request(error, payload=None, status=400):
     return JsonResponse(
         {
             "message": error,
@@ -61,3 +61,53 @@ def bad_request(error, payload, status=400):
         },
         status=status,
     )
+
+
+def accepted_response(data=None, message="Accepted"):
+    """
+    202 Accepted — publish requires explicit confirmation.
+    Used when dependent macros exist with an incompatible signature
+    (breaking change). The client must repeat the request with
+    forcePublish=True in the payload to proceed.
+    """
+    return JsonResponse(
+        {
+            "message": message,
+            "status": 202,
+            "timestamp": getDateTimeNow(),
+            "payload": data,
+        },
+        status=202,
+    )
+
+
+def conflict_response(data=None, message="Conflict"):
+    """
+    409 Conflict — cycle detected in the macro dependency DAG.
+    The payload contains the identified cycle as a list of IDs.
+    The client must resolve the cycle before retrying the publish.
+    """
+    return JsonResponse(
+        {
+            "message": message,
+            "status": 409,
+            "timestamp": getDateTimeNow(),
+            "payload": data,
+        },
+        status=409,
+    )
+
+def accepted_response(message: str = "", data=None) -> HttpResponse:
+    """202 — breaking changes detected, requires forcePublish confirmation."""
+    payload = {"message": message}
+    if data is not None:
+        payload["data"] = data
+    return JsonResponse(payload, status=202)
+
+
+def conflict_response(message: str = "", data=None) -> HttpResponse:
+    """409 — cycle detected in the dependency DAG."""
+    payload = {"message": message}
+    if data is not None:
+        payload["data"] = data
+    return JsonResponse(payload, status=409)

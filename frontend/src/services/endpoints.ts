@@ -53,6 +53,7 @@ export const endpoints = {
     objectsGraphic: `${GRAPHIC_API}/objectsGraphic/`,
     locationsGraphic: `${GRAPHIC_API}/locationsGraphic/`,
     actionsGraphic: `${GRAPHIC_API}/actionsGraphic/`,
+    macroList: `${GRAPHIC_API}/macroList/`,
   },
   chat: {
     newMessage: `${CHAT_API}/newMessage/`,
@@ -63,5 +64,12 @@ export const endpoints = {
     run: `${TASK_API}/run/`,
     simulate: `${TASK_API}/simulate/`,
     analyze: `${TASK_API}/analyze/`,
+    saveDraft: `${TASK_API}/save-draft/`,
+    publish: `${TASK_API}/publish/`,
+    discardDraft: `${TASK_API}/discard-draft/`,
+  },
+  // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
+  get macro() {
+    return this.task
   },
 }

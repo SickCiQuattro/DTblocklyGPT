@@ -1,14 +1,17 @@
-import React from 'react'
+import React, { useCallback, useState } from 'react'
 import {
   Button,
   Checkbox,
+  Chip,
   Divider,
   FormControlLabel,
   FormHelperText,
   Grid,
   Stack,
   TextField,
+  Tooltip,
 } from '@mui/material'
+import { CheckCircle, FileEdit, Trash2 } from 'lucide-react'
 import { Formik } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
@@ -22,7 +25,27 @@ import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 
-import { TaskDetailType } from './types'
+import { TaskDetailType, TaskStatus, TaskTypeField } from './types'
+
+// ─── Lifecycle guard helpers ──────────────────────────────────────────────────
+
+const isDraft = (status: TaskStatus): boolean => status === 'draft'
+
+const hasUnpublishedDraft = (status: TaskStatus): boolean =>
+  status === 'published_with_draft'
+
+// ─── Status chip metadata ──────────────────────────────────────────────────────
+
+type ChipColor = 'warning' | 'success' | 'info'
+
+function statusChip(status: TaskStatus): { label: string; color: ChipColor } {
+  if (isDraft(status)) return { label: 'Draft', color: 'warning' }
+  if (hasUnpublishedDraft(status))
+    return { label: 'Draft in progress', color: 'info' }
+  return { label: 'Published', color: 'success' }
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export enum TypeNewTask {
   CHAT = 'chat',
@@ -34,6 +57,8 @@ interface FormTaskProps {
   data: TaskDetailType | undefined
   insertMode: boolean
   backFunction: () => void
+  onLifecycleChange?: () => void | Promise<void>
+  taskType?: TaskTypeField
 }
 
 interface SaveTaskResponse {
@@ -41,18 +66,34 @@ interface SaveTaskResponse {
   id?: number
 }
 
-export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
+type FormValues = Omit<TaskDetailType, 'code'> & {
+  code: Record<string, unknown> | null
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export const FormTask = ({
+  data,
+  insertMode,
+  backFunction,
+  onLifecycleChange,
+  taskType = 'task',
+}: FormTaskProps) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type')
 
+  const [lifecycleLoading, setLifecycleLoading] = useState(false)
+
+  // ── Formik submit (metadata: name / description / shared) ──────────────────
+
   const onSubmit = async (
-    values: TaskDetailType,
+    values: FormValues,
     { setStatus, setSubmitting, setFieldError, setFieldTouched },
   ) => {
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    void fetchApi<SaveTaskResponse, TaskDetailType>({
+    void fetchApi<SaveTaskResponse, FormValues>({
       url: endpoints.home.libraries.task,
       method,
       body: values,
@@ -89,14 +130,78 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
       })
   }
 
+  // ── Lifecycle actions ───────────────────────────────────────────────────────
+
+  const handlePublish = useCallback(async () => {
+    if (!data?.id) return
+    setLifecycleLoading(true)
+    try {
+      await fetchApi({
+        url: endpoints.task.publish,
+        method: MethodHTTP.POST,
+        body: { id: data.id, taskStructure: data.code ?? null },
+      })
+      toast.success('Task published successfully')
+      await onLifecycleChange?.()
+    } catch {
+      toast.error('Error publishing task')
+    } finally {
+      setLifecycleLoading(false)
+    }
+  }, [data?.id, data?.code, onLifecycleChange])
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!data?.id) return
+    setLifecycleLoading(true)
+    try {
+      await fetchApi({
+        url: endpoints.task.saveDraft,
+        method: MethodHTTP.PUT,
+        body: { id: data.id, taskStructure: data.code ?? null },
+      })
+      toast.success('Draft saved')
+      await onLifecycleChange?.()
+    } catch {
+      toast.error('Error saving draft')
+    } finally {
+      setLifecycleLoading(false)
+    }
+  }, [data?.id, data?.code, onLifecycleChange])
+
+  const handleDiscardDraft = useCallback(async () => {
+    if (!data?.id) return
+    setLifecycleLoading(true)
+    try {
+      await fetchApi({
+        url: endpoints.task.discardDraft,
+        method: MethodHTTP.POST,
+        body: { id: data.id },
+      })
+      toast.success('Draft discarded — published version restored')
+      await onLifecycleChange?.()
+    } catch {
+      toast.error('Error discarding draft')
+    } finally {
+      setLifecycleLoading(false)
+    }
+  }, [data?.id, onLifecycleChange])
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const currentStatus: TaskStatus = data?.status ?? 'draft'
+  const { label: chipLabel, color: chipColor } = statusChip(currentStatus)
+
   return (
-    <Formik
+    <Formik<FormValues>
       initialValues={{
-        id: data?.id || -1,
-        name: data?.name || '',
-        description: data?.description || '',
-        code: data?.code || '',
-        shared: data?.shared || false,
+        id: data?.id ?? -1,
+        name: data?.name ?? '',
+        description: data?.description ?? '',
+        code: data?.code ?? null,
+        shared: data?.shared ?? false,
+        task_type: data?.task_type ?? taskType,
+        status: data?.status ?? 'draft',
+        signature: data?.signature ?? '',
       }}
       validationSchema={YupObject().shape({
         name: YupString()
@@ -123,6 +228,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
           }}
         >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
+            {/* ── Graphic shortcut ── */}
             {!insertMode && (
               <Grid size={1}>
                 <Stack spacing={1}>
@@ -143,11 +249,13 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 </Stack>
               </Grid>
             )}
+
+            {/* ── Name ── */}
             <Grid size={insertMode ? 3 : 2}>
               <Stack spacing={1}>
                 <TextField
                   id="name"
-                  value={values.name || ''}
+                  value={values.name}
                   name="name"
                   label="Name"
                   onBlur={handleBlur}
@@ -162,11 +270,13 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 )}
               </Stack>
             </Grid>
+
+            {/* ── Description ── */}
             <Grid size={8}>
               <Stack spacing={1}>
                 <TextField
                   id="description"
-                  value={values.description || ''}
+                  value={values.description}
                   name="description"
                   label="Description"
                   onBlur={handleBlur}
@@ -175,6 +285,8 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 />
               </Stack>
             </Grid>
+
+            {/* ── Shared ── */}
             <Grid size={1}>
               <Stack spacing={1}>
                 <FormControlLabel
@@ -193,7 +305,10 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 />
               </Stack>
             </Grid>
+
             <Divider />
+
+            {/* ── Debug JSON ── */}
             {!insertMode && (
               <Grid size={12}>
                 <Stack spacing={1}>
@@ -206,7 +321,7 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                         children: (
                           <pre>
                             {values.code
-                              ? JSON.stringify(JSON.parse(values.code), null, 2)
+                              ? JSON.stringify(values.code, null, 2)
                               : ''}
                           </pre>
                         ),
@@ -216,10 +331,12 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 </Stack>
               </Grid>
             )}
+
+            {/* ── Save metadata ── */}
             <Grid size={12}>
               <Button
                 disableElevation
-                disabled={isSubmitting}
+                disabled={isSubmitting || lifecycleLoading}
                 fullWidth
                 size="large"
                 type="submit"
@@ -230,6 +347,29 @@ export const FormTask = ({ data, insertMode, backFunction }: FormTaskProps) => {
                 Save
               </Button>
             </Grid>
+
+            {/* ── Lifecycle toolbar ── */}
+            {!insertMode && (
+              <>
+                <Divider sx={{ width: '100%' }} />
+
+                <Grid size={12}>
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    {/* Status badge */}
+                    <Chip
+                      size="small"
+                      label={chipLabel}
+                      color={chipColor}
+                      variant="outlined"
+                    />
+                  </Stack>
+                </Grid>
+              </>
+            )}
           </Grid>
         </form>
       )}

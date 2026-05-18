@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useMemo, useEffect } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -10,10 +10,15 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskDetailType,
+  TaskStatus,
+  TaskType,
+  TaskTypeField,
+} from 'pages/tasks/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { toggleEditMode } from 'store/reducers/task'
-import { AbstractStep } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 
 import { SplittedLayout } from './splittedLayout'
@@ -22,48 +27,85 @@ const isBlockState = (value: unknown): value is State =>
   typeof value === 'object' &&
   value !== null &&
   'type' in value &&
-  typeof (value as { type?: unknown }).type === 'string'
+  typeof (value as { type?: unknown }).type === 'string' &&
+  (String((value as any).type).endsWith('_block') || String((value as any).type) === 'when_start')
+
+const isBlockStateArray = (value: unknown): value is State[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isBlockState)
 
 const Graphic = () => {
   const { id } = useParams()
+  const currentTaskId =
+    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const { data: dataTask, isLoading: isLoadingTask } = useSWR<
-    { name: string; code: string },
+  const {
+    data: dataTask,
+    isLoading: isLoadingTask,
+    mutate: mutateTask,
+  } = useSWR<
+    {
+      name: string
+      code: Record<string, unknown> | null
+      status: TaskStatus
+      task_type: TaskTypeField
+    },
     Error
-  >({
-    url: endpoints.graphic.getGraphicTask,
-    body: { id },
-  })
+  >({ url: endpoints.graphic.getGraphicTask, body: { id } })
 
   const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
-  >({
-    url: endpoints.graphic.objectsGraphic,
-  })
+  >({ url: endpoints.graphic.objectsGraphic })
 
   const { data: dataActions, isLoading: isLoadingActions } = useSWR<
     ActionListType[],
     Error
-  >({
-    url: endpoints.graphic.actionsGraphic,
-  })
+  >({ url: endpoints.graphic.actionsGraphic })
 
   const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
     LocationListType[],
     Error
-  >({
-    url: endpoints.graphic.locationsGraphic,
-  })
+  >({ url: endpoints.graphic.locationsGraphic })
 
-  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
-    TaskType[],
-    Error
-  >({
-    url: endpoints.home.libraries.tasks,
-  })
+  const {
+    data: dataMacros = [],
+    isLoading: isLoadingMacros,
+    mutate: mutateMacros,
+  } = useSWR<TaskType[], Error>(
+    { url: endpoints.graphic.macroList },
+  )
+
+  // Derive macroDetailsById directly from dataMacros — no second fetch needed.
+  // published_workspace is returned by macroList and used for block explosion
+  // (break-into-steps) and tooltip preview.
+  const filteredMacros = useMemo(
+    () => dataMacros.filter((m) => m.id !== currentTaskId),
+    [dataMacros, currentTaskId],
+  )
+
+  const macroDetailsById = useMemo(
+    (): Record<number, TaskDetailType> =>
+      Object.fromEntries(
+        filteredMacros.map((m) => [
+          m.id,
+          {
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            shared: m.shared,
+            status: m.status,
+            task_type: m.task_type,
+            signature: m.signature,
+            // published_workspace is returned by get_macro_list and used for
+            // block explosion + preview.
+            code: m.published_workspace ?? null,
+          } satisfies TaskDetailType,
+        ]),
+      ),
+    [filteredMacros],
+  )
 
   const title = dataTask
     ? `Graphic interface to edit the task: "${dataTask.name}"`
@@ -77,7 +119,10 @@ const Graphic = () => {
   }
 
   const data =
-    dataTask && dataObjects && dataActions && dataLocations && dataMacros
+    dataTask !== undefined &&
+    dataObjects !== undefined &&
+    dataActions !== undefined &&
+    dataLocations !== undefined
 
   const isLoading =
     isLoadingTask ||
@@ -86,28 +131,21 @@ const Graphic = () => {
     isLoadingLocations ||
     isLoadingMacros
 
-  const parseTaskCode = (taskCode: string): unknown => {
-    try {
-      return JSON.parse(taskCode) as unknown
-    } catch {
-      return null
-    }
-  }
+  const parsedTaskCode = dataTask?.code ?? null
 
-  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
-  const currentTaskId =
-    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
-
-  const normalizedTaskCode: State | null =
+  const normalizedTaskCode: State | State[] | null =
     parsedTaskCode && Array.isArray(parsedTaskCode)
       ? (() => {
-          const convertedTaskCode = abstractToBlockly(
+          if (isBlockStateArray(parsedTaskCode)) {
+            return parsedTaskCode
+          }
+          const converted = abstractToBlockly(
             parsedTaskCode as AbstractStep[],
-            dataObjects || [],
-            dataLocations || [],
-            dataActions || [],
+            dataObjects ?? [],
+            dataLocations ?? [],
+            dataActions ?? [],
           )
-          return isBlockState(convertedTaskCode) ? convertedTaskCode : null
+          return isBlockState(converted) ? converted : null
         })()
       : isBlockState(parsedTaskCode)
         ? parsedTaskCode
@@ -128,10 +166,16 @@ const Graphic = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataMacros={dataMacros}
+          dataMacros={filteredMacros}
           currentTaskId={currentTaskId}
           dataTask={normalizedTaskCode}
           backFunction={backFunction}
+          macroDetailsById={macroDetailsById}
+          taskStatus={dataTask?.status ?? 'draft'}
+          onLifecycleChange={() => {
+            void mutateTask()
+            void mutateMacros()
+          }}
         />
       )}
     </MainCard>

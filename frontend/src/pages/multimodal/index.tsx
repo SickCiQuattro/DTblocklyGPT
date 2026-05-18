@@ -10,11 +10,25 @@ import { endpoints } from 'services/endpoints'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskType,
+  isPublished,
+  isMacroTask,
+} from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
-import { AbstractStep } from 'pages/tasks/types'
 
 import { SplittedLayout } from './splittedLayout'
+
+const isBlockState = (value: unknown): value is CustomBlock =>
+  typeof value === 'object' &&
+  value !== null &&
+  'type' in value &&
+  typeof (value as { type?: unknown }).type === 'string' &&
+  (String((value as any).type).endsWith('_block') || String((value as any).type) === 'when_start')
+
+const isBlockStateArray = (value: unknown): value is CustomBlock[] =>
+  Array.isArray(value) && value.length > 0 && value.every(isBlockState)
 
 const Multimodal = () => {
   const { id } = useParams()
@@ -22,7 +36,7 @@ const Multimodal = () => {
   const dispatch = useDispatch()
 
   const { data: dataTask, isLoading: isLoadingTask } = useSWR<
-    { name: string; code: string },
+    { name: string; code: Record<string, unknown> | null },
     Error
   >({
     url: endpoints.graphic.getGraphicTask,
@@ -50,12 +64,12 @@ const Multimodal = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: dataMacros, isLoading: isLoadingMacros } = useSWR<
-    TaskType[],
-    Error
-  >({
-    url: endpoints.home.libraries.tasks,
-  })
+  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
+    {
+      url: endpoints.home.libraries.tasks,
+    },
+  )
+  const dataMacros = (tasks ?? []).filter(isMacroTask).filter(isPublished)
 
   const title = dataTask
     ? `Multimodal interface for the task: "${dataTask.name}"`
@@ -67,8 +81,7 @@ const Multimodal = () => {
     void navigate('/tasks')
   }
 
-  const data =
-    dataTask && dataObjects && dataActions && dataLocations && dataMacros
+  const data = dataTask && dataObjects && dataActions && dataLocations && tasks
   const isLoading =
     isLoadingTask ||
     isLoadingObjects ||
@@ -76,23 +89,22 @@ const Multimodal = () => {
     isLoadingLocations ||
     isLoadingMacros
 
-  const parseTaskCode = (taskCode: string): unknown => {
-    try {
-      return JSON.parse(taskCode) as unknown
-    } catch {
-      return null
-    }
-  }
-
-  const parsedTaskCode = dataTask ? parseTaskCode(dataTask.code) : null
+  const parsedTaskCode = dataTask?.code ?? null
   const currentTaskId =
     id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const abstractTaskCode: AbstractStep[] =
     parsedTaskCode === null
       ? []
-      : Array.isArray(parsedTaskCode)
-        ? (parsedTaskCode as AbstractStep[])
-        : (blocklyToAbstract(parsedTaskCode as CustomBlock) ?? [])
+      : isBlockStateArray(parsedTaskCode)
+        ? (() => {
+            const mainBlock = parsedTaskCode.find((b: any) => b.type === 'when_start') || parsedTaskCode[0]
+            return blocklyToAbstract(mainBlock as CustomBlock) ?? []
+          })()
+        : Array.isArray(parsedTaskCode)
+          ? (parsedTaskCode as AbstractStep[])
+          : isBlockState(parsedTaskCode)
+            ? (blocklyToAbstract(parsedTaskCode) ?? [])
+            : []
 
   useEffect(() => {
     if (dataTask) dispatch(openDrawer(false))

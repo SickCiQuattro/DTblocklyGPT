@@ -40,7 +40,9 @@ const STRUCTURAL_EVENTS = new Set([
 
 const EMPTY_RESULT: ConformanceResult = {
   status: 'draft',
-  issues: [{ type: 'EMPTY_WORKSPACE' }],
+  issues: [{ type: 'EMPTY_WORKSPACE', severity: 'error' }],
+  errors: [{ type: 'EMPTY_WORKSPACE', severity: 'error' }],
+  warnings: [],
 }
 
 // ─── Public interface ─────────────────────────────────────────────────────────
@@ -52,11 +54,12 @@ export interface UseConformanceResult {
   isReady: boolean
   /** Structured list of active issues */
   issues: ConformanceIssue[]
-  /**
-   * Pre-formatted, human-readable strings ready for tooltip / UI display.
-   * Empty array when isReady is true.
-   */
+  errors: ConformanceIssue[]
+  warnings: ConformanceIssue[]
+  hasWarnings: boolean
   formattedIssues: string[]
+  formattedErrors: string[]
+  formattedWarnings: string[]
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -107,8 +110,13 @@ export const useConformance = (
 
   return {
     status: result.status,
-    isReady: result.status === 'ready',
+    isReady: result.errors.length === 0,
     issues: result.issues,
+    errors: result.errors,
+    warnings: result.warnings,
+    hasWarnings: result.warnings.length > 0,
     formattedIssues: result.issues.map(formatIssue),
+    formattedErrors: result.errors.map(formatIssue),
+    formattedWarnings: result.warnings.map(formatIssue),
   }
 }

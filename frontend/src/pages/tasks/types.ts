@@ -1,20 +1,78 @@
-export interface TaskType {
+// ─── Lifecycle types ──────────────────────────────────────────────────────────
+
+export type TaskStatus = 'draft' | 'published' | 'published_with_draft'
+export type TaskTypeField = 'task' | 'macro_task'
+
+// ─── TaskType (list) ─────────────────────────────────────────────────────────
+
+export interface BaseTaskType {
   id: number
   description: string
   last_modified: string
   name: string
-  owner: string
+  owner: number
   owner__username: string
   shared: boolean
-  code: string
+  task_type: TaskTypeField
+  status: TaskStatus
+  signature: string
+  published_workspace?: Record<string, unknown> | null
 }
+
+export interface RegularTaskType extends BaseTaskType {
+  task_type: 'task'
+}
+
+export interface MacroTaskType extends BaseTaskType {
+  task_type: 'macro_task'
+}
+
+export type TaskType = RegularTaskType | MacroTaskType
+
+// ─── TaskDetailType ───────────────────────────────────────────────────────────
 
 export type TaskDetailType = {
   id: number
   description: string
   name: string
   shared: boolean
-  code: string
+  code: Record<string, unknown> | null
+  task_type: TaskTypeField
+  status: TaskStatus
+  signature: string
+}
+
+// ─── Type guards ──────────────────────────────────────────────────────────────
+
+export const isRegularTask = (t: TaskType): t is RegularTaskType =>
+  t.task_type === 'task'
+
+export const isMacroTask = (t: TaskType): t is MacroTaskType =>
+  t.task_type === 'macro_task'
+
+export const isPublished = (t: TaskType): boolean =>
+  t.status === 'published' || t.status === 'published_with_draft'
+
+export const isDraft = (task: TaskType | TaskDetailType): boolean =>
+  task.status === 'draft'
+
+export const hasUnpublishedDraft = (task: TaskType | TaskDetailType): boolean =>
+  task.status === 'published_with_draft'
+
+// ─── Macro publish payload ────────────────────────────────────────────────────
+
+export interface PublishMacroPayload {
+  id: number
+  dependencies: number[]
+  forcePublish?: boolean
+}
+
+export interface PublishMacroResponse {
+  signature: string
+}
+
+export interface PublishMacroBreakingChanges {
+  stale_deps: number[]
 }
 
 export type AbstractObject = {

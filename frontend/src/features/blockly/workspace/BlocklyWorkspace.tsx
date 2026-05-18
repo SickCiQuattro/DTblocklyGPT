@@ -39,14 +39,14 @@ for (const [key, value] of Object.entries(locale)) {
 
 Blockly.setLocale(localeMessages)
 
-export const getBlocklyStructure = (): BlockState | null => {
+export const getBlocklyStructure = (): BlockState[] | null => {
   const workspace = Blockly.getMainWorkspace()
   if (!workspace) return null
   const blocklyTaskStructure = saveWorkspaceWithoutGhosts(
     workspace as Blockly.WorkspaceSvg,
   ).blocks?.blocks
-  if (!blocklyTaskStructure) return null
-  return blocklyTaskStructure[0] as BlockState
+  if (!blocklyTaskStructure || blocklyTaskStructure.length === 0) return null
+  return blocklyTaskStructure as BlockState[]
 }
 
 const disableContextMenuItems = () => {
@@ -87,7 +87,7 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
 }
 
 interface BlocklyComponentProps {
-  dataTask: BlockState | null
+  dataTask: BlockState | BlockState[] | null
   editMode: boolean
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
   applyExternalTaskState?: boolean
@@ -153,13 +153,21 @@ export const BlocklyWorkspace = ({
       onWorkspaceReadyRef.current?.(workspace)
 
       if (isValidBlockState(dataTask)) {
-        const defaultDataTask = { ...dataTask }
-        defaultDataTask.x = dataTask?.x || DEFAULT_X_AXIS
-        defaultDataTask.y = dataTask?.y || DEFAULT_Y_AXIS
-
         Blockly.Events.disable()
         try {
-          Blockly.serialization.blocks.append(defaultDataTask, workspace)
+          if (Array.isArray(dataTask)) {
+            dataTask.forEach((block) => {
+              const defaultDataTask = { ...block }
+              defaultDataTask.x = block.x ?? DEFAULT_X_AXIS
+              defaultDataTask.y = block.y ?? DEFAULT_Y_AXIS
+              Blockly.serialization.blocks.append(defaultDataTask, workspace)
+            })
+          } else {
+            const defaultDataTask = { ...dataTask }
+            defaultDataTask.x = dataTask?.x ?? DEFAULT_X_AXIS
+            defaultDataTask.y = dataTask?.y ?? DEFAULT_Y_AXIS
+            Blockly.serialization.blocks.append(defaultDataTask, workspace)
+          }
           injectAllGhostBlocks(workspace)
         } finally {
           Blockly.Events.enable()
@@ -199,16 +207,27 @@ export const BlocklyWorkspace = ({
 
     const workspace = primaryWorkspaceRef.current
     const blocklyTaskStructure = getBlocklyStructure()
-    const x_axis = blocklyTaskStructure?.x || DEFAULT_X_AXIS
-    const y_axis = blocklyTaskStructure?.y || DEFAULT_Y_AXIS
-
-    const defaultDataTask = { ...dataTask }
-    defaultDataTask.x = x_axis
-    defaultDataTask.y = y_axis
+    const firstBlock = Array.isArray(blocklyTaskStructure)
+      ? blocklyTaskStructure[0]
+      : blocklyTaskStructure
+    const x_axis = firstBlock?.x ?? DEFAULT_X_AXIS
+    const y_axis = firstBlock?.y ?? DEFAULT_Y_AXIS
 
     Blockly.Events.disable()
     try {
-      Blockly.serialization.blocks.append(defaultDataTask, workspace)
+      if (Array.isArray(dataTask)) {
+        dataTask.forEach((block) => {
+          const defaultDataTask = { ...block }
+          defaultDataTask.x = block.x ?? x_axis
+          defaultDataTask.y = block.y ?? y_axis
+          Blockly.serialization.blocks.append(defaultDataTask, workspace)
+        })
+      } else {
+        const defaultDataTask = { ...dataTask }
+        defaultDataTask.x = x_axis
+        defaultDataTask.y = y_axis
+        Blockly.serialization.blocks.append(defaultDataTask, workspace)
+      }
       injectAllGhostBlocks(workspace)
     } finally {
       Blockly.Events.enable()

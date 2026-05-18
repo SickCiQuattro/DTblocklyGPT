@@ -9,7 +9,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 
 import { FormTask, TypeNewTask } from './formTask'
-import { TaskDetailType } from './types'
+import { TaskDetailType, TaskTypeField } from './types'
 
 const DetailTask = () => {
   const { id } = useParams()
@@ -19,6 +19,7 @@ const DetailTask = () => {
 
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type')
+  const taskTypeProp = (searchParams.get('taskType') as TaskTypeField) ?? 'task'
 
   const { data, isLoading } = useSWR<TaskDetailType, Error>(
     !insertMode ? { url: endpoints.home.libraries.task, body: { id } } : null,
@@ -52,6 +53,7 @@ const DetailTask = () => {
           data={data}
           insertMode={insertMode}
           backFunction={backFunction}
+          taskType={taskTypeProp}
         />
       )}
     </MainCard>

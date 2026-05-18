@@ -27,7 +27,12 @@ import {
 } from '@mui/material'
 import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
 
-import { AbstractStep, TaskType } from 'pages/tasks/types'
+import {
+  AbstractStep,
+  TaskDetailType,
+  TaskType,
+  isPublished,
+} from 'pages/tasks/types'
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -429,8 +434,9 @@ interface BlocklyEditorProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros?: TaskType[]
+  macroDetailsById?: Record<number, TaskDetailType>
   currentTaskId?: number
-  dataTask: State | null
+  dataTask: State | State[] | null
   editMode?: boolean
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
@@ -457,6 +463,7 @@ export const BlocklyEditor = ({
   dataObjects,
   dataActions,
   dataMacros = [],
+  macroDetailsById = {},
   currentTaskId,
   dataTask,
   editMode = true,
@@ -517,13 +524,12 @@ export const BlocklyEditor = ({
   } | null>(null)
 
   // ── Exclude current task from macro list ───────────────────────────────────
-  const availableMacros = useMemo(
-    () =>
-      currentTaskId === undefined
-        ? dataMacros
-        : dataMacros.filter((m) => m.id !== currentTaskId),
-    [currentTaskId, dataMacros],
-  )
+  const availableMacros = useMemo(() => {
+    const publishedMacros = dataMacros.filter(isPublished)
+    return currentTaskId === undefined
+      ? publishedMacros
+      : publishedMacros.filter((m) => m.id !== currentTaskId)
+  }, [currentTaskId, dataMacros])
 
   // ── Shadow picker ──────────────────────────────────────────────────────────
   const shadowPicker = useShadowPicker({
@@ -699,12 +705,13 @@ export const BlocklyEditor = ({
         block,
         workspace,
         dataMacros: availableMacros,
+        macroDetailsById,
         dataObjects,
         dataLocations,
         dataActions,
       })
     },
-    [availableMacros, dataActions, dataLocations, dataObjects],
+    [availableMacros, macroDetailsById, dataObjects, dataLocations, dataActions],
   )
 
   // ── Context menu bridge ────────────────────────────────────────────────────
@@ -914,7 +921,7 @@ export const BlocklyEditor = ({
 
       // ── Main workspace event listener ──────────────────────────────────────
       const listener = (event: Blockly.Events.Abstract) => {
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
+        if (event.type === Blockly.Events.BLOCK_DELETE) {
           syncStartBlockVisibility(workspace, showStartBlockRef.current)
           stopToolboxHoverTracking()
           setIsDeleting(false)
@@ -924,7 +931,7 @@ export const BlocklyEditor = ({
         }
 
         // Drag start / end: toggle "delete zone" mode and shadow highlighting
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DRAG}`) {
+        if (event.type === Blockly.Events.BLOCK_DRAG) {
           const dragEvent = event as Blockly.Events.Abstract & {
             isStart?: boolean
           }
@@ -999,13 +1006,6 @@ export const BlocklyEditor = ({
           }
         }
 
-        if (`${event.type}` === `${Blockly.Events.BLOCK_DELETE}`) {
-          stopToolboxHoverTracking()
-          setIsDeleting(false)
-          setToolboxDeleteZoneState('idle')
-          clearShadowBlockHighlights(workspace)
-        }
-
         // Shadow block click: open the picker
         if (`${event.type}` === `${Blockly.Events.CLICK}`) {
           if (workspace.options.readOnly) {
@@ -1053,7 +1053,11 @@ export const BlocklyEditor = ({
         if (STRUCTURE_CHANGING_TYPES.has(event.type)) {
           if (onTaskStructureChangeRef.current) {
             const structure = getBlocklyStructure()
-            const abstract = blocklyToAbstract(structure as CustomBlock | null)
+            const mainBlock = Array.isArray(structure)
+              ? structure.find((b: any) => b.type === 'when_start') ||
+                structure[0]
+              : structure
+            const abstract = blocklyToAbstract(mainBlock as CustomBlock | null)
             onTaskStructureChangeRef.current(abstract)
           }
         }
@@ -1332,6 +1336,7 @@ export const BlocklyEditor = ({
         blockViewMode={blockViewMode}
         onRootRefChange={handleToolboxRootRefChange}
         onBlockPointerDown={handleBlockPointerDown}
+        macroDetailsById={macroDetailsById}
       />
       <div
         className="custom-dragdrop-workspace-wrapper"

@@ -27,11 +27,26 @@ import { isValidBlockState, parseJson } from '../utils/serialization'
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+const ABSTRACT_STEP_TYPES = new Set([
+  'pick',
+  'place',
+  'processing',
+  'move_to',
+  'move_relative',
+  'gripper',
+  'repeat',
+  'when',
+  'human_action',
+  'wait_for_human',
+])
+
 const isAbstractStepLike = (value: unknown): value is AbstractStep =>
-  isRecord(value) && typeof (value as { type?: unknown }).type === 'string'
+  isRecord(value) &&
+  typeof (value as { type?: unknown }).type === 'string' &&
+  ABSTRACT_STEP_TYPES.has((value as { type: string }).type)
 
 const isAbstractStepArray = (value: unknown): value is AbstractStep[] =>
-  Array.isArray(value) && value.every(isAbstractStepLike)
+  Array.isArray(value) && value.length > 0 && value.every(isAbstractStepLike)
 
 const hasAbstractStepsArray = (
   value: unknown,
@@ -65,19 +80,19 @@ const hasTopLevelBlocksArray = (
  * @param macroCode Serialised task code string stored in `TaskType.code`.
  * @returns         A `BlockState` ready for `BlocklyViewer`, or `null` on failure.
  */
-export const toMacroRootState = (macroCode: string): State | null => {
+export const toMacroRootState = (macroCode: string): State | State[] | null => {
   try {
     const parsed = parseJson<unknown>(macroCode)
     if (!parsed) return null
+
+    if (isValidBlockState(parsed)) {
+      return parsed
+    }
 
     if (isAbstractStepArray(parsed) || hasAbstractStepsArray(parsed)) {
       const steps = isAbstractStepArray(parsed) ? parsed : parsed.steps
       const converted = abstractToBlockly(steps, [], [], [])
       return isValidBlockState(converted) ? converted : null
-    }
-
-    if (isValidBlockState(parsed)) {
-      return parsed
     }
 
     if (hasWorkspaceBlocksPayload(parsed)) {
@@ -88,8 +103,8 @@ export const toMacroRootState = (macroCode: string): State | null => {
     }
 
     if (hasTopLevelBlocksArray(parsed) && parsed.blocks.length > 0) {
-      const firstBlock = parsed.blocks[0]
-      return isValidBlockState(firstBlock) ? firstBlock : null
+      const blocks = parsed.blocks as State[]
+      return isValidBlockState(blocks) ? blocks : null
     }
   } catch (e) {
     console.error('Failed to parse macro code for preview:', e)

@@ -11,6 +11,9 @@
  *  - Understands the project's shadow block conventions (types defined in
  *    definitions.ts) so it can detect unresolved placeholder slots.
  *
+ * Issue severity model:
+ *  - 'error'   → blocks Save (task) / Publish (macro). Workspace is not ready.
+ *  - 'warning' → non-blocking. Workspace is still ready (e.g. floating blocks).
  */
 
 import * as Blockly from 'blockly/core'
@@ -34,20 +37,34 @@ const START_BLOCK_TYPE = 'when_start'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export type TaskStatus = 'draft' | 'ready'
+export type ConformanceIssueSeverity = 'error' | 'warning'
 
 export type ConformanceIssue =
-  | { type: 'EMPTY_WORKSPACE' }
-  | { type: 'MULTIPLE_FLOWS'; count: number }
+  | { type: 'EMPTY_WORKSPACE'; severity: 'error' }
+  | { type: 'MULTIPLE_FLOWS'; severity: 'error'; count: number }
   | {
       type: 'UNRESOLVED_SHADOW'
+      severity: 'error'
       blockId: string
       blockType: string
       humanLabel: string
     }
+  | {
+      type: 'FLOATING_BLOCK'
+      severity: 'warning'
+      blockId: string
+      blockType: string
+    }
 
 export interface ConformanceResult {
+  /** 'draft' if any errors exist, 'ready' otherwise (warnings are allowed). */
   status: TaskStatus
+  /** All issues, errors first then warnings. */
   issues: ConformanceIssue[]
+  /** Only severity === 'error' — block Save / Publish. */
+  errors: ConformanceIssue[]
+  /** Only severity === 'warning' — non-blocking, shown as advisory. */
+  warnings: ConformanceIssue[]
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -69,6 +86,7 @@ const toShadowIssue = (block: Blockly.Block): ConformanceIssue => {
 
   return {
     type: 'UNRESOLVED_SHADOW',
+    severity: 'error',
     blockId: block.id,
     blockType: block.type,
     humanLabel,
@@ -108,16 +126,30 @@ const collectUnresolvedShadows = (
   return found
 }
 
+/** Builds the final ConformanceResult from a list of errors and warnings. */
+const buildResult = (
+  errors: ConformanceIssue[],
+  warnings: ConformanceIssue[],
+): ConformanceResult => ({
+  status: errors.length > 0 ? 'draft' : 'ready',
+  issues: [...errors, ...warnings],
+  errors,
+  warnings,
+})
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
  * Computes the conformance state of the given workspace.
  *
- * Rules (evaluated in order — first failure wins):
- *  1. Workspace has no enabled non-shadow top-level blocks → DRAFT / EMPTY_WORKSPACE
- *  2. More than one top-level flow exists               → DRAFT / MULTIPLE_FLOWS
- *  3. Any unresolved shadow block in the flow           → DRAFT / UNRESOLVED_SHADOW
- *  4. All rules pass                                    → READY
+ * Rules (in order):
+ *  1. No enabled non-shadow top-level blocks  → error EMPTY_WORKSPACE
+ *  2. More than one top-level connected flow  → error MULTIPLE_FLOWS
+ *     Note: extra disconnected tops become FLOATING_BLOCK warnings instead.
+ *  3. Any unresolved shadow block in the flow → error UNRESOLVED_SHADOW (×N)
+ *  4. Orphan/floating blocks outside the flow → warning FLOATING_BLOCK (×N)
+ *
+ * Status is 'ready' only when there are zero errors (warnings are allowed).
  *
  * Works identically regardless of whether the when_start block is present
  * (Detailed/Essential mode) or absent (Minimal mode). The start block is
@@ -134,36 +166,40 @@ export const computeConformance = (
 
   // ── Rule 1: empty workspace ──────────────────────────────────────────────
   if (topBlocks.length === 0) {
-    return { status: 'draft', issues: [{ type: 'EMPTY_WORKSPACE' }] }
+    return buildResult([{ type: 'EMPTY_WORKSPACE', severity: 'error' }], [])
   }
 
-  // ── Rule 2: multiple flows ───────────────────────────────────────────────
+  // ── Identify the main flow root ──────────────────────────────────────────
+  // Prefer the when_start block as root; otherwise take the first top block.
+  const startBlock = topBlocks.find((b) => b.type === START_BLOCK_TYPE)
+  const root = startBlock ?? topBlocks[0]
+
+  // ── Rule 2: multiple flows (error) ───────────────────────────────────────
+  // If there are multiple disconnected top-level blocks, the workspace is
+  // ambiguous. We enforce a single flow to consider the task 'ready'.
   if (topBlocks.length > 1) {
-    return {
-      status: 'draft',
-      issues: [{ type: 'MULTIPLE_FLOWS', count: topBlocks.length }],
-    }
+    return buildResult([
+      { type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length },
+    ], [])
   }
 
-  // ── Rule 3: unresolved shadow blocks ────────────────────────────────────
-  const root = topBlocks[0]
-
+  // ── Rule 3: unresolved shadow blocks in the main flow ────────────────────
   // When the root is when_start, begin traversal from its first child so the
   // start block itself is never misidentified as an unresolved slot.
   const traversalRoot =
     root.type === START_BLOCK_TYPE ? (root.getNextBlock() ?? root) : root
 
   if (isUnresolvedShadow(traversalRoot)) {
-    return { status: 'draft', issues: [toShadowIssue(traversalRoot)] }
+    return buildResult([toShadowIssue(traversalRoot)], [])
   }
 
-  const shadowIssues = collectUnresolvedShadows(traversalRoot)
-  if (shadowIssues.length > 0) {
-    return { status: 'draft', issues: shadowIssues }
+  const shadowErrors = collectUnresolvedShadows(traversalRoot)
+  if (shadowErrors.length > 0) {
+    return buildResult(shadowErrors, [])
   }
 
-  // ── All rules pass ───────────────────────────────────────────────────────
-  return { status: 'ready', issues: [] }
+  // ── All errors resolved ───────────────────────────────────────────────────
+  return buildResult([], [])
 }
 
 /**
@@ -178,5 +214,7 @@ export const formatIssue = (issue: ConformanceIssue): string => {
       return `${issue.count} separate flows detected — connect all blocks into one sequence.`
     case 'UNRESOLVED_SHADOW':
       return `"${issue.humanLabel}" requires a selection.`
+    case 'FLOATING_BLOCK':
+      return 'A disconnected block was found — it will be ignored at runtime.'
   }
 }

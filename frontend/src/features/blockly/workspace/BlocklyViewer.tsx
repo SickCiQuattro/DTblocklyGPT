@@ -8,7 +8,7 @@ import { isValidBlockState } from '../utils/serialization'
 import { READONLY_WORKSPACE_CONFIG } from './workspaceConfig'
 
 interface BlocklyViewerProps {
-  blockState: BlockState | null
+  blockState: BlockState | BlockState[] | null
   height?: string
   startScale?: number
   autoCenter?: boolean
@@ -88,7 +88,13 @@ export const BlocklyViewer = ({
       return
     }
 
-    Blockly.serialization.blocks.append({ ...blockState }, workspace)
+    if (Array.isArray(blockState)) {
+      blockState.forEach((block) => {
+        Blockly.serialization.blocks.append({ ...block }, workspace)
+      })
+    } else {
+      Blockly.serialization.blocks.append({ ...blockState }, workspace)
+    }
 
     window.requestAnimationFrame(() => {
       if (!workspaceRef.current) {

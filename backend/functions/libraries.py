@@ -16,6 +16,10 @@ from django.contrib.auth.models import User
 
 
 def get_task_list(request: HttpRequest) -> HttpResponse:
+    """Returns all tasks (and macro tasks) owned by or shared with the user.
+    Used by the management UI — no status filter applied here.
+    For the toolbox use get_published_macro_list instead.
+    """
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
@@ -29,11 +33,54 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
                         "owner",
                         "owner__username",
                         "shared",
-                        "code",
+                        "task_type",
+                        "status",
+                        "signature",
                     )
                     .order_by("-last_modified")
                 )
                 return success_response(tasks)
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))
+
+
+def get_published_macro_list(request: HttpRequest) -> HttpResponse:
+    """
+    GET api/macro/list/
+    Returns only Macro Tasks that are visible in the toolbox:
+    status IN ('published', 'published_with_draft').
+
+    The response intentionally omits draft_workspace and workspace;
+    published_workspace is served by get_graphic_task when the block
+    is resolved inside the editor.
+    """
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.GET.value:
+                macros = (
+                    Task.objects.filter(
+                        Q(owner=request.user) | Q(shared=True),
+                        task_type="macro_task",
+                        status__in=["published", "published_with_draft"],
+                    )
+                    .values(
+                        "id",
+                        "name",
+                        "description",
+                        "last_modified",
+                        "owner",
+                        "owner__username",
+                        "shared",
+                        "status",
+                        "signature",
+                    )
+                    .order_by("-last_modified")
+                )
+                return success_response(macros)
             else:
                 return invalid_request_method()
         else:
@@ -50,15 +97,33 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                 task = Task.objects.filter(id=task_id).first()
                 if task is None:
                     return success_response()
-                task_fields = task.to_dict(
-                    [
-                        "id",
-                        "name",
-                        "description",
-                        "shared",
-                        "code",
-                    ]
-                )
+
+                # Unified read path: draft_workspace > published_workspace > workspace > code(legacy)
+                if task.draft_workspace is not None:
+                    raw_workspace = task.draft_workspace
+                elif task.published_workspace is not None:
+                    raw_workspace = task.published_workspace
+                elif task.workspace is not None:
+                    raw_workspace = task.workspace
+                elif task.code:
+                    try:
+                        from json import loads as _loads
+                        raw_workspace = _loads(task.code)
+                    except Exception:
+                        raw_workspace = None
+                else:
+                    raw_workspace = None
+
+                task_fields = {
+                    "id": task.id,
+                    "name": task.name,
+                    "description": task.description,
+                    "shared": task.shared,
+                    "task_type": task.task_type,
+                    "status": task.status,
+                    "code": raw_workspace,
+                    "signature": task.signature,
+                }
                 return success_response(task_fields)
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)
@@ -71,6 +136,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                 task_name = data.get("name")
                 task_shared = data.get("shared")
                 task_description = data.get("description")
+                task_type = data.get("task_type", "task")
                 task_owner = User.objects.get(id=request.user.id)
                 date = getDateTimeNow()
                 # check if the name already exists
@@ -91,6 +157,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     description=task_description,
                     shared=task_shared,
                     last_modified=date,
+                    task_type=task_type,
                 )
                 response = {"id": task_created.id}
                 return success_response(response)
@@ -116,6 +183,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"nameAlreadyExists": True}
                     return bad_request("Name already exists", data_result)
 
+                # task_type is immutable after creation — never updated here.
                 Task.objects.filter(id=task_id).update(
                     name=task_name,
                     description=task_description,

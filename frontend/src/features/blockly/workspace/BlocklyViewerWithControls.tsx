@@ -10,7 +10,7 @@ import { MODAL_VIEWER_CONFIG } from './workspaceConfig'
 import '../styles/editor.css'
 
 interface BlocklyViewerWithControlsProps {
-  blockState: BlockState | null
+  blockState: BlockState | BlockState[] | null
   height?: string
   startScale?: number
   autoCenter?: boolean

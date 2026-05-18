@@ -24,6 +24,7 @@ from backend.block_types import (
     LibrariesItems,
     MacroItems,
 )
+from backend.functions.task import _resolve_runtime_workspace
 
 
 def launch_wsl_ros_command(command: str):
@@ -651,7 +652,12 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 locationsOfUser = Location.objects.filter(
                     Q(owner=request.user.id) | Q(shared=True)
                 )
-                code = loads(task.code)
+                if task.status not in ("published", "published_with_draft"):
+                    return error_response("Task not published")
+
+                code = _resolve_runtime_workspace(task)
+                if code is None:
+                    return error_response("No published workspace available")
 
                 reset_simulation_world()
 

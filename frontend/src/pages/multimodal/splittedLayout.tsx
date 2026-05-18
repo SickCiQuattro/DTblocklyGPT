@@ -69,12 +69,16 @@ export const SplittedLayout = ({
 
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
-    const abstractTask = blocklyToAbstract(blocklyTaskStructure as CustomBlock)
+    const mainBlock = Array.isArray(blocklyTaskStructure)
+      ? blocklyTaskStructure.find((b: any) => b.type === 'when_start') ||
+        blocklyTaskStructure[0]
+      : blocklyTaskStructure
+    const abstractTask = blocklyToAbstract(mainBlock as CustomBlock)
 
     void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
       method: MethodHTTP.PUT,
-      body: { taskStructure: abstractTask, id },
+      body: { taskStructure: blocklyTaskStructure, id },
     }).then(() => {
       toast.success(MessageText.success)
       void dispatch(toggleEditMode())
