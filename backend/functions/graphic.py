@@ -8,11 +8,11 @@ from backend.utils.response import (
 )
 from backend.functions.chat import search_existing_libraries
 from backend.models import Task, Object, Action, Location
+from backend.utils.signature import build_task_signature
 from django.db.models import Q
 from json import loads, dumps
 from django.contrib.auth.models import User
 from copy import deepcopy
-
 
 def save_graphic_task(request: HttpRequest) -> HttpResponse:
     """
@@ -46,12 +46,8 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 from backend.utils.date import getDateTimeNow
 
                 if publish:
-                    import hashlib
-                    import json
-                    
-                    sig_input = json.dumps(workspace_value, sort_keys=True, separators=(',', ':'))
-                    sig = hashlib.sha256(sig_input.encode()).hexdigest()[:16]
-                    
+                    sig = build_task_signature(workspace_value)
+
                     Task.objects.filter(id=task_id).update(
                         published_workspace=workspace_value,
                         draft_workspace=None,

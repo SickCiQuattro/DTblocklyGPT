@@ -13,8 +13,8 @@ from backend.models import (
     STATUS_PUBLISHED_WITH_DRAFT,
 )
 from backend.utils.date import getDateTimeNow
+from backend.utils.signature import build_task_signature
 from json import loads
-
 
 def save_draft(request: HttpRequest) -> HttpResponse:
     """
@@ -92,16 +92,12 @@ def publish_task(request: HttpRequest) -> HttpResponse:
         if task is None:
             return error_response("Task not found")
 
-        import hashlib
-        import json
-
         task.published_workspace = task_structure
         task.draft_workspace = None
         task.status = STATUS_PUBLISHED
         task.last_modified = getDateTimeNow()
 
-        sig_input = json.dumps(task_structure, sort_keys=True, separators=(',', ':'))
-        task.signature = hashlib.sha256(sig_input.encode()).hexdigest()[:16]
+        task.signature = build_task_signature(task_structure)
 
         task.save(update_fields=[
             "published_workspace", "draft_workspace", "status", "last_modified", "signature"
