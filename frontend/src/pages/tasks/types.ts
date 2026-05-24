@@ -120,6 +120,25 @@ export type AbstractStep =
   | AbstractWhenStep
   | AbstractHumanActionStep
   | AbstractWaitForHumanStep
+  | AbstractNotifyActionStep
+  | AbstractRepeatUntilStep
+  | AbstractWaitStep
+
+export type AbstractWaitStep = {
+  type: 'wait'
+  seconds: number
+}
+
+export type AbstractNotifyActionStep = {
+  type: 'notify_action'
+  description: string
+}
+
+export type AbstractRepeatUntilStep = {
+  type: 'repeat_until'
+  condition: AbstractCondition | null
+  steps: AbstractStep[]
+}
 
 export type AbstractPickStep = {
   type: 'pick'

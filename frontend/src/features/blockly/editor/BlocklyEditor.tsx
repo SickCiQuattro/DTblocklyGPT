@@ -24,8 +24,16 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Popover,
+  ToggleButton,
+  ToggleButtonGroup,
+  Switch,
+  Box,
+  Stack,
+  Typography,
+  Button,
 } from '@mui/material'
-import { Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react'
+import { Maximize, Minus, Plus, Redo2, Undo2, Settings } from 'lucide-react'
 
 import {
   AbstractStep,
@@ -44,6 +52,7 @@ import { CustomToolbox, ToolboxBlockItem } from '../toolbox'
 import {
   type BlockViewMode,
   type DeleteConfirmMode,
+  type ViewSettings,
 } from '../utils/useViewSettings'
 import { applyBlockViewMode } from '../utils/viewModePresentation'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
@@ -392,6 +401,9 @@ interface BlocklyEditorProps {
   blockViewMode?: BlockViewMode
   deleteConfirmMode?: DeleteConfirmMode
   showStartBlock?: boolean
+  viewSettings?: ViewSettings
+  onViewSettingsChange?: (patch: Partial<ViewSettings>) => void
+  onResetViewSettings?: () => void
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
@@ -421,6 +433,9 @@ export const BlocklyEditor = ({
   blockViewMode = 'complete',
   deleteConfirmMode = 'multiple',
   showStartBlock = true,
+  viewSettings,
+  onViewSettingsChange,
+  onResetViewSettings,
 }: BlocklyEditorProps) => {
   // ── Workspace refs ─────────────────────────────────────────────────────────
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null)
@@ -453,6 +468,14 @@ export const BlocklyEditor = ({
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [isDeleting, setIsDeleting] = useState(false)
+  const [settingsAnchorEl, setSettingsAnchorEl] = useState<HTMLButtonElement | null>(null)
+  const handleOpenSettings = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setSettingsAnchorEl(event.currentTarget as HTMLButtonElement)
+  }
+  const handleCloseSettings = () => {
+    setSettingsAnchorEl(null)
+  }
+  const isSettingsOpen = Boolean(settingsAnchorEl)
   const [toolboxDeleteZoneState, setToolboxDeleteZoneState] =
     useState<DeleteZoneState>('idle')
   const [historyState, setHistoryState] = useState({
@@ -1319,6 +1342,16 @@ export const BlocklyEditor = ({
             >
               <Redo2 size={18} />
             </IconButton>
+            {onViewSettingsChange && viewSettings && (
+              <IconButton
+                className="workspace-control-button"
+                size="small"
+                onClick={handleOpenSettings}
+                aria-label="Workspace Settings"
+              >
+                <Settings size={18} />
+              </IconButton>
+            )}
           </div>
           <div className="workspace-controls-group workspace-controls-group--bottom-right">
             <IconButton
@@ -1464,6 +1497,104 @@ export const BlocklyEditor = ({
             onConfirm={confirmDialog.onConfirm}
             onCancel={confirmDialog.onCancel}
           />
+        )}
+
+        {/* Workspace settings popover */}
+        {onViewSettingsChange && viewSettings && (
+          <Popover
+            open={isSettingsOpen}
+            anchorEl={settingsAnchorEl}
+            onClose={handleCloseSettings}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            slotProps={{
+              paper: {
+                sx: {
+                  p: 2.5,
+                  mt: 1,
+                  width: 320,
+                  borderRadius: 3,
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                  border: '1px solid rgba(148, 163, 184, 0.12)',
+                },
+              },
+            }}
+          >
+            <Stack spacing={2.5}>
+              <Box>
+                <Typography variant="h6" sx={{ fontSize: 15, fontWeight: 700, color: 'text.primary' }}>
+                  Workspace Settings
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+                  Adjust the visual editor and safety controls.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                  Block Visualization
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  fullWidth
+                  size="small"
+                  value={viewSettings.blockViewMode}
+                  onChange={(_e, val) => val && onViewSettingsChange({ blockViewMode: val })}
+                >
+                  <ToggleButton value="complete" sx={{ fontSize: 12, py: 0.5 }}>Complete</ToggleButton>
+                  <ToggleButton value="essential" sx={{ fontSize: 12, py: 0.5 }}>Essential</ToggleButton>
+                  <ToggleButton value="minimal" sx={{ fontSize: 12, py: 0.5 }}>Minimal</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                  Delete Confirmations
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  fullWidth
+                  size="small"
+                  value={viewSettings.deleteConfirmMode}
+                  onChange={(_e, val) => val && onViewSettingsChange({ deleteConfirmMode: val })}
+                >
+                  <ToggleButton value="always" sx={{ fontSize: 12, py: 0.5 }}>Always</ToggleButton>
+                  <ToggleButton value="multiple" sx={{ fontSize: 12, py: 0.5 }}>Multiple</ToggleButton>
+                  <ToggleButton value="never" sx={{ fontSize: 12, py: 0.5 }}>Never</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              <Box>
+                <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                      Show Start Block
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', maxWidth: 200 }}>
+                      Hiding start block disables orphan highlighting.
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={viewSettings.showStartBlock}
+                    onChange={(_e, checked) => onViewSettingsChange({ showStartBlock: checked })}
+                    size="small"
+                  />
+                </Stack>
+              </Box>
+
+              {onResetViewSettings && (
+                <Button variant="outlined" size="small" onClick={onResetViewSettings} fullWidth sx={{ borderRadius: 2, fontSize: 12 }}>
+                  Restore Defaults
+                </Button>
+              )}
+            </Stack>
+          </Popover>
         )}
       </div>
     </div>

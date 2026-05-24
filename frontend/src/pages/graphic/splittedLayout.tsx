@@ -62,6 +62,9 @@ export const SplittedLayout = ({
         deleteConfirmMode={viewSettings.deleteConfirmMode}
         showStartBlock={viewSettings.showStartBlock}
         macroDetailsById={macroDetailsById}
+        viewSettings={viewSettings}
+        onViewSettingsChange={updateViewSettings}
+        onResetViewSettings={resetViewSettings}
       />
 
       <RightPanel

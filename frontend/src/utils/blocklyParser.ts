@@ -47,6 +47,7 @@ export interface CustomBlock {
     | 'human_feedback_block'
     | 'human_action_block'
     | 'notify_action_block'
+    | 'wait_block'
     | 'logic_and_block'
     | 'logic_or_block'
     | 'logic_not_block'
@@ -190,12 +191,35 @@ export const abstractToBlockly = (
           type: 'gripper_block',
           fields: { GRIPPER_STATE: step.state ?? 'CLOSE' },
         }
+      case 'wait':
+        return {
+          type: 'wait_block',
+          fields: { SECONDS: (step as any).seconds ?? 3 },
+        }
       case 'repeat': {
         const innerBlock = stepsToSequence(step.steps)
         return {
           type: 'repeat_block',
           fields: { times: step.times },
           inputs: innerBlock ? { DO: { block: innerBlock } } : { DO: {} },
+        }
+      }
+      case 'repeat_until': {
+        const condBlock = conditionToBlock(step.condition)
+        const innerSteps = (step as any).do || step.steps
+        const innerBlock = stepsToSequence(innerSteps)
+        return {
+          type: 'repeat_until_block',
+          inputs: {
+            CONDITION: condBlock ? { block: condBlock } : {},
+            DO: innerBlock ? { block: innerBlock } : {},
+          },
+        }
+      }
+      case 'notify_action': {
+        return {
+          type: 'notify_action_block',
+          fields: { TASK_DESC: step.description ?? '' },
         }
       }
       case 'when': {
@@ -458,6 +482,11 @@ export const blocklyToAbstract = (
           type: 'gripper',
           state: block.fields?.GRIPPER_STATE ?? 'CLOSE',
         }
+      case 'wait_block':
+        return {
+          type: 'wait',
+          seconds: Number(block.fields?.SECONDS ?? 3),
+        } as any
       case 'repeat_block':
         return {
           type: 'repeat',
@@ -465,10 +494,20 @@ export const blocklyToAbstract = (
           steps: sequenceToSteps(resolveBlock(block.inputs?.DO)),
         }
       case 'loop_block':
-      case 'repeat_until_block':
-      case 'notify_action_block':
         // Frontend-only blocks — skip and continue sequence traversal via next
         return null
+      case 'repeat_until_block':
+        return {
+          type: 'repeat_until',
+          condition: blockToCondition(resolveBlock(block.inputs?.CONDITION)),
+          do: sequenceToSteps(resolveBlock(block.inputs?.DO)),
+          steps: sequenceToSteps(resolveBlock(block.inputs?.DO)),
+        } as any
+      case 'notify_action_block':
+        return {
+          type: 'notify_action',
+          description: block.fields?.TASK_DESC ?? '',
+        }
       case 'when_block':
         return {
           type: 'when',

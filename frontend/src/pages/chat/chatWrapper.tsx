@@ -12,7 +12,7 @@ import { MessageBox } from 'react-chat-elements'
 import SpeechRecognition, {
   useSpeechRecognition,
 } from 'react-speech-recognition'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 
 import { formatTimeFrontend } from 'utils/date'
 import { getFromLocalStorage } from 'utils/localStorageUtils'
@@ -22,6 +22,7 @@ import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { resetTask, updateTask } from 'store/reducers/task'
+import { setProposedTask, clearProposedTask } from 'store/reducers/proposal'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 import {
@@ -32,7 +33,6 @@ import {
   FINE_TUNING_JOB_ID,
   INITIAL_MESSAGE_1,
   LastMessage,
-  MergeTaskStructure,
   MessageType,
   MessageTypeEnum,
   TaskChatStructure,
@@ -91,12 +91,44 @@ export const ChatWrapper = ({
   const [isProcessing, setIsProcessing] = React.useState(false)
   const [isRecording, setIsRecording] = React.useState(false)
   const [isFinished, setIsFinished] = React.useState(false)
+  const [dataObjects, setDataObjects] = React.useState<any[]>([])
+  const [dataLocations, setDataLocations] = React.useState<any[]>([])
+  const [dataActions, setDataActions] = React.useState<any[]>([])
   const {
     transcript,
     resetTranscript,
     browserSupportsSpeechRecognition,
     isMicrophoneAvailable,
   } = useSpeechRecognition()
+
+  // Fetch libraries (objects, locations, actions) on mount
+  React.useEffect(() => {
+    const fetchLibraries = async () => {
+      try {
+        const [objectsRes, locationsRes, actionsRes] = await Promise.all([
+          fetchApi({
+            url: endpoints.home.libraries.objects,
+            method: MethodHTTP.GET,
+          }),
+          fetchApi({
+            url: endpoints.home.libraries.locations,
+            method: MethodHTTP.GET,
+          }),
+          fetchApi({
+            url: endpoints.home.libraries.actions,
+            method: MethodHTTP.GET,
+          }),
+        ])
+        setDataObjects(objectsRes as any[])
+        setDataLocations(locationsRes as any[])
+        setDataActions(actionsRes as any[])
+      } catch (error) {
+        console.error('Failed to fetch libraries:', error)
+      }
+    }
+
+    fetchLibraries()
+  }, [])
 
   const startRecording = () => {
     void SpeechRecognition.startListening({
@@ -129,14 +161,16 @@ export const ChatWrapper = ({
     setMessage('')
 
     void fetchApi<ChatResponse>({
-      url: endpoints.chat.newMessage,
+      url: endpoints.chat.newMessageMultimodal,
       method: MethodHTTP.POST,
       body: {
         id: Number(id),
         message,
         chatLog,
-        fineTunedModel,
-        fineTuningJobId,
+        dataObjects,
+        dataLocations,
+        dataActions,
+        taskStructure: taskStructure, // current task structure from props
       },
     })
       .then((res: ChatResponse) => {
@@ -168,12 +202,18 @@ export const ChatWrapper = ({
             setChatLog(res.chatLog)
           }
 
-          const newTaskStructure: TaskChatStructure = MergeTaskStructure(
-            taskStructure,
-            res.response.task,
+          // Set the proposed task and validation warnings in the proposal slice
+          dispatch(
+            setProposedTask({
+              proposedTask: (res.response.task as any) || null,
+              validationWarnings: (res.response as any).validationWarnings || [],
+              answer: res.response.answer || '',
+            })
           )
-          setTaskStructure(newTaskStructure)
-          void dispatch(updateTask(newTaskStructure))
+
+          // Optionally, we can still update the task structure if we want to keep a preview?
+          // But according to the plan, we should not update the task until the user applies.
+          // So we leave the task structure as is (the current one) and only set the proposal.
 
           if (res.response?.finished) {
             setIsFinished(true)
@@ -182,7 +222,7 @@ export const ChatWrapper = ({
               method: MethodHTTP.POST,
               body: {
                 id: Number(id),
-                taskStructure: newTaskStructure,
+                taskStructure: taskStructure, // Note: we are saving the current task structure, not the proposed one
               },
             }).then((res) => {
               const { taskCode } = res

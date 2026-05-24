@@ -1,20 +1,25 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useMediaQuery } from '@mui/material'
 import {
-  CloseOutlined,
-  EditOutlined,
-  SaveOutlined,
-  SoundOutlined,
-} from '@ant-design/icons'
+  Edit3,
+  Save,
+  X,
+  Volume2,
+  VolumeX,
+  Undo2,
+  Play,
+  MessageSquare,
+} from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
 import { useParams } from 'react-router-dom'
 
 import { BlocklyEditor, getBlocklyStructure } from 'features/blockly'
+import { useViewSettings } from 'features/blockly/utils/useViewSettings'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { ActionListType } from 'pages/actions/types'
-import { AbstractStep, TaskType } from 'pages/tasks/types'
+import { AbstractStep, TaskType, TaskDetailType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import {
   abstractToBlockly,
@@ -27,7 +32,10 @@ import { endpoints } from 'services/endpoints'
 import { MessageText } from 'utils/messages'
 import { toggleEditMode } from 'store/reducers/task'
 
-import { ChatWrapper } from './chatWrapper'
+import { ChatDrawer } from 'components/ChatDrawer'
+import { DigitalTwinPanel } from 'components/DigitalTwinPanel'
+import { INITIAL_MESSAGE_1, MessageType } from './utils'
+import { useSpeechRecognition } from 'react-speech-recognition'
 import { RightPanel } from './rightPanel'
 
 interface SplittedLayoutProps {
@@ -35,6 +43,7 @@ interface SplittedLayoutProps {
   dataObjects: ObjectListType[]
   dataActions: ActionListType[]
   dataMacros: TaskType[]
+  macroDetailsById?: Record<number, TaskDetailType>
   currentTaskId?: number
   abstractTask: AbstractStep[]
   backFunction: () => void
@@ -51,6 +60,7 @@ export const SplittedLayout = ({
   dataObjects,
   dataActions,
   dataMacros,
+  macroDetailsById = {},
   currentTaskId,
   abstractTask,
   backFunction,
@@ -66,6 +76,29 @@ export const SplittedLayout = ({
   const themePalette = Palette('light')
   const dispatch = useDispatch()
   const { id } = useParams()
+
+  const { viewSettings, updateViewSettings, resetViewSettings } =
+    useViewSettings()
+
+  const [chatOpen, setChatOpen] = useState<boolean>(true)
+  const [simOpen, setSimOpen] = useState<boolean>(false)
+  const [isProcessing, setIsProcessing] = useState<boolean>(false)
+  const [fineTunedModel, setFineTunedModel] = useState<string>('')
+  const [fineTuningJobId, setFineTuningJobId] = useState<string>('')
+  const [listMessages, setListMessages] = useState<MessageType[]>([
+    INITIAL_MESSAGE_1,
+  ])
+  const [chatLog, setChatLog] = useState<any[]>([])
+  const [message, setMessage] = useState<string>('')
+  const [isRecording, setIsRecording] = useState<boolean>(false)
+  const [undoStack, setUndoStack] = useState<AbstractStep[][]>([])
+
+  const {
+    transcript,
+    resetTranscript,
+    browserSupportsSpeechRecognition,
+    isMicrophoneAvailable,
+  } = useSpeechRecognition()
 
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
@@ -86,103 +119,382 @@ export const SplittedLayout = ({
     })
   }
 
-  const parsedDataTask = useMemo(() => {
-    if (!taskStructure) return null
+  const initialDataTask = useMemo(() => {
+    if (!abstractTask) return null
 
     const convertedTask = abstractToBlockly(
-      taskStructure,
+      abstractTask,
       dataObjects,
       dataLocations,
       dataActions,
     )
     return isBlockState(convertedTask) ? convertedTask : null
-  }, [taskStructure, dataObjects, dataLocations, dataActions])
+  }, [abstractTask, dataObjects, dataLocations, dataActions])
+
+  const [editorDataTask, setEditorDataTask] = useState<State | null>(null)
+
+  // Initialize editorDataTask once when initialDataTask becomes available
+  useEffect(() => {
+    if (initialDataTask && !editorDataTask) {
+      setEditorDataTask(initialDataTask)
+    }
+  }, [initialDataTask, editorDataTask])
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
+      <div style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
         {!editingMode && (
-          <EditOutlined
-            style={{
-              fontSize: '2em',
-              marginRight: '1rem',
-              color: themePalette.palette.warning.main,
-            }}
-            onClick={() => {
-              setEditingMode(true)
-            }}
+          <button
+            onClick={() => setEditingMode(true)}
             title="Edit"
-          />
+            style={{
+              background: 'rgba(237, 137, 54, 0.1)',
+              border: '1px solid rgba(237, 137, 54, 0.2)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(237, 137, 54, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(237, 137, 54, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <Edit3 size={20} style={{ color: themePalette.palette.warning.main }} />
+          </button>
         )}
         {editingMode && (
-          <SaveOutlined
-            style={{
-              fontSize: '2em',
-              marginRight: '1rem',
-              color: themePalette.palette.primary.main,
-            }}
-            title="Save"
+          <button
             onClick={handleSave}
-          />
+            title="Save"
+            style={{
+              background: 'rgba(79, 70, 229, 0.1)',
+              border: '1px solid rgba(79, 70, 229, 0.2)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(79, 70, 229, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <Save size={20} style={{ color: themePalette.palette.primary.main }} />
+          </button>
         )}
-        <CloseOutlined
-          style={{
-            fontSize: '2em',
-            marginRight: '2rem',
-            color: editingMode
-              ? themePalette.palette.error.main
-              : themePalette.palette.grey[300],
-            cursor: editingMode ? 'pointer' : 'not-allowed',
+        <button
+          onClick={() => {
+            if (editingMode) {
+              setEditingMode(false)
+              setTaskStructure(abstractTask)
+            }
           }}
+          disabled={!editingMode}
           title="Cancel"
-          onClick={() => {
-            setEditingMode(false)
-            setTaskStructure(abstractTask)
-          }}
-          disabled={!editingMode}
-        />
-        <SoundOutlined
           style={{
-            fontSize: '2em',
-            marginRight: '2rem',
-            color: !editingMode
-              ? themePalette.palette.grey[300]
-              : speaker
-                ? themePalette.palette.success.main
-                : themePalette.palette.error.main,
+            background: editingMode ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 0, 0, 0.02)',
+            border: editingMode ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(0, 0, 0, 0.05)',
+            borderRadius: '8px',
+            padding: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             cursor: editingMode ? 'pointer' : 'not-allowed',
+            opacity: editingMode ? 1 : 0.5,
+            transition: 'all 0.2s ease',
           }}
-          onClick={() => {
-            setSpeaker(!speaker)
+          onMouseEnter={(e) => {
+            if (editingMode) {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }
           }}
-          disabled={!editingMode}
-          title="Toggle Speaker"
-        />
+          onMouseLeave={(e) => {
+            if (editingMode) {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }
+          }}
+        >
+          <X
+            size={20}
+            style={{
+              color: editingMode
+                ? themePalette.palette.error.main
+                : themePalette.palette.grey[300],
+            }}
+          />
+        </button>
+
+        {speaker ? (
+          <button
+            onClick={() => {
+              if (editingMode) setSpeaker(false)
+            }}
+            disabled={!editingMode}
+            title="Mute Speaker"
+            style={{
+              background: editingMode ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0, 0, 0, 0.02)',
+              border: editingMode ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(0, 0, 0, 0.05)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: editingMode ? 'pointer' : 'not-allowed',
+              opacity: editingMode ? 1 : 0.5,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (editingMode) {
+                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (editingMode) {
+                e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            <Volume2 size={20} style={{ color: themePalette.palette.success.main }} />
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              if (editingMode) setSpeaker(true)
+            }}
+            disabled={!editingMode}
+            title="Unmute Speaker"
+            style={{
+              background: editingMode ? 'rgba(239, 68, 68, 0.1)' : 'rgba(0, 0, 0, 0.02)',
+              border: editingMode ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(0, 0, 0, 0.05)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: editingMode ? 'pointer' : 'not-allowed',
+              opacity: editingMode ? 1 : 0.5,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (editingMode) {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (editingMode) {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            <VolumeX size={20} style={{ color: themePalette.palette.error.main }} />
+          </button>
+        )}
+
+        {editingMode && (
+          <button
+            onClick={() => {
+              if (undoStack.length > 0) {
+                const previous = undoStack[undoStack.length - 1]
+                setUndoStack(undoStack.slice(0, -1))
+                setTaskStructure(previous)
+                setNewChatResponse(true)
+              }
+            }}
+            disabled={undoStack.length === 0}
+            title="Undo Last AI Application"
+            style={{
+              background: undoStack.length > 0 ? 'rgba(79, 70, 229, 0.1)' : 'rgba(0, 0, 0, 0.02)',
+              border: undoStack.length > 0 ? '1px solid rgba(79, 70, 229, 0.2)' : '1px solid rgba(0, 0, 0, 0.05)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: undoStack.length > 0 ? 'pointer' : 'not-allowed',
+              opacity: undoStack.length > 0 ? 1 : 0.5,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (undoStack.length > 0) {
+                e.currentTarget.style.background = 'rgba(79, 70, 229, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (undoStack.length > 0) {
+                e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            <Undo2
+              size={20}
+              style={{
+                color: undoStack.length > 0
+                  ? themePalette.palette.primary.main
+                  : themePalette.palette.grey[300],
+              }}
+            />
+          </button>
+        )}
+        {editingMode && (
+          <button
+            onClick={() => setSimOpen(!simOpen)}
+            title="Toggle Simulation Panel"
+            style={{
+              background: simOpen ? 'rgba(16, 185, 129, 0.1)' : 'rgba(79, 70, 229, 0.1)',
+              border: simOpen ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(79, 70, 229, 0.2)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = simOpen ? 'rgba(16, 185, 129, 0.2)' : 'rgba(79, 70, 229, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = simOpen ? 'rgba(16, 185, 129, 0.1)' : 'rgba(79, 70, 229, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <Play
+              size={20}
+              style={{
+                color: simOpen
+                  ? themePalette.palette.success.main
+                  : themePalette.palette.primary.main,
+              }}
+            />
+          </button>
+        )}
+        {editingMode && !chatOpen && (
+          <button
+            onClick={() => setChatOpen(true)}
+            title="Open Chat"
+            style={{
+              background: 'rgba(79, 70, 229, 0.1)',
+              border: '1px solid rgba(79, 70, 229, 0.2)',
+              borderRadius: '8px',
+              padding: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(79, 70, 229, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <MessageSquare size={20} style={{ color: themePalette.palette.primary.main }} />
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', height }}>
+        {editingMode && (
+          <ChatDrawer
+            open={chatOpen}
+            onOpenChange={setChatOpen}
+            speaker={speaker}
+            setSpeaker={setSpeaker}
+            isProcessing={isProcessing}
+            setIsProcessing={setIsProcessing}
+            fineTunedModel={fineTunedModel}
+            setFineTunedModel={setFineTunedModel}
+            fineTuningJobId={fineTuningJobId}
+            setFineTuningJobId={setFineTuningJobId}
+            listMessages={listMessages}
+            setListMessages={setListMessages}
+            chatLog={chatLog}
+            setChatLog={setChatLog}
+            message={message}
+            setMessage={setMessage}
+            dataObjects={dataObjects}
+            dataLocations={dataLocations}
+            dataActions={dataActions}
+            isRecording={isRecording}
+            setIsRecording={setIsRecording}
+            transcript={transcript}
+            resetTranscript={resetTranscript}
+            browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
+            isMicrophoneAvailable={isMicrophoneAvailable}
+            taskId={id || ''}
+            taskStructure={taskStructure}
+            setTaskStructure={setTaskStructure}
+            onApplyProposedTask={(proposed) => {
+              if (taskStructure) {
+                setUndoStack((prev) => [...prev, taskStructure])
+              }
+              setTaskStructure(proposed)
+              const converted = abstractToBlockly(
+                proposed,
+                dataObjects,
+                dataLocations,
+                dataActions,
+              )
+              if (isBlockState(converted)) {
+                setEditorDataTask(converted)
+              }
+            }}
+            setNewChatResponse={setNewChatResponse}
+          />
+        )}
         <BlocklyEditor
           dataLocations={dataLocations}
           dataObjects={dataObjects}
           dataActions={dataActions}
           dataMacros={dataMacros}
+          macroDetailsById={macroDetailsById}
           currentTaskId={currentTaskId}
-          dataTask={parsedDataTask}
+          dataTask={editorDataTask}
           editMode={editingMode}
           applyExternalTaskState={newChatResponse}
           onExternalTaskStateApplied={() => setNewChatResponse(false)}
           onTaskStructureChange={setTaskStructure}
+          blockViewMode={viewSettings.blockViewMode}
+          deleteConfirmMode={viewSettings.deleteConfirmMode}
+          showStartBlock={viewSettings.showStartBlock}
+          viewSettings={viewSettings}
+          onViewSettingsChange={updateViewSettings}
+          onResetViewSettings={resetViewSettings}
         />
-        {editingMode && (
-          <ChatWrapper
-            speaker={speaker}
-            taskStructure={taskStructure}
-            setTaskStructure={setTaskStructure}
-            editingMode={editingMode}
-            dataLocations={dataLocations}
-            dataObjects={dataObjects}
-            dataActions={dataActions}
-            setNewChatResponse={setNewChatResponse}
-          />
+        {simOpen && (
+          <div style={{ width: '33.33%', marginRight: '1rem', marginLeft: '1rem' }}>
+            <DigitalTwinPanel
+              taskId={id || ''}
+              onClose={() => setSimOpen(false)}
+            />
+          </div>
         )}
         <RightPanel dataTask={taskStructure} />
       </div>

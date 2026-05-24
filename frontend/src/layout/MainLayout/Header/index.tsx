@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTheme } from '@mui/material/styles'
 import { IconButton, Toolbar, useMediaQuery } from '@mui/material'
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import AppBar from '@mui/material/AppBar'
 
 import { Profile } from 'layout/MainLayout/Header/Profile'
@@ -35,7 +35,20 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       >
         {!open ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
       </IconButton>
-      <Profile />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <IconButton
+          // We'll leave the onClick empty for now, to be implemented later
+          onClick={() => {
+            // TODO: Implement simulation start
+            console.log('Simulate button clicked')
+          }}
+          size="small"
+          style={{ marginRight: 8 }}
+        >
+          <PlayCircleOutlined />
+        </IconButton>
+        <Profile />
+      </div>
     </Toolbar>
   )
 

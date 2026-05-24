@@ -93,9 +93,31 @@ export const Theme = (colors: PalettesProps) => {
 export const backgroundForm = '#f2fafd'
 
 export const antdTheme: ThemeConfig = {
+  token: {
+    colorPrimary: '#4f46e5', // Sleek premium Indigo
+    colorSuccess: '#10b981', // Emerald green
+    colorWarning: '#f59e0b', // Amber
+    colorError: '#ef4444', // Coral red
+    borderRadius: 16,
+    fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
   components: {
     Collapse: {
-      colorBgContainer: backgroundForm,
+      colorBgContainer: 'rgba(255, 255, 255, 0.4)',
+      borderRadiusLG: 16,
+    },
+    Card: {
+      colorBgContainer: 'rgba(255, 255, 255, 0.15)',
+      borderRadiusLG: 16,
+    },
+    Button: {
+      borderRadius: 10,
+      controlHeight: 38,
+      fontWeight: 500,
+    },
+    Input: {
+      borderRadius: 10,
+      controlHeight: 38,
     },
   },
 }

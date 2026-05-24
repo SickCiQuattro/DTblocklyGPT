@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CircularProgress, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
@@ -12,9 +12,8 @@ import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import {
   AbstractStep,
+  TaskDetailType,
   TaskType,
-  isPublished,
-  isMacroTask,
 } from 'pages/tasks/types'
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
@@ -64,12 +63,9 @@ const Multimodal = () => {
     url: endpoints.graphic.locationsGraphic,
   })
 
-  const { data: tasks, isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
-    {
-      url: endpoints.home.libraries.tasks,
-    },
+  const { data: dataMacros = [], isLoading: isLoadingMacros } = useSWR<TaskType[], Error>(
+    { url: endpoints.graphic.macroList },
   )
-  const dataMacros = (tasks ?? []).filter(isMacroTask).filter(isPublished)
 
   const title = dataTask
     ? `Multimodal interface for the task: "${dataTask.name}"`
@@ -81,7 +77,35 @@ const Multimodal = () => {
     void navigate('/tasks')
   }
 
-  const data = dataTask && dataObjects && dataActions && dataLocations && tasks
+  const currentTaskId =
+    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
+
+  const filteredMacros = useMemo(
+    () => dataMacros.filter((m) => m.id !== currentTaskId),
+    [dataMacros, currentTaskId],
+  )
+
+  const macroDetailsById = useMemo(
+    (): Record<number, TaskDetailType> =>
+      Object.fromEntries(
+        filteredMacros.map((m) => [
+          m.id,
+          {
+            id: m.id,
+            name: m.name,
+            description: m.description,
+            shared: m.shared,
+            status: m.status,
+            task_type: m.task_type,
+            signature: m.signature,
+            code: m.published_workspace ?? null,
+          } satisfies TaskDetailType,
+        ]),
+      ),
+    [filteredMacros],
+  )
+
+  const data = dataTask && dataObjects && dataActions && dataLocations
   const isLoading =
     isLoadingTask ||
     isLoadingObjects ||
@@ -90,8 +114,6 @@ const Multimodal = () => {
     isLoadingMacros
 
   const parsedTaskCode = dataTask?.code ?? null
-  const currentTaskId =
-    id !== undefined && !Number.isNaN(Number(id)) ? Number(id) : undefined
   const abstractTaskCode: AbstractStep[] =
     parsedTaskCode === null
       ? []
@@ -121,7 +143,8 @@ const Multimodal = () => {
           dataObjects={dataObjects}
           dataLocations={dataLocations}
           dataActions={dataActions}
-          dataMacros={dataMacros}
+          dataMacros={filteredMacros}
+          macroDetailsById={macroDetailsById}
           currentTaskId={currentTaskId}
           abstractTask={abstractTaskCode}
           backFunction={backFunction}

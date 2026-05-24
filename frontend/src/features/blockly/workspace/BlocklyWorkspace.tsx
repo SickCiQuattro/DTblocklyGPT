@@ -163,9 +163,20 @@ export const BlocklyWorkspace = ({
               Blockly.serialization.blocks.append(defaultDataTask, workspace)
             })
           } else {
-            const defaultDataTask = { ...dataTask }
-            defaultDataTask.x = dataTask?.x ?? DEFAULT_X_AXIS
-            defaultDataTask.y = dataTask?.y ?? DEFAULT_Y_AXIS
+            let defaultDataTask = { ...dataTask }
+            if (defaultDataTask.type !== 'when_start') {
+              defaultDataTask = {
+                type: 'when_start',
+                x: DEFAULT_X_AXIS,
+                y: DEFAULT_Y_AXIS,
+                next: {
+                  block: defaultDataTask
+                }
+              } as any
+            } else {
+              defaultDataTask.x = dataTask?.x ?? DEFAULT_X_AXIS
+              defaultDataTask.y = dataTask?.y ?? DEFAULT_Y_AXIS
+            }
             Blockly.serialization.blocks.append(defaultDataTask, workspace)
           }
           injectAllGhostBlocks(workspace)
@@ -215,6 +226,7 @@ export const BlocklyWorkspace = ({
 
     Blockly.Events.disable()
     try {
+      workspace.clear() // Clear existing blocks to prevent overlap/duplication
       if (Array.isArray(dataTask)) {
         dataTask.forEach((block) => {
           const defaultDataTask = { ...block }
@@ -223,9 +235,20 @@ export const BlocklyWorkspace = ({
           Blockly.serialization.blocks.append(defaultDataTask, workspace)
         })
       } else {
-        const defaultDataTask = { ...dataTask }
-        defaultDataTask.x = x_axis
-        defaultDataTask.y = y_axis
+        let defaultDataTask = { ...dataTask }
+        if (defaultDataTask.type !== 'when_start') {
+          defaultDataTask = {
+            type: 'when_start',
+            x: x_axis,
+            y: y_axis,
+            next: {
+              block: defaultDataTask
+            }
+          } as any
+        } else {
+          defaultDataTask.x = x_axis
+          defaultDataTask.y = y_axis
+        }
         Blockly.serialization.blocks.append(defaultDataTask, workspace)
       }
       injectAllGhostBlocks(workspace)

@@ -28,7 +28,7 @@ export const INITIAL_MESSAGE_1: MessageType = {
   id: 0,
   text: 'Hello! I will assist you with your task',
   user: UserChatEnum.ROBOT,
-  timestamp: formatTimeFrontend(dayjs().toString()),
+  timestamp: dayjs().toISOString(),
   type: MessageTypeEnum.TEXT,
 }
 
@@ -42,12 +42,16 @@ export interface ChatLogType {
 
 interface ResponseChatGPT {
   answer: string
-  task: AbstractStep[]
+  task: AbstractStep[] | null
+  finished?: boolean
+  validationWarnings?: string[]
 }
 
 export interface ChatResponse {
   chatLog: ChatLogType[]
   response: ResponseChatGPT
+  fineTunedModel?: string
+  fineTuningJobId?: string
 }
 
 export const InitialSystemMessage = () => {

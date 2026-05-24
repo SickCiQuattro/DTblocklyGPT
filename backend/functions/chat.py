@@ -1,4 +1,5 @@
 import json
+import copy
 from django.http import HttpResponse, HttpRequest
 from backend.utils.response import (
     HttpMethod,
@@ -19,21 +20,171 @@ from django.contrib.auth.models import User
 from enum import Enum
 from typing import Tuple
 from backend.block_types import EventsItems, LibrariesItems, LogicItems, StepsItems
+from .schemas import MessagePart, AbstractCondition, AbstractStep, LLMResponse, ChatApiResponse
 import os
 
-# api_key = os.getenv("OPENAI_API_KEY")
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("The GEMINI_API_KEY environment variable is not set.")
-# client = OpenAI(api_key=api_key)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL")
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
+CHATGPT_TEMPERATURE = 0.0
 
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
-# CHATGPT_MODEL = "gpt-4.1-mini"
-CHATGPT_MODEL = "gemini-2.5-flash"
-CHATGPT_TEMPERATURE = 0
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Any
+
+@dataclass
+class ProviderLLMResponse:
+    answer: str                    # Testo naturale estratto
+    raw_arguments: dict            # Argomenti della tool call parsati
+    raw_response: object           # Risposta originale del client per debug
+
+class BaseLLMProvider(ABC):
+    @abstractmethod
+    def complete(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        tool_name: str,
+        temperature: float = 0.0,
+    ) -> ProviderLLMResponse:
+        pass
+    
+    @abstractmethod
+    def supports_tool_calling(self) -> bool:
+        pass
+
+class GeminiProvider(BaseLLMProvider):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gemini-2.5-flash", timeout: int = 30, max_retries: int = 3):
+        self.api_key = api_key
+        self.base_url = base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        self.model = model
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            max_retries=self.max_retries
+        )
+
+    def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], tool_name: str, temperature: float = 0.0) -> ProviderLLMResponse:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            tools=tools,
+            tool_choice={
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                },
+            },
+            parallel_tool_calls=False,
+        )
+        msg = response.choices[0].message
+        if msg.tool_calls and len(msg.tool_calls) > 0:
+            arguments_str = msg.tool_calls[0].function.arguments
+        else:
+            arguments_str = msg.content or "{}"
+        
+        try:
+            raw_arguments = json.loads(arguments_str)
+        except Exception:
+            raw_arguments = {}
+            
+        answer = raw_arguments.get("answer", "")
+        return ProviderLLMResponse(
+            answer=answer,
+            raw_arguments=raw_arguments,
+            raw_response=response
+        )
+
+    def supports_tool_calling(self) -> bool:
+        return True
+
+class OpenAIProvider(BaseLLMProvider):
+    def __init__(self, api_key: str, base_url: str = None, model: str = "gpt-4o", timeout: int = 30, max_retries: int = 3):
+        self.api_key = api_key
+        self.base_url = base_url  # can be None for official openai endpoint
+        self.model = model
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            max_retries=self.max_retries
+        )
+
+    def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], tool_name: str, temperature: float = 0.0) -> ProviderLLMResponse:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            tools=tools,
+            tool_choice={
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                },
+            },
+            parallel_tool_calls=False,
+        )
+        msg = response.choices[0].message
+        if msg.tool_calls and len(msg.tool_calls) > 0:
+            arguments_str = msg.tool_calls[0].function.arguments
+        else:
+            arguments_str = msg.content or "{}"
+        
+        try:
+            raw_arguments = json.loads(arguments_str)
+        except Exception:
+            raw_arguments = {}
+            
+        answer = raw_arguments.get("answer", "")
+        return ProviderLLMResponse(
+            answer=answer,
+            raw_arguments=raw_arguments,
+            raw_response=response
+        )
+
+    def supports_tool_calling(self) -> bool:
+        return True
+
+class LocalLlamaProvider(BaseLLMProvider):
+    def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], tool_name: str, temperature: float = 0.0) -> ProviderLLMResponse:
+        raise NotImplementedError("LocalLlamaProvider not yet implemented.")
+
+    def supports_tool_calling(self) -> bool:
+        return False
+
+def get_llm_provider() -> BaseLLMProvider:
+    if not LLM_API_KEY:
+        raise ValueError("API LLM Key not found in environment variables.")
+    
+    if LLM_PROVIDER == "gemini":
+        return GeminiProvider(
+            api_key=LLM_API_KEY,
+            base_url=LLM_BASE_URL,
+            model=LLM_MODEL,
+            timeout=LLM_TIMEOUT,
+            max_retries=LLM_MAX_RETRIES
+        )
+    elif LLM_PROVIDER == "openai":
+        return OpenAIProvider(
+            api_key=LLM_API_KEY,
+            base_url=LLM_BASE_URL,
+            model=LLM_MODEL,
+            timeout=LLM_TIMEOUT,
+            max_retries=LLM_MAX_RETRIES
+        )
+    elif LLM_PROVIDER == "local":
+        return LocalLlamaProvider()
+    else:
+        raise ValueError(f"Provider LLM '{LLM_PROVIDER}' not supported.")
 
 CHATGPT_INSTRUCTIONS = """
 You are an assistant designed to extract intent from text. You must drive the user to define a Pick-and-Place task for a collaborative robot providing to him/her the details to be defined before he/she asks for them.
@@ -333,31 +484,16 @@ def new_message(request: HttpRequest) -> HttpResponse:
                     ]
 
                 chat_log.append({"role": "user", "content": message})
-                response = client.chat.completions.create(
-                    model=CHATGPT_MODEL,
+                provider = get_llm_provider()
+                llm_response = provider.complete(
                     messages=chat_log,
-                    temperature=CHATGPT_TEMPERATURE,
                     tools=[CHATGPT_FUNCTION],
-                    tool_choice={
-                        "type": "function",
-                        "function": {
-                            "name": CHATGPT_FUNCTION["function"]["name"],
-                        },
-                    },
+                    tool_name=CHATGPT_FUNCTION["function"]["name"],
+                    temperature=CHATGPT_TEMPERATURE
                 )
-
-                # Extract response: Gemini may return tool_calls or plain content
-                msg = response.choices[0].message
-                if msg.tool_calls and len(msg.tool_calls) > 0:
-                    response_json = msg.tool_calls[0].function.arguments
-                elif msg.content:
-                    response_json = msg.content
-                else:
-                    print("Unexpected response structure:", response)
-                    raise ValueError("No tool_calls and no content in response")
+                response_json = llm_response.raw_arguments
 
                 try:
-                    response_json = loads(response_json)
                     answer = response_json.get("answer", "")
 
                     if answer:
@@ -376,26 +512,13 @@ def new_message(request: HttpRequest) -> HttpResponse:
                         chat_log.append(
                             {"role": "system", "content": CHATGPT_ALWAYS_REPLY}
                         )
-                        response = client.chat.completions.create(
-                            model=CHATGPT_MODEL,
+                        llm_response = provider.complete(
                             messages=chat_log,
-                            temperature=CHATGPT_TEMPERATURE,
                             tools=[CHATGPT_FUNCTION],
-                            tool_choice={
-                                "type": "function",
-                                "function": {
-                                    "name": CHATGPT_FUNCTION["function"]["name"],
-                                },
-                            },
+                            tool_name=CHATGPT_FUNCTION["function"]["name"],
+                            temperature=CHATGPT_TEMPERATURE
                         )
-
-                        retry_msg = response.choices[0].message
-                        if retry_msg.tool_calls and len(retry_msg.tool_calls) > 0:
-                            response_json = retry_msg.tool_calls[0].function.arguments
-                        else:
-                            response_json = retry_msg.content or "{}"
-
-                        response_json = loads(response_json)
+                        response_json = llm_response.raw_arguments
                         answer = response_json.get("answer", "")
                         i += 1
 
@@ -1406,6 +1529,12 @@ class AbstractGripperStep:
 
 
 @dataclass
+class AbstractWaitStep:
+    type: Literal["wait"]
+    seconds: int
+
+
+@dataclass
 class AbstractHumanActionStep:
     type: Literal["human_action"]
     description: str
@@ -1442,6 +1571,7 @@ AbstractStep = Union[
     AbstractProcessingStep,
     AbstractMoveToStep,
     AbstractGripperStep,
+    AbstractWaitStep,
     AbstractHumanActionStep,
     AbstractNotifyActionStep,
     AbstractRepeatStep,
@@ -1499,6 +1629,12 @@ Where AbstractStep is one of:
       "state": "OPEN" | "CLOSE"
     }}
 
+  - Wait Step (pause the robot for a set amount of seconds):
+    {{
+      "type": "wait",
+      "seconds": number
+    }}
+
   - Human Action Step (pause the robot and show a message to the operator):
     {{
       "type": "human_action",
@@ -1549,6 +1685,48 @@ Conditions (AbstractCondition) can be one of:
 - {{"type": "gesture", "gestureType": "THUMBS_UP" | "OPEN_HAND"}}
 - {{"type": "timer", "seconds": number}}
 
+# BLOCKLY TOOLBOX & CATEGORIES #
+In the visual Blockly interface, blocks are organized into the following collapsible categories in the toolbox sidebar:
+
+1. "Task Flow" (Orange/Coral):
+   - "Repeat times" (repeat_block): Repeats a nested sequence of steps a set number of times.
+   - "Repeat forever" (loop_block): Infinite loop (not supported by backend, only used in frontend).
+   - "Repeat until" (repeat_until_block): Repeats nested steps until a condition is met.
+   - "When → Do" (when_block): Runs steps only if a condition is met.
+   - "When → Do / Otherwise" (when_otherwise_block): Runs one set of steps if a condition is met, otherwise runs another set of steps.
+
+2. "Robot Actions" (Indigo/Blue):
+   - "Pick up" (pick_block): Grabs an object. Accepts "Objects" block as input.
+   - "Perform" (processing_block): Executes a skill or procedure. Accepts "Procedures" block as input.
+   - "Place at" (place_block): Places a held object at a location. Accepts "Destinations" block as input.
+   - "Move to" (move_to_block): Moves the robot to a destination. Accepts "Destinations" block as input.
+   - "Open / Close Gripper" (gripper_block): Controls the robot gripper (OPEN/CLOSE).
+   - "Wait" (wait_block): Pauses execution for a specified duration in seconds.
+
+3. "Human Step" (Green/Teal):
+   - "Pause and show message" (human_action_block): Pauses the robot and waits for operator input or condition.
+   - "Show message" (notify_action_block): Shows a message to the operator without stopping the robot.
+
+4. "My Workspace" (Grey/Neutral):
+   - "Objects" (object_block): Pill blocks representing objects from the database (e.g. widget, red cube).
+   - "Destinations" (location_block): Pill blocks representing locations from the database (e.g. bin A, pick station).
+   - "Procedures" (action_block): Pill blocks representing actions from the database (e.g. inspect, assemble).
+
+5. "Conditions" (Yellow/Amber):
+   - "Object detected" (find_object_block): Detects if a specific object is present.
+   - "Contact detected" (touch_detect_block): Detects physical contact.
+   - "Gesture detected" (gesture_block): Detects human gestures (e.g., THUMBS_UP, OPEN_HAND, STOP).
+   - "Time passed" (timer_block): Triggered after a set amount of seconds.
+   - "External signal received" (sensor_signal_block): Listens to a sensor signal (camera, ir).
+   - "AND" (logic_and_block): Combines two conditions (both must be true).
+   - "OR" (logic_or_block): Combines two conditions (at least one must be true).
+   - "NOT" (logic_not_block): Inverts a condition.
+
+6. "My Tasks" (Purple):
+   - "My Task" (macro_task_block): Reuse another saved task as a single macro block.
+
+If the user asks where to find a block or how they are organized, guide them to these categories!
+
 # CONNECTION RULES #
 All step blocks (pick, place, processing, move_to, gripper, human_action, repeat, when, when_otherwise)
 can be freely chained in sequence. Condition blocks can only appear inside a "when" step or as
@@ -1563,6 +1741,10 @@ the "confirmEvent" of a "human_action" step.
 - Always reply with the language used by the user, even if it is not English.
 
 # IMPORTANT INSTRUCTIONS #
+- When responding to the user in natural language (the "answer" field), you MUST refer to blocks EXACTLY by their user-facing names in quotes as defined in the "# BLOCKLY TOOLBOX & CATEGORIES #" list (e.g. "Pick up" instead of "Pick" or "pick_block", "Pause and show message" instead of "human_action" or "Wait for Operator", "Show message" instead of "notify_action", "Repeat times" instead of "repeat_block", "Perform" instead of "processing_block", "Place at" instead of "place_block", etc.). Never use their technical type names (e.g. pick, place, processing, repeat, when, human_action, etc.) or generic code-like names in your conversational answers.
+- The "# CURRENT TASK SNAPSHOT #" is the ONLY ground truth for the actual state of the workspace. Do NOT assume that blocks discussed in previous turns of the conversation are in the workspace unless they are explicitly present in the "# CURRENT TASK SNAPSHOT #" of the current turn.
+- If the "# CURRENT TASK SNAPSHOT #" is empty (e.g. `[]`), then the workspace is currently empty, regardless of what was discussed in previous turns.
+- If the user asks about the current state, content, or blocks in the workspace, you MUST describe the blocks listed in "# CURRENT TASK SNAPSHOT #" exactly as they are, without modifying them, adding phantom blocks, or inventing steps. You must return the "task" field EXACTLY matching the provided "# CURRENT TASK SNAPSHOT #" array.
 - Between a user request and the next one, the user may change the existing task structure using the Blockly interface. Always consider the latest task structure provided.
 - If no modifications are needed, return the existing task structure as it is.
 - Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
@@ -1605,6 +1787,29 @@ Response:
 }}
 """
 
+CONDITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": [
+                "sensor_signal",
+                "find_object",
+                "human_feedback",
+                "touch_detect",
+                "gesture",
+                "timer",
+            ]
+        },
+        "sensor": {"type": "string"},
+        "objectId": {"type": "integer"},
+        "objectName": {"type": "string"},
+        "gestureType": {"type": "string"},
+        "seconds": {"type": "integer"}
+    },
+    "required": ["type"]
+}
+
 CHATGPT_FUNCTION_MULTIMODAL = {
     "type": "function",
     "function": {
@@ -1621,101 +1826,78 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                     "type": "array",
                     "description": "Sequence of robot steps",
                     "items": {
-                        "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "enum": [
-                                    "pick",
-                                    "place",
-                                    "processing",
-                                    "move_to",
-                                    "gripper",
-                                    "human_action",
-                                    "notify_action",
-                                    "repeat",
-                                    "repeat_until",
-                                    "when",
-                                ],
-                                "description": "Step type",
-                            },
-                            "objectId": {"type": "integer"},
-                            "objectName": {"type": "string"},
-                            "locationId": {"type": "integer"},
-                            "locationName": {"type": "string"},
-                            "actionId": {"type": "integer"},
-                            "actionName": {"type": "string"},
-                            "motionType": {"type": "string", "enum": ["LINEAR", "JOINT"]},
-                            "state": {"type": "string", "enum": ["OPEN", "CLOSE"]},
-                            "description": {"type": "string", "description": "Message for human interaction"},
-                            "times": {"type": "integer"},
-                            "condition": {
-                                "type": "object",
-                                "properties": {
-                                    "type": {
-                                        "type": "string",
-                                        "enum": [
-                                            "sensor_signal",
-                                            "find_object",
-                                            "human_feedback",
-                                            "touch_detect",
-                                            "gesture",
-                                            "timer",
-                                        ]
-                                    },
-                                    "sensor": {"type": "string"},
-                                    "objectId": {"type": "integer"},
-                                    "objectName": {"type": "string"},
-                                    "gestureType": {"type": "string"},
-                                    "seconds": {"type": "integer"}
-                                },
-                                "required": ["type"]
-                            },
-                            "confirmEvent": {
-                                "type": "object",
-                                "description": "Event required to resume from human action",
-                                # Use same structure as condition for simplicity
-                                "properties": {
-                                    "type": {"type": "string"}
-                                },
-                                "required": ["type"]
-                            },
-                            "do": {
-                                "type": "array",
-                                "description": "Steps to execute",
-                                "items": {"type": "object"}  # Recursive types are hard in strict JSON schema, keep it generic
-                            },
-                            "otherwise": {
-                                "type": "array",
-                                "description": "Steps to execute when condition is not met",
-                                "items": {"type": "object"}
-                            },
-                            "steps": {
-                                "type": "array",
-                                "description": "Steps for repeat loop",
-                                "items": {"type": "object"}
-                            }
-                        },
-                        "required": ["type"],
+                        "$ref": "#/$defs/AbstractStep"
                     },
                 },
             },
             "additionalProperties": False,
             "required": ["answer", "task"],
-            # Strict validation ensures the LLM sticks exactly to the provided schema
-            "strict": False, # Changed to False momentarily because recursive schema definition (like 'do' containing 'steps') breaks strict JSON schemas in OpenAI unless built intricately.
+            "$defs": {
+                "AbstractStep": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "pick",
+                                "place",
+                                "processing",
+                                "move_to",
+                                "gripper",
+                                "wait",
+                                "human_action",
+                                "notify_action",
+                                "repeat",
+                                "repeat_until",
+                                "when",
+                            ],
+                            "description": "Step type",
+                        },
+                        "seconds": {"type": "integer", "description": "Duration in seconds for wait step"},
+                        "objectId": {"type": "integer"},
+                        "objectName": {"type": "string"},
+                        "locationId": {"type": "integer"},
+                        "locationName": {"type": "string"},
+                        "actionId": {"type": "integer"},
+                        "actionName": {"type": "string"},
+                        "motionType": {"type": "string", "enum": ["LINEAR", "JOINT"]},
+                        "state": {"type": "string", "enum": ["OPEN", "CLOSE"]},
+                        "description": {"type": "string", "description": "Message for human interaction"},
+                        "times": {"type": "integer"},
+                        "condition": CONDITION_SCHEMA,
+                        "confirmEvent": {
+                            **CONDITION_SCHEMA,
+                            "description": "Event required to resume from human action"
+                        },
+                        "do": {
+                            "type": "array",
+                            "description": "Steps to execute",
+                            "items": {
+                                "$ref": "#/$defs/AbstractStep"
+                            }
+                        },
+                        "otherwise": {
+                            "type": "array",
+                            "description": "Steps to execute when condition is not met",
+                            "items": {
+                                "$ref": "#/$defs/AbstractStep"
+                            }
+                        },
+                        "steps": {
+                            "type": "array",
+                            "description": "Steps for repeat loop",
+                            "items": {
+                                "$ref": "#/$defs/AbstractStep"
+                            }
+                        }
+                    },
+                    "required": ["type"],
+                }
+            },
+            "strict": False,
         },
     },
 }
-
-CHATGPT_NEW_MESSAGE_MULTIMODAL = """
-# User Request #
-{message}
-
-# Actual Task Structure #
-{task}
-"""
-
 
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
@@ -1729,62 +1911,275 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data_objects = data.get("dataObjects")
                 data_actions = data.get("dataActions")
 
+                if message is None:
+                    return error_response("Message is required")
+
                 data_result = {}
 
-                prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL.format(
-                    objects=data_objects,
-                    locations=data_locations,
-                    actions=data_actions,
-                    task=json.dumps(task_structure),
-                )
+                replacements = {
+                    "{objects}": json.dumps(data_objects, ensure_ascii=False),
+                    "{locations}": json.dumps(data_locations, ensure_ascii=False),
+                    "{actions}": json.dumps(data_actions, ensure_ascii=False),
+                }
+                prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
+                for placeholder, value in replacements.items():
+                    prompt_template = prompt_template.replace(placeholder, value)
 
-                # Init the conversation
+                prompt_template += f"\n\n# CURRENT TASK SNAPSHOT #\n{json.dumps(task_structure, ensure_ascii=False)}"
+
+                system_message = {"role": "system", "content": prompt_template}
+
                 if chat_log is None or len(chat_log) == 0:
-                    chat_log = [
-                        {
-                            "role": "system",
-                            "content": prompt_template,
-                        },
-                    ]
-
-                new_message_template = CHATGPT_NEW_MESSAGE_MULTIMODAL.format(
-                    message=message,
-                    task=json.dumps(task_structure),
-                )
-
-                chat_log.append({"role": "user", "content": new_message_template})
-                response = client.chat.completions.create(
-                    model=CHATGPT_MODEL,
-                    messages=chat_log,
-                    temperature=CHATGPT_TEMPERATURE,
-                    tools=[CHATGPT_FUNCTION_MULTIMODAL],
-                    tool_choice={
-                        "type": "function",
-                        "function": {
-                            "name": CHATGPT_FUNCTION_MULTIMODAL["function"]["name"],
-                        },
-                    },
-                    parallel_tool_calls=False,
-                )
-
-                msg = response.choices[0].message
-                if msg.tool_calls and len(msg.tool_calls) > 0:
-                    response_json = msg.tool_calls[0].function.arguments
+                    chat_log = [system_message]
                 else:
-                    response_json = msg.content or "{}"
+                    if chat_log[0]["role"] == "system":
+                        chat_log[0] = system_message
+                    else:
+                        chat_log.insert(0, system_message)
+
+                chat_log.append({"role": "user", "content": message})
+
+                provider = get_llm_provider()
+
+                response_json = {}
+                answer = ""
+                llm_task = []
+
+                for attempt in range(3):
+                    llm_response = provider.complete(
+                        messages=chat_log,
+                        tools=[CHATGPT_FUNCTION_MULTIMODAL],
+                        tool_name=CHATGPT_FUNCTION_MULTIMODAL["function"]["name"],
+                        temperature=CHATGPT_TEMPERATURE
+                    )
+                    response_json = llm_response.raw_arguments
+                    answer = response_json.get("answer", "").strip()
+                    llm_task = response_json.get("task", [])
+
+                    if answer:
+                        break
+
+                    chat_log.append({"role": "system", "content": CHATGPT_ALWAYS_REPLY})
+
+                chat_log = [msg for msg in chat_log if not (msg["role"] == "system" and msg["content"] == CHATGPT_ALWAYS_REPLY)]
+
+                if not answer:
+                    answer = "Ok! Andiamo avanti."
+                    response_json["answer"] = answer
 
                 try:
-                    response_json = loads(response_json)
-                    answer = response_json["answer"]
+                    validation_warnings = []
+                    validated_task = []
 
-                    if answer != "":
-                        chat_log.append({"role": "assistant", "content": answer})
+                    def validate_step(step, step_index, warnings):
+                        step_copy = copy.deepcopy(step)
+                        step_type = step.get("type")
 
-                except Exception:
-                    data_result["answer"] = CHATGPT_ERROR
+                        if step_type == "pick":
+                            object_id = step.get("objectId")
+                            obj = None
+                            for obj_item in data_objects:
+                                if obj_item["id"] == object_id:
+                                    obj = obj_item
+                                    break
+                            if obj is None:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Pick step {step_index}: objectId {object_id} not found."
+                                })
 
-                data_result["chatLog"] = chat_log
-                data_result["response"] = response_json
+                        elif step_type == "place":
+                            location_id = step.get("locationId")
+                            loc = None
+                            for loc_item in data_locations:
+                                if loc_item["id"] == location_id:
+                                    loc = loc_item
+                                    break
+                            if loc is None:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Place step {step_index}: locationId {location_id} not found."
+                                })
+
+                        elif step_type == "processing":
+                            action_id = step.get("actionId")
+                            act = None
+                            for act_item in data_actions:
+                                if act_item["id"] == action_id:
+                                    act = act_item
+                                    break
+                            if act is None:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Processing step {step_index}: actionId {action_id} not found."
+                                })
+
+                        elif step_type == "move_to":
+                            location_id = step.get("locationId")
+                            motion_type = step.get("motionType")
+                            loc = None
+                            for loc_item in data_locations:
+                                if loc_item["id"] == location_id:
+                                    loc = loc_item
+                                    break
+                            if loc is None:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"MoveTo step {step_index}: locationId {location_id} not found."
+                                })
+                            if motion_type not in ["LINEAR", "JOINT"]:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"MoveTo step {step_index}: invalid motionType '{motion_type}'."
+                                })
+
+                        elif step_type == "gripper":
+                            state = step.get("state")
+                            if state not in ["OPEN", "CLOSE"]:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Gripper step {step_index}: invalid state '{state}'."
+                                })
+
+                        elif step_type == "wait":
+                            seconds = step.get("seconds")
+                            if not isinstance(seconds, (int, float)) or seconds < 0:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Wait step {step_index}: invalid seconds '{seconds}'."
+                                })
+
+                        elif step_type == "human_action":
+                            confirm_event = step.get("confirmEvent")
+                            if confirm_event is not None:
+                                validate_condition(confirm_event, f"{step_index}.human_action.confirmEvent", warnings)
+
+                        elif step_type == "notify_action":
+                            if not isinstance(step.get("description"), str):
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"NotifyAction step {step_index}: description must be a string."
+                                })
+
+                        elif step_type == "repeat":
+                            times = step.get("times")
+                            steps = step.get("steps", [])
+                            if not isinstance(times, int) or times <= 0:
+                                warnings.append({
+                                    "severity": "error",
+                                    "message": f"Repeat step {step_index}: invalid times '{times}'."
+                                })
+                            validated_children = []
+                            for i, sub_step in enumerate(steps):
+                                validated_children.append(validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings))
+                            step_copy["steps"] = validated_children
+
+                        elif step_type == "repeat_until":
+                            condition = step.get("condition")
+                            steps = step.get("do", [])
+                            if condition is not None:
+                                validate_condition(condition, f"{step_index}.repeat_until.condition", warnings)
+                            validated_children = []
+                            for i, sub_step in enumerate(steps):
+                                validated_children.append(validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings))
+                            step_copy["do"] = validated_children
+
+                        elif step_type == "when":
+                            condition = step.get("condition")
+                            do_steps = step.get("do", [])
+                            otherwise_steps = step.get("otherwise", [])
+                            if condition is not None:
+                                validate_condition(condition, f"{step_index}.when.condition", warnings)
+                            validated_do = []
+                            for i, sub_step in enumerate(do_steps):
+                                validated_do.append(validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings))
+                            step_copy["do"] = validated_do
+                            if otherwise_steps is not None:
+                                validated_otherwise = []
+                                for i, sub_step in enumerate(otherwise_steps):
+                                    validated_otherwise.append(validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings))
+                                step_copy["otherwise"] = validated_otherwise
+
+                        else:
+                            warnings.append({
+                                "severity": "error",
+                                "message": f"Step {step_index}: unknown step type '{step_type}'."
+                            })
+
+                        return step_copy
+
+                    def validate_condition(condition, cond_index, warnings):
+                        if not isinstance(condition, dict):
+                            warnings.append({"severity": "error", "message": f"Condition {cond_index}: must be object."})
+                            return
+                        cond_type = condition.get("type")
+                        if cond_type == "sensor_signal":
+                            if condition.get("sensor") not in ["camera", "ir"]:
+                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid sensor."})
+                        elif cond_type == "find_object":
+                            object_id = condition.get("objectId")
+                            if not any(o["id"] == object_id for o in data_objects):
+                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown objectId."})
+                        elif cond_type == "gesture":
+                            gesture_type = condition.get("gestureType")
+                            if gesture_type not in ["THUMBS_UP", "OPEN_HAND", "STOP"]:
+                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid gestureType."})
+                        elif cond_type == "timer":
+                            if not isinstance(condition.get("seconds"), int) or condition.get("seconds") < 0:
+                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid seconds."})
+
+                    for step_index, step in enumerate(llm_task):
+                        validated_task.append(validate_step(step, step_index, validation_warnings))
+
+                    message_parts = []
+                    if answer:
+                        message_parts.append({"type": "text", "content": answer})
+                    
+                    frontend_warnings = [w["message"] for w in validation_warnings]
+                    for warning_msg in frontend_warnings:
+                        message_parts.append({"type": "warning", "content": warning_msg})
+
+                    chat_log.append({"role": "assistant", "content": json.dumps(response_json)})
+                    
+                    is_valid = not any(w["severity"] == "error" for w in validation_warnings)
+                    requires_confirmation = len(validated_task) > 0 and is_valid
+
+                    data_result = {
+                        "messageParts": message_parts,
+                        "proposedTask": validated_task if requires_confirmation else None,
+                        "requiresConfirmation": requires_confirmation,
+                        "validationWarnings": frontend_warnings,
+                        "isValid": is_valid,
+                        "chatLog": chat_log,
+                        "response": {
+                            "answer": answer,
+                            "task": validated_task if requires_confirmation else None,
+                            "finished": False,
+                            "validationWarnings": frontend_warnings,
+                        },
+                        "fineTunedModel": "",
+                        "fineTuningJobId": "",
+                    }
+
+                except Exception as inner_e:
+                    print("Inner chat parse error:", inner_e)
+                    data_result = {
+                        "messageParts": [{"type": "text", "content": CHATGPT_ERROR}],
+                        "proposedTask": None,
+                        "requiresConfirmation": False,
+                        "validationWarnings": [str(inner_e)],
+                        "isValid": False,
+                        "chatLog": chat_log,
+                        "response": {
+                            "answer": CHATGPT_ERROR,
+                            "task": None,
+                            "finished": False,
+                            "validationWarnings": [str(inner_e)],
+                        },
+                        "fineTunedModel": "",
+                        "fineTuningJobId": "",
+                    }
+
                 return success_response(data_result)
             else:
                 return invalid_request_method()
