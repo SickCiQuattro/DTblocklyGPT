@@ -120,7 +120,7 @@ export const abstractToBlockly = (
                 data: JSON.stringify({
                   id: object?.id ?? step.objectId ?? null,
                   name: object?.name ?? step.objectName ?? null,
-                  keywords: object?.keywords.join(',') ?? '',
+                  keywords: object?.keywords?.join(',') ?? '',
                 }),
                 fields: { name: object?.name ?? step.objectName ?? '' },
               },
@@ -139,7 +139,7 @@ export const abstractToBlockly = (
                 data: JSON.stringify({
                   id: location?.id ?? step.locationId ?? null,
                   name: location?.name ?? step.locationName ?? null,
-                  keywords: location?.keywords.join(',') ?? '',
+                  keywords: location?.keywords?.join(',') ?? '',
                 }),
                 fields: { name: location?.name ?? step.locationName ?? '' },
               },
@@ -158,7 +158,7 @@ export const abstractToBlockly = (
                 data: JSON.stringify({
                   id: action?.id ?? step.actionId ?? null,
                   name: action?.name ?? step.actionName ?? null,
-                  keywords: action?.keywords.join(',') ?? '',
+                  keywords: action?.keywords?.join(',') ?? '',
                 }),
                 fields: { name: action?.name ?? step.actionName ?? '' },
               },
@@ -294,7 +294,7 @@ export const abstractToBlockly = (
                 data: JSON.stringify({
                   id: object?.id ?? condition.objectId ?? null,
                   name: object?.name ?? condition.objectName ?? null,
-                  keywords: object?.keywords.join(',') ?? '',
+                  keywords: object?.keywords?.join(',') ?? '',
                 }),
                 fields: { name: object?.name ?? condition.objectName ?? '' },
               },

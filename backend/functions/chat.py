@@ -1878,6 +1878,41 @@ CONDITION_SCHEMA = {
     "required": ["type"]
 }
 
+SIMPLE_STEP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": [
+                "pick",
+                "place",
+                "processing",
+                "move_to",
+                "gripper",
+                "wait",
+                "human_action",
+                "notify_action"
+            ],
+            "description": "Step type"
+        },
+        "seconds": {"type": "integer", "description": "Duration in seconds for wait step"},
+        "objectId": {"type": "integer"},
+        "objectName": {"type": "string"},
+        "locationId": {"type": "integer"},
+        "locationName": {"type": "string"},
+        "actionId": {"type": "integer"},
+        "actionName": {"type": "string"},
+        "motionType": {"type": "string", "enum": ["LINEAR", "JOINT"]},
+        "state": {"type": "string", "enum": ["OPEN", "CLOSE"]},
+        "description": {"type": "string", "description": "Message for human interaction"},
+        "confirmEvent": {
+            **CONDITION_SCHEMA,
+            "description": "Event required to resume from human action"
+        }
+    },
+    "required": ["type"]
+}
+
 CHATGPT_FUNCTION_MULTIMODAL = {
     "type": "function",
     "function": {
@@ -1945,26 +1980,27 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                             "type": "array",
                             "description": "Steps to execute",
                             "items": {
-                                "$ref": "#/$defs/AbstractStep"
+                                "$ref": "#/$defs/SimpleStep"
                             }
                         },
                         "otherwise": {
                             "type": "array",
                             "description": "Steps to execute when condition is not met",
                             "items": {
-                                "$ref": "#/$defs/AbstractStep"
+                                "$ref": "#/$defs/SimpleStep"
                             }
                         },
                         "steps": {
                             "type": "array",
                             "description": "Steps for repeat loop",
                             "items": {
-                                "$ref": "#/$defs/AbstractStep"
+                                "$ref": "#/$defs/SimpleStep"
                             }
                         }
                     },
                     "required": ["type"],
-                }
+                },
+                "SimpleStep": SIMPLE_STEP_SCHEMA
             },
             "strict": False,
         },
@@ -2060,9 +2096,9 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data_result = {}
 
                 replacements = {
-                    "{objects}": json.dumps(data_objects, ensure_ascii=False),
-                    "{locations}": json.dumps(data_locations, ensure_ascii=False),
-                    "{actions}": json.dumps(data_actions, ensure_ascii=False),
+                    "{{objects}}": json.dumps(data_objects, ensure_ascii=False),
+                    "{{locations}}": json.dumps(data_locations, ensure_ascii=False),
+                    "{{actions}}": json.dumps(data_actions, ensure_ascii=False),
                 }
                 prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
                 for placeholder, value in replacements.items():

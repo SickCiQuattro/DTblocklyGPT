@@ -45,7 +45,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
 
   return (
     <Card
-      bordered={false}
+      variant="borderless"
       style={{
         height: '100%',
         background: 'rgba(255, 255, 255, 0.15)',

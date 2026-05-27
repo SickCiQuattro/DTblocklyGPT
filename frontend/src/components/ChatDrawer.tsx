@@ -252,7 +252,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   return (
     <Card
-      bordered={false}
+      variant="borderless"
       style={{
         position: 'relative',
         width: open ? width : 0,
