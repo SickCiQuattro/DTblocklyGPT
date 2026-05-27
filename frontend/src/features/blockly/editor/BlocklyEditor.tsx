@@ -393,6 +393,7 @@ interface BlocklyEditorProps {
   macroDetailsById?: Record<number, TaskDetailType>
   currentTaskId?: number
   dataTask: State | State[] | null
+  pendingExternalTask?: State | null
   editMode?: boolean
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
@@ -425,6 +426,7 @@ export const BlocklyEditor = ({
   macroDetailsById = {},
   currentTaskId,
   dataTask,
+  pendingExternalTask,
   editMode = true,
   applyExternalTaskState = false,
   onExternalTaskStateApplied,
@@ -1109,7 +1111,7 @@ export const BlocklyEditor = ({
   const handleUndo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
-    const stack = workspace.getUndoStack()
+    let stack = workspace.getUndoStack()
     if (stack.length === 0) return
 
     const undoGroup = (group: string | undefined) => {
@@ -1126,10 +1128,22 @@ export const BlocklyEditor = ({
       }
     }
 
-    const topGroup = stack[stack.length - 1].group
-    undoGroup(topGroup)
+    // 1. First, if the very top of the stack is 'ghost-restore', undo all of them silently.
+    while (
+      stack.length > 0 &&
+      stack[stack.length - 1].group === 'ghost-restore'
+    ) {
+      undoGroup('ghost-restore')
+      stack = workspace.getUndoStack()
+    }
 
-    // Skip over ghost-restore events so they are transparent to the user
+    // 2. Now, the top of the stack is a real action. Undo it!
+    if (stack.length > 0) {
+      const topGroup = stack[stack.length - 1].group
+      undoGroup(topGroup)
+    }
+
+    // 3. Just in case there are any older ghost-restores right under it, clear those too.
     let afterStack = workspace.getUndoStack()
     while (
       afterStack.length > 0 &&
@@ -1315,6 +1329,7 @@ export const BlocklyEditor = ({
         <BlocklyWorkspace
           dataTask={dataTask}
           editMode={editMode}
+          pendingExternalTask={pendingExternalTask}
           applyExternalTaskState={applyExternalTaskState}
           onExternalTaskStateApplied={onExternalTaskStateApplied}
           onWorkspaceReady={handleWorkspaceReady}

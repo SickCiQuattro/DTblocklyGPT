@@ -1589,7 +1589,8 @@ Steps can be nested inside "steps", "do", or "otherwise" arrays to represent loo
 You must reply with a JSON response that follows this format:
 {{
   "answer": string,       // Natural language explanation or clarification to the user
-  "task": AbstractStep[]  // The updated or created task program
+  "task": AbstractStep[], // The updated or created task program
+  "taskModified": boolean // Set to true if you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. Set to false if the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.
 }}
 
 Where AbstractStep is one of:
@@ -1738,17 +1739,31 @@ the "confirmEvent" of a "human_action" step.
 - You must interpret their requests accurately using only the provided database.
 - Always use the exact "objectId"/"objectName", "locationId"/"locationName", and "actionId"/"actionName" from the database.
 - If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification and do not modify the task returning the task structure as it is.
-- Always reply with the language used by the user, even if it is not English.
+- The default language is English. You MUST reply in the language used by the user in their most recent message. If the user writes in English, reply in English. If the user writes in Italian, reply in Italian. Do not default or switch to Italian if the user's latest query is in English, even if previous parts of the chat log contain Italian.
 
 # IMPORTANT INSTRUCTIONS #
 - When responding to the user in natural language (the "answer" field), you MUST refer to blocks EXACTLY by their user-facing names in quotes as defined in the "# BLOCKLY TOOLBOX & CATEGORIES #" list (e.g. "Pick up" instead of "Pick" or "pick_block", "Pause and show message" instead of "human_action" or "Wait for Operator", "Show message" instead of "notify_action", "Repeat times" instead of "repeat_block", "Perform" instead of "processing_block", "Place at" instead of "place_block", etc.). Never use their technical type names (e.g. pick, place, processing, repeat, when, human_action, etc.) or generic code-like names in your conversational answers.
 - The "# CURRENT TASK SNAPSHOT #" is the ONLY ground truth for the actual state of the workspace. Do NOT assume that blocks discussed in previous turns of the conversation are in the workspace unless they are explicitly present in the "# CURRENT TASK SNAPSHOT #" of the current turn.
 - If the "# CURRENT TASK SNAPSHOT #" is empty (e.g. `[]`), then the workspace is currently empty, regardless of what was discussed in previous turns.
 - If the user asks about the current state, content, or blocks in the workspace, you MUST describe the blocks listed in "# CURRENT TASK SNAPSHOT #" exactly as they are, without modifying them, adding phantom blocks, or inventing steps. You must return the "task" field EXACTLY matching the provided "# CURRENT TASK SNAPSHOT #" array.
+- CRITICAL: You must NEVER flatten nested steps inside loops or conditionals in the "task" array. All steps inside "repeat" MUST be nested inside the "steps" array of that repeat step. All steps inside "when" or "repeat_until" MUST be nested inside the "do" or "otherwise" array of that block. Returning them as flat sibling steps in the root "task" array is strictly forbidden and will break the system. Keep the exact nested structure of any block program.
+- If the user's message is purely informational, analytical, or asking about the state/content of the workspace (e.g. "Cosa c'è nel mio workspace?", "Analizza il workspace"), you must NOT modify the task. You must return the "task" field EXACTLY matching the provided "# CURRENT TASK SNAPSHOT #" array structure, retaining its full nested representation without any changes.
+- You MUST set the "taskModified" field to true ONLY when you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. You MUST set "taskModified" to false when the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.
 - Between a user request and the next one, the user may change the existing task structure using the Blockly interface. Always consider the latest task structure provided.
 - If no modifications are needed, return the existing task structure as it is.
 - Task sequence must be only one. So don't return an array of tasks (i.e., don't return "task": [[AbstractStep], [AbstractStep], ...]).
 - By default, if the user asks for a request, modify the existing task. Only if the user explicitly asks for a new task, create a new one from scratch.
+
+# HOW TO EDIT/MODIFY THE CURRENT TASK SNAPSHOT #
+When the user asks to add, remove, or modify steps relative to the existing workspace task snapshot:
+1. Locate the target step or container block in the "# CURRENT TASK SNAPSHOT #" array (e.g. a "repeat", "repeat_until", "when", or "human_action" step).
+2. If the user asks to insert steps "inside" or "in" a loop or conditional block:
+   - For a "Repeat times" block (type "repeat"): insert the nested steps inside its "steps" array.
+   - For a "Repeat until" block (type "repeat_until"): insert the nested steps inside its "do" array.
+   - For a "When → Do" block (type "when"): insert the nested steps inside its "do" array.
+3. If the user asks to set a confirmation event or sensor trigger for a "Pause and show message" block (type "human_action"):
+   - Set or update its "confirmEvent" property with the correct condition object (e.g., {"type": "gesture", "gestureType": "OPEN_HAND"}).
+4. Ensure all other unmodified steps in the task tree are preserved exactly as they are in their correct nested positions, without flattening them or creating unrelated blocks (like adding "when" blocks externally).
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):
@@ -1784,6 +1799,59 @@ Response:
   "task": [
       {{"type": "human_action", "description": "Please place the part on the table and confirm.", "confirmEvent": {{"type": "human_feedback"}}}}
     ]
+}}
+
+User says: "Repeat 2 times: pick red_pill and then wait 3 seconds."
+Response:
+{{
+  "answer": "I added a repeat loop to repeat 2 times, containing a pick step for 'red_pill' and a wait step of 3 seconds.",
+  "task": [
+    {{
+      "type": "repeat",
+      "times": 2,
+      "steps": [
+        {{"type": "pick", "objectId": 1, "objectName": "red_pill"}},
+        {{"type": "wait", "seconds": 3}}
+      ]
+    }}
+  ],
+  "taskModified": true
+}}
+
+User says: "Repeat until a contact is detected: pick flask and place in box."
+Response:
+{{
+  "answer": "I structured a repeat until loop that runs until contact is detected, containing a pick step for 'flask' and a place step for 'box'.",
+  "task": [
+    {{
+      "type": "repeat_until",
+      "condition": {{"type": "touch_detect"}},
+      "do": [
+        {{"type": "pick", "objectId": 4, "objectName": "flask"}},
+        {{"type": "place", "locationId": 3, "locationName": "box"}}
+      ]
+    }}
+  ],
+  "taskModified": true
+}}
+
+User says: "If camera detects widget, pick it up, otherwise wait 5 seconds."
+Response:
+{{
+  "answer": "I added a conditional block: if the camera detects the widget, the robot will pick it up, otherwise it will wait for 5 seconds.",
+  "task": [
+    {{
+      "type": "when",
+      "condition": {{"type": "sensor_signal", "sensor": "camera"}},
+      "do": [
+        {{"type": "pick", "objectId": 3, "objectName": "widget"}}
+      ],
+      "otherwise": [
+        {{"type": "wait", "seconds": 5}}
+      ]
+    }}
+  ],
+  "taskModified": true
 }}
 """
 
@@ -1829,9 +1897,13 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                         "$ref": "#/$defs/AbstractStep"
                     },
                 },
+                "taskModified": {
+                    "type": "boolean",
+                    "description": "Set to true ONLY if you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. Set to false if the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.",
+                },
             },
             "additionalProperties": False,
-            "required": ["answer", "task"],
+            "required": ["answer", "task", "taskModified"],
             "$defs": {
                 "AbstractStep": {
                     "type": "object",
@@ -1898,6 +1970,77 @@ CHATGPT_FUNCTION_MULTIMODAL = {
         },
     },
 }
+
+def repair_flattened_steps(steps, warnings=None):
+    if not isinstance(steps, list):
+        return steps
+    
+    repaired = []
+    i = 0
+    while i < len(steps):
+        step = steps[i]
+        if not isinstance(step, dict):
+            repaired.append(step)
+            i += 1
+            continue
+            
+        step_type = step.get("type")
+        
+        # Unify children keys based on block types to prevent fallback gaps
+        if step_type == "repeat":
+            has_do = "do" in step and isinstance(step["do"], list) and len(step["do"]) > 0
+            has_steps = "steps" in step and isinstance(step["steps"], list) and len(step["steps"]) > 0
+            if has_do and not has_steps:
+                step["steps"] = step.pop("do")
+                if "do" in step:
+                    del step["do"]
+        elif step_type == "repeat_until":
+            has_do = "do" in step and isinstance(step["do"], list) and len(step["do"]) > 0
+            has_steps = "steps" in step and isinstance(step["steps"], list) and len(step["steps"]) > 0
+            if has_steps and not has_do:
+                step["do"] = step.pop("steps")
+                if "steps" in step:
+                    del step["steps"]
+        
+        # Recursive repair of children first if they exist
+        if step_type == "repeat":
+            if "steps" in step and isinstance(step["steps"], list):
+                step["steps"] = repair_flattened_steps(step["steps"], warnings)
+        elif step_type in ["repeat_until", "when"]:
+            if "do" in step and isinstance(step["do"], list):
+                step["do"] = repair_flattened_steps(step["do"], warnings)
+            if step_type == "when" and "otherwise" in step and isinstance(step["otherwise"], list):
+                step["otherwise"] = repair_flattened_steps(step["otherwise"], warnings)
+        
+        # Check if this is an empty container at the current level, followed by some sibling steps that should be nested
+        is_empty_container = False
+        children_key = None
+        
+        if step_type == "repeat":
+            children_key = "steps"
+            is_empty_container = (children_key not in step) or (not isinstance(step[children_key], list)) or (len(step[children_key]) == 0)
+        elif step_type in ["repeat_until", "when"]:
+            children_key = "do"
+            is_empty_container = (children_key not in step) or (not isinstance(step[children_key], list)) or (len(step[children_key]) == 0)
+            
+        if is_empty_container and children_key is not None:
+            subsequent_siblings = steps[i+1:]
+            if subsequent_siblings:
+                if warnings is not None:
+                    warnings.append({
+                        "severity": "warning",
+                        "message": f"Auto-corrected: flattened steps were nested inside the empty '{step_type}' container."
+                    })
+                nested_siblings = repair_flattened_steps(subsequent_siblings, warnings)
+                step[children_key] = nested_siblings
+                repaired.append(step)
+                i = len(steps)
+                continue
+        
+        repaired.append(step)
+        i += 1
+        
+    return repaired
 
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
@@ -1969,6 +2112,8 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                 try:
                     validation_warnings = []
+                    if isinstance(llm_task, list) and len(llm_task) > 0:
+                        llm_task = repair_flattened_steps(llm_task, validation_warnings)
                     validated_task = []
 
                     def validate_step(step, step_index, warnings):
@@ -1977,56 +2122,80 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                         if step_type == "pick":
                             object_id = step.get("objectId")
+                            object_name = step.get("objectName")
                             obj = None
                             for obj_item in data_objects:
-                                if obj_item["id"] == object_id:
+                                if (object_id is not None and str(obj_item["id"]) == str(object_id)) or \
+                                   (object_id is not None and obj_item.get("name") and obj_item["name"].lower() == str(object_id).lower()) or \
+                                   (object_name and obj_item.get("name") and obj_item["name"].lower() == object_name.lower()):
                                     obj = obj_item
                                     break
                             if obj is None:
                                 warnings.append({
                                     "severity": "error",
-                                    "message": f"Pick step {step_index}: objectId {object_id} not found."
+                                    "message": f"Pick step {step_index}: object '{object_name or object_id}' not found."
                                 })
+                            else:
+                                step_copy["objectId"] = obj["id"]
+                                step_copy["objectName"] = obj["name"]
 
                         elif step_type == "place":
                             location_id = step.get("locationId")
+                            location_name = step.get("locationName")
                             loc = None
                             for loc_item in data_locations:
-                                if loc_item["id"] == location_id:
+                                if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
+                                   (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
+                                   (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
                                     loc = loc_item
                                     break
                             if loc is None:
                                 warnings.append({
                                     "severity": "error",
-                                    "message": f"Place step {step_index}: locationId {location_id} not found."
+                                    "message": f"Place step {step_index}: location '{location_name or location_id}' not found."
                                 })
+                            else:
+                                step_copy["locationId"] = loc["id"]
+                                step_copy["locationName"] = loc["name"]
 
                         elif step_type == "processing":
                             action_id = step.get("actionId")
+                            action_name = step.get("actionName")
                             act = None
                             for act_item in data_actions:
-                                if act_item["id"] == action_id:
+                                if (action_id is not None and str(act_item["id"]) == str(action_id)) or \
+                                   (action_id is not None and act_item.get("name") and act_item["name"].lower() == str(action_id).lower()) or \
+                                   (action_name and act_item.get("name") and act_item["name"].lower() == action_name.lower()):
                                     act = act_item
                                     break
                             if act is None:
                                 warnings.append({
                                     "severity": "error",
-                                    "message": f"Processing step {step_index}: actionId {action_id} not found."
+                                    "message": f"Processing step {step_index}: action '{action_name or action_id}' not found."
                                 })
+                            else:
+                                step_copy["actionId"] = act["id"]
+                                step_copy["actionName"] = act["name"]
 
                         elif step_type == "move_to":
                             location_id = step.get("locationId")
+                            location_name = step.get("locationName")
                             motion_type = step.get("motionType")
                             loc = None
                             for loc_item in data_locations:
-                                if loc_item["id"] == location_id:
+                                if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
+                                   (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
+                                   (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
                                     loc = loc_item
                                     break
                             if loc is None:
                                 warnings.append({
                                     "severity": "error",
-                                    "message": f"MoveTo step {step_index}: locationId {location_id} not found."
+                                    "message": f"MoveTo step {step_index}: location '{location_name or location_id}' not found."
                                 })
+                            else:
+                                step_copy["locationId"] = loc["id"]
+                                step_copy["locationName"] = loc["name"]
                             if motion_type not in ["LINEAR", "JOINT"]:
                                 warnings.append({
                                     "severity": "error",
@@ -2063,7 +2232,9 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                         elif step_type == "repeat":
                             times = step.get("times")
-                            steps = step.get("steps", [])
+                            steps = step.get("steps")
+                            if not steps: # fallback if steps is None or empty list []
+                                steps = step.get("do", [])
                             if not isinstance(times, int) or times <= 0:
                                 warnings.append({
                                     "severity": "error",
@@ -2076,7 +2247,9 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                         elif step_type == "repeat_until":
                             condition = step.get("condition")
-                            steps = step.get("do", [])
+                            steps = step.get("do")
+                            if not steps: # fallback if do is None or empty list []
+                                steps = step.get("steps", [])
                             if condition is not None:
                                 validate_condition(condition, f"{step_index}.repeat_until.condition", warnings)
                             validated_children = []
@@ -2118,8 +2291,19 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                                 warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid sensor."})
                         elif cond_type == "find_object":
                             object_id = condition.get("objectId")
-                            if not any(o["id"] == object_id for o in data_objects):
-                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown objectId."})
+                            object_name = condition.get("objectName")
+                            obj = None
+                            for o in data_objects:
+                                if (object_id is not None and str(o["id"]) == str(object_id)) or \
+                                   (object_id is not None and o.get("name") and o["name"].lower() == str(object_id).lower()) or \
+                                   (object_name and o.get("name") and o["name"].lower() == object_name.lower()):
+                                    obj = o
+                                    break
+                            if obj is None:
+                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown object '{object_name or object_id}'."})
+                            else:
+                                condition["objectId"] = obj["id"]
+                                condition["objectName"] = obj["name"]
                         elif cond_type == "gesture":
                             gesture_type = condition.get("gestureType")
                             if gesture_type not in ["THUMBS_UP", "OPEN_HAND", "STOP"]:
@@ -2142,7 +2326,8 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     chat_log.append({"role": "assistant", "content": json.dumps(response_json)})
                     
                     is_valid = not any(w["severity"] == "error" for w in validation_warnings)
-                    requires_confirmation = len(validated_task) > 0 and is_valid
+                    task_modified = response_json.get("taskModified", True)
+                    requires_confirmation = task_modified and len(validated_task) > 0 and is_valid
 
                     data_result = {
                         "messageParts": message_parts,
@@ -2154,6 +2339,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         "response": {
                             "answer": answer,
                             "task": validated_task if requires_confirmation else None,
+                            "taskModified": task_modified,
                             "finished": False,
                             "validationWarnings": frontend_warnings,
                         },

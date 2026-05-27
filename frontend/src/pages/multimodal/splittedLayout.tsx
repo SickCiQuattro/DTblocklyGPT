@@ -6,7 +6,6 @@ import {
   X,
   Volume2,
   VolumeX,
-  Undo2,
   Play,
   MessageSquare,
 } from 'lucide-react'
@@ -91,7 +90,7 @@ export const SplittedLayout = ({
   const [chatLog, setChatLog] = useState<any[]>([])
   const [message, setMessage] = useState<string>('')
   const [isRecording, setIsRecording] = useState<boolean>(false)
-  const [undoStack, setUndoStack] = useState<AbstractStep[][]>([])
+
 
   const {
     transcript,
@@ -132,6 +131,7 @@ export const SplittedLayout = ({
   }, [abstractTask, dataObjects, dataLocations, dataActions])
 
   const [editorDataTask, setEditorDataTask] = useState<State | null>(null)
+  const [pendingChatTask, setPendingChatTask] = useState<State | null>(null)
 
   // Initialize editorDataTask once when initialDataTask becomes available
   useEffect(() => {
@@ -311,53 +311,7 @@ export const SplittedLayout = ({
           </button>
         )}
 
-        {editingMode && (
-          <button
-            onClick={() => {
-              if (undoStack.length > 0) {
-                const previous = undoStack[undoStack.length - 1]
-                setUndoStack(undoStack.slice(0, -1))
-                setTaskStructure(previous)
-                setNewChatResponse(true)
-              }
-            }}
-            disabled={undoStack.length === 0}
-            title="Undo Last AI Application"
-            style={{
-              background: undoStack.length > 0 ? 'rgba(79, 70, 229, 0.1)' : 'rgba(0, 0, 0, 0.02)',
-              border: undoStack.length > 0 ? '1px solid rgba(79, 70, 229, 0.2)' : '1px solid rgba(0, 0, 0, 0.05)',
-              borderRadius: '8px',
-              padding: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: undoStack.length > 0 ? 'pointer' : 'not-allowed',
-              opacity: undoStack.length > 0 ? 1 : 0.5,
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              if (undoStack.length > 0) {
-                e.currentTarget.style.background = 'rgba(79, 70, 229, 0.2)';
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (undoStack.length > 0) {
-                e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)';
-                e.currentTarget.style.transform = 'scale(1)';
-              }
-            }}
-          >
-            <Undo2
-              size={20}
-              style={{
-                color: undoStack.length > 0
-                  ? themePalette.palette.primary.main
-                  : themePalette.palette.grey[300],
-              }}
-            />
-          </button>
-        )}
+
         {editingMode && (
           <button
             onClick={() => setSimOpen(!simOpen)}
@@ -452,9 +406,6 @@ export const SplittedLayout = ({
             taskStructure={taskStructure}
             setTaskStructure={setTaskStructure}
             onApplyProposedTask={(proposed) => {
-              if (taskStructure) {
-                setUndoStack((prev) => [...prev, taskStructure])
-              }
               setTaskStructure(proposed)
               const converted = abstractToBlockly(
                 proposed,
@@ -463,8 +414,9 @@ export const SplittedLayout = ({
                 dataActions,
               )
               if (isBlockState(converted)) {
-                setEditorDataTask(converted)
+                setPendingChatTask(converted)
               }
+              setNewChatResponse(true)
             }}
             setNewChatResponse={setNewChatResponse}
           />
@@ -477,9 +429,13 @@ export const SplittedLayout = ({
           macroDetailsById={macroDetailsById}
           currentTaskId={currentTaskId}
           dataTask={editorDataTask}
+          pendingExternalTask={pendingChatTask}
           editMode={editingMode}
           applyExternalTaskState={newChatResponse}
-          onExternalTaskStateApplied={() => setNewChatResponse(false)}
+          onExternalTaskStateApplied={() => {
+            setNewChatResponse(false)
+            setPendingChatTask(null)
+          }}
           onTaskStructureChange={setTaskStructure}
           blockViewMode={viewSettings.blockViewMode}
           deleteConfirmMode={viewSettings.deleteConfirmMode}

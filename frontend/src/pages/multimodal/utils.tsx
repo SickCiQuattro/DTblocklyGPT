@@ -43,6 +43,7 @@ export interface ChatLogType {
 interface ResponseChatGPT {
   answer: string
   task: AbstractStep[] | null
+  taskModified?: boolean
   finished?: boolean
   validationWarnings?: string[]
 }

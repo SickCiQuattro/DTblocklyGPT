@@ -24,9 +24,15 @@ const normalizeStep = (step: any): any => {
   const cleaned: any = {};
   const keys = Object.keys(step).sort();
   for (const key of keys) {
-    const val = step[key];
+    let val = step[key];
     if (val === null || val === undefined) continue;
     if (Array.isArray(val) && val.length === 0) continue;
+    
+    // Coerce numeric strings to numbers for IDs and numeric properties
+    if ((key.endsWith('Id') || key === 'seconds' || key === 'times') && typeof val === 'string' && /^\d+$/.test(val)) {
+      val = Number(val);
+    }
+    
     cleaned[key] = normalizeStep(val);
   }
   return cleaned;
@@ -189,52 +195,29 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         setListMessages([...messagesWithUserRequest, ...newMessages]);
         setChatLog(res.chatLog);
 
-        const isIdentical = areStepsIdentical(res.response.task, taskStructure);
+        const taskModified = res.response?.taskModified ?? true;
 
-        if (isIdentical) {
-          // If the task structure didn't change semantically, do not apply and clear proposed task
+        if (!taskModified) {
+          // If the task was not modified, clear proposed task and do not apply anything to the workspace!
           dispatch(clearProposedTask());
-        } else if (Array.isArray(res.response.task) && res.response.task.length > 0) {
-          // If we received a valid multimodal task array, automatically apply it to the workspace!
-          onApplyProposedTask(res.response.task);
-          setNewChatResponse(true);
-          dispatch(clearProposedTask());
-        } else if (res.response?.finished) {
-          // Fallback legacy flow: if finished is true, save the chat task structure
-          await fetchApi({
-            url: endpoints.chat.saveChatTask,
-            method: MethodHTTP.POST,
-            body: {
-              id: Number(taskId),
-              taskStructure: res.response.task || taskStructure,
-            },
-          }).then((saveRes) => {
-            const { taskCode } = saveRes as { taskCode: unknown };
-            const abstractTaskCode = blocklyToAbstract(taskCode as CustomBlock);
-
-            void fetchApi({
-              url: endpoints.graphic.saveGraphicTask,
-              method: MethodHTTP.PUT,
-              body: {
-                id: Number(taskId),
-                taskStructure: abstractTaskCode,
-              },
-            }).then(() => {
-              // Finish action
-            });
-          });
-          dispatch(clearProposedTask());
-        } else if (res.response.task) {
-          // Legacy flow: not finished yet, dispatch proposed task to show preview card
-          dispatch(
-            setProposedTask({
-              proposedTask: res.response.task || null,
-              validationWarnings: res.response.validationWarnings || [],
-              answer: res.response.answer || '',
-            })
-          );
         } else {
-          dispatch(clearProposedTask());
+          const isIdentical = areStepsIdentical(res.response.task, taskStructure);
+
+          if (isIdentical) {
+            // If the task structure didn't change semantically, do not apply and clear proposed task
+            dispatch(clearProposedTask());
+          } else if (Array.isArray(res.response.task) && res.response.task.length > 0) {
+            // Se abbiamo ricevuto un task valido, lo impostiamo come proposta per chiedere la conferma dell'utente!
+            dispatch(
+              setProposedTask({
+                proposedTask: res.response.task,
+                validationWarnings: res.response.validationWarnings || [],
+                answer: res.response.answer || '',
+              })
+            );
+          } else {
+            dispatch(clearProposedTask());
+          }
         }
       }
     } catch (error) {
@@ -401,32 +384,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       )}
 
       <ChatComposer
-        taskId={taskId}
-        taskStructure={taskStructure}
-        setTaskStructure={setTaskStructure}
-        speaker={speaker}
-        setSpeaker={setSpeaker}
         isProcessing={isProcessing}
-        setIsProcessing={setIsProcessing}
-        fineTunedModel={fineTunedModel}
-        setFineTunedModel={setFineTunedModel}
-        fineTuningJobId={fineTuningJobId}
-        setFineTuningJobId={setFineTuningJobId}
-        listMessages={listMessages}
-        setListMessages={setListMessages}
-        chatLog={chatLog}
-        setChatLog={setChatLog}
         message={message}
         setMessage={setMessage}
-        dataObjects={dataObjects}
-        dataLocations={dataLocations}
-        dataActions={dataActions}
         isRecording={isRecording}
         setIsRecording={setIsRecording}
         transcript={transcript}
         resetTranscript={resetTranscript}
         browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
         isMicrophoneAvailable={isMicrophoneAvailable}
+        onMessageSend={onMessageSend}
       />
     </Card>
   );

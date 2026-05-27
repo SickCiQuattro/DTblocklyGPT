@@ -42,7 +42,7 @@ const buildTreeNodes = (
         icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
         break;
       case 'processing':
-        title = `Process: ${getNameFromId((step as any).actionId, dataActions)}`;
+        title = `Perform: ${getNameFromId((step as any).actionId, dataActions)}`;
         icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
         break;
       case 'move_to':
@@ -51,6 +51,10 @@ const buildTreeNodes = (
         break;
       case 'gripper':
         title = `Gripper: ${(step as any).state}`;
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
+        break;
+      case 'wait':
+        title = `Wait: ${(step as any).seconds}s`;
         icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
         break;
       case 'human_action':

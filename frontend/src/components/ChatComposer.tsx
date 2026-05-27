@@ -13,62 +13,30 @@ import { CHATGPT_ERROR } from 'pages/multimodal/utils';
 import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser';
 
 interface ChatComposerProps {
-  taskId: string;
-  taskStructure: any; // TaskChatStructure
-  setTaskStructure: (taskStructure: any) => void;
-  speaker: boolean;
-  setSpeaker: (speaker: boolean) => void;
   isProcessing: boolean;
-  setIsProcessing: (isProcessing: boolean) => void;
-  fineTunedModel: string;
-  setFineTunedModel: (model: string) => void;
-  fineTuningJobId: string;
-  setFineTuningJobId: (jobId: string) => void;
-  listMessages: any[];
-  setListMessages: (messages: any[]) => void;
-  chatLog: any[];
-  setChatLog: (log: any[]) => void;
   message: string;
   setMessage: (message: string) => void;
-  dataObjects: any[];
-  dataLocations: any[];
-  dataActions: any[];
   isRecording: boolean;
   setIsRecording: (recording: boolean) => void;
   transcript: string;
   resetTranscript: () => void;
   browserSupportsSpeechRecognition: boolean;
   isMicrophoneAvailable: boolean;
+  onMessageSend: () => void;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
-  taskId,
-  taskStructure,
-  speaker,
   isProcessing,
-  setIsProcessing,
-  fineTunedModel,
-  setFineTunedModel,
-  fineTuningJobId,
-  setFineTuningJobId,
-  listMessages,
-  setListMessages,
-  chatLog,
-  setChatLog,
   message,
   setMessage,
-  dataObjects,
-  dataLocations,
-  dataActions,
   isRecording,
   setIsRecording,
   transcript,
   resetTranscript,
   browserSupportsSpeechRecognition,
   isMicrophoneAvailable,
+  onMessageSend,
 }) => {
-  const dispatch = useDispatch();
-
   const startRecording = () => {
     SpeechRecognition.startListening({
       language: 'en-GB',
@@ -82,102 +50,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     setMessage(transcript);
     resetTranscript();
     setIsRecording(false);
-  };
-
-  const onMessageSend = async () => {
-    if (!message.trim() || isProcessing) return;
-
-    const messagesWithUserRequest = [
-      ...listMessages,
-      {
-        text: message,
-        id: listMessages[listMessages.length - 1].id + 1,
-        user: UserChatEnum.USER,
-        timestamp: dayjs().toISOString(),
-        type: MessageTypeEnum.TEXT,
-      },
-    ];
-    setListMessages(messagesWithUserRequest);
-    setIsProcessing(true);
-    setMessage('');
-
-    try {
-      const res: ChatResponse = await fetchApi({
-        url: endpoints.chat.newMessageMultimodal,
-        method: MethodHTTP.POST,
-        body: {
-          id: Number(taskId),
-          message,
-          chatLog,
-          dataObjects,
-          dataLocations,
-          dataActions,
-          taskStructure: taskStructure,
-        },
-      });
-
-      if (res) {
-        if (res.fineTunedModel !== undefined && res.fineTunedModel !== fineTunedModel) setFineTunedModel(res.fineTunedModel);
-        if (res.fineTuningJobId !== undefined && res.fineTuningJobId !== fineTuningJobId) setFineTuningJobId(res.fineTuningJobId);
-
-        if (speaker) {
-          const utterance = new SpeechSynthesisUtterance(res.response.answer);
-          utterance.lang = 'en-GB';
-          window.speechSynthesis.speak(utterance);
-        }
-
-        const newMessage: MessageType = {
-          text: res.response.answer || CHATGPT_ERROR,
-          id: messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
-          user: UserChatEnum.ROBOT,
-          timestamp: dayjs().toISOString(),
-          type: MessageTypeEnum.TEXT,
-        };
-        const newMessages: MessageType[] = [newMessage];
-
-        if (!res.response?.finished) {
-          setListMessages([...messagesWithUserRequest, ...newMessages]);
-          setChatLog(res.chatLog);
-        }
-
-        dispatch(
-          setProposedTask({
-            proposedTask: res.response.task || null,
-            validationWarnings: res.response.validationWarnings || [],
-            answer: res.response.answer || '',
-          })
-        );
-
-        if (res.response?.finished) {
-          await fetchApi({
-            url: endpoints.chat.saveChatTask,
-            method: MethodHTTP.POST,
-            body: {
-              id: Number(taskId),
-              taskStructure: taskStructure,
-            },
-          }).then((saveRes) => {
-            const { taskCode } = saveRes as { taskCode: string };
-            const abstractTaskCode = blocklyToAbstract(taskCode as any as CustomBlock);
-
-            void fetchApi({
-              url: endpoints.graphic.saveGraphicTask,
-              method: MethodHTTP.PUT,
-              body: {
-                id: Number(taskId),
-                taskStructure: abstractTaskCode,
-              },
-            }).then(() => {
-              // Navigation or other final actions
-            });
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -89,6 +89,7 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
 interface BlocklyComponentProps {
   dataTask: BlockState | BlockState[] | null
   editMode: boolean
+  pendingExternalTask?: BlockState | BlockState[] | null
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
@@ -101,6 +102,7 @@ const DEFAULT_Y_AXIS = 100
 export const BlocklyWorkspace = ({
   dataTask,
   editMode,
+  pendingExternalTask,
   onWorkspaceReady,
   applyExternalTaskState = false,
   onExternalTaskStateApplied,
@@ -214,7 +216,7 @@ export const BlocklyWorkspace = ({
 
   useEffect(() => {
     if (!primaryWorkspaceRef.current || !applyExternalTaskState) return
-    if (!isValidBlockState(dataTask)) return
+    if (!isValidBlockState(pendingExternalTask)) return
 
     const workspace = primaryWorkspaceRef.current
     const blocklyTaskStructure = getBlocklyStructure()
@@ -224,41 +226,11 @@ export const BlocklyWorkspace = ({
     const x_axis = firstBlock?.x ?? DEFAULT_X_AXIS
     const y_axis = firstBlock?.y ?? DEFAULT_Y_AXIS
 
-    Blockly.Events.disable()
-    try {
-      workspace.clear() // Clear existing blocks to prevent overlap/duplication
-      if (Array.isArray(dataTask)) {
-        dataTask.forEach((block) => {
-          const defaultDataTask = { ...block }
-          defaultDataTask.x = block.x ?? x_axis
-          defaultDataTask.y = block.y ?? y_axis
-          Blockly.serialization.blocks.append(defaultDataTask, workspace)
-        })
-      } else {
-        let defaultDataTask = { ...dataTask }
-        if (defaultDataTask.type !== 'when_start') {
-          defaultDataTask = {
-            type: 'when_start',
-            x: x_axis,
-            y: y_axis,
-            next: {
-              block: defaultDataTask
-            }
-          } as any
-        } else {
-          defaultDataTask.x = x_axis
-          defaultDataTask.y = y_axis
-        }
-        Blockly.serialization.blocks.append(defaultDataTask, workspace)
-      }
-      injectAllGhostBlocks(workspace)
-    } finally {
-      Blockly.Events.enable()
-    }
+    updateStructureAndFireFakeChangeEvent(workspace, pendingExternalTask, x_axis, y_axis)
 
     onTaskLoadedRef.current?.()
     onExternalTaskStateAppliedRef.current?.()
-  }, [applyExternalTaskState, dataTask])
+  }, [applyExternalTaskState, pendingExternalTask])
 
   return (
     <div
