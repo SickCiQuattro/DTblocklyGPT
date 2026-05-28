@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, Space, Divider, Typography } from 'antd';
-import { PlayCircleOutlined, StopOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Box, Divider, Typography, Stack, CircularProgress } from '@mui/material';
+import { PlayCircle, StopCircle, X } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { endpoints } from 'services/endpoints';
 import { MethodHTTP, fetchApi } from 'services/api';
@@ -44,38 +44,41 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
   };
 
   return (
-    <Card
-      variant="borderless"
-      style={{
+    <Box
+      sx={{
         height: '100%',
         background: 'rgba(255, 255, 255, 0.15)',
         backdropFilter: 'blur(10px)',
         border: '1px solid rgba(255, 255, 255, 0.2)',
         borderRadius: '16px',
         boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+        display: 'flex',
+        flexDirection: 'column',
+        boxSizing: 'border-box',
+        p: '16px',
       }}
     >
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <Typography.Title level={4} style={{ margin: 0, color: 'rgba(0, 0, 0, 0.85)' }}>
+          <Typography variant="h6" style={{ margin: 0, color: 'rgba(0, 0, 0, 0.85)', fontWeight: 600 }}>
             Digital Twin / Simulation
-          </Typography.Title>
-          <div onClick={onClose} style={{ cursor: 'pointer', fontSize: '20px', color: '#8c8c8c' }}>
-            <span>x</span>
+          </Typography>
+          <div onClick={onClose} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8c8c8c' }}>
+            <X size={20} />
           </div>
         </div>
         <Divider style={{ margin: '0 0 16px 0', opacity: 0.2 }} />
 
         <div style={{ marginBottom: '16px' }}>
-          <Typography.Text strong style={{ marginRight: '8px' }}>Status:</Typography.Text>
-          <Typography.Text>{simulation.message}</Typography.Text>
+          <Typography variant="body2" component="span" sx={{ fontWeight: 600, marginRight: '8px' }}>Status:</Typography>
+          <Typography variant="body2" component="span">{simulation.message}</Typography>
         </div>
 
         {simulation.isRunning && (
           <div style={{ marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <LoadingOutlined style={{ color: '#1890ff' }} spin />
-              <Typography.Text strong>Execution Progress:</Typography.Text>
+              <CircularProgress size={16} sx={{ color: '#1890ff' }} />
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Execution Progress:</Typography>
             </div>
             <div style={{ height: '8px', background: 'rgba(0, 0, 0, 0.05)', borderRadius: '4px', overflow: 'hidden' }}>
               <div
@@ -87,9 +90,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
                 }}
               />
             </div>
-            <Typography.Text style={{ display: 'block', marginTop: '4px', textAlign: 'right' }}>
+            <Typography variant="caption" style={{ display: 'block', marginTop: '4px', textAlign: 'right' }}>
               {simulation.progress}%
-            </Typography.Text>
+            </Typography>
           </div>
         )}
 
@@ -108,18 +111,18 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
             color: 'rgba(0, 0, 0, 0.45)',
           }}
         >
-          <Space direction="vertical" align="center">
+          <Stack spacing={1} direction="column" sx={{ alignItems: 'center' }}>
             <div style={{ fontSize: '32px', opacity: 0.7 }}>Robot</div>
-            <Typography.Text style={{ fontSize: '14px' }}>
+            <Typography style={{ fontSize: '14px' }}>
               WSL / Gazebo ROS2 Simulation Workspace Active
-            </Typography.Text>
-          </Space>
+            </Typography>
+          </Stack>
         </div>
       </div>
 
       <Divider style={{ margin: '16px 0', opacity: 0.2 }} />
       <div style={{ textAlign: 'center', paddingBottom: '8px' }}>
-        <Space size="middle">
+        <Stack direction="row" spacing={2} sx={{ justifyContent: 'center' }}>
           <button
             onClick={startSimulation}
             disabled={simulation.isRunning}
@@ -137,7 +140,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
               transition: 'all 0.3s',
             }}
           >
-            <PlayCircleOutlined /> Start Simulation
+            <PlayCircle size={16} /> Start Simulation
           </button>
           <button
             onClick={stopSimulation}
@@ -157,10 +160,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId, onCl
               opacity: !simulation.isRunning ? 0.5 : 1,
             }}
           >
-            <StopOutlined /> Stop
+            <StopCircle size={16} /> Stop
           </button>
-        </Space>
+        </Stack>
       </div>
-    </Card>
+    </Box>
   );
 };

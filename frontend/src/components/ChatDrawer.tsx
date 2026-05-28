@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Card } from 'antd';
+import { Box } from '@mui/material';
 import { X } from 'lucide-react';
 import { UserBubble } from './UserBubble';
 import { AssistantBubble } from './AssistantBubble';
@@ -113,6 +113,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
   const [width, setWidth] = React.useState(450);
   const [isResizing, setIsResizing] = React.useState(false);
+  const [showProposalOverlay, setShowProposalOverlay] = React.useState(false);
+
+  // Auto-open overlay when a new proposal is received
+  const prevProposedTaskRef = useRef<any>(null);
+  useEffect(() => {
+    if (proposal.proposedTask && !prevProposedTaskRef.current) {
+      setShowProposalOverlay(true);
+    } else if (!proposal.proposedTask) {
+      setShowProposalOverlay(false);
+    }
+    prevProposedTaskRef.current = proposal.proposedTask;
+  }, [proposal.proposedTask]);
 
   const startResizing = React.useCallback((pointerDownEvent: React.PointerEvent) => {
     pointerDownEvent.preventDefault();
@@ -250,10 +262,36 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     }
   };
 
+  const renderTypingIndicator = () => {
+    return (
+      <div
+        className="assistant-bubble-premium"
+        style={{
+          margin: '8px 0',
+          width: '74px',
+          alignSelf: 'flex-start',
+          background: 'rgba(16, 185, 129, 0.06)',
+          border: '1px solid rgba(16, 185, 129, 0.14)',
+          borderRadius: '16px 16px 16px 4px',
+          padding: '12px 16px',
+          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <Card
-      variant="borderless"
-      style={{
+    <Box
+      sx={{
         position: 'relative',
         width: open ? width : 0,
         minWidth: open ? width : 0,
@@ -269,14 +307,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         height: '100%',
         margin: '0',
         borderRadius: '10px',
-      }}
-      styles={{
-        body: {
-          padding: 0,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-        }
+        boxSizing: 'border-box',
       }}
     >
       <style>{`
@@ -285,6 +316,53 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         }
         .resize-handle:hover, .resize-handle:active {
           background: rgba(99, 102, 241, 0.3) !important;
+        }
+        .chat-messages-container::-webkit-scrollbar {
+          width: 5px !important;
+        }
+        .chat-messages-container::-webkit-scrollbar-track {
+          background: transparent !important;
+        }
+        .chat-messages-container::-webkit-scrollbar-thumb {
+          background: rgba(99, 102, 241, 0.18) !important;
+          border-radius: 10px !important;
+        }
+        .chat-messages-container::-webkit-scrollbar-thumb:hover {
+          background: rgba(99, 102, 241, 0.35) !important;
+        }
+        .close-btn-premium {
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .close-btn-premium:hover {
+          transform: rotate(90deg) scale(1.08) !important;
+          background: rgba(99, 102, 241, 0.08) !important;
+        }
+        .close-btn-premium:active {
+          transform: rotate(90deg) scale(0.92) !important;
+        }
+        @keyframes typing-dot-bounce {
+          0%, 100% {
+            transform: translateY(0);
+            opacity: 0.4;
+          }
+          50% {
+            transform: translateY(-4px);
+            opacity: 1;
+          }
+        }
+        .typing-dot {
+          width: 6px;
+          height: 6px;
+          background-color: #10b981;
+          border-radius: 50%;
+          display: inline-block;
+          animation: typing-dot-bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) {
+          animation-delay: -0.32s;
+        }
+        .typing-dot:nth-child(2) {
+          animation-delay: -0.16s;
         }
       `}</style>
 
@@ -322,6 +400,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         </div>
         <button
           onClick={() => onOpenChange(false)}
+          className="close-btn-premium"
           style={{
             background: 'none',
             border: 'none',
@@ -331,55 +410,151 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: '8px',
-            transition: 'background 0.2s',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >
           <X size={18} style={{ color: '#6366f1' }} />
         </button>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-        }}
-      >
-        {listMessages.map(renderMessage)}
-        <div ref={chatEndRef} />
-      </div>
-
-      {proposal.proposedTask && (
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Chat message history list */}
         <div
+          className="chat-messages-container"
           style={{
-            borderTop: '1px solid rgba(0, 0, 0, 0.05)',
-            background: 'rgba(255, 255, 255, 0.4)',
-            maxHeight: '50%',
+            flex: 1,
             overflowY: 'auto',
-            flexShrink: 0,
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
           }}
         >
-          <TaskPreviewCard
-            proposedTask={proposal.proposedTask}
-            validationWarnings={proposal.validationWarnings}
-            answer={proposal.answer}
-            dataObjects={dataObjects}
-            dataLocations={dataLocations}
-            dataActions={dataActions}
-            onApply={() => {
-              onApplyProposedTask(proposal.proposedTask);
-              setNewChatResponse(true);
-              dispatch(clearProposedTask());
+          {listMessages.map(renderMessage)}
+          {isProcessing && renderTypingIndicator()}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Slide-Up Details Overlay Panel */}
+        {proposal.proposedTask && (
+          <div
+            className={`proposal-overlay ${showProposalOverlay ? 'overlay-open' : ''}`}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 90,
+              background: '#ffffff',
+              transform: showProposalOverlay ? 'translateY(0)' : 'translateY(100%)',
+              transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
-            onCancel={() => {
-              dispatch(clearProposedTask());
-            }}
-          />
+          >
+            <TaskPreviewCard
+              proposedTask={proposal.proposedTask}
+              validationWarnings={proposal.validationWarnings}
+              answer={proposal.answer}
+              dataObjects={dataObjects}
+              dataLocations={dataLocations}
+              dataActions={dataActions}
+              onApply={() => {
+                onApplyProposedTask(proposal.proposedTask);
+                setNewChatResponse(true);
+                dispatch(clearProposedTask());
+              }}
+              onCancel={() => {
+                dispatch(clearProposedTask());
+              }}
+              onBack={() => setShowProposalOverlay(false)}
+            />
+          </div>
+        )}
+      </div>
+
+      {proposal.proposedTask && !showProposalOverlay && (
+        <div
+          className="proposal-floating-badge"
+          style={{
+            margin: '0 20px 8px 20px',
+            background: 'rgba(99, 102, 241, 0.08)',
+            border: '1px solid rgba(99, 102, 241, 0.16)',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.04)',
+          }}
+        >
+          <style>{`
+            @keyframes badge-entrance {
+              from { opacity: 0; transform: translateY(8px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+            .proposal-floating-badge {
+              animation: badge-entrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            }
+            .badge-action-btn {
+              background: #6366f1;
+              color: white;
+              border: none;
+              padding: 4px 10px;
+              border-radius: 6px;
+              font-size: 12px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: all 0.2s;
+            }
+            .badge-action-btn:hover {
+              background: #4f46e5;
+              transform: scale(1.03);
+            }
+            .badge-action-btn:active {
+              transform: scale(0.96);
+            }
+          `}</style>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              backgroundColor: '#6366f1',
+              borderRadius: '50%',
+              display: 'inline-block',
+              boxShadow: '0 0 8px #6366f1'
+            }} />
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e1b4b' }}>
+              New Blockly task proposed
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              onClick={() => setShowProposalOverlay(true)}
+              className="badge-action-btn"
+            >
+              View Details
+            </button>
+            <button
+              onClick={() => dispatch(clearProposedTask())}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+            >
+              <X size={14} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -395,6 +570,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         isMicrophoneAvailable={isMicrophoneAvailable}
         onMessageSend={onMessageSend}
       />
-    </Card>
+    </Box>
   );
 };

@@ -1,13 +1,15 @@
 import React from 'react';
-import { Alert, Button, Space, Typography, Tree } from 'antd';
+import { Box, Button, Typography, Alert, AlertTitle, Stack } from '@mui/material';
 import {
   PlayCircle,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { AbstractStep, AbstractCondition } from 'pages/tasks/types';
 import { useDispatch } from 'react-redux';
 import { clearProposedTask } from 'store/reducers/proposal';
 import { abstractToBlockly } from 'utils/blocklyParser';
+import { StepTree } from './StepTree';
 
 // Helper function to get the display name for an ID from the catalogs
 const getNameFromId = (id: number | string | null, catalog: any[], nameField: string = 'name'): string => {
@@ -209,6 +211,7 @@ interface TaskPreviewCardProps {
   dataActions: any[];
   onApply: () => void;
   onCancel: () => void;
+  onBack?: () => void;
 }
 
 export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
@@ -220,6 +223,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
   dataActions,
   onApply,
   onCancel,
+  onBack,
 }) => {
   const dispatch = useDispatch();
 
@@ -254,107 +258,198 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
   }
 
   return (
-    <div style={{
-      background: 'rgba(79, 70, 229, 0.04)',
-      backdropFilter: 'blur(10px)',
-      border: '1px solid rgba(79, 70, 229, 0.15)',
-      borderRadius: '16px',
-      boxShadow: '0 8px 24px rgba(79, 70, 229, 0.08)',
-      margin: '16px',
-    }}>
-      <div style={{ padding: '16px' }}>
+    <div
+      className="task-card-premium"
+      style={{
+        background: 'rgba(255, 255, 255, 0.98)',
+        borderRadius: '10px',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: 'none',
+      }}
+    >
+      <style>{`
+        @keyframes task-card-entrance {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .task-card-premium {
+          animation: task-card-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        }
+        .task-card-tree::-webkit-scrollbar {
+          width: 4px !important;
+        }
+        .task-card-tree::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.02) !important;
+          border-radius: 10px !important;
+        }
+        .task-card-tree::-webkit-scrollbar-thumb {
+          background: rgba(79, 70, 229, 0.25) !important;
+          border-radius: 10px !important;
+        }
+        .task-card-tree::-webkit-scrollbar-thumb:hover {
+          background: rgba(79, 70, 229, 0.45) !important;
+        }
+        .task-btn-premium {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .task-btn-premium:hover:not(:disabled) {
+          transform: translateY(-1px) scale(1.03);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05) !important;
+        }
+        .task-btn-premium:active:not(:disabled) {
+          transform: scale(0.95);
+        }
+        .task-btn-apply-premium {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .task-btn-apply-premium:hover:not(:disabled) {
+          transform: translateY(-1px) scale(1.03);
+          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25) !important;
+          background: #4338ca !important;
+        }
+        .task-btn-apply-premium:active:not(:disabled) {
+          transform: scale(0.95);
+        }
+      `}</style>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Back Button Header */}
+        {onBack && (
+          <div style={{ marginBottom: '12px', flexShrink: 0 }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#4f46e5',
+                fontWeight: 600,
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 0',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateX(-2px)')}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateX(0)')}
+            >
+              <ArrowLeft size={14} /> Back to Chat
+            </button>
+          </div>
+        )}
+
         {/* Answer from the assistant */}
         {answer && (
-          <div style={{ maxHeight: '120px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px' }}>
-            <Typography.Text
+          <div style={{ maxHeight: '90px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px', flexShrink: 0 }}>
+            <Typography
               style={{ fontWeight: 600, color: '#1e1b4b', display: 'block', fontSize: '14px', lineHeight: '1.5' }}
             >
               {answer}
-            </Typography.Text>
+            </Typography>
           </div>
         )}
 
         {/* Validation warnings */}
         {validationWarnings.length > 0 && (
           <Alert
-            type="warning"
-            message="Validation Warnings"
-            description={
-              <Space direction="vertical" style={{ marginTop: 4 }}>
+            severity="warning"
+            sx={{ marginBottom: '12px', borderRadius: '12px', flexShrink: 0 }}
+          >
+            <AlertTitle sx={{ fontWeight: 600, fontSize: '14px', m: 0 }}>Validation Warnings</AlertTitle>
+            <Box sx={{ maxHeight: '80px', overflowY: 'auto', mt: 0.5 }}>
+              <Stack spacing={0.5}>
                 {validationWarnings.map((warning, index) => (
-                  <Typography.Text
+                  <Typography
                     key={index}
-                    type="secondary"
-                    style={{ fontSize: '13px', color: '#b45309' }}
+                    variant="caption"
+                    style={{ display: 'block', fontSize: '13px', color: '#b45309' }}
                   >
                     • {warning}
-                  </Typography.Text>
+                  </Typography>
                 ))}
-              </Space>
-            }
-            showIcon
-            style={{ marginBottom: '16px', borderRadius: '12px' }}
-          />
+              </Stack>
+            </Box>
+          </Alert>
         )}
 
         {/* Task preview tree */}
-        <Typography.Text
-          style={{ fontWeight: 600, marginBottom: '8px', color: '#1e1b4b', display: 'block', fontSize: '14px' }}
+        <Typography
+          style={{ fontWeight: 600, marginBottom: '6px', color: '#1e1b4b', display: 'block', fontSize: '14px', flexShrink: 0 }}
         >
           Proposed Task Steps
-        </Typography.Text>
-        <Tree
-          showLine
-          defaultExpandAll
-          style={{ maxHeight: '200px', overflowY: 'auto', background: 'transparent', padding: '8px 4px', borderRadius: '8px', marginBottom: '8px' }}
-          treeData={buildTreeNodes(proposedTask, dataObjects, dataLocations, dataActions)}
-        />
+        </Typography>
+        <div
+          className="task-card-tree"
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            minHeight: 0,
+            marginBottom: '8px',
+            background: 'transparent',
+            padding: '4px 8px',
+            borderRadius: '8px',
+            border: '1px solid rgba(0, 0, 0, 0.02)',
+          }}
+        >
+          <StepTree
+            treeData={buildTreeNodes(proposedTask, dataObjects, dataLocations, dataActions)}
+          />
+        </div>
 
         {/* Action buttons */}
         <div style={{
-          marginTop: '16px',
+          marginTop: 'auto',
           textAlign: 'right',
-          position: 'sticky',
-          bottom: 0,
-          background: 'rgba(251, 251, 254, 0.95)',
-          backdropFilter: 'blur(8px)',
           paddingTop: '12px',
           borderTop: '1px solid rgba(79, 70, 229, 0.1)',
           zIndex: 10,
+          flexShrink: 0,
         }}>
-          <Space size={8}>
+          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
             <Button
-              type="default"
-              size="middle"
+              variant="outlined"
+              size="medium"
               onClick={handleCancel}
+              className="task-btn-premium"
               style={{
-                width: 80,
+                minWidth: 80,
                 borderRadius: '8px',
-                border: '1px solid rgba(0, 0, 0, 0.08)',
+                borderColor: 'rgba(0, 0, 0, 0.08)',
                 color: '#4b5563',
                 fontSize: '13px',
                 fontWeight: 500,
+                textTransform: 'none',
               }}
             >
               Cancel
             </Button>
             <Button
-              type="primary"
-              size="middle"
+              variant="contained"
+              size="medium"
               onClick={handleApply}
+              className="task-btn-apply-premium"
               style={{
-                width: 80,
+                minWidth: 80,
                 borderRadius: '8px',
                 background: '#4f46e5',
                 border: 'none',
                 color: '#ffffff',
                 fontSize: '13px',
                 fontWeight: 600,
+                textTransform: 'none',
               }}
             >
               Apply
             </Button>
-          </Space>
+          </Stack>
         </div>
       </div>
     </div>

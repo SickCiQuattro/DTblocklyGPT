@@ -22,8 +22,8 @@ import { Formik } from 'formik'
 import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
-import { AimOutlined, PlusOutlined } from '@ant-design/icons'
-import { Popconfirm } from 'antd'
+import { Target, Plus } from 'lucide-react'
+import { ConfirmPopover } from 'components/ConfirmPopover'
 import { useSearchParams } from 'react-router-dom'
 
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -298,8 +298,9 @@ export const FormAction = ({
                                 values.keywords.includes(addKeyword)
                               }
                               edge="end"
+                              size="large"
                             >
-                              <PlusOutlined />
+                              <Plus size={16} />
                             </IconButton>
                           </InputAdornment>
                         ),
@@ -448,7 +449,7 @@ export const FormAction = ({
                     aria-label="detail"
                     size="medium"
                     title="Acquire a point to define a custom pattern"
-                    startIcon={<AimOutlined style={{ fontSize: '2em' }} />}
+                    startIcon={<Target size={18} />}
                   >
                     Get point
                   </Button>
@@ -472,19 +473,18 @@ export const FormAction = ({
                     </Grid>
                     <Grid size={2}>
                       <Stack spacing={1}>
-                        <Popconfirm
+                        <ConfirmPopover
                           title="Delete?"
                           onConfirm={() =>
                             handleDelete(values.points, index, setFieldValue)
                           }
-                          okText="Ok"
-                          cancelText="Cancel"
-                          icon={iconMap.deleteCircle}
                         >
-                          <Button color="error" title="Delete this point">
-                            Delete
-                          </Button>
-                        </Popconfirm>
+                          {(onOpen) => (
+                            <Button color="error" title="Delete this point" onClick={onOpen}>
+                              Delete
+                            </Button>
+                          )}
+                        </ConfirmPopover>
                       </Stack>
                     </Grid>
                   </React.Fragment>

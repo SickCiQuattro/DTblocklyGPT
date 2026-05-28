@@ -1,7 +1,6 @@
 import React from 'react'
-import { Collapse } from 'antd'
-import { Divider, useTheme } from '@mui/material'
-import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { Accordion, AccordionSummary, AccordionDetails, Divider, Box, Typography, IconButton, useTheme } from '@mui/material'
+import { Copy, HelpCircle, ChevronDown } from 'lucide-react'
 import { toast } from 'react-toastify'
 
 import { MessageText } from 'utils/messages'
@@ -24,16 +23,8 @@ export const RightPanel = ({ taskStructure }: RightPanelProps) => {
         overflow: 'auto',
       }}
     >
-      {/*       <MainCard
-        sx={{
-          background: backgroundForm,
-          marginRight: '1rem',
-        }}
-      >
-        TASK IN PROGRESS
-      </MainCard> */}
-      <h2 style={{ marginTop: '1rem' }}>
-        <QuestionCircleOutlined /> Instructions & FAQ
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1rem', fontSize: '1.25rem', color: theme.palette.text.primary }}>
+        <HelpCircle size={20} /> Instructions & FAQ
       </h2>
       <p>In this chat you can define a new task.</p>
       <p>The steps to be defined are:</p>
@@ -58,41 +49,41 @@ export const RightPanel = ({ taskStructure }: RightPanelProps) => {
         <li>Ask if you don&apos;t know how to proceed</li>
         <li>Task will not be saved until the end of the conversation</li>
       </ul>
-      <Divider />
-      <Divider style={{ marginTop: '1rem' }} />
-      <Collapse
-        key="task-collapse-debug"
-        style={{ marginTop: '1rem', marginRight: '1rem' }}
-        items={[
-          {
-            label: 'Task JSON',
-            key: 'task-json',
-            children: taskStructure ? (
-              <pre>{JSON.stringify(taskStructure, null, 2)}</pre>
-            ) : (
-              <i>None</i>
-            ),
-            extra: (
-              <CopyOutlined
-                style={{
-                  marginRight: '1rem',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void navigator.clipboard
-                    .writeText(
-                      taskStructure
-                        ? JSON.stringify(taskStructure, null, 2)
-                        : '',
-                    )
-                    .then(() => toast.success(MessageText.copiedInClipboard))
-                    .catch(() => undefined)
-                }}
-              />
-            ),
-          },
-        ]}
-      />
+      <Divider sx={{ my: 2 }} />
+      <Accordion defaultExpanded sx={{ mt: '1rem', mr: '1rem' }}>
+        <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              Task JSON
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation()
+                void navigator.clipboard
+                  .writeText(
+                    taskStructure
+                      ? JSON.stringify(taskStructure, null, 2)
+                      : '',
+                  )
+                  .then(() => toast.success(MessageText.copiedInClipboard))
+                  .catch(() => undefined)
+              }}
+            >
+              <Copy size={16} />
+            </IconButton>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          {taskStructure ? (
+            <pre style={{ margin: 0, overflowX: 'auto', fontSize: '12px' }}>
+              {JSON.stringify(taskStructure, null, 2)}
+            </pre>
+          ) : (
+            <i>None</i>
+          )}
+        </AccordionDetails>
+      </Accordion>
     </div>
   )
 }

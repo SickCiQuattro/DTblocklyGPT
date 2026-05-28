@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Button, Space } from 'antd';
+import { Box, TextField, IconButton, Stack } from '@mui/material';
 import { Send, Mic, Square } from 'lucide-react';
 import SpeechRecognition from 'react-speech-recognition';
 import { formatTimeFrontend } from 'utils/date';
@@ -52,7 +52,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     setIsRecording(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onMessageSend();
@@ -96,34 +96,69 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         .premium-btn:active:not(:disabled) {
           transform: scale(0.95);
         }
+        @keyframes recording-pulsate {
+          0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            transform: scale(1.0);
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+            transform: scale(1.08);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            transform: scale(1.0);
+          }
+        }
+        .recording-active {
+          animation: recording-pulsate 1.5s infinite cubic-bezier(0.4, 0, 0.2, 1) !important;
+          background: rgba(239, 68, 68, 0.15) !important;
+          border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        }
+        .premium-send-btn {
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .premium-send-btn:hover:not(:disabled) {
+          transform: scale(1.08);
+          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
+          background: #4338ca !important;
+        }
+        .premium-send-btn:active:not(:disabled) {
+          transform: scale(0.92);
+        }
       `}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-        <Input.TextArea
+        <TextField
           placeholder={isRecording ? "Listening..." : "Type a message..."}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={isRecording}
           onKeyDown={handleKeyDown}
-          autoSize={{ minRows: 1, maxRows: 6 }}
-          className="premium-textarea"
-          style={{ flex: 1 }}
+          multiline
+          minRows={1}
+          maxRows={6}
+          variant="standard"
+          slotProps={{
+            input: {
+              disableUnderline: true,
+              className: "premium-textarea",
+            }
+          }}
+          sx={{ flex: 1 }}
         />
-        <Space size={6} style={{ marginBottom: '2px' }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', marginBottom: '2px' }}>
           {!message && !isRecording && (
-            <Button
-              icon={<Mic size={16} style={{ color: '#4f46e5' }} />}
+            <IconButton
               onClick={startRecording}
               disabled={
                 isProcessing ||
                 !browserSupportsSpeechRecognition ||
                 !isMicrophoneAvailable
               }
-              shape="circle"
               className="premium-btn"
               style={{
                 background: 'rgba(79, 70, 229, 0.1)',
-                border: 'none',
                 width: '38px',
                 height: '38px',
                 display: 'flex',
@@ -131,22 +166,21 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 justifyContent: 'center',
               }}
               title="Speak"
-            />
+            >
+              <Mic size={16} style={{ color: '#4f46e5' }} />
+            </IconButton>
           )}
           {!message && isRecording && (
-            <Button
-              icon={<Square size={14} style={{ color: '#ef4444' }} fill="#ef4444" />}
+            <IconButton
               onClick={stopRecording}
               disabled={
                 isProcessing ||
                 !browserSupportsSpeechRecognition ||
                 !isMicrophoneAvailable
               }
-              shape="circle"
-              className="premium-btn"
+              className="premium-btn recording-active"
               style={{
                 background: 'rgba(239, 68, 68, 0.1)',
-                border: 'none',
                 width: '38px',
                 height: '38px',
                 display: 'flex',
@@ -154,18 +188,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 justifyContent: 'center',
               }}
               title="Stop Recording"
-            />
+            >
+              <Square size={14} style={{ color: '#ef4444' }} fill="#ef4444" />
+            </IconButton>
           )}
-          <Button
-            icon={<Send size={16} />}
-            type="primary"
+          <IconButton
             disabled={isProcessing || !message.trim()}
             onClick={onMessageSend}
-            shape="circle"
-            className="premium-btn"
+            className="premium-send-btn"
             style={{
               background: message.trim() ? '#4f46e5' : 'rgba(0, 0, 0, 0.04)',
-              border: 'none',
+              color: message.trim() ? '#ffffff' : 'rgba(0, 0, 0, 0.26)',
               width: '38px',
               height: '38px',
               display: 'flex',
@@ -173,8 +206,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               justifyContent: 'center',
             }}
             title="Send"
-          />
-        </Space>
+          >
+            <Send size={16} />
+          </IconButton>
+        </Stack>
       </div>
     </div>
   );

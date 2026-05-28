@@ -1,30 +1,30 @@
 import React from 'react'
-import { Collapse, Divider } from 'antd'
 import {
   Alert,
   Box,
   Button,
   Chip,
-  Paper,
-  Stack,
-  Switch,
-  ToggleButton,
-  ToggleButtonGroup,
+  Divider,
   Tooltip,
   Typography,
   useTheme,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  IconButton,
 } from '@mui/material'
 import { useDispatch, useSelector } from 'react-redux'
 import { toast } from 'react-toastify'
 import { useParams } from 'react-router-dom'
 import * as Blockly from 'blockly/core'
 import {
-  CopyOutlined,
-  EditOutlined,
-  QuestionCircleOutlined,
-  SaveOutlined,
-  SyncOutlined,
-} from '@ant-design/icons'
+  Copy,
+  Edit,
+  HelpCircle,
+  Save,
+  RefreshCw,
+  ChevronDown,
+} from 'lucide-react'
 
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
@@ -186,7 +186,7 @@ export const RightPanel = ({
             fullWidth
             variant={isReady ? 'contained' : 'outlined'}
             color={isReady ? 'success' : 'primary'}
-            startIcon={<SaveOutlined />}
+            startIcon={<Save />}
             onClick={isReady ? handlePublish : handleSaveDraft}
           >
             {isReady ? 'Save' : 'Save draft'}
@@ -229,7 +229,7 @@ export const RightPanel = ({
         <Button
           fullWidth
           variant="contained"
-          startIcon={<EditOutlined />}
+          startIcon={<Edit />}
           onClick={() => void dispatch(toggleEditMode())}
           color="warning"
         >
@@ -239,8 +239,8 @@ export const RightPanel = ({
 
       {editMode && renderEditActions()}
 
-      <h2>
-        <QuestionCircleOutlined /> Instructions &amp; FAQ
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.25rem', color: theme.palette.text.primary, marginTop: '1rem' }}>
+        <HelpCircle size={20} /> Instructions &amp; FAQ
       </h2>
       <p>In this graphic interface you can edit your task.</p>
       <ul>
@@ -257,49 +257,52 @@ export const RightPanel = ({
           All changes will be lost if you exit without clicking the <i>Save</i>{' '}
           button.
         </li>
-      </ul>
+      </ul>      <Divider sx={{ my: 2 }} />
 
-      <Divider />
-
-      <Collapse
-        key="task-collapse-debug"
-        style={{ marginTop: '1rem', marginRight: '1rem' }}
-        items={[
-          {
-            label: 'Task JSON',
-            key: 'task-json',
-            children: actualTask ? (
-              <pre>{JSON.stringify(actualTask, null, 2)}</pre>
-            ) : (
-              <i>None</i>
-            ),
-            extra: (
-              <>
-                <CopyOutlined
-                  style={{ marginRight: '1rem' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void navigator.clipboard
-                      .writeText(
-                        actualTask ? JSON.stringify(actualTask, null, 2) : '',
-                      )
-                      .then(() => toast.success(MessageText.copiedInClipboard))
-                      .catch(() => undefined)
-                  }}
-                />
-                <SyncOutlined
-                  style={{ marginRight: '1rem' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setActualTask(getBlocklyStructure())
-                    toast.success(MessageText.success)
-                  }}
-                />
-              </>
-            ),
-          },
-        ]}
-      />
+      <Accordion defaultExpanded sx={{ mt: '1rem', mr: '1rem' }}>
+        <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              Task JSON
+            </Typography>
+            <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', gap: 1 }}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void navigator.clipboard
+                    .writeText(
+                      actualTask ? JSON.stringify(actualTask, null, 2) : '',
+                    )
+                    .then(() => toast.success(MessageText.copiedInClipboard))
+                    .catch(() => undefined)
+                }}
+              >
+                <Copy size={16} />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setActualTask(getBlocklyStructure())
+                  toast.success(MessageText.success)
+                }}
+              >
+                <RefreshCw size={16} />
+              </IconButton>
+            </Box>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          {actualTask ? (
+            <pre style={{ margin: 0, overflowX: 'auto', fontSize: '12px' }}>
+              {JSON.stringify(actualTask, null, 2)}
+            </pre>
+          ) : (
+            <i>None</i>
+          )}
+        </AccordionDetails>
+      </Accordion>
     </div>
   )
 }

@@ -1,7 +1,6 @@
-import { Collapse, Divider } from 'antd'
-import { useTheme } from '@mui/material'
+import { Accordion, AccordionSummary, AccordionDetails, Divider, Box, Typography, IconButton, useTheme } from '@mui/material'
 import { toast } from 'react-toastify'
-import { CopyOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { Copy, HelpCircle, ChevronDown } from 'lucide-react'
 
 import { MessageText } from 'utils/messages'
 import { AbstractStep } from 'pages/tasks/types'
@@ -22,8 +21,8 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
         overflow: 'auto',
       }}
     >
-      <h2>
-        <QuestionCircleOutlined /> Instructions & FAQ
+      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.25rem', color: theme.palette.text.primary }}>
+        <HelpCircle size={20} /> Instructions & FAQ
       </h2>
       <p>In this multimodal interface you can interact with your task.</p>
       <ul>
@@ -44,43 +43,39 @@ export const RightPanel = ({ dataTask }: RightPanelProps) => {
           button.
         </li>
       </ul>
-      <Divider />
-      <Collapse
-        key="task-collapse-debug"
-        style={{ marginTop: '1rem', marginRight: '1rem' }}
-        defaultActiveKey={
-          [
-            /* 'task-representation' */
-          ]
-        }
-        items={[
-          {
-            label: 'Task representation',
-            key: 'task-representation',
-            children: dataTask ? (
-              <pre>{JSON.stringify(dataTask, null, 2)}</pre>
-            ) : (
-              <i>None</i>
-            ),
-            extra: (
-              <>
-                <CopyOutlined
-                  style={{ marginRight: '1rem' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void navigator.clipboard
-                      .writeText(
-                        dataTask ? JSON.stringify(dataTask, null, 2) : '',
-                      )
-                      .then(() => toast.success(MessageText.copiedInClipboard))
-                      .catch(() => undefined)
-                  }}
-                />
-              </>
-            ),
-          },
-        ]}
-      />
+      <Divider sx={{ my: 2 }} />
+      <Accordion defaultExpanded sx={{ mt: '1rem', mr: '1rem' }}>
+        <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              Task representation
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation()
+                void navigator.clipboard
+                  .writeText(
+                    dataTask ? JSON.stringify(dataTask, null, 2) : '',
+                  )
+                  .then(() => toast.success(MessageText.copiedInClipboard))
+                  .catch(() => undefined)
+              }}
+            >
+              <Copy size={16} />
+            </IconButton>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails>
+          {dataTask ? (
+            <pre style={{ margin: 0, overflowX: 'auto', fontSize: '12px' }}>
+              {JSON.stringify(dataTask, null, 2)}
+            </pre>
+          ) : (
+            <i>None</i>
+          )}
+        </AccordionDetails>
+      </Accordion>
     </div>
   )
 }

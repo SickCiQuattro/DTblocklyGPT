@@ -16,6 +16,7 @@ import { TableCell } from './TableCell'
 import { Tabs } from './Tabs'
 import { InputBase } from './InputBase'
 import { Typography } from './Typography'
+import { Accordion } from './Accordion'
 
 export const componentsOverrides = (theme: Theme) => {
   return {
@@ -35,5 +36,6 @@ export const componentsOverrides = (theme: Theme) => {
     ...TableCell(theme),
     ...Tabs(),
     ...Typography(),
+    ...Accordion(),
   }
 }
