@@ -625,6 +625,10 @@ def simulation_recursive_blockly_parser(
             print(f"[MACRO] Macro complete: {macro_name}")
             _next()
 
+        elif block_type == "when_start":
+            print("[LOGIC] Start sequence")
+            _next()
+
         else:
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 
@@ -661,10 +665,17 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
 
                 reset_simulation_world()
 
-                simulation_recursive_blockly_parser(
-                    code, objectsOfUser, actionsOfUser, locationsOfUser,
-                    simulate_event, inside_conditional=False,
-                )
+                if isinstance(code, list):
+                    for block in code:
+                        simulation_recursive_blockly_parser(
+                            block, objectsOfUser, actionsOfUser, locationsOfUser,
+                            simulate_event, inside_conditional=False,
+                        )
+                else:
+                    simulation_recursive_blockly_parser(
+                        code, objectsOfUser, actionsOfUser, locationsOfUser,
+                        simulate_event, inside_conditional=False,
+                    )
 
                 return success_response()
             else:

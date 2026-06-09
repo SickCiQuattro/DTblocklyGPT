@@ -4,7 +4,6 @@ from flask import Blueprint, request, jsonify
 from ..db import get_db
 from ..flask_node import flask_pub
 from ..flask_node import sendRequestPosition
-from my_robot_interfaces.srv import ListPosJoint
 
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -83,13 +82,13 @@ def savePoint(id):
     db.execute(
         "INSERT INTO points (j1,j2,j3,j4,j5,j6,hand,trajectory_id) values (?,?,?,?,?,?,?,?)",
         (
-            robot_position[0],
-            robot_position[1],
-            robot_position[2],
-            robot_position[3],
-            robot_position[4],
-            robot_position[5],
-            robot_position[6],
+            robot_position.get('joint1', 0.0),
+            robot_position.get('joint2', 0.0),
+            robot_position.get('joint3', 0.0),
+            robot_position.get('joint4', 0.0),
+            robot_position.get('joint5', 0.0),
+            robot_position.get('joint6', 0.0),
+            robot_position.get('joint_left', 0.0),
             trajectory_id,
         ),
     )
@@ -147,15 +146,9 @@ def showTrajectory(id):
 
 @bp.route("/trajectory/<int:id>/play")
 def playTrajectory(id):
-    db = get_db()
-    points = db.execute(
-        "SELECT * FROM points JOIN trajectories ON points.trajectory_id = trajectories.id WHERE trajectories.id = ?",
-        (id,),
-    ).fetchall()
-    req = ListPosJoint.Request()  # request client (service ros)
-    createListPosJoint(points, req)
-    future = flask_pub.client_play_trajectory.call(req)
-    return {"completed": future.completed}
+    # TODO: playTrajectory richiede il service ROS /play_trajectory disponibile solo con cobotta_node (robot fisico).
+    # Con BridgeNodeROS in modalità simulazione, questo endpoint non è supportato.
+    return jsonify({"error": "Trajectory playback not available in simulation mode"}), 501
 
 
 def createListPosJoint(points, req):
@@ -174,5 +167,14 @@ def getJointsPosFromPoint(point):
 
 @bp.route("/actual-joints-pos")
 def getActualJointsPos():
-    actual_joints_position = list(sendRequestPosition())
+    position_dict = sendRequestPosition()
+    actual_joints_position = [
+        position_dict.get('joint1', 0.0),
+        position_dict.get('joint2', 0.0),
+        position_dict.get('joint3', 0.0),
+        position_dict.get('joint4', 0.0),
+        position_dict.get('joint5', 0.0),
+        position_dict.get('joint6', 0.0),
+        position_dict.get('joint_left', 0.0),
+    ]
     return {"position": actual_joints_position}

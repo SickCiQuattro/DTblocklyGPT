@@ -33,7 +33,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 def main(args=None):
     Thread(target=lambda: rclpy.spin(polling_node)).start()
-    socketio.run(app, debug=True, host="localhost", port=5001)
+    socketio.run(app, debug=True, host="localhost", port=5001, allow_unsafe_werkzeug=True)
     polling_node.destroy_node()
     rclpy.shutdown()
 

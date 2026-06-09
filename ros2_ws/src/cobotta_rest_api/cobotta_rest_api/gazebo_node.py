@@ -1,3 +1,10 @@
+import warnings
+warnings.warn(
+    "gazebo_node.py è deprecato. Usa gazebo_state_node.py per il feedback da Gazebo.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import math
 import sys
 

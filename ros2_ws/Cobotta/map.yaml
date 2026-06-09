@@ -39,42 +39,8 @@
   ros_type_name: "std_msgs/msg/Float64"
   gz_type_name: "ignition.msgs.Double"
 
-- ros_topic_name: "/joint1"
-  gz_topic_name: "/joint1"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint2"
-  gz_topic_name: "/joint2"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint3"
-  gz_topic_name: "/joint3"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint4"
-  gz_topic_name: "/joint4"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint5"
-  gz_topic_name: "/joint5"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint6"
-  gz_topic_name: "/joint6"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint_right"
-  gz_topic_name: "/joint_right"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint_left"
-  gz_topic_name: "/joint_left"
+# Topic unificato per lo stato di tutti i joint
+- ros_topic_name: "/joint_states"
+  gz_topic_name: "/joint_states"
   ros_type_name: "sensor_msgs/msg/JointState"
   gz_type_name: "ignition.msgs.Model"
