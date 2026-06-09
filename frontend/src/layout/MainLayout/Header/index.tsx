@@ -26,7 +26,13 @@ import {
 } from 'lucide-react'
 
 import { useAppSelector } from 'store/reducers'
-import { setTaskName, toggleSim, triggerSave, triggerDiscard, toggleChat } from 'store/reducers/task'
+import {
+  setTaskName,
+  toggleSim,
+  triggerSave,
+  triggerDiscard,
+  toggleChat,
+} from 'store/reducers/task'
 import { Profile } from 'layout/MainLayout/Header/Profile'
 import { LogoSection } from 'components/Logo'
 import { drawerWidth } from 'utils/constants'
@@ -45,7 +51,9 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const isIDERoute = location.pathname.startsWith('/task/')
 
   const activeTaskName = useAppSelector((state) => state.task.activeTaskName)
-  const activeTaskStatus = useAppSelector((state) => state.task.activeTaskStatus)
+  const activeTaskStatus = useAppSelector(
+    (state) => state.task.activeTaskStatus,
+  )
   const isSaving = useAppSelector((state) => state.task.isSaving)
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
@@ -68,6 +76,53 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
 
   const iconBackColor = 'grey.100'
   const iconBackColorOpen = 'grey.200'
+
+  const getStatusConfig = (status?: string) => {
+    const s = status?.toLowerCase() ?? 'draft'
+    if (s === 'published' || s === 'ready' || s === 'tested') {
+      return {
+        label: 'Published',
+        color: '#10B981',
+        bg: 'rgba(16, 185, 129, 0.08)',
+        border: 'rgba(16, 185, 129, 0.2)',
+      }
+    }
+    if (s === 'published_with_draft') {
+      return {
+        label: 'Draft in Progress',
+        color: '#3B82F6',
+        bg: 'rgba(59, 130, 246, 0.08)',
+        border: 'rgba(59, 130, 246, 0.2)',
+      }
+    }
+    return {
+      label: 'Draft',
+      color: '#D97706',
+      bg: 'rgba(217, 119, 6, 0.08)',
+      border: 'rgba(217, 119, 6, 0.2)',
+    }
+  }
+
+  const statusCfg = getStatusConfig(activeTaskStatus)
+  const statusChip = (
+    <Chip
+      label={statusCfg.label}
+      size="small"
+      sx={{
+        bgcolor: statusCfg.bg,
+        color: statusCfg.color,
+        borderColor: statusCfg.border,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        fontSize: '0.65rem',
+        fontWeight: 600,
+        letterSpacing: '0.05em',
+        height: '20px',
+        borderRadius: '4px',
+        textTransform: 'uppercase',
+      }}
+    />
+  )
 
   const mainHeader = isIDERoute ? (
     <Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -105,53 +160,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               </IconButton>
             </div>
           )}
-          {(() => {
-            const getStatusConfig = (status?: string) => {
-              const s = status?.toLowerCase() ?? 'draft'
-              if (s === 'published' || s === 'ready' || s === 'tested') {
-                return {
-                  label: 'Published',
-                  color: '#10B981',
-                  bg: 'rgba(16, 185, 129, 0.08)',
-                  border: 'rgba(16, 185, 129, 0.2)',
-                }
-              }
-              if (s === 'published_with_draft') {
-                return {
-                  label: 'Draft in Progress',
-                  color: '#3B82F6',
-                  bg: 'rgba(59, 130, 246, 0.08)',
-                  border: 'rgba(59, 130, 246, 0.2)',
-                }
-              }
-              return {
-                label: 'Draft',
-                color: '#D97706',
-                bg: 'rgba(217, 119, 6, 0.08)',
-                border: 'rgba(217, 119, 6, 0.2)',
-              }
-            }
-            const cfg = getStatusConfig(activeTaskStatus)
-            return (
-              <Chip
-                label={cfg.label}
-                size="small"
-                sx={{
-                  bgcolor: cfg.bg,
-                  color: cfg.color,
-                  borderColor: cfg.border,
-                  borderWidth: 1,
-                  borderStyle: 'solid',
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.05em',
-                  height: '20px',
-                  borderRadius: '4px',
-                  textTransform: 'uppercase',
-                }}
-              />
-            )
-          })()}
+          {statusChip}
         </div>
       </div>
 
@@ -228,7 +237,13 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             variant="outlined"
             color="error"
             size="small"
-            startIcon={isSaving ? <CircularProgress size={14} color="inherit" /> : <RotateCcw size={14} />}
+            startIcon={
+              isSaving ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <RotateCcw size={14} />
+              )
+            }
             disabled={isSaving}
             onClick={() => dispatch(triggerDiscard(true))}
             sx={{
@@ -245,7 +260,13 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
           variant={workspaceReady ? 'contained' : 'outlined'}
           color={workspaceReady ? 'success' : 'primary'}
           size="small"
-          startIcon={isSaving ? <CircularProgress size={14} color="inherit" /> : <Save size={14} />}
+          startIcon={
+            isSaving ? (
+              <CircularProgress size={14} color="inherit" />
+            ) : (
+              <Save size={14} />
+            )
+          }
           disabled={isSaving}
           onClick={() => dispatch(triggerSave(true))}
           sx={{
@@ -254,7 +275,9 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             textTransform: 'none',
             fontWeight: 500,
             fontSize: '0.85rem',
-            borderColor: workspaceReady ? 'transparent' : 'rgba(99, 102, 241, 0.2)',
+            borderColor: workspaceReady
+              ? 'transparent'
+              : 'rgba(99, 102, 241, 0.2)',
             color: workspaceReady ? '#FFFFFF' : 'primary.main',
             bgcolor: workspaceReady ? 'success.main' : 'transparent',
             boxShadow: 'none',
@@ -262,15 +285,19 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             '&:hover': {
               boxShadow: 'none',
               borderColor: workspaceReady ? 'success.dark' : 'primary.main',
-              bgcolor: workspaceReady ? 'success.dark' : 'rgba(99, 102, 241, 0.04)',
+              bgcolor: workspaceReady
+                ? 'success.dark'
+                : 'rgba(99, 102, 241, 0.04)',
             },
             '&.Mui-disabled': {
               color: workspaceReady ? '#FFFFFF' : 'primary.main',
               bgcolor: workspaceReady ? 'success.main' : 'transparent',
-              borderColor: workspaceReady ? 'transparent' : 'rgba(99, 102, 241, 0.2)',
+              borderColor: workspaceReady
+                ? 'transparent'
+                : 'rgba(99, 102, 241, 0.2)',
               opacity: 0.7,
               cursor: 'not-allowed',
-            }
+            },
           }}
         >
           {workspaceReady ? 'Save' : 'Save draft'}

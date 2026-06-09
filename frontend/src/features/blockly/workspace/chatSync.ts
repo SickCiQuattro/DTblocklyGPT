@@ -57,7 +57,10 @@ export const updateStructureAndFireFakeChangeEvent = (
   Blockly.Events.setGroup(groupId)
 
   try {
-    const startBlock = workspace.getBlocksByType('when_start', false)[0] as Blockly.BlockSvg | null
+    const startBlock = workspace.getBlocksByType(
+      'when_start',
+      false,
+    )[0] as Blockly.BlockSvg | null
 
     if (startBlock) {
       // 1. Disconnect and dispose any existing child blocks under the start block
@@ -94,11 +97,19 @@ export const updateStructureAndFireFakeChangeEvent = (
 
       // 4. Append and connect the new steps
       if (innerBlockState) {
-        const newBlock = Blockly.serialization.blocks.append(stripBlockIds(innerBlockState), workspace, {
-          recordUndo: true,
-        }) as Blockly.BlockSvg
+        const newBlock = Blockly.serialization.blocks.append(
+          stripBlockIds(innerBlockState),
+          workspace,
+          {
+            recordUndo: true,
+          },
+        ) as Blockly.BlockSvg
 
-        if (newBlock && startBlock.nextConnection && newBlock.previousConnection) {
+        if (
+          newBlock &&
+          startBlock.nextConnection &&
+          newBlock.previousConnection
+        ) {
           startBlock.nextConnection.connect(newBlock.previousConnection)
         }
       }
@@ -114,9 +125,13 @@ export const updateStructureAndFireFakeChangeEvent = (
           const defaultDataTask = { ...block }
           defaultDataTask.x = block.x ?? x_axis
           defaultDataTask.y = block.y ?? y_axis
-          Blockly.serialization.blocks.append(stripBlockIds(defaultDataTask), workspace, {
-            recordUndo: true,
-          })
+          Blockly.serialization.blocks.append(
+            stripBlockIds(defaultDataTask),
+            workspace,
+            {
+              recordUndo: true,
+            },
+          )
         })
       } else {
         let defaultDataTask = { ...dataTask }
@@ -126,19 +141,23 @@ export const updateStructureAndFireFakeChangeEvent = (
             x: x_axis,
             y: y_axis,
             next: {
-              block: defaultDataTask
-            }
-          } as any
+              block: defaultDataTask,
+            },
+          }
         } else {
           defaultDataTask.x = x_axis
           defaultDataTask.y = y_axis
         }
-        Blockly.serialization.blocks.append(stripBlockIds(defaultDataTask), workspace, {
-          recordUndo: true,
-        })
+        Blockly.serialization.blocks.append(
+          stripBlockIds(defaultDataTask),
+          workspace,
+          {
+            recordUndo: true,
+          },
+        )
       }
     }
-    
+
     injectAllGhostBlocks(workspace)
   } finally {
     Blockly.Events.setGroup(false)

@@ -228,7 +228,6 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   },
 ]
 
-
 const CategoryPanel: React.FC<{
   category: ToolboxCategory
   pills: ToolboxBlockItem[]

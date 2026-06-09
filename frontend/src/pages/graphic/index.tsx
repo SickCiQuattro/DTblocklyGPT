@@ -28,7 +28,8 @@ const isBlockState = (value: unknown): value is State =>
   value !== null &&
   'type' in value &&
   typeof (value as { type?: unknown }).type === 'string' &&
-  (String((value as any).type).endsWith('_block') || String((value as any).type) === 'when_start')
+  (String((value as any).type).endsWith('_block') ||
+    String((value as any).type) === 'when_start')
 
 const isBlockStateArray = (value: unknown): value is State[] =>
   Array.isArray(value) && value.length > 0 && value.every(isBlockState)
@@ -73,9 +74,7 @@ const Graphic = () => {
     data: dataMacros = [],
     isLoading: isLoadingMacros,
     mutate: mutateMacros,
-  } = useSWR<TaskType[], Error>(
-    { url: endpoints.graphic.macroList },
-  )
+  } = useSWR<TaskType[], Error>({ url: endpoints.graphic.macroList })
 
   // Derive macroDetailsById directly from dataMacros — no second fetch needed.
   // published_workspace is returned by macroList and used for block explosion

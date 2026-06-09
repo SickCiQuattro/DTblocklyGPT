@@ -1,10 +1,18 @@
 import React from 'react'
-import { Box, ListItemButton, ListItemIcon, ListItemText, Typography, Tooltip } from '@mui/material'
+import {
+  Box,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Typography,
+  Tooltip,
+} from '@mui/material'
 import { HelpCircle } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTheme } from '@mui/material/styles'
 
 import { SimpleBarScroll } from '../../../../components/SimpleBar'
+
 import { Navigation } from './Navigation'
 
 interface DrawerContentProps {
@@ -34,8 +42,18 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
       </Box>
 
       {/* Bottom FAQ button separated by a divider */}
-      <Box sx={{ p: 1, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
-        <Tooltip title="Instructions & FAQ" placement="right" disableHoverListener={open}>
+      <Box
+        sx={{
+          p: 1,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Tooltip
+          title="Instructions & FAQ"
+          placement="right"
+          disableHoverListener={open}
+        >
           <ListItemButton
             component={Link}
             to="/faq"
@@ -70,7 +88,7 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
                   width: '3px',
                   borderRadius: '0 4px 4px 0',
                   bgcolor: theme.palette.primary.main,
-                }
+                },
               },
               '&:hover': {
                 bgcolor: 'rgba(99, 102, 241, 0.04)',
@@ -97,10 +115,17 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
                 maxWidth: open ? '150px' : '0px',
                 overflow: 'hidden',
                 whiteSpace: 'nowrap',
-                transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition:
+                  'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               primary={
-                <Typography variant="body2" sx={{ color: isFaqActive ? 'primary.main' : 'text.primary', fontWeight: 500 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: isFaqActive ? 'primary.main' : 'text.primary',
+                    fontWeight: 500,
+                  }}
+                >
                   Instructions & FAQ
                 </Typography>
               }

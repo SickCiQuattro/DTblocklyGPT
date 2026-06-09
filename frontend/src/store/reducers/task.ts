@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
-import { INITIAL_TASK_STRUCTURE, TaskChatStructure } from 'pages/chat/utils'
+import { INITIAL_TASK_STRUCTURE, TaskChatStructure } from 'utils/chat'
 
 export type TaskStatus = 'draft' | 'published' | 'published_with_draft'
 
@@ -35,7 +35,10 @@ export const initialState: TaskState = {
   saveTriggered: false,
   discardTriggered: false,
   workspaceReady: false,
-  chatPosition: (typeof window !== 'undefined' ? (localStorage.getItem('chatPosition') as 'left' | 'right') : null) || 'right',
+  chatPosition:
+    (typeof window !== 'undefined'
+      ? (localStorage.getItem('chatPosition') as 'left' | 'right')
+      : null) || 'right',
 }
 
 const taskSlice = createSlice({
@@ -53,7 +56,11 @@ const taskSlice = createSlice({
     },
     setActiveTask(
       state,
-      action: PayloadAction<{ id: string | null; name: string; status: TaskStatus }>
+      action: PayloadAction<{
+        id: string | null
+        name: string
+        status: TaskStatus
+      }>,
     ) {
       state.activeTaskId = action.payload.id
       state.activeTaskName = action.payload.name
@@ -117,4 +124,3 @@ export const {
 } = taskSlice.actions
 
 export const taskReducers = taskSlice.reducer
-

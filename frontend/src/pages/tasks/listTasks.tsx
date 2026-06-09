@@ -163,7 +163,7 @@ const TaskRowActions = ({
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const open = Boolean(anchorEl)
-  
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -192,7 +192,10 @@ const TaskRowActions = ({
         <IconButton
           size="small"
           sx={{ color: 'success.main' }}
-          onClick={() => { setRunTaskModalVisible(true); setRunningTask(row) }}
+          onClick={() => {
+            setRunTaskModalVisible(true)
+            setRunningTask(row)
+          }}
           id={`btn-run-task-${row.id}`}
           aria-label="run task"
         >
@@ -200,11 +203,7 @@ const TaskRowActions = ({
         </IconButton>
       </Tooltip>
 
-      <IconButton
-        size="small"
-        onClick={handleClick}
-        aria-label="more actions"
-      >
+      <IconButton size="small" onClick={handleClick} aria-label="more actions">
         <MoreVertical size={16} />
       </IconButton>
 
@@ -222,8 +221,8 @@ const TaskRowActions = ({
               border: '1px solid',
               borderColor: 'divider',
               minWidth: '150px',
-            }
-          }
+            },
+          },
         }}
       >
         <MenuItem
@@ -236,7 +235,11 @@ const TaskRowActions = ({
           <ListItemIcon>
             <Eye size={15} />
           </ListItemIcon>
-          <ListItemText primary={<Typography sx={{ fontSize: '0.85rem' }}>View details</Typography>} />
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>View details</Typography>
+            }
+          />
         </MenuItem>
 
         <MenuItem
@@ -249,7 +252,11 @@ const TaskRowActions = ({
           <ListItemIcon>
             <Cpu size={15} style={{ color: '#D97706' }} />
           </ListItemIcon>
-          <ListItemText primary={<Typography sx={{ fontSize: '0.85rem' }}>Simulate</Typography>} />
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>Simulate</Typography>
+            }
+          />
         </MenuItem>
 
         <MenuItem
@@ -262,7 +269,11 @@ const TaskRowActions = ({
           <ListItemIcon>
             <BrainCircuit size={15} style={{ color: '#0284C7' }} />
           </ListItemIcon>
-          <ListItemText primary={<Typography sx={{ fontSize: '0.85rem' }}>Verify Logic</Typography>} />
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>Verify Logic</Typography>
+            }
+          />
         </MenuItem>
 
         <ConfirmPopover
@@ -284,7 +295,13 @@ const TaskRowActions = ({
               <ListItemIcon>
                 <Trash2 size={15} color="red" />
               </ListItemIcon>
-              <ListItemText primary={<Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>Delete</Typography>} />
+              <ListItemText
+                primary={
+                  <Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>
+                    Delete
+                  </Typography>
+                }
+              />
             </MenuItem>
           )}
         </ConfirmPopover>
@@ -325,7 +342,8 @@ const ListTasks = () => {
 
   const [runTaskModalVisible, setRunTaskModalVisible] = useState(false)
   const [runningTask, setRunningTask] = useState<TaskType | null>(null)
-  const [simulateTaskModalVisible, setSimulateTaskModalVisible] = useState(false)
+  const [simulateTaskModalVisible, setSimulateTaskModalVisible] =
+    useState(false)
   const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
@@ -372,7 +390,10 @@ const ListTasks = () => {
 
   // Paginated rows
   const rows = dataTasks ?? []
-  const paginated = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginated = rows.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  )
 
   return (
     <MainCard
@@ -409,9 +430,21 @@ const ListTasks = () => {
       {/* ── Table ── */}
       <Paper
         variant="outlined"
-        sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+        sx={{
+          borderRadius: '10px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
       >
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', overflowX: 'hidden', pb: 2 }}>
+        <TableContainer
+          sx={{
+            maxHeight: 'calc(100vh - 280px)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            pb: 2,
+          }}
+        >
           <Table size="small" aria-label="tasks table" stickyHeader>
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -427,7 +460,10 @@ const ListTasks = () => {
               {isLoadingTasks ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+                    <CircularProgress
+                      size={28}
+                      sx={{ color: 'primary.main' }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
@@ -448,13 +484,19 @@ const ListTasks = () => {
                       '&:last-child td': { border: 0 },
                       '& td': { borderColor: 'divider' },
                     }}
-                    onClick={() => canManage(row.owner) && handleOpenWorkspace(row.id)}
+                    onClick={() =>
+                      canManage(row.owner) && handleOpenWorkspace(row.id)
+                    }
                   >
                     {/* Name */}
                     <TableCell>
                       <Typography
                         variant="body2"
-                        sx={{ fontWeight: 600, fontFamily: "'Geist', 'Inter', sans-serif", color: 'text.primary' }}
+                        sx={{
+                          fontWeight: 600,
+                          fontFamily: "'Geist', 'Inter', sans-serif",
+                          color: 'text.primary',
+                        }}
                       >
                         {row.name}
                       </Typography>
@@ -462,7 +504,14 @@ const ListTasks = () => {
                         <Typography
                           variant="caption"
                           color="text.secondary"
-                          sx={{ display: 'block', mt: 0.25, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          sx={{
+                            display: 'block',
+                            mt: 0.25,
+                            maxWidth: 280,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
                         >
                           {row.description}
                         </Typography>
@@ -506,7 +555,9 @@ const ListTasks = () => {
                         handleOpenDetails={handleOpenDetails}
                         setRunTaskModalVisible={setRunTaskModalVisible}
                         setRunningTask={setRunningTask}
-                        setSimulateTaskModalVisible={setSimulateTaskModalVisible}
+                        setSimulateTaskModalVisible={
+                          setSimulateTaskModalVisible
+                        }
                         setSimulatingTask={setSimulatingTask}
                         setAnalyzeModalVisible={setAnalyzeModalVisible}
                         setAnalyzingTask={setAnalyzingTask}

@@ -117,7 +117,7 @@ const collectMacroRefs = (
     try {
       const data =
         typeof node['data'] === 'string'
-          ? JSON.parse(node['data'] as string)
+          ? JSON.parse(node['data'])
           : node['data']
       refs.push({ id: data.id, name: data.name, blockId: node['id'] as string })
     } catch {

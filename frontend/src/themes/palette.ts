@@ -23,55 +23,55 @@ export const Palette = (mode: PaletteMode) => {
           white: '#fff',
         },
         primary: {
-          lighter:     paletteColor.primary.lighter,
-          light:       paletteColor.primary.light,
-          main:        paletteColor.primary.main,      // #6366F1
-          dark:        paletteColor.primary.dark,
-          darker:      paletteColor.primary.darker,
+          lighter: paletteColor.primary.lighter,
+          light: paletteColor.primary.light,
+          main: paletteColor.primary.main, // #6366F1
+          dark: paletteColor.primary.dark,
+          darker: paletteColor.primary.darker,
           contrastText: paletteColor.primary.contrastText,
         } as any,
         secondary: {
-          lighter:     paletteColor.secondary.lighter,
-          light:       paletteColor.secondary.light,
-          main:        paletteColor.secondary.main,
-          dark:        paletteColor.secondary.dark,
-          darker:      paletteColor.secondary.darker,
+          lighter: paletteColor.secondary.lighter,
+          light: paletteColor.secondary.light,
+          main: paletteColor.secondary.main,
+          dark: paletteColor.secondary.dark,
+          darker: paletteColor.secondary.darker,
           contrastText: paletteColor.secondary.contrastText,
         } as any,
         error: {
           lighter: paletteColor.error.lighter,
-          light:   paletteColor.error.light,
-          main:    paletteColor.error.main,
-          dark:    paletteColor.error.dark,
-          darker:  paletteColor.error.darker,
+          light: paletteColor.error.light,
+          main: paletteColor.error.main,
+          dark: paletteColor.error.dark,
+          darker: paletteColor.error.darker,
           contrastText: paletteColor.error.contrastText,
         } as any,
         warning: {
           lighter: paletteColor.warning.lighter,
-          light:   paletteColor.warning.light,
-          main:    paletteColor.warning.main,
-          dark:    paletteColor.warning.dark,
-          darker:  paletteColor.warning.darker,
+          light: paletteColor.warning.light,
+          main: paletteColor.warning.main,
+          dark: paletteColor.warning.dark,
+          darker: paletteColor.warning.darker,
           contrastText: paletteColor.warning.contrastText,
         } as any,
         info: {
           lighter: paletteColor.info.lighter,
-          light:   paletteColor.info.light,
-          main:    paletteColor.info.main,
-          dark:    paletteColor.info.dark,
-          darker:  paletteColor.info.darker,
+          light: paletteColor.info.light,
+          main: paletteColor.info.main,
+          dark: paletteColor.info.dark,
+          darker: paletteColor.info.darker,
           contrastText: paletteColor.info.contrastText,
         } as any,
         success: {
           lighter: paletteColor.success.lighter,
-          light:   paletteColor.success.light,
-          main:    paletteColor.success.main,
-          dark:    paletteColor.success.dark,
-          darker:  paletteColor.success.darker,
+          light: paletteColor.success.light,
+          main: paletteColor.success.main,
+          dark: paletteColor.success.dark,
+          darker: paletteColor.success.darker,
           contrastText: paletteColor.success.contrastText,
         } as any,
         grey: {
-          50:  paletteColor.grey[1],
+          50: paletteColor.grey[1],
           100: paletteColor.grey[2],
           200: paletteColor.grey[3],
           300: paletteColor.grey[4],
@@ -81,24 +81,24 @@ export const Palette = (mode: PaletteMode) => {
           700: paletteColor.grey[8],
           800: paletteColor.grey[9],
           900: paletteColor.grey[10],
-          A50:  paletteColor.grey[11],
+          A50: paletteColor.grey[11],
           A100: paletteColor.grey[0],
           A200: paletteColor.grey[13],
           A400: paletteColor.grey[13],
           A700: paletteColor.grey[14],
         } as any,
         text: {
-          primary:   '#1A1A2E', // Quasi-nero con tinta indigo
+          primary: '#1A1A2E', // Quasi-nero con tinta indigo
           secondary: '#6B7280', // Muted
-          disabled:  '#9CA3AF', // Faint
+          disabled: '#9CA3AF', // Faint
         },
         action: {
           disabled: paletteColor.grey[4],
         },
         divider: 'rgba(0, 0, 0, 0.08)',
         background: {
-          paper:   '#FFFFFF',   // Card surfaces
-          default: '#F5F5F7',   // Warm white — sfondo app
+          paper: '#FFFFFF', // Card surfaces
+          default: '#F5F5F7', // Warm white — sfondo app
         },
       },
 
@@ -159,7 +159,7 @@ export const Palette = (mode: PaletteMode) => {
           fontSize: '0.875rem',
           fontWeight: 500,
           lineHeight: 1.2,
-          textTransform: 'none',  // No uppercase buttons
+          textTransform: 'none', // No uppercase buttons
         },
         overline: {
           fontSize: '0.72rem',

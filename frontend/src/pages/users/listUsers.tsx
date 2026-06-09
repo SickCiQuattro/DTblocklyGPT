@@ -94,7 +94,10 @@ const ListUsers = () => {
   }
 
   const rows = data ?? []
-  const paginated = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginated = rows.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  )
 
   return (
     <MainCard
@@ -128,9 +131,16 @@ const ListUsers = () => {
 
       <Paper
         variant="outlined"
-        sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+        sx={{
+          borderRadius: '10px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
       >
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+        <TableContainer
+          sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}
+        >
           <Table size="small" aria-label="users table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -148,7 +158,10 @@ const ListUsers = () => {
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+                    <CircularProgress
+                      size={28}
+                      sx={{ color: 'primary.main' }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
@@ -176,12 +189,8 @@ const ListUsers = () => {
                     <TableCell sx={{ py: 1, fontWeight: 500 }}>
                       {row.username}
                     </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.email}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.role}
-                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.email}</TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.role}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       {formatDateTimeFrontend(row.last_login)}
                     </TableCell>
@@ -207,7 +216,12 @@ const ListUsers = () => {
                               variant="outlined"
                               onClick={onOpen}
                               title="Reset user password"
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem', borderRadius: '6px' }}
+                              sx={{
+                                py: 0.25,
+                                px: 1,
+                                fontSize: '0.75rem',
+                                borderRadius: '6px',
+                              }}
                             >
                               Reset
                             </Button>
@@ -215,8 +229,12 @@ const ListUsers = () => {
                         </ConfirmPopover>
 
                         <ConfirmPopover
-                          title={row.is_active ? 'Disable user?' : 'Enable user?'}
-                          onConfirm={() => handleDisable(row.id, !row.is_active)}
+                          title={
+                            row.is_active ? 'Disable user?' : 'Enable user?'
+                          }
+                          onConfirm={() =>
+                            handleDisable(row.id, !row.is_active)
+                          }
                         >
                           {(onOpen) => (
                             <Button
@@ -224,8 +242,17 @@ const ListUsers = () => {
                               variant="contained"
                               color={row.is_active ? 'error' : 'primary'}
                               onClick={onOpen}
-                              title={row.is_active ? 'Disable this user' : 'Enable this user'}
-                              sx={{ py: 0.25, px: 1, fontSize: '0.75rem', borderRadius: '6px' }}
+                              title={
+                                row.is_active
+                                  ? 'Disable this user'
+                                  : 'Enable this user'
+                              }
+                              sx={{
+                                py: 0.25,
+                                px: 1,
+                                fontSize: '0.75rem',
+                                borderRadius: '6px',
+                              }}
                             >
                               {row.is_active ? 'Disable' : 'Enable'}
                             </Button>

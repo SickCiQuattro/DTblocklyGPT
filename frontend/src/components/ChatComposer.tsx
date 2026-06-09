@@ -1,30 +1,30 @@
-import React from 'react';
-import { Box, TextField, IconButton, Stack } from '@mui/material';
-import { Send, Mic, Square, Volume2, VolumeX } from 'lucide-react';
-import SpeechRecognition from 'react-speech-recognition';
-import { formatTimeFrontend } from 'utils/date';
-import dayjs from 'dayjs';
-import { MethodHTTP, fetchApi } from 'services/api';
-import { endpoints } from 'services/endpoints';
-import { useDispatch } from 'react-redux';
-import { setProposedTask } from 'store/reducers/proposal';
-import { ChatResponse, MessageType, UserChatEnum, MessageTypeEnum } from 'pages/multimodal/utils';
-import { CHATGPT_ERROR } from 'pages/multimodal/utils';
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser';
+import React from 'react'
+import { Box, TextField, IconButton, Stack } from '@mui/material'
+import { Send, Mic, Square, Volume2, VolumeX } from 'lucide-react'
+import SpeechRecognition from 'react-speech-recognition'
+import dayjs from 'dayjs'
+import { useDispatch } from 'react-redux'
+
+import { formatTimeFrontend } from 'utils/date'
+import { MethodHTTP, fetchApi } from 'services/api'
+import { endpoints } from 'services/endpoints'
+import { setProposedTask } from 'store/reducers/proposal'
+import { MessageType, UserChatEnum, MessageTypeEnum } from 'utils/chat'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
 
 interface ChatComposerProps {
-  isProcessing: boolean;
-  message: string;
-  setMessage: (message: string) => void;
-  isRecording: boolean;
-  setIsRecording: (recording: boolean) => void;
-  transcript: string;
-  resetTranscript: () => void;
-  browserSupportsSpeechRecognition: boolean;
-  isMicrophoneAvailable: boolean;
-  onMessageSend: () => void;
-  speaker: boolean;
-  setSpeaker: (speaker: boolean) => void;
+  isProcessing: boolean
+  message: string
+  setMessage: (message: string) => void
+  isRecording: boolean
+  setIsRecording: (recording: boolean) => void
+  transcript: string
+  resetTranscript: () => void
+  browserSupportsSpeechRecognition: boolean
+  isMicrophoneAvailable: boolean
+  onMessageSend: () => void
+  speaker: boolean
+  setSpeaker: (speaker: boolean) => void
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -45,23 +45,23 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     SpeechRecognition.startListening({
       language: 'en-GB',
       continuous: true,
-    });
-    setIsRecording(true);
-  };
+    })
+    setIsRecording(true)
+  }
 
   const stopRecording = () => {
-    SpeechRecognition.stopListening();
-    setMessage(transcript);
-    resetTranscript();
-    setIsRecording(false);
-  };
+    SpeechRecognition.stopListening()
+    setMessage(transcript)
+    resetTranscript()
+    setIsRecording(false)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onMessageSend();
+      e.preventDefault()
+      onMessageSend()
     }
-  };
+  }
 
   return (
     <div
@@ -134,7 +134,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
         <TextField
-          placeholder={isRecording ? "Listening..." : "Type a message..."}
+          placeholder={isRecording ? 'Listening...' : 'Type a message...'}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={isRecording}
@@ -146,24 +146,30 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           slotProps={{
             input: {
               disableUnderline: true,
-              className: "premium-textarea",
-            }
+              className: 'premium-textarea',
+            },
           }}
           sx={{ flex: 1 }}
         />
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', marginBottom: '2px' }}>
+        <Stack
+          direction="row"
+          spacing={0.75}
+          sx={{ alignItems: 'center', marginBottom: '2px' }}
+        >
           <IconButton
             onClick={() => setSpeaker(!speaker)}
             className="premium-btn"
             style={{
-              background: speaker ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0, 0, 0, 0.04)',
+              background: speaker
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(0, 0, 0, 0.04)',
               width: '38px',
               height: '38px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            title={speaker ? "Mute Speaker" : "Unmute Speaker"}
+            title={speaker ? 'Mute Speaker' : 'Unmute Speaker'}
           >
             {speaker ? (
               <Volume2 size={16} style={{ color: '#10b981' }} />
@@ -235,5 +241,5 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         </Stack>
       </div>
     </div>
-  );
-};
+  )
+}

@@ -58,9 +58,7 @@ const DetailLocation = () => {
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic
-          ? 'Return to the task graphic'
-          : 'Return to Locations'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Locations'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}

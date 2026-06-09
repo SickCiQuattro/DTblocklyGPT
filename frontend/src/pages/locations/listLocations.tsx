@@ -97,7 +97,10 @@ const ListLocations = () => {
   }
 
   const rows = data ?? []
-  const paginated = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginated = rows.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  )
 
   return (
     <MainCard
@@ -131,9 +134,16 @@ const ListLocations = () => {
 
       <Paper
         variant="outlined"
-        sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+        sx={{
+          borderRadius: '10px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
       >
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+        <TableContainer
+          sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}
+        >
           <Table size="small" aria-label="locations table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -149,7 +159,10 @@ const ListLocations = () => {
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+                    <CircularProgress
+                      size={28}
+                      sx={{ color: 'primary.main' }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
@@ -178,9 +191,7 @@ const ListLocations = () => {
                     <TableCell sx={{ py: 1, fontWeight: 500 }}>
                       {row.name}
                     </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.owner__username}
-                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.owner__username}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       {row.shared ? (
                         <CheckCircle2 size={16} color="#10B981" />
@@ -190,7 +201,10 @@ const ListLocations = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       {row.keywords.length === 0 ? (
-                        <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontStyle: 'italic', color: 'text.secondary' }}
+                        >
                           None
                         </Typography>
                       ) : (
@@ -211,7 +225,7 @@ const ListLocations = () => {
                             size="small"
                           >
                             <Trash2 size={18} />
-                            </IconButton>
+                          </IconButton>
                         )}
                       </ConfirmPopover>
                     </TableCell>

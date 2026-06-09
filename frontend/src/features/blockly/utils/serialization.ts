@@ -55,11 +55,15 @@ const ABSTRACT_STEP_TYPES = new Set([
   'wait_for_human',
 ])
 
-export const isAbstractStepLike = (value: unknown): value is import('pages/tasks/types').AbstractStep =>
+export const isAbstractStepLike = (
+  value: unknown,
+): value is import('pages/tasks/types').AbstractStep =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as { type?: unknown }).type === 'string' &&
   ABSTRACT_STEP_TYPES.has((value as { type: string }).type)
 
-export const isAbstractStepArray = (value: unknown): value is import('pages/tasks/types').AbstractStep[] =>
+export const isAbstractStepArray = (
+  value: unknown,
+): value is import('pages/tasks/types').AbstractStep[] =>
   Array.isArray(value) && value.length > 0 && value.every(isAbstractStepLike)

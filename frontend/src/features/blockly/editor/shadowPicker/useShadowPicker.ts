@@ -25,6 +25,7 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
+
 import { toKeywordsCsvOrNull } from '../../utils/keywords'
 import { SHADOW_ICON_URIS } from '../../blocks/icons'
 
@@ -210,7 +211,7 @@ export const useShadowPicker = ({
     const id = targetBlockIdRef.current
     if (id && workspaceRef.current) {
       const block = workspaceRef.current.getBlockById(id)
-      const blockSvg = block as Blockly.BlockSvg | null
+      const blockSvg = block
       if (blockSvg) {
         blockSvg.getSvgRoot?.()?.classList.remove('shadow-block--selected')
         setShadowIconState(blockSvg, false)
@@ -313,12 +314,8 @@ export const useShadowPicker = ({
               }
             : {
                 type: selectedBlockType,
-                ...(DIRECT_BLOCK_TYPES.has(
-                  selectedBlockType as SelectableShadowBlockType,
-                )
-                  ? getBlockInputState(
-                      selectedBlockType as SelectableShadowBlockType,
-                    )
+                ...(DIRECT_BLOCK_TYPES.has(selectedBlockType)
+                  ? getBlockInputState(selectedBlockType)
                   : {}),
               }
 

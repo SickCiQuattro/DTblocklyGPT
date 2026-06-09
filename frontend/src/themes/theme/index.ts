@@ -23,65 +23,65 @@ export const Theme = () => {
 
   return {
     primary: {
-      lighter: 'hsl(239, 84%, 95%)',   // #eef2ff
-      100:     'hsl(239, 84%, 90%)',
-      200:     'hsl(239, 84%, 85%)',   // #c7d2fe
-      light:   'hsl(239, 84%, 75%)',
-      400:     '#818CF8',              // Indigo 400
-      main:    '#6366F1',              // Indigo 500 — brand accent
-      dark:    '#4F46E5',              // Indigo 600
-      700:     '#4338CA',              // Indigo 700
-      darker:  '#3730A3',              // Indigo 800
-      900:     '#312E81',              // Indigo 900
+      lighter: 'hsl(239, 84%, 95%)', // #eef2ff
+      100: 'hsl(239, 84%, 90%)',
+      200: 'hsl(239, 84%, 85%)', // #c7d2fe
+      light: 'hsl(239, 84%, 75%)',
+      400: '#818CF8', // Indigo 400
+      main: '#6366F1', // Indigo 500 — brand accent
+      dark: '#4F46E5', // Indigo 600
+      700: '#4338CA', // Indigo 700
+      darker: '#3730A3', // Indigo 800
+      900: '#312E81', // Indigo 900
       contrastText: '#FFFFFF',
     },
     secondary: {
       lighter: grey[1],
-      100:     grey[2],
-      200:     grey[3],
-      light:   grey[4],
-      400:     grey[5],
-      main:    grey[6],
-      600:     grey[7],
-      dark:    grey[8],
-      800:     grey[9],
-      darker:  grey[10],
-      A50:     grey[11],
-      A100:    grey[0],
-      A200:    grey[13],
-      A300:    grey[14],
+      100: grey[2],
+      200: grey[3],
+      light: grey[4],
+      400: grey[5],
+      main: grey[6],
+      600: grey[7],
+      dark: grey[8],
+      800: grey[9],
+      darker: grey[10],
+      A50: grey[11],
+      A100: grey[0],
+      A200: grey[13],
+      A300: grey[14],
       contrastText: grey[0],
     },
     error: {
       lighter: '#fde8e8',
-      light:   '#F87171',
-      main:    '#EF4444',
-      dark:    '#DC2626',
-      darker:  '#B91C1C',
+      light: '#F87171',
+      main: '#EF4444',
+      dark: '#DC2626',
+      darker: '#B91C1C',
       contrastText: '#FFFFFF',
     },
     warning: {
       lighter: '#fef3c7',
-      light:   '#FCD34D',
-      main:    '#F59E0B',
-      dark:    '#D97706',
-      darker:  '#B45309',
+      light: '#FCD34D',
+      main: '#F59E0B',
+      dark: '#D97706',
+      darker: '#B45309',
       contrastText: '#FFFFFF',
     },
     info: {
       lighter: '#e0f2fe',
-      light:   '#38BDF8',
-      main:    '#0EA5E9',
-      dark:    '#0284C7',
-      darker:  '#0369A1',
+      light: '#38BDF8',
+      main: '#0EA5E9',
+      dark: '#0284C7',
+      darker: '#0369A1',
       contrastText: '#FFFFFF',
     },
     success: {
       lighter: '#d1fae5',
-      light:   '#34D399',
-      main:    '#10B981',
-      dark:    '#059669',
-      darker:  '#047857',
+      light: '#34D399',
+      main: '#10B981',
+      dark: '#059669',
+      darker: '#047857',
       contrastText: '#FFFFFF',
     },
     grey,

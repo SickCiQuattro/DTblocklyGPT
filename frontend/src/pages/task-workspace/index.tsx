@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { Box, CircularProgress, Typography } from '@mui/material'
 import useSWR, { useSWRConfig } from 'swr'
 import dayjs from 'dayjs'
 import { toast } from 'react-toastify'
+import * as Blockly from 'blockly/core'
 
 import { useAppSelector } from 'store/reducers'
 import {
@@ -19,19 +20,23 @@ import {
 import { BlocklyEditor, getBlocklyStructure } from 'features/blockly'
 import { useViewSettings } from 'features/blockly/utils/useViewSettings'
 import { useConformance } from 'features/blockly/utils/useConformance'
-import * as Blockly from 'blockly/core'
-import { abstractToBlockly, blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
+import {
+  abstractToBlockly,
+  blocklyToAbstractAll,
+  CustomBlock,
+} from 'utils/blocklyParser'
 import { endpoints } from 'services/endpoints'
 import { fetchApi, MethodHTTP } from 'services/api'
-import { ChatThread } from '../../components/ChatThread'
-import { DigitalTwinPanel } from '../../components/DigitalTwinPanel'
-import { BottomPanel } from '../../components/BottomPanel'
-import { StatusBar } from '../../components/StatusBar'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { TaskType, TaskDetailType, AbstractStep } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
+
+import { ChatThread } from '../../components/ChatThread'
+import { DigitalTwinPanel } from '../../components/DigitalTwinPanel'
+import { BottomPanel } from '../../components/BottomPanel'
+import { StatusBar } from '../../components/StatusBar'
 
 const isBlockState = (value: unknown): value is State =>
   typeof value === 'object' &&
@@ -44,20 +49,41 @@ export const UnifiedWorkspace = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { mutate } = useSWRConfig()
+  const [searchParams] = useSearchParams()
+  const typeParam = searchParams.get('type')
 
   // Redux layout/sync states
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
   const activeTaskName = useAppSelector((state) => state.task.activeTaskName)
-  const activeTaskStatus = useAppSelector((state) => state.task.activeTaskStatus)
+  const activeTaskStatus = useAppSelector(
+    (state) => state.task.activeTaskStatus,
+  )
   const isSaving = useAppSelector((state) => state.task.isSaving)
   const saveTriggered = useAppSelector((state) => state.task.saveTriggered)
-  const discardTriggered = useAppSelector((state) => state.task.discardTriggered)
-  const chatPosition = useAppSelector((state) => state.task.chatPosition) || 'right'
+  const discardTriggered = useAppSelector(
+    (state) => state.task.discardTriggered,
+  )
+  const chatPosition =
+    useAppSelector((state) => state.task.chatPosition) || 'right'
+
+  // Sync chat sidebar visibility based on homepage URL query parameters
+  useEffect(() => {
+    if (typeParam === 'graphic') {
+      if (chatOpen) {
+        dispatch(toggleChat())
+      }
+    } else if (typeParam === 'chat' || typeParam === 'multimodal') {
+      if (!chatOpen) {
+        dispatch(toggleChat())
+      }
+    }
+  }, [typeParam, chatOpen, dispatch])
 
   // Blockly View Settings
-  const { viewSettings, updateViewSettings, resetViewSettings } = useViewSettings()
+  const { viewSettings, updateViewSettings, resetViewSettings } =
+    useViewSettings()
 
   // Chat interaction states
   const [newChatResponse, setNewChatResponse] = useState(false)
@@ -66,13 +92,22 @@ export const UnifiedWorkspace = () => {
   const [workspace, setWorkspace] = useState<Blockly.WorkspaceSvg | null>(null)
 
   // SWR queries for libraries
-  const { data: dataObjects = [], isLoading: isLoadingObjects } = useSWR<ObjectListType[], Error>({
+  const { data: dataObjects = [], isLoading: isLoadingObjects } = useSWR<
+    ObjectListType[],
+    Error
+  >({
     url: endpoints.graphic.objectsGraphic,
   })
-  const { data: dataActions = [], isLoading: isLoadingActions } = useSWR<ActionListType[], Error>({
+  const { data: dataActions = [], isLoading: isLoadingActions } = useSWR<
+    ActionListType[],
+    Error
+  >({
     url: endpoints.graphic.actionsGraphic,
   })
-  const { data: dataLocations = [], isLoading: isLoadingLocations } = useSWR<LocationListType[], Error>({
+  const { data: dataLocations = [], isLoading: isLoadingLocations } = useSWR<
+    LocationListType[],
+    Error
+  >({
     url: endpoints.graphic.locationsGraphic,
   })
   const { data: dataMacros = [] } = useSWR<TaskType[], Error>({
@@ -84,7 +119,7 @@ export const UnifiedWorkspace = () => {
   // Filter out the current task to prevent infinite recursion/self-reference cycles
   const filteredMacros = useMemo(
     () => dataMacros.filter((m) => m.id !== currentTaskId),
-    [dataMacros, currentTaskId]
+    [dataMacros, currentTaskId],
   )
 
   // Derive macroDetailsById mapping (published_workspace maps to code) for block explosion and tooltips preview
@@ -103,14 +138,18 @@ export const UnifiedWorkspace = () => {
             signature: m.signature,
             code: m.published_workspace ?? null,
           } satisfies TaskDetailType,
-        ])
+        ]),
       ),
-    [filteredMacros]
+    [filteredMacros],
   )
 
   // SWR query for specific task
-  const { data: taskData, isLoading: isTaskLoading, mutate: mutateTask } = useSWR<TaskDetailType, Error>(
-    id ? { url: endpoints.home.libraries.task, body: { id } } : null
+  const {
+    data: taskData,
+    isLoading: isTaskLoading,
+    mutate: mutateTask,
+  } = useSWR<TaskDetailType, Error>(
+    id ? { url: endpoints.home.libraries.task, body: { id } } : null,
   )
 
   // Set active task info in Redux on load
@@ -121,7 +160,7 @@ export const UnifiedWorkspace = () => {
           id: taskData.id.toString(),
           name: taskData.name,
           status: taskData.status,
-        })
+        }),
       )
       if (taskData.code) {
         const isVisual = (item: any): boolean => {
@@ -136,7 +175,9 @@ export const UnifiedWorkspace = () => {
           : isVisual(taskData.code)
 
         if (hasVisualBlock) {
-          const abstract = blocklyToAbstractAll(taskData.code as unknown as CustomBlock[] | null)
+          const abstract = blocklyToAbstractAll(
+            taskData.code as unknown as CustomBlock[] | null,
+          )
           setTaskStructure(abstract || [])
         } else {
           setTaskStructure(taskData.code as unknown as any[])
@@ -148,7 +189,7 @@ export const UnifiedWorkspace = () => {
           id: null,
           name: 'New Task',
           status: 'draft',
-        })
+        }),
       )
       setTaskStructure([])
     }
@@ -177,7 +218,7 @@ export const UnifiedWorkspace = () => {
       taskData.code as unknown as any[],
       dataObjects,
       dataLocations,
-      dataActions
+      dataActions,
     )
     return isBlockState(converted) ? converted : null
   }, [taskData, dataObjects, dataLocations, dataActions])
@@ -231,7 +272,7 @@ export const UnifiedWorkspace = () => {
                 id: res.id.toString(),
                 name: currentName,
                 status: 'draft',
-              })
+              }),
             )
           } else {
             throw new Error('Failed to create task record')
@@ -279,7 +320,7 @@ export const UnifiedWorkspace = () => {
               id: updatedTask.id.toString(),
               name: updatedTask.name,
               status: updatedTask.status,
-            })
+            }),
           )
         }
         void mutate({ url: endpoints.home.libraries.tasks })
@@ -291,24 +332,32 @@ export const UnifiedWorkspace = () => {
         }
 
         if (!isAutoSave) {
-          toast.success(isPublish ? 'Task saved and published successfully' : 'Draft saved successfully')
+          toast.success(
+            isPublish
+              ? 'Task saved and published successfully'
+              : 'Draft saved successfully',
+          )
         }
       } catch (err) {
         console.error('Failed to save task:', err)
         if (!isAutoSave) {
-          toast.error(isPublish ? 'Failed to publish task' : 'Failed to save draft')
+          toast.error(
+            isPublish ? 'Failed to publish task' : 'Failed to save draft',
+          )
         }
       } finally {
         dispatch(setSaving(false))
       }
     },
-    [id, isSaving, taskData, dispatch, navigate, mutate, mutateTask]
+    [id, isSaving, taskData, dispatch, navigate, mutate, mutateTask],
   )
 
   // Debounced auto-save handler (2 seconds)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const handleTaskStructureChange = (newStructure: import('pages/tasks/types').ASTBranch[] | null) => {
+  const handleTaskStructureChange = (
+    newStructure: import('pages/tasks/types').ASTBranch[] | null,
+  ) => {
     const structureArray = newStructure || []
     setTaskStructure(structureArray)
 
@@ -372,7 +421,11 @@ export const UnifiedWorkspace = () => {
     }
   }, [discardTriggered, id, dispatch, mutateTask, mutate])
 
-  const isLoading = isLoadingObjects || isLoadingActions || isLoadingLocations || (id && isTaskLoading && !taskData)
+  const isLoading =
+    isLoadingObjects ||
+    isLoadingActions ||
+    isLoadingLocations ||
+    (id && isTaskLoading && !taskData)
 
   if (isLoading) {
     return (
@@ -461,7 +514,7 @@ export const UnifiedWorkspace = () => {
               proposed,
               dataObjects,
               dataLocations,
-              dataActions
+              dataActions,
             )
             if (isBlockState(converted)) {
               setPendingChatTask(converted)

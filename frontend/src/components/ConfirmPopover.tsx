@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { Popover, Box, Typography, Stack, Button } from '@mui/material';
+import React, { useState } from 'react'
+import { Popover, Box, Typography, Stack, Button } from '@mui/material'
 
 interface ConfirmPopoverProps {
-  title: string;
-  onConfirm: () => void;
-  cancelText?: string;
-  confirmText?: string;
-  children: (onOpen: (event: React.MouseEvent<HTMLElement>) => void) => React.ReactNode;
+  title: string
+  onConfirm: () => void
+  cancelText?: string
+  confirmText?: string
+  children: (
+    onOpen: (event: React.MouseEvent<HTMLElement>) => void,
+  ) => React.ReactNode
 }
 
 export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({
@@ -16,20 +18,20 @@ export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({
   confirmText = 'Confirm',
   children,
 }) => {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
   const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+    setAnchorEl(event.currentTarget)
+  }
 
   const handleClose = () => {
-    setAnchorEl(null);
-  };
+    setAnchorEl(null)
+  }
 
   const handleConfirm = () => {
-    onConfirm();
-    handleClose();
-  };
+    onConfirm()
+    handleClose()
+  }
 
   return (
     <>
@@ -53,24 +55,33 @@ export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({
               borderRadius: 2,
               border: '1px solid',
               borderColor: 'divider',
-            }
-          }
+            },
+          },
         }}
       >
         <Box sx={{ p: 2, maxWidth: 220 }}>
           <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 500 }}>
             {title}
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ justifyContent: 'flex-end' }}
+          >
             <Button size="small" variant="text" onClick={handleClose}>
               {cancelText}
             </Button>
-            <Button size="small" variant="contained" color="error" onClick={handleConfirm}>
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              onClick={handleConfirm}
+            >
               {confirmText}
             </Button>
           </Stack>
         </Box>
       </Popover>
     </>
-  );
-};
+  )
+}

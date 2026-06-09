@@ -1,78 +1,88 @@
-import React, { useEffect, useRef } from 'react';
-import { Box } from '@mui/material';
-import { X } from 'lucide-react';
-import { UserBubble } from './UserBubble';
-import { AssistantBubble } from './AssistantBubble';
-import { ChatComposer } from './ChatComposer';
-import { TaskPreviewCard } from './TaskPreviewCard';
-import { MessageType, UserChatEnum, MessageTypeEnum } from '../pages/multimodal/utils';
-import { useDispatch, useSelector } from 'react-redux';
-import { setProposedTask, clearProposedTask } from 'store/reducers/proposal';
-import { endpoints } from 'services/endpoints';
-import { MethodHTTP, fetchApi } from 'services/api';
-import dayjs from 'dayjs';
-import { formatTimeFrontend } from 'utils/date';
-import { CHATGPT_ERROR } from 'pages/multimodal/utils';
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser';
-import { ChatResponse } from 'pages/multimodal/utils';
+import React, { useEffect, useRef } from 'react'
+import { Box } from '@mui/material'
+import { X } from 'lucide-react'
+import { useDispatch, useSelector } from 'react-redux'
+import dayjs from 'dayjs'
+
+import {
+  MessageType,
+  UserChatEnum,
+  MessageTypeEnum,
+  CHATGPT_ERROR,
+  ChatResponse,
+} from 'utils/chat'
+import { setProposedTask, clearProposedTask } from 'store/reducers/proposal'
+import { endpoints } from 'services/endpoints'
+import { MethodHTTP, fetchApi } from 'services/api'
+import { formatTimeFrontend } from 'utils/date'
+import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+
+import { TaskPreviewCard } from './TaskPreviewCard'
+import { ChatComposer } from './ChatComposer'
+import { AssistantBubble } from './AssistantBubble'
+import { UserBubble } from './UserBubble'
 
 const normalizeStep = (step: any): any => {
-  if (!step || typeof step !== 'object') return step;
+  if (!step || typeof step !== 'object') return step
   if (Array.isArray(step)) {
-    return step.map(normalizeStep);
+    return step.map(normalizeStep)
   }
-  const cleaned: any = {};
-  const keys = Object.keys(step).sort();
+  const cleaned: any = {}
+  const keys = Object.keys(step).sort()
   for (const key of keys) {
-    let val = step[key];
-    if (val === null || val === undefined) continue;
-    if (Array.isArray(val) && val.length === 0) continue;
-    
+    let val = step[key]
+    if (val === null || val === undefined) continue
+    if (Array.isArray(val) && val.length === 0) continue
+
     // Coerce numeric strings to numbers for IDs and numeric properties
-    if ((key.endsWith('Id') || key === 'seconds' || key === 'times') && typeof val === 'string' && /^\d+$/.test(val)) {
-      val = Number(val);
+    if (
+      (key.endsWith('Id') || key === 'seconds' || key === 'times') &&
+      typeof val === 'string' &&
+      /^\d+$/.test(val)
+    ) {
+      val = Number(val)
     }
-    
-    cleaned[key] = normalizeStep(val);
+
+    cleaned[key] = normalizeStep(val)
   }
-  return cleaned;
-};
+  return cleaned
+}
 
 const areStepsIdentical = (a: any, b: any) => {
-  return JSON.stringify(normalizeStep(a)) === JSON.stringify(normalizeStep(b));
-};
+  return JSON.stringify(normalizeStep(a)) === JSON.stringify(normalizeStep(b))
+}
 
 interface ChatDrawerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  speaker: boolean;
-  setSpeaker: (speaker: boolean) => void;
-  isProcessing: boolean;
-  setIsProcessing: (isProcessing: boolean) => void;
-  fineTunedModel: string;
-  setFineTunedModel: (model: string) => void;
-  fineTuningJobId: string;
-  setFineTuningJobId: (jobId: string) => void;
-  listMessages: MessageType[];
-  setListMessages: (messages: MessageType[]) => void;
-  chatLog: any[];
-  setChatLog: (log: any[]) => void;
-  message: string;
-  setMessage: (message: string) => void;
-  dataObjects: any[];
-  dataLocations: any[];
-  dataActions: any[];
-  isRecording: boolean;
-  setIsRecording: (recording: boolean) => void;
-  transcript: string;
-  resetTranscript: () => void;
-  browserSupportsSpeechRecognition: boolean;
-  isMicrophoneAvailable: boolean;
-  taskId: string;
-  taskStructure: any; // TaskChatStructure
-  setTaskStructure: (taskStructure: any) => void;
-  onApplyProposedTask: (proposedTask: any[]) => void;
-  setNewChatResponse: (response: boolean) => void;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  speaker: boolean
+  setSpeaker: (speaker: boolean) => void
+  isProcessing: boolean
+  setIsProcessing: (isProcessing: boolean) => void
+  fineTunedModel: string
+  setFineTunedModel: (model: string) => void
+  fineTuningJobId: string
+  setFineTuningJobId: (jobId: string) => void
+  listMessages: MessageType[]
+  setListMessages: (messages: MessageType[]) => void
+  chatLog: any[]
+  setChatLog: (log: any[]) => void
+  message: string
+  setMessage: (message: string) => void
+  dataObjects: any[]
+  dataLocations: any[]
+  dataActions: any[]
+  isRecording: boolean
+  setIsRecording: (recording: boolean) => void
+  transcript: string
+  resetTranscript: () => void
+  browserSupportsSpeechRecognition: boolean
+  isMicrophoneAvailable: boolean
+  taskId: string
+  taskStructure: any // TaskChatStructure
+  setTaskStructure: (taskStructure: any) => void
+  onApplyProposedTask: (proposedTask: any[]) => void
+  setNewChatResponse: (response: boolean) => void
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({
@@ -107,55 +117,58 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   onApplyProposedTask,
   setNewChatResponse,
 }) => {
-  const dispatch = useDispatch();
-  const proposal = useSelector((state: any) => state.proposal);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const dispatch = useDispatch()
+  const proposal = useSelector((state: any) => state.proposal)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
-  const [width, setWidth] = React.useState(450);
-  const [isResizing, setIsResizing] = React.useState(false);
-  const [showProposalOverlay, setShowProposalOverlay] = React.useState(false);
+  const [width, setWidth] = React.useState(450)
+  const [isResizing, setIsResizing] = React.useState(false)
+  const [showProposalOverlay, setShowProposalOverlay] = React.useState(false)
 
   // Auto-open overlay when a new proposal is received
-  const prevProposedTaskRef = useRef<any>(null);
+  const prevProposedTaskRef = useRef<any>(null)
   useEffect(() => {
     if (proposal.proposedTask && !prevProposedTaskRef.current) {
-      setShowProposalOverlay(true);
+      setShowProposalOverlay(true)
     } else if (!proposal.proposedTask) {
-      setShowProposalOverlay(false);
+      setShowProposalOverlay(false)
     }
-    prevProposedTaskRef.current = proposal.proposedTask;
-  }, [proposal.proposedTask]);
+    prevProposedTaskRef.current = proposal.proposedTask
+  }, [proposal.proposedTask])
 
-  const startResizing = React.useCallback((pointerDownEvent: React.PointerEvent) => {
-    pointerDownEvent.preventDefault();
-    setIsResizing(true);
-    const startWidth = width;
-    const startX = pointerDownEvent.clientX;
+  const startResizing = React.useCallback(
+    (pointerDownEvent: React.PointerEvent) => {
+      pointerDownEvent.preventDefault()
+      setIsResizing(true)
+      const startWidth = width
+      const startX = pointerDownEvent.clientX
 
-    const handlePointerMove = (pointerMoveEvent: PointerEvent) => {
-      const newWidth = startWidth + (pointerMoveEvent.clientX - startX);
-      if (newWidth >= 320 && newWidth <= 750) {
-        setWidth(newWidth);
+      const handlePointerMove = (pointerMoveEvent: PointerEvent) => {
+        const newWidth = startWidth + (pointerMoveEvent.clientX - startX)
+        if (newWidth >= 320 && newWidth <= 750) {
+          setWidth(newWidth)
+        }
       }
-    };
 
-    const handlePointerUp = (pointerUpEvent: PointerEvent) => {
-      setIsResizing(false);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
+      const handlePointerUp = (pointerUpEvent: PointerEvent) => {
+        setIsResizing(false)
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+      }
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-  }, [width]);
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+    },
+    [width],
+  )
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [listMessages]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [listMessages])
 
   const onMessageSend = async () => {
-    if (!message.trim() || isProcessing) return;
+    if (!message.trim() || isProcessing) return
 
     const newUserMessage: MessageType = {
       text: message,
@@ -163,11 +176,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       user: UserChatEnum.USER,
       timestamp: dayjs().toISOString(),
       type: MessageTypeEnum.TEXT,
-    };
-    const messagesWithUserRequest = [...listMessages, newUserMessage];
-    setListMessages(messagesWithUserRequest);
-    setIsProcessing(true);
-    setMessage('');
+    }
+    const messagesWithUserRequest = [...listMessages, newUserMessage]
+    setListMessages(messagesWithUserRequest)
+    setIsProcessing(true)
+    setMessage('')
 
     try {
       const res: ChatResponse = await fetchApi({
@@ -182,62 +195,71 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           dataActions,
           taskStructure: taskStructure,
         },
-      });
+      })
 
       if (res) {
-        if (res.fineTunedModel && res.fineTunedModel !== fineTunedModel) setFineTunedModel(res.fineTunedModel);
-        if (res.fineTuningJobId && res.fineTuningJobId !== fineTuningJobId) setFineTuningJobId(res.fineTuningJobId);
+        if (res.fineTunedModel && res.fineTunedModel !== fineTunedModel)
+          setFineTunedModel(res.fineTunedModel)
+        if (res.fineTuningJobId && res.fineTuningJobId !== fineTuningJobId)
+          setFineTuningJobId(res.fineTuningJobId)
 
         if (speaker) {
-          const utterance = new SpeechSynthesisUtterance(res.response.answer);
-          utterance.lang = 'en-GB';
-          window.speechSynthesis.speak(utterance);
+          const utterance = new SpeechSynthesisUtterance(res.response.answer)
+          utterance.lang = 'en-GB'
+          window.speechSynthesis.speak(utterance)
         }
 
         const newRobotMessage: MessageType = {
           text: res.response.answer || CHATGPT_ERROR,
-          id: messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
+          id:
+            messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
           user: UserChatEnum.ROBOT,
           timestamp: dayjs().toISOString(),
           type: MessageTypeEnum.TEXT,
-        };
-        const newMessages: MessageType[] = [newRobotMessage];
+        }
+        const newMessages: MessageType[] = [newRobotMessage]
 
         // Always show the robot's message in the chat
-        setListMessages([...messagesWithUserRequest, ...newMessages]);
-        setChatLog(res.chatLog);
+        setListMessages([...messagesWithUserRequest, ...newMessages])
+        setChatLog(res.chatLog)
 
-        const taskModified = res.response?.taskModified ?? true;
+        const taskModified = res.response?.taskModified ?? true
 
         if (!taskModified) {
           // If the task was not modified, clear proposed task and do not apply anything to the workspace!
-          dispatch(clearProposedTask());
+          dispatch(clearProposedTask())
         } else {
-          const isIdentical = areStepsIdentical(res.response.task, taskStructure);
+          const isIdentical = areStepsIdentical(
+            res.response.task,
+            taskStructure,
+          )
 
           if (isIdentical) {
             // If the task structure didn't change semantically, do not apply and clear proposed task
-            dispatch(clearProposedTask());
-          } else if (Array.isArray(res.response.task) && res.response.task.length > 0) {
+            dispatch(clearProposedTask())
+          } else if (
+            Array.isArray(res.response.task) &&
+            res.response.task.length > 0
+          ) {
             // Se abbiamo ricevuto un task valido, lo impostiamo come proposta per chiedere la conferma dell'utente!
             dispatch(
               setProposedTask({
                 proposedTask: res.response.task,
                 validationWarnings: res.response.validationWarnings || [],
                 answer: res.response.answer || '',
-              })
-            );
+              }),
+            )
           } else {
-            dispatch(clearProposedTask());
+            dispatch(clearProposedTask())
           }
         }
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error sending message:', error)
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   const renderMessage = (msg: MessageType) => {
     if (msg.user === UserChatEnum.USER) {
@@ -249,7 +271,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           user="User"
           avatarUrl="/pages/user.png"
         />
-      );
+      )
     } else {
       return (
         <AssistantBubble
@@ -258,9 +280,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           timestamp={msg.timestamp}
           avatarUrl="/pages/robot.png"
         />
-      );
+      )
     }
-  };
+  }
 
   const renderTypingIndicator = () => {
     return (
@@ -286,8 +308,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           <span className="typing-dot" />
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
     <Box
@@ -295,13 +317,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         position: 'relative',
         width: open ? width : 0,
         minWidth: open ? width : 0,
-        transition: isResizing ? 'none' : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: isResizing
+          ? 'none'
+          : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
         background: 'rgba(246, 248, 251, 0.85)',
         backdropFilter: 'blur(24px)',
         border: '1px solid rgba(99, 102, 241, 0.12)',
         borderRight: '2px solid rgba(99, 102, 241, 0.22)',
-        boxShadow: '0 20px 40px -15px rgba(31, 38, 135, 0.06), 0 4px 12px 0 rgba(0, 0, 0, 0.02)',
+        boxShadow:
+          '0 20px 40px -15px rgba(31, 38, 135, 0.06), 0 4px 12px 0 rgba(0, 0, 0, 0.02)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -395,7 +420,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           background: 'rgba(238, 242, 246, 0.5)',
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: '16px', color: '#1e1b4b', letterSpacing: '-0.02em' }}>
+        <div
+          style={{
+            fontWeight: 700,
+            fontSize: '16px',
+            color: '#1e1b4b',
+            letterSpacing: '-0.02em',
+          }}
+        >
           Interactive Assistant
         </div>
         <button
@@ -416,7 +448,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         </button>
       </div>
 
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {/* Chat message history list */}
         <div
           className="chat-messages-container"
@@ -446,7 +486,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               bottom: 0,
               zIndex: 90,
               background: '#ffffff',
-              transform: showProposalOverlay ? 'translateY(0)' : 'translateY(100%)',
+              transform: showProposalOverlay
+                ? 'translateY(0)'
+                : 'translateY(100%)',
               transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
@@ -458,12 +500,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               dataLocations={dataLocations}
               dataActions={dataActions}
               onApply={() => {
-                onApplyProposedTask(proposal.proposedTask);
-                setNewChatResponse(true);
-                dispatch(clearProposedTask());
+                onApplyProposedTask(proposal.proposedTask)
+                setNewChatResponse(true)
+                dispatch(clearProposedTask())
               }}
               onCancel={() => {
-                dispatch(clearProposedTask());
+                dispatch(clearProposedTask())
               }}
               onBack={() => setShowProposalOverlay(false)}
             />
@@ -516,15 +558,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             }
           `}</style>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{
-              width: '6px',
-              height: '6px',
-              backgroundColor: '#6366f1',
-              borderRadius: '50%',
-              display: 'inline-block',
-              boxShadow: '0 0 8px #6366f1'
-            }} />
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e1b4b' }}>
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                backgroundColor: '#6366f1',
+                borderRadius: '50%',
+                display: 'inline-block',
+                boxShadow: '0 0 8px #6366f1',
+              }}
+            />
+            <span
+              style={{ fontSize: '13px', fontWeight: 600, color: '#1e1b4b' }}
+            >
               New Blockly task proposed
             </span>
           </div>
@@ -573,5 +619,5 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         setSpeaker={setSpeaker}
       />
     </Box>
-  );
-};
+  )
+}

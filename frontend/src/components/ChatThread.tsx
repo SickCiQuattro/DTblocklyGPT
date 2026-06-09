@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Box, Typography, IconButton, Button, Chip, Tooltip } from '@mui/material'
+import {
+  Box,
+  Typography,
+  IconButton,
+  Button,
+  Chip,
+  Tooltip,
+} from '@mui/material'
 import { X, Pencil, Play, Square, Save, ArrowLeftRight } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import useSWR from 'swr'
@@ -18,15 +25,16 @@ import {
   INITIAL_MESSAGE_1,
   CHATGPT_ERROR,
   ChatResponse,
-} from 'pages/multimodal/utils'
-import { UserBubble } from './UserBubble'
-import { AssistantBubble } from './AssistantBubble'
-import { ChatComposer } from './ChatComposer'
-import { TaskPreviewCard } from './TaskPreviewCard'
+} from 'utils/chat'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
+
+import { UserBubble } from './UserBubble'
+import { AssistantBubble } from './AssistantBubble'
+import { ChatComposer } from './ChatComposer'
+import { TaskPreviewCard } from './TaskPreviewCard'
 
 export type BlockGeneratedPayload = {
   blockType: string
@@ -81,7 +89,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const dispatch = useDispatch()
   const proposal = useAppSelector((state) => state.proposal)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
-  const chatPosition = useAppSelector((state) => state.task.chatPosition) || 'right'
+  const chatPosition =
+    useAppSelector((state) => state.task.chatPosition) || 'right'
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const [width, setWidth] = useState(360)
@@ -134,7 +143,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
       const handlePointerMove = (pointerMoveEvent: PointerEvent) => {
         const delta = pointerMoveEvent.clientX - startX
-        const newWidth = chatPosition === 'left' ? startWidth + delta : startWidth - delta
+        const newWidth =
+          chatPosition === 'left' ? startWidth + delta : startWidth - delta
         if (newWidth >= 320 && newWidth <= 600) {
           setWidth(newWidth)
         }
@@ -149,7 +159,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       window.addEventListener('pointermove', handlePointerMove)
       window.addEventListener('pointerup', handlePointerUp)
     },
-    [width, chatPosition]
+    [width, chatPosition],
   )
 
   useEffect(() => {
@@ -194,13 +204,19 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         }
 
         let answerText = res.response.answer || CHATGPT_ERROR
-        if (res.response.validationWarnings && res.response.validationWarnings.length > 0) {
-          answerText += '\n\n⚠️ Errori di validazione:\n' + res.response.validationWarnings.join('\n')
+        if (
+          res.response.validationWarnings &&
+          res.response.validationWarnings.length > 0
+        ) {
+          answerText +=
+            '\n\n⚠️ Errori di validazione:\n' +
+            res.response.validationWarnings.join('\n')
         }
 
         const newRobotMessage: MessageType = {
           text: answerText,
-          id: messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
+          id:
+            messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
           user: UserChatEnum.ROBOT,
           timestamp: dayjs().toISOString(),
           type: MessageTypeEnum.TEXT,
@@ -214,7 +230,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         if (!taskModified) {
           dispatch(clearProposedTask())
         } else {
-          const isIdentical = areStepsIdentical(res.response.task, taskStructure)
+          const isIdentical = areStepsIdentical(
+            res.response.task,
+            taskStructure,
+          )
 
           if (isIdentical) {
             dispatch(clearProposedTask())
@@ -227,7 +246,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 proposedTask: res.response.task,
                 validationWarnings: res.response.validationWarnings || [],
                 answer: res.response.answer || '',
-              })
+              }),
             )
           } else {
             dispatch(clearProposedTask())
@@ -303,11 +322,18 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
         background: '#FFFFFF',
-        borderLeft: chatPosition === 'right' ? '1px solid rgba(99, 102, 241, 0.12)' : 'none',
-        borderRight: chatPosition === 'left' ? '1px solid rgba(99, 102, 241, 0.12)' : 'none',
-        boxShadow: chatPosition === 'right' 
-          ? '-10px 0 30px -10px rgba(0, 0, 0, 0.03)' 
-          : '10px 0 30px -10px rgba(0, 0, 0, 0.03)',
+        borderLeft:
+          chatPosition === 'right'
+            ? '1px solid rgba(99, 102, 241, 0.12)'
+            : 'none',
+        borderRight:
+          chatPosition === 'left'
+            ? '1px solid rgba(99, 102, 241, 0.12)'
+            : 'none',
+        boxShadow:
+          chatPosition === 'right'
+            ? '-10px 0 30px -10px rgba(0, 0, 0, 0.03)'
+            : '10px 0 30px -10px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -410,7 +436,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           AI Copilot
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Tooltip title={chatPosition === 'left' ? 'Move to right' : 'Move to left'} placement="bottom">
+          <Tooltip
+            title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
+            placement="bottom"
+          >
             <IconButton
               onClick={() => dispatch(toggleChatPosition())}
               size="small"
@@ -495,7 +524,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                     proposal.proposedTask,
                     dataObjects,
                     dataLocations,
-                    dataActions
+                    dataActions,
                   )
                   // Find all generated blocks inside converted state
                   if (converted && Array.isArray(converted.blocks)) {

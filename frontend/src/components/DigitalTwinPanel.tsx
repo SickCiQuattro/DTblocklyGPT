@@ -1,5 +1,13 @@
 import React from 'react'
-import { Box, Divider, Typography, Stack, CircularProgress, IconButton, Button } from '@mui/material'
+import {
+  Box,
+  Divider,
+  Typography,
+  Stack,
+  CircularProgress,
+  IconButton,
+  Button,
+} from '@mui/material'
 import { PlayCircle, StopCircle, X, Terminal } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 
@@ -18,7 +26,9 @@ interface DigitalTwinPanelProps {
   taskId: string
 }
 
-export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId }) => {
+export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
+  taskId,
+}) => {
   const dispatch = useDispatch()
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
@@ -38,7 +48,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({ taskId }) =>
       dispatch(setSimulationCompleted())
     } catch (error: any) {
       console.error('Error starting simulation:', error)
-      dispatch(setSimulationError(error?.message || 'Error starting simulation'))
+      dispatch(
+        setSimulationError(error?.message || 'Error starting simulation'),
+      )
     }
   }
 

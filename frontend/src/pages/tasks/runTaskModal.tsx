@@ -73,35 +73,56 @@ export const RunTaskModal = ({
           sx: {
             backdropFilter: 'blur(8px)',
             backgroundColor: 'rgba(0, 0, 0, 0.4)',
-          }
+          },
         },
         paper: {
           sx: {
             borderRadius: '12px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            boxShadow:
+              '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             border: '1px solid',
             borderColor: 'divider',
             p: 1.5,
             maxWidth: '480px',
             width: '100%',
-          }
-        }
+          },
+        },
       }}
     >
       <DialogTitle sx={{ fontWeight: 600, pb: 1, fontSize: '1.125rem' }}>
         Run task: {task?.name}
       </DialogTitle>
-      
+
       <DialogContent sx={{ py: 1.5 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Are you sure you want to run this task on a robot?
         </Typography>
-        
+
         <Box sx={{ mb: 3 }}>
-          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', display: 'block', mb: 0.5 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 600,
+              color: 'text.secondary',
+              textTransform: 'uppercase',
+              display: 'block',
+              mb: 0.5,
+            }}
+          >
             Description
           </Typography>
-          <Typography variant="body2" sx={{ fontStyle: task?.description ? 'normal' : 'italic', color: 'text.primary', bgcolor: 'rgba(0, 0, 0, 0.02)', p: 1.5, borderRadius: '6px', border: '1px solid', borderColor: 'divider' }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontStyle: task?.description ? 'normal' : 'italic',
+              color: 'text.primary',
+              bgcolor: 'rgba(0, 0, 0, 0.02)',
+              p: 1.5,
+              borderRadius: '6px',
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             {task?.description || 'None'}
           </Typography>
         </Box>
@@ -145,19 +166,21 @@ export const RunTaskModal = ({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-        <Button 
-          variant="text" 
+        <Button
+          variant="text"
           onClick={handleCancelClick}
           sx={{ fontWeight: 500 }}
         >
           Cancel
         </Button>
-        <Button 
-          variant="contained" 
+        <Button
+          variant="contained"
           color="primary"
           onClick={handleOk}
           disabled={!selectedRobot || running}
-          startIcon={running ? <CircularProgress size={14} color="inherit" /> : null}
+          startIcon={
+            running ? <CircularProgress size={14} color="inherit" /> : null
+          }
           sx={{ fontWeight: 500, borderRadius: '8px', minWidth: '80px' }}
         >
           Run

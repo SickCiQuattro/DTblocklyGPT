@@ -100,4 +100,3 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
     </Box>
   )
 }
-

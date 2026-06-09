@@ -26,8 +26,17 @@ export const MainLayout = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', width: '100%', height: '100vh', overflow: 'hidden' }}>
-      {showHeader && <Header open={drawerOpen} handleDrawerToggle={handleDrawerToggle} />}
+    <Box
+      sx={{
+        display: 'flex',
+        width: '100%',
+        height: '100vh',
+        overflow: 'hidden',
+      }}
+    >
+      {showHeader && (
+        <Header open={drawerOpen} handleDrawerToggle={handleDrawerToggle} />
+      )}
       <MainDrawer open={drawerOpen} handleDrawerToggle={handleDrawerToggle} />
       <Box
         component="main"
@@ -42,11 +51,18 @@ export const MainLayout = () => {
         }}
       >
         {showHeader && <Toolbar />}
-        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: isIDERoute ? 'hidden' : 'auto' }}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: isIDERoute ? 'hidden' : 'auto',
+          }}
+        >
           <Outlet />
         </Box>
       </Box>
     </Box>
   )
 }
-

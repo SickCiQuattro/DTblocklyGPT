@@ -98,12 +98,8 @@ function stripGhostsFromBlock(block: AnyBlockState): AnyBlockState {
   const cleanedInputs: Record<string, AnyBlockState> = {}
 
   for (const [inputName, inputState] of Object.entries(inputs)) {
-    const shadow = (inputState as AnyBlockState).shadow as
-      | AnyBlockState
-      | undefined
-    const realBlock = (inputState as AnyBlockState).block as
-      | AnyBlockState
-      | undefined
+    const shadow = inputState.shadow as AnyBlockState | undefined
+    const realBlock = inputState.block as AnyBlockState | undefined
 
     /**
      * Logic:
@@ -172,7 +168,7 @@ function injectGhostBlock(
 
   Blockly.Events.disable()
   try {
-    const ghost = workspace.newBlock(ghostDef.type) as Blockly.BlockSvg
+    const ghost = workspace.newBlock(ghostDef.type)
     ghost.setFieldValue(ghostDef.label, 'name')
     ghost.setShadow(true)
     ghost.initSvg()

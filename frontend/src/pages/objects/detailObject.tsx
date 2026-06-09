@@ -53,9 +53,7 @@ const DetailObject = () => {
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic
-          ? 'Return to the task graphic'
-          : 'Return to Objects'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Objects'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}

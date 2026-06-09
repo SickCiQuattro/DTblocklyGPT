@@ -10,7 +10,10 @@ interface DrawerHeaderProps {
   handleDrawerToggle?: () => void
 }
 
-export const DrawerHeader = ({ open, handleDrawerToggle }: DrawerHeaderProps) => {
+export const DrawerHeader = ({
+  open,
+  handleDrawerToggle,
+}: DrawerHeaderProps) => {
   const theme = useTheme()
 
   return (
@@ -29,7 +32,11 @@ export const DrawerHeader = ({ open, handleDrawerToggle }: DrawerHeaderProps) =>
       <LogoSection open={open} />
       {open && handleDrawerToggle && (
         <Tooltip title="Collapse Sidebar" placement="right">
-          <IconButton onClick={handleDrawerToggle} size="small" sx={{ color: 'primary.main' }}>
+          <IconButton
+            onClick={handleDrawerToggle}
+            size="small"
+            sx={{ color: 'primary.main' }}
+          >
             <PanelLeftClose size={18} />
           </IconButton>
         </Tooltip>

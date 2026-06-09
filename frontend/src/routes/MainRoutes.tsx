@@ -9,9 +9,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 
 const ListTasks = Loadable(lazy(() => import('pages/tasks/listTasks')))
 const DetailTask = Loadable(lazy(() => import('pages/tasks/detailTask')))
-const UnifiedWorkspace = Loadable(
-  lazy(() => import('pages/task-workspace')),
-)
+const UnifiedWorkspace = Loadable(lazy(() => import('pages/task-workspace')))
 const ListObjects = Loadable(lazy(() => import('pages/objects/listObjects')))
 const DetailObject = Loadable(lazy(() => import('pages/objects/detailObject')))
 const ListLocations = Loadable(
@@ -154,4 +152,3 @@ export const MainRoutes: RouteObject = {
     },
   ],
 }
-

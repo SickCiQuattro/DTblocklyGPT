@@ -107,9 +107,16 @@ export const Profile = ({ drawerOpen = true }: ProfileProps) => {
         <Stack
           direction="row"
           spacing={0}
-          sx={{ alignItems: 'center', justifyContent: 'flex-start', width: '100%' }}
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            width: '100%',
+          }}
         >
-          <Avatar alt="user profile" sx={{ width: 32, height: 32, flexShrink: 0 }}>
+          <Avatar
+            alt="user profile"
+            sx={{ width: 32, height: 32, flexShrink: 0 }}
+          >
             <RandomUserIcon />
           </Avatar>
           <Typography
@@ -123,7 +130,8 @@ export const Profile = ({ drawerOpen = true }: ProfileProps) => {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              transition:
+                'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
             {userName}

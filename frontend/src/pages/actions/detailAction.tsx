@@ -53,9 +53,7 @@ const DetailAction = () => {
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic
-          ? 'Return to the task graphic'
-          : 'Return to Routines'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Routines'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}

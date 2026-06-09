@@ -13,8 +13,9 @@
 import * as Blockly from 'blockly/core'
 
 import { BlockState as State, ConnectionState } from 'utils/blocklyTypes'
-import { ToolboxBlockItem } from '../toolbox'
 import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
+
+import { ToolboxBlockItem } from '../toolbox'
 
 const getShadowInputs = (
   blockType: string,

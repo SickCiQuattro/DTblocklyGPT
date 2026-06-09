@@ -54,11 +54,7 @@ export const NavItem = ({ item, level }: NavItemProps) => {
   }
 
   const Icon = item.icon
-  const itemIcon = Icon ? (
-    <Icon style={{ fontSize: '1.15rem' }} />
-  ) : (
-    false
-  )
+  const itemIcon = Icon ? <Icon style={{ fontSize: '1.15rem' }} /> : false
 
   const currentIndex = document.location.pathname
     .toString()
@@ -78,7 +74,11 @@ export const NavItem = ({ item, level }: NavItemProps) => {
   const iconSelectedColor = 'primary.main'
 
   return (
-    <Tooltip title={item.title} placement="right" disableHoverListener={drawerOpen}>
+    <Tooltip
+      title={item.title}
+      placement="right"
+      disableHoverListener={drawerOpen}
+    >
       <ListItemButton
         {...listItemProps}
         disabled={item.disabled}
@@ -115,7 +115,7 @@ export const NavItem = ({ item, level }: NavItemProps) => {
               width: '3px',
               borderRadius: '0 4px 4px 0',
               bgcolor: theme.palette.primary.main,
-            }
+            },
           },
         }}
       >
@@ -142,12 +142,16 @@ export const NavItem = ({ item, level }: NavItemProps) => {
             minWidth: 0,
             overflow: 'hidden',
             whiteSpace: 'nowrap',
-            transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition:
+              'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
           primary={
             <Typography
               variant="body2"
-              sx={{ color: isSelected ? iconSelectedColor : textColor, fontWeight: 500 }}
+              sx={{
+                color: isSelected ? iconSelectedColor : textColor,
+                fontWeight: 500,
+              }}
             >
               {item.title}
             </Typography>

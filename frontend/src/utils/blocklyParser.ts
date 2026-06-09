@@ -256,7 +256,7 @@ export const abstractToBlockly = (
     }
   }
 
-  const stepsToSequence = (steps: AbstractStep[]): any | null => {
+  const stepsToSequence = (steps: AbstractStep[]): any => {
     if (!steps || !steps.length) return null
     const [first, ...rest] = steps
     const block = stepToBlock(first)
@@ -268,9 +268,7 @@ export const abstractToBlockly = (
     return block
   }
 
-  const conditionToBlock = (
-    condition: AbstractCondition | null,
-  ): any | null => {
+  const conditionToBlock = (condition: AbstractCondition | null): any => {
     if (!condition) return null
     switch (condition.type) {
       case 'sensor_signal': {
@@ -419,10 +417,7 @@ export const blocklyToAbstract = (
       case 'gesture_block':
         return {
           type: 'gesture',
-          gestureType: (block.fields?.GESTURE_TYPE ?? 'THUMBS_UP') as
-            | 'THUMBS_UP'
-            | 'STOP'
-            | 'OPEN_HAND',
+          gestureType: block.fields?.GESTURE_TYPE ?? 'THUMBS_UP',
         }
       case 'timer_block':
         return { type: 'timer', seconds: block.fields?.SECONDS ?? 5 }

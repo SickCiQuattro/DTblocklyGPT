@@ -23,9 +23,9 @@ import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { Target, Plus } from 'lucide-react'
-import { ConfirmPopover } from 'components/ConfirmPopover'
 import { useSearchParams } from 'react-router-dom'
 
+import { ConfirmPopover } from 'components/ConfirmPopover'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
@@ -480,7 +480,11 @@ export const FormAction = ({
                           }
                         >
                           {(onOpen) => (
-                            <Button color="error" title="Delete this point" onClick={onOpen}>
+                            <Button
+                              color="error"
+                              title="Delete this point"
+                              onClick={onOpen}
+                            >
                               Delete
                             </Button>
                           )}

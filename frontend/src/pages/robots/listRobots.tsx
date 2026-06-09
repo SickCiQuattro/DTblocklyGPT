@@ -103,7 +103,10 @@ const ListRobots = () => {
   }
 
   const rows = data ?? []
-  const paginated = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginated = rows.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  )
 
   return (
     <MainCard
@@ -137,9 +140,16 @@ const ListRobots = () => {
 
       <Paper
         variant="outlined"
-        sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+        sx={{
+          borderRadius: '10px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
       >
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+        <TableContainer
+          sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}
+        >
           <Table size="small" aria-label="robots table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -157,7 +167,10 @@ const ListRobots = () => {
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+                    <CircularProgress
+                      size={28}
+                      sx={{ color: 'primary.main' }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (
@@ -199,15 +212,9 @@ const ListRobots = () => {
                     <TableCell sx={{ py: 1 }}>
                       {RobotModel[row.model]}
                     </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.ip}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.port}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {row.cameraip}
-                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.ip}</TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.port}</TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.cameraip}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <ConfirmPopover
                         title="Delete this robot?"

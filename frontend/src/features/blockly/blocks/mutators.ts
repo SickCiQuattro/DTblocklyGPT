@@ -30,9 +30,7 @@ const parseBlockData = (
 
   try {
     const parsed = JSON.parse(rawData) as unknown
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as { id?: unknown; keywords?: unknown })
-      : null
+    return typeof parsed === 'object' && parsed !== null ? parsed : null
   } catch {
     return null
   }
@@ -76,10 +74,7 @@ const applyEntityMetadata = (
  * @param id             The unique mutator identifier string.
  * @param missingWarning Warning shown when `data.id` is missing.
  */
-const registerEntityMutator = (
-  id: string,
-  missingWarning: string,
-): void => {
+const registerEntityMutator = (id: string, missingWarning: string): void => {
   Blockly.Extensions.registerMutator(id, {
     mutationToDom(this: Blockly.Block) {
       applyEntityMetadata(this, missingWarning)

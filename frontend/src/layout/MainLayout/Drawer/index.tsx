@@ -24,7 +24,10 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
 
   // header content
   const drawerContent = useMemo(() => <DrawerContent open={open} />, [open])
-  const drawerHeader = useMemo(() => <DrawerHeader open={open} handleDrawerToggle={handleDrawerToggle} />, [open, handleDrawerToggle])
+  const drawerHeader = useMemo(
+    () => <DrawerHeader open={open} handleDrawerToggle={handleDrawerToggle} />,
+    [open, handleDrawerToggle],
+  )
 
   return (
     <Box component="nav" sx={{ flexShrink: { md: 0 }, zIndex: 1100 }}>
@@ -50,7 +53,14 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
           }}
         >
           {drawerHeader}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Box
+            sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
             {drawerContent}
           </Box>
           <Box
@@ -98,7 +108,14 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
         >
           {open && drawerHeader}
           {open && (
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
               {drawerContent}
             </Box>
           )}

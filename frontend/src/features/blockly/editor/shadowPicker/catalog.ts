@@ -12,6 +12,7 @@
  */
 
 import { TaskType } from 'pages/tasks/types'
+
 import { normalizeKeywords } from '../../utils/keywords'
 import { blocksColours } from '../../blocks/palette'
 

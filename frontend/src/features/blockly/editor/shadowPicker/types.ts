@@ -160,7 +160,6 @@ export const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   sequence: 'No steps available.',
 }
 
-
 /**
  * Block types that are created directly without needing a data lookup.
  * Entity block types (object, location, action) are NOT direct — they

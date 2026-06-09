@@ -3,7 +3,7 @@
 // to avoid magic numbers in position:fixed panels (DigitalTwinPanel, BottomPanel).
 // Update here only — CSS vars propagate automatically.
 export const LAYOUT = {
-  appBarHeight: 56,    // AppBar height (px)
+  appBarHeight: 56, // AppBar height (px)
   statusBarHeight: 40, // StatusBar footer height (px)
 } as const
 
@@ -38,7 +38,6 @@ export const defaultPaginationConfig = {
   showSizeChanger: true,
   hideOnSinglePage: true,
 }
-
 
 // ─── Autocomplete ────────────────────────────────────────────────────────────
 export const timerTimeoutAutocomplete = 500

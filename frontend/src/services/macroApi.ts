@@ -1,10 +1,12 @@
 import axios, { AxiosRequestConfig } from 'axios'
-import { endpoints } from './endpoints'
+
 import type {
   PublishMacroPayload,
   PublishMacroResponse,
   PublishMacroBreakingChanges,
 } from 'pages/tasks/types'
+
+import { endpoints } from './endpoints'
 
 export type PublishMacroResult =
   | { type: 'published'; signature: string }

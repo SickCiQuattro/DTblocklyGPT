@@ -1,22 +1,31 @@
-import React from 'react';
-import { Box, Button, Typography, Alert, AlertTitle, Stack } from '@mui/material';
+import React from 'react'
 import {
-  PlayCircle,
-  AlertCircle,
-  ArrowLeft,
-} from 'lucide-react';
-import { AbstractStep, AbstractCondition } from 'pages/tasks/types';
-import { useDispatch } from 'react-redux';
-import { clearProposedTask } from 'store/reducers/proposal';
-import { abstractToBlockly } from 'utils/blocklyParser';
-import { StepTree } from './StepTree';
+  Box,
+  Button,
+  Typography,
+  Alert,
+  AlertTitle,
+  Stack,
+} from '@mui/material'
+import { PlayCircle, AlertCircle, ArrowLeft } from 'lucide-react'
+import { useDispatch } from 'react-redux'
+
+import { AbstractStep, AbstractCondition } from 'pages/tasks/types'
+import { clearProposedTask } from 'store/reducers/proposal'
+import { abstractToBlockly } from 'utils/blocklyParser'
+
+import { StepTree } from './StepTree'
 
 // Helper function to get the display name for an ID from the catalogs
-const getNameFromId = (id: number | string | null, catalog: any[], nameField: string = 'name'): string => {
-  if (id === null || id === undefined) return '';
-  const item = catalog.find((item: any) => item.id === id);
-  return item ? item[nameField] : `Unknown ID: ${id}`;
-};
+const getNameFromId = (
+  id: number | string | null,
+  catalog: any[],
+  nameField: string = 'name',
+): string => {
+  if (id === null || id === undefined) return ''
+  const item = catalog.find((item: any) => item.id === id)
+  return item ? item[nameField] : `Unknown ID: ${id}`
+}
 
 // Helper function to build tree nodes recursively with stable path keys
 const buildTreeNodes = (
@@ -24,94 +33,140 @@ const buildTreeNodes = (
   dataObjects: any[],
   dataLocations: any[],
   dataActions: any[],
-  parentPath: string = 'step'
+  parentPath: string = 'step',
 ): any[] => {
   return steps.map((step, index) => {
-    const { type } = step;
-    const currentPath = `${parentPath}-${type}-${index}`;
+    const { type } = step
+    const currentPath = `${parentPath}-${type}-${index}`
 
-    let title: React.ReactNode;
-    let icon: React.ReactNode | undefined;
-    let children: any[] = [];
+    let title: React.ReactNode
+    let icon: React.ReactNode | undefined
+    let children: any[] = []
 
     switch (type) {
       case 'pick':
-        title = `Pick: ${getNameFromId((step as any).objectId, dataObjects)}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Pick: ${getNameFromId((step as any).objectId, dataObjects)}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'place':
-        title = `Place: ${getNameFromId((step as any).locationId, dataLocations)}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Place: ${getNameFromId((step as any).locationId, dataLocations)}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'processing':
         // MAPPING REFERENCE:
         // - step type: 'processing' ➔ User-facing title prefix: 'Run' (renamed from 'Perform')
-        title = `Run: ${getNameFromId((step as any).actionId, dataActions)}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Run: ${getNameFromId((step as any).actionId, dataActions)}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'move_to':
-        title = `Move To: ${getNameFromId((step as any).locationId, dataLocations)} (${(step as any).motionType})`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Move To: ${getNameFromId((step as any).locationId, dataLocations)} (${(step as any).motionType})`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'gripper':
-        title = `Gripper: ${(step as any).state}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Gripper: ${(step as any).state}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'wait':
-        title = `Wait: ${(step as any).seconds}s`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Wait: ${(step as any).seconds}s`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'human_action':
-        title = `Human Action: ${(step as any).description || 'No description'}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Human Action: ${(step as any).description || 'No description'}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'notify_action':
-        title = `Notify: ${(step as any).description || 'No description'}`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
-        break;
+        title = `Notify: ${(step as any).description || 'No description'}`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        break
       case 'repeat':
-        title = `Repeat ${(step as any).times} times`;
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
+        title = `Repeat ${(step as any).times} times`
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
         if ((step as any).steps && (step as any).steps.length > 0) {
-          children = buildTreeNodes((step as any).steps, dataObjects, dataLocations, dataActions, currentPath);
+          children = buildTreeNodes(
+            (step as any).steps,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            currentPath,
+          )
         }
-        break;
-      case 'repeat_until':
-        title = 'Repeat Until';
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
+        break
+      case 'repeat_until': {
+        title = 'Repeat Until'
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
         if ((step as any).condition) {
-          const conditionNode = renderConditionNode((step as any).condition, dataObjects, dataLocations, dataActions, `${currentPath}-cond`);
+          const conditionNode = renderConditionNode(
+            (step as any).condition,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${currentPath}-cond`,
+          )
           if (conditionNode) {
-            children.push(conditionNode);
+            children.push(conditionNode)
           }
         }
-        const repeatUntilSteps = (step as any).do || (step as any).steps;
+        const repeatUntilSteps = (step as any).do || (step as any).steps
         if (repeatUntilSteps && repeatUntilSteps.length > 0) {
-          children = [...children, ...buildTreeNodes(repeatUntilSteps, dataObjects, dataLocations, dataActions, currentPath)];
+          children = [
+            ...children,
+            ...buildTreeNodes(
+              repeatUntilSteps,
+              dataObjects,
+              dataLocations,
+              dataActions,
+              currentPath,
+            ),
+          ]
         }
-        break;
+        break
+      }
       case 'when':
-        title = 'When';
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
+        title = 'When'
+        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
         // Build condition node
         if ((step as any).condition) {
-          const conditionNode = renderConditionNode((step as any).condition, dataObjects, dataLocations, dataActions, `${currentPath}-cond`);
+          const conditionNode = renderConditionNode(
+            (step as any).condition,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${currentPath}-cond`,
+          )
           if (conditionNode) {
-            children.push(conditionNode);
+            children.push(conditionNode)
           }
         }
         // Build do steps
         if ((step as any).do && (step as any).do.length > 0) {
-          children = [...children, ...buildTreeNodes((step as any).do, dataObjects, dataLocations, dataActions, `${currentPath}-do`)];
+          children = [
+            ...children,
+            ...buildTreeNodes(
+              (step as any).do,
+              dataObjects,
+              dataLocations,
+              dataActions,
+              `${currentPath}-do`,
+            ),
+          ]
         }
         // Build otherwise steps
         if ((step as any).otherwise && (step as any).otherwise.length > 0) {
-          children = [...children, ...buildTreeNodes((step as any).otherwise, dataObjects, dataLocations, dataActions, `${currentPath}-otherwise`)];
+          children = [
+            ...children,
+            ...buildTreeNodes(
+              (step as any).otherwise,
+              dataObjects,
+              dataLocations,
+              dataActions,
+              `${currentPath}-otherwise`,
+            ),
+          ]
         }
-        break;
+        break
       default:
-        title = `Unknown step: ${type}`;
-        icon = <AlertCircle size={16} style={{ color: '#f59e0b' }} />;
+        title = `Unknown step: ${type}`
+        icon = <AlertCircle size={16} style={{ color: '#f59e0b' }} />
     }
 
     return {
@@ -119,9 +174,9 @@ const buildTreeNodes = (
       icon,
       key: currentPath,
       children: children.length > 0 ? children : undefined,
-    };
-  });
-};
+    }
+  })
+}
 
 // Helper function to render a condition as a tree node with stable path keys
 const renderConditionNode = (
@@ -129,9 +184,9 @@ const renderConditionNode = (
   dataObjects: any[],
   dataLocations: any[],
   dataActions: any[],
-  path: string
-): any | null => {
-  const { type } = condition;
+  path: string,
+): any => {
+  const { type } = condition
 
   switch (type) {
     case 'sensor_signal':
@@ -139,81 +194,111 @@ const renderConditionNode = (
         title: `Sensor: ${condition.sensor}`,
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-sensor`,
-      };
+      }
     case 'find_object':
       return {
         title: `Find Object: ${getNameFromId(condition.objectId, dataObjects)}`,
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-find-object`,
-      };
+      }
     case 'human_feedback':
       return {
         title: 'Human Feedback',
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-human-feedback`,
-      };
+      }
     case 'touch_detect':
       return {
         title: 'Touch Detect',
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-touch`,
-      };
+      }
     case 'gesture':
       return {
         title: `Gesture: ${condition.gestureType}`,
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-gesture`,
-      };
+      }
     case 'timer':
       return {
         title: `Timer: ${condition.seconds}s`,
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-timer`,
-      };
+      }
     case 'and':
       return {
         title: 'AND',
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-and`,
         children: [
-          renderConditionNode(condition.left, dataObjects, dataLocations, dataActions, `${path}-l`),
-          renderConditionNode(condition.right, dataObjects, dataLocations, dataActions, `${path}-r`),
+          renderConditionNode(
+            condition.left,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${path}-l`,
+          ),
+          renderConditionNode(
+            condition.right,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${path}-r`,
+          ),
         ].filter((child): child is any => child !== null),
-      };
+      }
     case 'or':
       return {
         title: 'OR',
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-or`,
         children: [
-          renderConditionNode(condition.left, dataObjects, dataLocations, dataActions, `${path}-l`),
-          renderConditionNode(condition.right, dataObjects, dataLocations, dataActions, `${path}-r`),
+          renderConditionNode(
+            condition.left,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${path}-l`,
+          ),
+          renderConditionNode(
+            condition.right,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${path}-r`,
+          ),
         ].filter((child): child is any => child !== null),
-      };
+      }
     case 'not':
       return {
         title: 'NOT',
         icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
         key: `${path}-not`,
         children: [
-          renderConditionNode(condition.condition, dataObjects, dataLocations, dataActions, `${path}-inner`),
+          renderConditionNode(
+            condition.condition,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            `${path}-inner`,
+          ),
         ].filter((child): child is any => child !== null),
-      };
+      }
     default:
-      return null;
+      return null
   }
-};
+}
 
 interface TaskPreviewCardProps {
-  proposedTask: AbstractStep[] | null;
-  validationWarnings: string[];
-  answer: string;
-  dataObjects: any[];
-  dataLocations: any[];
-  dataActions: any[];
-  onApply: () => void;
-  onCancel: () => void;
-  onBack?: () => void;
+  proposedTask: AbstractStep[] | null
+  validationWarnings: string[]
+  answer: string
+  dataObjects: any[]
+  dataLocations: any[]
+  dataActions: any[]
+  onApply: () => void
+  onCancel: () => void
+  onBack?: () => void
 }
 
 export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
@@ -227,36 +312,41 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
   onCancel,
   onBack,
 }) => {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch()
 
   const handleApply = () => {
     if (!proposedTask) {
-      onCancel();
-      return;
+      onCancel()
+      return
     }
 
     try {
       // Convert the proposed task to Blockly XML
-      const blocklyXml = abstractToBlockly(proposedTask, dataObjects, dataLocations, dataActions);
+      const blocklyXml = abstractToBlockly(
+        proposedTask,
+        dataObjects,
+        dataLocations,
+        dataActions,
+      )
 
       // Call the onApply callback (parent should handle updating the task structure)
-      onApply();
+      onApply()
 
       // Clear the proposal
-      dispatch(clearProposedTask());
+      dispatch(clearProposedTask())
     } catch (error) {
-      console.error('Error applying task:', error);
+      console.error('Error applying task:', error)
       // Optionally show an error message
     }
-  };
+  }
 
   const handleCancel = () => {
-    onCancel();
-    dispatch(clearProposedTask());
-  };
+    onCancel()
+    dispatch(clearProposedTask())
+  }
 
   if (!proposedTask || proposedTask.length === 0) {
-    return null; // Don't show the card if there's no proposed task
+    return null // Don't show the card if there's no proposed task
   }
 
   return (
@@ -321,7 +411,15 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
           transform: scale(0.95);
         }
       `}</style>
-      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div
+        style={{
+          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      >
         {/* Back Button Header */}
         {onBack && (
           <div style={{ marginBottom: '12px', flexShrink: 0 }}>
@@ -340,8 +438,12 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
                 padding: '4px 0',
                 transition: 'all 0.2s ease',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateX(-2px)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateX(0)')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform = 'translateX(-2px)')
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = 'translateX(0)')
+              }
             >
               <ArrowLeft size={14} /> Back to Chat
             </button>
@@ -350,9 +452,23 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
 
         {/* Answer from the assistant */}
         {answer && (
-          <div style={{ maxHeight: '90px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px', flexShrink: 0 }}>
+          <div
+            style={{
+              maxHeight: '90px',
+              overflowY: 'auto',
+              marginBottom: '12px',
+              paddingRight: '4px',
+              flexShrink: 0,
+            }}
+          >
             <Typography
-              style={{ fontWeight: 600, color: '#1e1b4b', display: 'block', fontSize: '14px', lineHeight: '1.5' }}
+              style={{
+                fontWeight: 600,
+                color: '#1e1b4b',
+                display: 'block',
+                fontSize: '14px',
+                lineHeight: '1.5',
+              }}
             >
               {answer}
             </Typography>
@@ -365,14 +481,20 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             severity="warning"
             sx={{ marginBottom: '12px', borderRadius: '12px', flexShrink: 0 }}
           >
-            <AlertTitle sx={{ fontWeight: 600, fontSize: '14px', m: 0 }}>Validation Warnings</AlertTitle>
+            <AlertTitle sx={{ fontWeight: 600, fontSize: '14px', m: 0 }}>
+              Validation Warnings
+            </AlertTitle>
             <Box sx={{ maxHeight: '80px', overflowY: 'auto', mt: 0.5 }}>
               <Stack spacing={0.5}>
                 {validationWarnings.map((warning, index) => (
                   <Typography
                     key={index}
                     variant="caption"
-                    style={{ display: 'block', fontSize: '13px', color: '#b45309' }}
+                    style={{
+                      display: 'block',
+                      fontSize: '13px',
+                      color: '#b45309',
+                    }}
                   >
                     • {warning}
                   </Typography>
@@ -384,7 +506,14 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
 
         {/* Task preview tree */}
         <Typography
-          style={{ fontWeight: 600, marginBottom: '6px', color: '#1e1b4b', display: 'block', fontSize: '14px', flexShrink: 0 }}
+          style={{
+            fontWeight: 600,
+            marginBottom: '6px',
+            color: '#1e1b4b',
+            display: 'block',
+            fontSize: '14px',
+            flexShrink: 0,
+          }}
         >
           Proposed Task Steps
         </Typography>
@@ -402,20 +531,31 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
           }}
         >
           <StepTree
-            treeData={buildTreeNodes(proposedTask, dataObjects, dataLocations, dataActions)}
+            treeData={buildTreeNodes(
+              proposedTask,
+              dataObjects,
+              dataLocations,
+              dataActions,
+            )}
           />
         </div>
 
         {/* Action buttons */}
-        <div style={{
-          marginTop: 'auto',
-          textAlign: 'right',
-          paddingTop: '12px',
-          borderTop: '1px solid rgba(79, 70, 229, 0.1)',
-          zIndex: 10,
-          flexShrink: 0,
-        }}>
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+        <div
+          style={{
+            marginTop: 'auto',
+            textAlign: 'right',
+            paddingTop: '12px',
+            borderTop: '1px solid rgba(79, 70, 229, 0.1)',
+            zIndex: 10,
+            flexShrink: 0,
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ justifyContent: 'flex-end' }}
+          >
             <Button
               variant="outlined"
               size="medium"
@@ -455,5 +595,5 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
         </div>
       </div>
     </div>
-  );
-};
+  )
+}

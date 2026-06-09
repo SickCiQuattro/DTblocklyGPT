@@ -45,7 +45,8 @@ export const LogoSection = ({ open = true }: LogoSectionProps) => {
           maxWidth: open ? '150px' : '0px',
           overflow: 'hidden',
           whiteSpace: 'nowrap',
-          transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition:
+            'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         DTblocklyGPT
