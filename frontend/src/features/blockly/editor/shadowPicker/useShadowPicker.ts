@@ -162,14 +162,18 @@ export const useShadowPicker = ({
 
   // ── Full item list for the current context ─────────────────────────────────
 
+  // MAPPING REFERENCE:
+  // - dataObjects ➔ 'Objects'
+  // - dataLocations (LocationListType) ➔ 'Locations'
+  // - dataActions (ActionListType) ➔ 'Routines'
   const selectedItems = useMemo<ShadowPickerItem[]>(() => {
     switch (popoverType) {
       case 'object':
         return buildShadowPickerItems(dataObjects, 'Object', 'Objects')
       case 'location':
-        return buildShadowPickerItems(dataLocations, 'Location', 'Destinations')
+        return buildShadowPickerItems(dataLocations, 'Location', 'Locations')
       case 'action':
-        return buildShadowPickerItems(dataActions, 'Action', 'Procedures')
+        return buildShadowPickerItems(dataActions, 'Routine', 'Routines')
       case 'trigger':
         return TRIGGER_PICKER_ITEMS
       case 'sequence':

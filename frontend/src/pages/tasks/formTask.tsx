@@ -360,12 +360,53 @@ export const FormTask = ({
                     sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                   >
                     {/* Status badge */}
-                    <Chip
-                      size="small"
-                      label={chipLabel}
-                      color={chipColor}
-                      variant="outlined"
-                    />
+                    {(() => {
+                      const getStatusConfig = (status?: string) => {
+                        const s = status?.toLowerCase() ?? 'draft'
+                        if (s === 'published' || s === 'ready' || s === 'tested') {
+                          return {
+                            label: 'Published',
+                            color: '#10B981',
+                            bg: 'rgba(16, 185, 129, 0.08)',
+                            border: 'rgba(16, 185, 129, 0.2)',
+                          }
+                        }
+                        if (s === 'published_with_draft') {
+                          return {
+                            label: 'Draft in Progress',
+                            color: '#3B82F6',
+                            bg: 'rgba(59, 130, 246, 0.08)',
+                            border: 'rgba(59, 130, 246, 0.2)',
+                          }
+                        }
+                        return {
+                          label: 'Draft',
+                          color: '#D97706',
+                          bg: 'rgba(217, 119, 6, 0.08)',
+                          border: 'rgba(217, 119, 6, 0.2)',
+                        }
+                      }
+                      const cfg = getStatusConfig(currentStatus)
+                      return (
+                        <Chip
+                          size="small"
+                          label={cfg.label}
+                          sx={{
+                            bgcolor: cfg.bg,
+                            color: cfg.color,
+                            borderColor: cfg.border,
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            height: '22px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                          }}
+                        />
+                      )
+                    })()}
                   </Stack>
                 </Grid>
               </>

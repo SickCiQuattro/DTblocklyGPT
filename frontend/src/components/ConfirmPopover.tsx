@@ -4,10 +4,18 @@ import { Popover, Box, Typography, Stack, Button } from '@mui/material';
 interface ConfirmPopoverProps {
   title: string;
   onConfirm: () => void;
+  cancelText?: string;
+  confirmText?: string;
   children: (onOpen: (event: React.MouseEvent<HTMLElement>) => void) => React.ReactNode;
 }
 
-export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({ title, onConfirm, children }) => {
+export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({
+  title,
+  onConfirm,
+  cancelText = 'Cancel',
+  confirmText = 'Confirm',
+  children,
+}) => {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
   const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -55,10 +63,10 @@ export const ConfirmPopover: React.FC<ConfirmPopoverProps> = ({ title, onConfirm
           </Typography>
           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
             <Button size="small" variant="text" onClick={handleClose}>
-              Annulla
+              {cancelText}
             </Button>
             <Button size="small" variant="contained" color="error" onClick={handleConfirm}>
-              Conferma
+              {confirmText}
             </Button>
           </Stack>
         </Box>

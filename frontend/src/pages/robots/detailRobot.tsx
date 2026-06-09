@@ -26,15 +26,15 @@ const DetailRobot = () => {
   }
 
   const subtitle = insertMode
-    ? 'Here you can define the detail of the Robot defined at system level. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of the Robot defined at system level. Stay hover the fields to see the description.'
+    ? 'Here you can define the details of the robot in the fleet. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the robot in the fleet. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add Robot' : 'Robot detail'}
+      title={insertMode ? 'Add Robot to Fleet' : 'Robot Fleet Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle="Return to the list of robots"
+      backTitle="Return to Robots Fleet"
     >
       {isLoading && !insertMode && <CircularProgress />}
       {data === null && <Typography>Robot with ID {id} not found</Typography>}

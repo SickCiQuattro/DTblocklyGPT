@@ -1,38 +1,62 @@
 import React, { useState } from 'react'
-import {
-  Popconfirm,
-  TableColumnsType,
-  TablePaginationConfig,
-  Space,
-  Table,
-} from 'antd'
 import { useDispatch } from 'react-redux'
-import { Button, IconButton, Stack } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
-import { EyeOutlined, PlusCircleOutlined } from '@ant-design/icons'
+import {
+  Box,
+  Button,
+  CircularProgress,
+  IconButton,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Typography,
+} from '@mui/material'
+import { Eye, Plus, CheckCircle2, XCircle, Trash2 } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
+import { ConfirmPopover } from 'components/ConfirmPopover'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
-import { iconMap } from 'utils/iconMap'
-import {
-  defaultCurrentPage,
-  defaultPageSizeSelection,
-  defaultPaginationConfig,
-} from 'utils/constants'
+import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { ObjectListType } from './types'
 
+const ColHead = ({ children }: { children: React.ReactNode }) => (
+  <TableCell
+    sx={{
+      fontSize: '0.72rem',
+      fontWeight: 700,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      color: 'text.secondary',
+      borderBottom: '1px solid',
+      borderColor: 'divider',
+      py: 1.5,
+      whiteSpace: 'nowrap',
+      fontFamily: "'Geist', 'Inter', sans-serif",
+    }}
+  >
+    {children}
+  </TableCell>
+)
+
 const ListObjects = () => {
-  const [tablePageSize, setTablePageSize] = useState(defaultPageSizeSelection)
-  const [tableCurrentPage, setTableCurrentPage] = useState(defaultCurrentPage)
+  const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
+  const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const navigate = useNavigate()
   const dispatch = useDispatch()
+
   const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
   const currentUserId =
     typeof storedUser === 'object' &&
@@ -41,8 +65,10 @@ const ListObjects = () => {
     (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
       ? String(storedUser.id)
       : null
+
   const canManageObject = (owner: ObjectListType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
+
   const { data, mutate, isLoading } = useSWR<ObjectListType[], Error>({
     url: endpoints.home.libraries.objects,
   })
@@ -56,102 +82,13 @@ const ListObjects = () => {
     void fetchApi({
       url: endpoints.home.libraries.object,
       method: MethodHTTP.DELETE,
-      body: {
-        id,
-      },
+      body: { id },
     }).then(() => {
       toast.success(MessageText.success)
       void mutate()
-      if (data?.length === 1 && tableCurrentPage > 1) {
-        setTableCurrentPage(tableCurrentPage - 1)
-      }
+      const remaining = (data?.length ?? 1) - 1
+      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
-  }
-
-  const columns: TableColumnsType<ObjectListType> = [
-    {
-      key: 'detail',
-      title: 'Detail',
-      dataIndex: 'detail',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => handleDetail(record.id)}
-          color="primary"
-          aria-label="detail"
-          disabled={!canManageObject(record.owner)}
-          title="View object details"
-        >
-          <EyeOutlined style={{ fontSize: '2em' }} />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'name',
-      title: 'Name',
-      dataIndex: 'name',
-    },
-    {
-      key: 'owner__username',
-      title: 'Owner',
-      dataIndex: 'owner__username',
-    },
-    {
-      key: 'shared',
-      title: 'Shared',
-      dataIndex: 'shared',
-      render: (shared) => {
-        if (shared > 0) {
-          return iconMap.successData
-        }
-        return iconMap.deleteCircle
-      },
-    },
-    {
-      key: 'keywords',
-      title: 'Keywords',
-      dataIndex: 'keywords',
-      render: (keywords: string[]) => {
-        if (keywords.length === 0) {
-          return <i>None</i>
-        }
-        return keywords.map((keyword) => keyword).join(', ')
-      },
-    },
-    {
-      title: 'Operations',
-      key: 'operation',
-      render: (_, record) => (
-        <Space size="middle">
-          <Popconfirm
-            title="Delete?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Ok"
-            cancelText="Cancel"
-            icon={iconMap.deleteCircle}
-          >
-            <Button
-              color="error"
-              disabled={!canManageObject(record.owner)}
-              title="Delete this object"
-            >
-              Delete
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
-  const PaginationConfig: TablePaginationConfig = {
-    pageSize: tablePageSize,
-    current: tableCurrentPage,
-    total: data?.length || 0,
-    onChange: (page: number, pageSize: number) => {
-      setTableCurrentPage(page)
-      setTablePageSize(pageSize)
-    },
-    ...defaultPaginationConfig,
   }
 
   const handleAdd = () => {
@@ -159,35 +96,145 @@ const ListObjects = () => {
     void navigate('/object/add')
   }
 
+  const rows = data ?? []
+  const paginated = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+
   return (
     <MainCard
-      title="Object list"
-      subtitle="Here you can see the list of the Objects defined."
+      title="Objects List"
+      subtitle="Here you can view and manage defined Objects."
     >
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={{ xs: 2, sm: 2, md: 2 }}
-        sx={{ mb: 2, display: 'flex', justifyContent: 'space-between' }}
+        direction="row"
+        sx={{ mb: 2.5, alignItems: 'center', justifyContent: 'space-between' }}
       >
+        <Typography variant="body2" color="text.secondary">
+          {rows.length} object{rows.length !== 1 ? 's' : ''}
+        </Typography>
         <Button
-          size="large"
-          variant="text"
+          variant="contained"
           color="primary"
+          size="medium"
+          startIcon={<Plus size={16} />}
           onClick={handleAdd}
-          startIcon={<PlusCircleOutlined />}
-          title="Add a new object"
+          sx={{
+            borderRadius: '8px',
+            fontFamily: "'Geist', 'Inter', sans-serif",
+            fontWeight: 500,
+            fontSize: '0.875rem',
+            textTransform: 'none',
+          }}
         >
-          Add
+          Add Object
         </Button>
       </Stack>
-      <Table
-        columns={columns}
-        dataSource={data || []}
-        pagination={PaginationConfig}
-        loading={isLoading}
-        rowKey="id"
-        style={{ overflowX: 'auto' }}
-      />
+
+      <Paper
+        variant="outlined"
+        sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
+      >
+        <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+          <Table size="small" aria-label="objects table">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <ColHead>Detail</ColHead>
+                <ColHead>Name</ColHead>
+                <ColHead>Owner</ColHead>
+                <ColHead>Shared</ColHead>
+                <ColHead>Keywords</ColHead>
+                <ColHead>Operations</ColHead>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                    <CircularProgress size={28} sx={{ color: 'primary.main' }} />
+                  </TableCell>
+                </TableRow>
+              ) : paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No objects found. Create your first object.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginated.map((row) => (
+                  <TableRow key={row.id} hover>
+                    <TableCell sx={{ py: 1 }}>
+                      <IconButton
+                        onClick={() => handleDetail(row.id)}
+                        color="primary"
+                        aria-label="detail"
+                        disabled={!canManageObject(row.owner)}
+                        title="View object details"
+                        size="small"
+                      >
+                        <Eye size={18} />
+                      </IconButton>
+                    </TableCell>
+                    <TableCell sx={{ py: 1, fontWeight: 500 }}>
+                      {row.name}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      {row.owner__username}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      {row.shared ? (
+                        <CheckCircle2 size={16} color="#10B981" />
+                      ) : (
+                        <XCircle size={16} color="#94A3B8" />
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      {row.keywords.length === 0 ? (
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                          None
+                        </Typography>
+                      ) : (
+                        row.keywords.join(', ')
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <ConfirmPopover
+                        title="Delete this object?"
+                        onConfirm={() => handleDelete(row.id)}
+                      >
+                        {(onOpen) => (
+                          <IconButton
+                            color="error"
+                            disabled={!canManageObject(row.owner)}
+                            title="Delete this object"
+                            onClick={onOpen}
+                            size="small"
+                          >
+                            <Trash2 size={18} />
+                          </IconButton>
+                        )}
+                      </ConfirmPopover>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25]}
+          component="div"
+          count={rows.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10))
+            setPage(0)
+          }}
+          sx={{ borderTop: '1px solid', borderColor: 'divider' }}
+        />
+      </Paper>
     </MainCard>
   )
 }

@@ -140,10 +140,13 @@ export const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
 }
 
 /** Header text displayed at the top of the picker menu for each context type. */
+// MAPPING REFERENCE:
+// - location ➔ Select Location (maps to location_block)
+// - action ➔ Select Routine (maps to action_block)
 export const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'Select Object',
-  location: 'Select Destination',
-  action: 'Select Procedure',
+  location: 'Select Location',
+  action: 'Select Routine',
   trigger: 'Select Condition',
   sequence: 'Add a step',
 }
@@ -151,11 +154,12 @@ export const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
 /** Empty-state copy shown inside the picker when no items match the search. */
 export const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'No objects available.',
-  location: 'No destinations available.',
-  action: 'No procedures available.',
+  location: 'No locations available.',
+  action: 'No routines available.',
   trigger: 'No conditions available.',
   sequence: 'No steps available.',
 }
+
 
 /**
  * Block types that are created directly without needing a data lookup.

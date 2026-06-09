@@ -20,7 +20,7 @@ interface ThemeCustomizationProps {
 
 const ThemeCustomization = ({ children }: ThemeCustomizationProps) => {
   const themePalette = Palette('light')
-  const themeTypography = Typography(`'Public Sans', sans-serif`)
+  const themeTypography = Typography("'Geist', 'Inter', 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif")
   const themeCustomShadows = useMemo(
     () => CustomShadows(themePalette),
     [themePalette],

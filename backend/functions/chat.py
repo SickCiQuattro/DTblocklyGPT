@@ -1926,11 +1926,8 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                     "description": "Natural language explanation shown to the user",
                 },
                 "task": {
-                    "type": "array",
-                    "description": "Sequence of robot steps",
-                    "items": {
-                        "$ref": "#/$defs/AbstractStep"
-                    },
+                    "type": "string",
+                    "description": "Sequence of robot steps (following the AbstractStep format from instructions). MUST BE A VALID JSON STRING OF AN ARRAY (e.g. \"[{\\\"type\\\": \\\"pick\\\", \\\"objectId\\\": 4, \\\"objectName\\\": \\\"flask\\\"}]\"). Return an empty array string \"[]\" if empty.",
                 },
                 "taskModified": {
                     "type": "boolean",
@@ -1939,70 +1936,6 @@ CHATGPT_FUNCTION_MULTIMODAL = {
             },
             "additionalProperties": False,
             "required": ["answer", "task", "taskModified"],
-            "$defs": {
-                "AbstractStep": {
-                    "type": "object",
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": [
-                                "pick",
-                                "place",
-                                "processing",
-                                "move_to",
-                                "gripper",
-                                "wait",
-                                "human_action",
-                                "notify_action",
-                                "repeat",
-                                "repeat_until",
-                                "when",
-                            ],
-                            "description": "Step type",
-                        },
-                        "seconds": {"type": "integer", "description": "Duration in seconds for wait step"},
-                        "objectId": {"type": "integer"},
-                        "objectName": {"type": "string"},
-                        "locationId": {"type": "integer"},
-                        "locationName": {"type": "string"},
-                        "actionId": {"type": "integer"},
-                        "actionName": {"type": "string"},
-                        "motionType": {"type": "string", "enum": ["LINEAR", "JOINT"]},
-                        "state": {"type": "string", "enum": ["OPEN", "CLOSE"]},
-                        "description": {"type": "string", "description": "Message for human interaction"},
-                        "times": {"type": "integer"},
-                        "condition": CONDITION_SCHEMA,
-                        "confirmEvent": {
-                            **CONDITION_SCHEMA,
-                            "description": "Event required to resume from human action"
-                        },
-                        "do": {
-                            "type": "array",
-                            "description": "Steps to execute",
-                            "items": {
-                                "$ref": "#/$defs/SimpleStep"
-                            }
-                        },
-                        "otherwise": {
-                            "type": "array",
-                            "description": "Steps to execute when condition is not met",
-                            "items": {
-                                "$ref": "#/$defs/SimpleStep"
-                            }
-                        },
-                        "steps": {
-                            "type": "array",
-                            "description": "Steps for repeat loop",
-                            "items": {
-                                "$ref": "#/$defs/SimpleStep"
-                            }
-                        }
-                    },
-                    "required": ["type"],
-                },
-                "SimpleStep": SIMPLE_STEP_SCHEMA
-            },
-            "strict": False,
         },
     },
 }
@@ -2133,7 +2066,14 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     )
                     response_json = llm_response.raw_arguments
                     answer = response_json.get("answer", "").strip()
-                    llm_task = response_json.get("task", [])
+                    llm_task_raw = response_json.get("task", "[]")
+                    if isinstance(llm_task_raw, str):
+                        try:
+                            llm_task = json.loads(llm_task_raw)
+                        except Exception:
+                            llm_task = []
+                    else:
+                        llm_task = llm_task_raw or []
 
                     if answer:
                         break
@@ -2408,5 +2348,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
         else:
             return unauthorized_request()
     except Exception as e:
-        print(e)
-        return error_response(CHATGPT_ERROR)
+        print("Exception in new_message_multimodal:", e)
+        import traceback
+        traceback.print_exc()
+        return error_response(f"Server error: {str(e)}")

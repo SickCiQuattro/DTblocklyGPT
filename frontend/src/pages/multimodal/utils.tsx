@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
-import { SystemMessage } from 'react-chat-elements'
+import { SystemMessage, MessageBox } from 'react-chat-elements'
+import { useTheme } from '@mui/material'
 
 import { formatTimeFrontend } from 'utils/date'
 import { AbstractStep } from 'pages/tasks/types'
@@ -77,6 +78,14 @@ export const InitialSystemMessage = () => {
 }
 
 export const TypingSystemMessage = () => {
+  const theme = useTheme()
+  const successColor =
+    (
+      theme.palette.success as typeof theme.palette.success & {
+        lighter?: string
+      }
+    ).lighter || theme.palette.success.light
+  const [messageDate] = useState(() => dayjs().toDate())
   const [dotsCount, setDotsCount] = useState(0)
 
   useEffect(() => {
@@ -90,22 +99,29 @@ export const TypingSystemMessage = () => {
   const typingText = `Robot is typing${'.'.repeat(dotsCount)}`
 
   return (
-    <SystemMessage
-      text={typingText}
-      id={-3}
-      position="center"
+    <MessageBox
+      position="left"
+      title="Robot"
       type="text"
-      title="System message"
+      text={typingText}
+      date={messageDate}
+      dateString={formatTimeFrontend(dayjs().toString()) || ''}
+      id={-3}
       focus={false}
-      date={dayjs().toDate()}
+      titleColor={theme.palette.success.main}
       forwarded={false}
-      titleColor="black"
       replyButton={false}
       removeButton={false}
+      notch
       retracted={false}
       status="sent"
-      notch={false}
-      className="msg-is-typing"
+      avatar="/pages/robot.png"
+      styles={{
+        backgroundColor: successColor,
+      }}
+      notchStyle={{
+        fill: successColor,
+      }}
     />
   )
 }

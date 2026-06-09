@@ -18,9 +18,8 @@
 
 .msg-is-typing {
     font-style: italic;
-  }
+}
 
-  .msg-is-typing .rce-smsg {
-    width: 140px;
-    align-items: flex-start;
-  }
+.msg-is-typing .rce-smsg-text {
+    color: #047857 !important;
+}

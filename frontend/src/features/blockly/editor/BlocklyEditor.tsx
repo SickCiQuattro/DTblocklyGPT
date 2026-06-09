@@ -44,7 +44,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
 
@@ -397,7 +397,7 @@ interface BlocklyEditorProps {
   editMode?: boolean
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
-  onTaskStructureChange?: (task: AbstractStep[] | null) => void
+  onTaskStructureChange?: (task: import('pages/tasks/types').ASTBranch[] | null) => void
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
   blockViewMode?: BlockViewMode
   deleteConfirmMode?: DeleteConfirmMode
@@ -1025,11 +1025,7 @@ export const BlocklyEditor = ({
         if (STRUCTURE_CHANGING_TYPES.has(event.type)) {
           if (onTaskStructureChangeRef.current) {
             const structure = getBlocklyStructure()
-            const mainBlock = Array.isArray(structure)
-              ? structure.find((b: any) => b.type === 'when_start') ||
-                structure[0]
-              : structure
-            const abstract = blocklyToAbstract(mainBlock as CustomBlock | null)
+            const abstract = blocklyToAbstractAll(structure as CustomBlock[] | null)
             onTaskStructureChangeRef.current(abstract)
           }
         }

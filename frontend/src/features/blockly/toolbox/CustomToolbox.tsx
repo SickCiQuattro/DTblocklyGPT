@@ -187,7 +187,10 @@ const BlockPill: React.FC<{
   >
     <div
       className="toolbox-pill"
-      style={{ backgroundColor: item.colour }}
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderLeft: `3px solid ${item.colour}`,
+      }}
       onPointerDown={(e) => onPointerDown(e, item)}
       aria-label={item.label}
     >
@@ -204,6 +207,9 @@ interface CategoryTabDefinition {
   blockTypes: string[]
 }
 
+// MAPPING REFERENCE:
+// - key: 'positions' ➔ User-facing label: 'Locations' (maps to location_block)
+// - key: 'actions' ➔ User-facing label: 'Routines' (maps to action_block)
 const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   {
     key: 'objects',
@@ -212,15 +218,16 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   },
   {
     key: 'positions',
-    label: 'Destinations',
+    label: 'Locations',
     blockTypes: ['location_block'],
   },
   {
     key: 'actions',
-    label: 'Procedures',
+    label: 'Routines',
     blockTypes: ['action_block'],
   },
 ]
+
 
 const CategoryPanel: React.FC<{
   category: ToolboxCategory

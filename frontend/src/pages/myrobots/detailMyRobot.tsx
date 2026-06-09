@@ -42,15 +42,15 @@ const DetailMyRobot = () => {
   const data = dataRobots && dataMyRobot
 
   const subtitle = insertMode
-    ? 'Here you can define the detail of your personal Robot. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of your personal Robot. Stay hover the fields to see the description.'
+    ? 'Here you can define the details of your personal robot. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of your personal robot. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add My Robot' : 'My Robot detail'}
+      title={insertMode ? 'Add My Robot' : 'My Robot Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle="Return to the list of my robots"
+      backTitle="Return to My Robot"
     >
       {isLoading && !insertMode && <CircularProgress />}
       {data === null && (

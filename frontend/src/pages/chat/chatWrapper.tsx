@@ -23,7 +23,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { resetTask, updateTask } from 'store/reducers/task'
 import { setProposedTask, clearProposedTask } from 'store/reducers/proposal'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 
 import {
   CHATGPT_ERROR,
@@ -226,16 +226,14 @@ export const ChatWrapper = ({
               },
             }).then((res) => {
               const { taskCode } = res
-              const abstractTaskCode = blocklyToAbstract(
-                taskCode as CustomBlock,
-              )
+              // Removed abstractTaskCode as it's no longer needed
 
               void fetchApi({
                 url: endpoints.graphic.saveGraphicTask,
                 method: MethodHTTP.PUT,
                 body: {
                   id: Number(id),
-                  taskStructure: abstractTaskCode,
+                  taskStructure: taskCode,
                 },
               }).then(() => {
                 scrollToBottom()

@@ -130,9 +130,12 @@ export const buildSequencePickerItems = (
     },
     {
       id: -2,
-      name: 'Perform',
-      description: 'Execute a pre-configured procedure',
-      keywords: ['perform', 'procedure', 'execute', 'skill'],
+      // MAPPING REFERENCE:
+      // - User-facing block name: 'Run' (renamed from 'Perform' to align with Run Routines)
+      // - Internally creates a 'processing_block' (which maps to /actions DB records)
+      name: 'Run',
+      description: 'Run a pre-configured routine',
+      keywords: ['run', 'routine', 'execute', 'perform', 'skill'],
       blockType: 'processing_block',
       group: 'Robot Actions',
     },
@@ -237,7 +240,9 @@ export const buildSequencePickerItems = (
       description: macro.description?.trim() || undefined,
       keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
       blockType: 'macro_task_block' as const,
-      group: 'My Tasks',
+      // MAPPING REFERENCE:
+      // - Category key: 'macro-tasks' ➔ User-facing picker group: 'Saved Tasks'
+      group: 'Saved Tasks',
       // Signal to the picker UI that this item has a stable published workspace.
       isMacroReady: true,
     }))
@@ -257,7 +262,9 @@ export const buildSequencePickerItems = (
  */
 export const buildShadowPickerItems = (
   entities: ShadowEntitySource[],
-  fallbackPrefix: 'Object' | 'Location' | 'Action',
+  // MAPPING REFERENCE:
+  // - fallbackPrefix: 'Routine' (user-facing) maps internally to ActionListType (dataActions)
+  fallbackPrefix: 'Object' | 'Location' | 'Routine',
   group: string,
 ): ShadowPickerItem[] =>
   entities.map((entity) => ({
@@ -385,8 +392,8 @@ export const getBlockInputState = (
 export const getDotColour = (group: string): string => {
   switch (group) {
     case 'Objects':
-    case 'Destinations':
-    case 'Procedures':
+    case 'Locations':
+    case 'Routines':
       return blocksColours.objectsPositions
     case 'Conditions':
     case 'Logic':
@@ -397,7 +404,7 @@ export const getDotColour = (group: string): string => {
       return blocksColours.humanActions
     case 'Task Flow':
       return blocksColours.logicControl
-    case 'My Tasks':
+    case 'Saved Tasks':
       return blocksColours.macroTasks
     default:
       return '#94A3B8'

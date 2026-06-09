@@ -109,6 +109,11 @@ export type AbstractTask = {
   robot?: AbstractRobot
 }
 
+export type ASTBranch = {
+  isMain: boolean
+  steps: AbstractStep[]
+}
+
 export type AbstractStep =
   | AbstractPickStep
   | AbstractPlaceStep
@@ -123,6 +128,13 @@ export type AbstractStep =
   | AbstractNotifyActionStep
   | AbstractRepeatUntilStep
   | AbstractWaitStep
+  | AbstractMacroTaskStep
+
+export type AbstractMacroTaskStep = {
+  type: 'macro_task'
+  macroId: number | string | null
+  macroName: string
+}
 
 export type AbstractWaitStep = {
   type: 'wait'

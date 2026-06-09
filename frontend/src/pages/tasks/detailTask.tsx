@@ -32,19 +32,19 @@ const DetailTask = () => {
 
   const titleNewTask =
     type === TypeNewTask.CHAT
-      ? 'New task with chat'
-      : 'New task with graphic interface'
+      ? 'New Task with Chat'
+      : 'New Task with Graphic Interface'
 
   const subtitle = insertMode
-    ? 'Here you can define a new task. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of the task. Stay hover the fields to see the description.'
+    ? 'Here you can define a new task. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the task. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={!insertMode ? 'Task detail' : titleNewTask}
+      title={!insertMode ? 'Task Detail' : titleNewTask}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle="Return to the list of tasks"
+      backTitle="Return to Tasks"
     >
       {isLoading && !insertMode && <CircularProgress />}
       {data === null && <Typography>Task with ID {id} not found</Typography>}

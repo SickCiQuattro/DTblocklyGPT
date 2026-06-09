@@ -22,7 +22,7 @@ import { AbstractStep, TaskType, TaskDetailType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import {
   abstractToBlockly,
-  blocklyToAbstract,
+  blocklyToAbstractAll,
   CustomBlock,
 } from 'utils/blocklyParser'
 import { Palette } from 'themes/palette'
@@ -66,7 +66,7 @@ export const SplittedLayout = ({
 }: SplittedLayoutProps) => {
   const isBigScreen = useMediaQuery('(min-width: 1700px)')
   const height = isBigScreen ? '70vh' : '60vh'
-  const [taskStructure, setTaskStructure] = useState<AbstractStep[] | null>(
+  const [taskStructure, setTaskStructure] = useState<any[]>(
     abstractTask,
   )
   const [editingMode, setEditingMode] = useState<boolean>(true)
@@ -98,14 +98,9 @@ export const SplittedLayout = ({
     browserSupportsSpeechRecognition,
     isMicrophoneAvailable,
   } = useSpeechRecognition()
-
   const handleSave = () => {
     const blocklyTaskStructure = getBlocklyStructure()
-    const mainBlock = Array.isArray(blocklyTaskStructure)
-      ? blocklyTaskStructure.find((b: any) => b.type === 'when_start') ||
-        blocklyTaskStructure[0]
-      : blocklyTaskStructure
-    const abstractTask = blocklyToAbstract(mainBlock as CustomBlock)
+    const abstractTask = blocklyToAbstractAll(blocklyTaskStructure as CustomBlock[] | null)
 
     void fetchApi({
       url: endpoints.graphic.saveGraphicTask,
@@ -436,7 +431,7 @@ export const SplittedLayout = ({
             setNewChatResponse(false)
             setPendingChatTask(null)
           }}
-          onTaskStructureChange={setTaskStructure}
+          onTaskStructureChange={(newStruct) => setTaskStructure(newStruct || [])}
           blockViewMode={viewSettings.blockViewMode}
           deleteConfirmMode={viewSettings.deleteConfirmMode}
           showStartBlock={viewSettings.showStartBlock}
@@ -448,7 +443,6 @@ export const SplittedLayout = ({
           <div style={{ width: '33.33%', marginRight: '1rem', marginLeft: '1rem' }}>
             <DigitalTwinPanel
               taskId={id || ''}
-              onClose={() => setSimOpen(false)}
             />
           </div>
         )}

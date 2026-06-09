@@ -349,7 +349,7 @@ export const FormObject = ({
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.robot && errors.robot)}
-                    title="Robot use to acquire height and photo"
+                    title="Robot used to acquire height and photo"
                   >
                     {dataMyRobots?.map((myRobot) => (
                       <MenuItem value={myRobot.id} key={myRobot.id}>

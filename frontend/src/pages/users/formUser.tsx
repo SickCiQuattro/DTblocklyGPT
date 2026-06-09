@@ -117,7 +117,7 @@ export const FormUser = ({
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.username && errors.username)}
-                  title="Username of the user"
+                  title="Username of the user account"
                 />
                 {touched.username && errors.username && (
                   <FormHelperText error id="helper-text-username">
@@ -136,7 +136,7 @@ export const FormUser = ({
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.email && errors.email)}
-                  title="Email of the user"
+                  title="Email of the user account"
                 />
                 {touched.email && errors.email && (
                   <FormHelperText error id="helper-text-email">
@@ -154,7 +154,7 @@ export const FormUser = ({
                   label="First name"
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  title="First name of the user"
+                  title="First name of the user account"
                 />
               </Stack>
             </Grid>
@@ -167,7 +167,7 @@ export const FormUser = ({
                   label="Last name"
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  title="Last name of the user"
+                  title="Last name of the user account"
                 />
               </Stack>
             </Grid>
@@ -184,7 +184,7 @@ export const FormUser = ({
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.role && errors.role)}
-                    title="Select the role of the user. Manager can also create and edit users and robots at system level"
+                    title="Select the role of the user account. Managers can also create and edit user accounts and robots in the fleet"
                   >
                     {dataRoles?.map((role) => (
                       <MenuItem value={role.id} key={role.id}>
@@ -209,7 +209,7 @@ export const FormUser = ({
                 type="submit"
                 variant="contained"
                 color="primary"
-                title="Save this user"
+                title="Save user account"
               >
                 Save
               </Button>

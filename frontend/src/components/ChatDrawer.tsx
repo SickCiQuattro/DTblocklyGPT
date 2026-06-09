@@ -569,6 +569,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
         isMicrophoneAvailable={isMicrophoneAvailable}
         onMessageSend={onMessageSend}
+        speaker={speaker}
+        setSpeaker={setSpeaker}
       />
     </Box>
   );

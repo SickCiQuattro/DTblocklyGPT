@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, TextField, IconButton, Stack } from '@mui/material';
-import { Send, Mic, Square } from 'lucide-react';
+import { Send, Mic, Square, Volume2, VolumeX } from 'lucide-react';
 import SpeechRecognition from 'react-speech-recognition';
 import { formatTimeFrontend } from 'utils/date';
 import dayjs from 'dayjs';
@@ -23,6 +23,8 @@ interface ChatComposerProps {
   browserSupportsSpeechRecognition: boolean;
   isMicrophoneAvailable: boolean;
   onMessageSend: () => void;
+  speaker: boolean;
+  setSpeaker: (speaker: boolean) => void;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -36,6 +38,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   browserSupportsSpeechRecognition,
   isMicrophoneAvailable,
   onMessageSend,
+  speaker,
+  setSpeaker,
 }) => {
   const startRecording = () => {
     SpeechRecognition.startListening({
@@ -148,6 +152,25 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           sx={{ flex: 1 }}
         />
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', marginBottom: '2px' }}>
+          <IconButton
+            onClick={() => setSpeaker(!speaker)}
+            className="premium-btn"
+            style={{
+              background: speaker ? 'rgba(16, 185, 129, 0.1)' : 'rgba(0, 0, 0, 0.04)',
+              width: '38px',
+              height: '38px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title={speaker ? "Mute Speaker" : "Unmute Speaker"}
+          >
+            {speaker ? (
+              <Volume2 size={16} style={{ color: '#10b981' }} />
+            ) : (
+              <VolumeX size={16} style={{ color: 'rgba(0, 0, 0, 0.4)' }} />
+            )}
+          </IconButton>
           {!message && !isRecording && (
             <IconButton
               onClick={startRecording}

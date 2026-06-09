@@ -15,7 +15,7 @@ import {
   TaskDetailType,
   TaskType,
 } from 'pages/tasks/types'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 
 import { SplittedLayout } from './splittedLayout'
 
@@ -118,14 +118,11 @@ const Multimodal = () => {
     parsedTaskCode === null
       ? []
       : isBlockStateArray(parsedTaskCode)
-        ? (() => {
-            const mainBlock = parsedTaskCode.find((b: any) => b.type === 'when_start') || parsedTaskCode[0]
-            return blocklyToAbstract(mainBlock as CustomBlock) ?? []
-          })()
+        ? (blocklyToAbstractAll(parsedTaskCode as CustomBlock[] | null).find(b => b.isMain)?.steps ?? [])
         : Array.isArray(parsedTaskCode)
           ? (parsedTaskCode as AbstractStep[])
           : isBlockState(parsedTaskCode)
-            ? (blocklyToAbstract(parsedTaskCode) ?? [])
+            ? (blocklyToAbstractAll(parsedTaskCode as CustomBlock | null).find(b => b.isMain)?.steps ?? [])
             : []
 
   useEffect(() => {

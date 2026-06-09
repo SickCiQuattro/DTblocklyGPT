@@ -36,12 +36,12 @@ export const RightPanel = ({ taskStructure }: RightPanelProps) => {
           <b>Place</b>: use an already defined <b>location</b>.
         </li>
         <li>
-          <b>Processing</b> (optional): use an already defined <b>action</b>.
+          <b>Processing</b> (optional): use an already defined <b>routine</b>.
         </li>
       </ol>
       <p>
         It is possible to specify the number of times to repeat the
-        pick-and-place (and processing) or to perform it only if a certain
+        pick-and-place (and processing) or to run it only if a certain
         object is found or a signal is received from a sensor or from the human.
       </p>
       <p>Other useful information:</p>

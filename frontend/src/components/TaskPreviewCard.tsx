@@ -44,7 +44,9 @@ const buildTreeNodes = (
         icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
         break;
       case 'processing':
-        title = `Perform: ${getNameFromId((step as any).actionId, dataActions)}`;
+        // MAPPING REFERENCE:
+        // - step type: 'processing' ➔ User-facing title prefix: 'Run' (renamed from 'Perform')
+        title = `Run: ${getNameFromId((step as any).actionId, dataActions)}`;
         icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />;
         break;
       case 'move_to':
