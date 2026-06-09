@@ -33,6 +33,9 @@ pytz = "^2026.1.post1"
 pywin32 = {version = "^311", markers = "sys_platform == 'win32'"}
 rapidfuzz = "^3.13.0"
 pydantic-core = "^2.45.0"
+hand-gesture-engine = "^0.1.1"
+ultralytics = "^8.4.62"
+pyyaml = "^6.0.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^26.3.1"
