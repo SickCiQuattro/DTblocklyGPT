@@ -27,7 +27,7 @@ numpy = "^2.3.1"
 openai = "^2.31.0"
 opencv-python = "^4.11.0.86"
 pillow = "^12.2.0"
-python = ">=3.12,<3.15"
+python = ">=3.12,<3.14"
 python-dotenv = "^1.1.0"
 pytz = "^2026.1.post1"
 pywin32 = {version = "^311", markers = "sys_platform == 'win32'"}
@@ -36,6 +36,8 @@ pydantic-core = "^2.45.0"
 hand-gesture-engine = "^0.1.1"
 ultralytics = "^8.4.62"
 pyyaml = "^6.0.3"
+torchvision = "^0.27.0"
+mediapipe = "0.10.14"
 
 [tool.poetry.group.dev.dependencies]
 black = "^26.3.1"

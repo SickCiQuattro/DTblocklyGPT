@@ -144,18 +144,20 @@ poetry run poetryup
 To launch the application, you need to open multiple terminals and execute commands in the sequence indicated below.
 
 ## 1. Frontend
-  Open a Powershell terminal, navigate to the project directory `frontend\src\`, and install the dependencies:
+  Open a terminal, navigate to the **project root directory** `DTblocklyGPT/`, and install the dependencies:
   ```bash
-  npm install
+  npm install --legacy-peer-deps
   ```
-  Then, move to the main directory `DTblocklyGPT\` and activate the Poetry environment:
+  *(Note: The `--legacy-peer-deps` flag is required due to ESLint/React peer dependency conflicts).*
+
+  Then, activate the Poetry environment:
   ```bash
   poetry env activate
   ```
-  Run the `.ps1` script path returned by the previous command to activate the environment (for example: `C:\Users\repos\AppData\Local\pypoetry\Cache\virtualenvs\blocklygpt-qMnQLS6V-py3.11\Scripts\activate.ps1`).
+  On Windows, run the `.ps1` script path returned by the previous command to activate the environment. On Linux/WSL, you can use `poetry shell`.
 
   Start the frontend:
-   ```bash
+  ```bash
   npm start
   ```
 
@@ -189,9 +191,10 @@ Navigate to the directory `DTblocklyGPT/ros2_ws/` and activate the Python enviro
 ```bash
   source .venv/bin/activate
 ```
+*(Note: If you run nodes that require external Python packages like `hand-gesture-engine` or `ultralytics`—specifically the `vision_node`—it is recommended to run them within the Poetry environment using `poetry run ros2 run ...` as detailed below, or install those dependencies inside this `.venv` using `pip install`).*
 
 ### Project Build
-If this is your first time running the program or you have made changes to the ROS part, build the project with:
+If this is your first time running the program or you have made changes to the ROS part, build the project. The workspace already includes source directories for custom streaming dependencies (`async_web_server_cpp` and `web_video_server`) in `ros2_ws/src/`, which will be built automatically:
 ```bash
   colcon build
 ```
@@ -206,8 +209,11 @@ Source the workspace environment to load local packages:
 ### Launch the node (*finally...*)
 In each configured terminal, launch a node following the order above with the command:
 ```bash
-  #  Replace "ros_node" with the actual node name
-  ros2 run cobotta_rest_api "ros_node"
+  # Standard nodes
+  ros2 run cobotta_rest_api <ros_node>
+  
+  # For the vision_node (which requires custom Python modules):
+  poetry run ros2 run cobotta_rest_api vision_node
 ```
 
 
