@@ -116,10 +116,12 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'processing_block',
-        label: 'Perform', // Process -> Execute Skill -> Perform
+        // MAPPING REFERENCE:
+        // - Block type: 'processing_block' ➔ User-facing pill label: 'Run' (renamed from 'Perform')
+        label: 'Run',
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
-        inputs: 'Procedure to perform',
+        inputs: 'Routine to run',
         outputs: 'None',
       },
       {
@@ -181,7 +183,9 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'objects-positions',
-    name: 'My Workspace', // Renamed from "Objects & Positions" // Variables & Entities
+    // MAPPING REFERENCE:
+    // - Category key: 'objects-positions' ➔ User-facing accordion name: 'Twin Library'
+    name: 'Twin Library',
     colour: blocksColours.objectsPositions,
     blocks: [
       // Dynamic blocks — pills are generated from props (dataObjects, dataLocations, dataActions).
@@ -194,13 +198,17 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'location_block',
-        label: 'Destinations', // Location
+        // MAPPING REFERENCE:
+        // - Block type: 'location_block' ➔ User-facing label: 'Locations' (maps to spatial destinations)
+        label: 'Locations',
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
       {
         type: 'action_block',
-        label: 'Procedures', // Action ->  Skill
+        // MAPPING REFERENCE:
+        // - Block type: 'action_block' ➔ User-facing label: 'Routines' (replaces Procedures/Actions)
+        label: 'Routines',
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
@@ -277,12 +285,16 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'macro-tasks',
-    name: 'My Tasks', // Macro-tasks -> saved Routines
+    // MAPPING REFERENCE:
+    // - Category key: 'macro-tasks' ➔ User-facing accordion name: 'Saved Tasks' (corresponds to nested task workflows)
+    name: 'Saved Tasks',
     colour: blocksColours.macroTasks,
     blocks: [
       {
         type: 'macro_task_block',
-        label: 'My Task', // Macro
+        // MAPPING REFERENCE:
+        // - Block type: 'macro_task_block' ➔ User-facing label: 'Saved Task'
+        label: 'Saved Task',
         colour: blocksColours.macroTasks,
         dynamic: true,
       },

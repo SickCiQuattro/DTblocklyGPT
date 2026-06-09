@@ -307,7 +307,7 @@ export const FormLocation = ({
                       void setFieldValue('position', '')
                     }}
                     error={Boolean(touched.robot && errors.robot)}
-                    title="Robot use to acquire position and photo"
+                    title="Robot used to acquire position and photo"
                   >
                     {dataMyRobots?.map((myRobot) => (
                       <MenuItem value={myRobot.id} key={myRobot.id}>

@@ -290,7 +290,7 @@ export const FormRobot = ({
               </Stack>
             </Grid>
             <Grid size={12}>
-              <Divider textAlign="left">Techical details</Divider>
+              <Divider textAlign="left">Technical details</Divider>
             </Grid>
             <Grid size={2}>
               <Stack spacing={1}>

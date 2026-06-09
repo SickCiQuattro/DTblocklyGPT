@@ -1,123 +1,89 @@
-import { PalettesProps } from '@ant-design/colors'
-import { ThemeConfig } from 'antd'
+// DTblocklyGPT Design System v1.0 — MUI Theme Tokens
+// Primary: Indigo #6366F1 | Font: Geist → Inter → General Sans
+// Light-mode default. Dark mode: border token rgba(99,102,241,0.20).
 
-export const Theme = (colors: PalettesProps) => {
-  const { blue, red, gold, cyan, green, grey } = colors
-  const greyColors = {
-    0: grey[0],
-    50: grey[1],
-    100: grey[2],
-    200: grey[3],
-    300: grey[4],
-    400: grey[5],
-    500: grey[6],
-    600: grey[7],
-    700: grey[8],
-    800: grey[9],
-    900: grey[10],
-    A50: grey[15],
-    A100: grey[11],
-    A200: grey[12],
-    A400: grey[13],
-    A700: grey[14],
-    A800: grey[16],
-  }
-  const contrastText = '#fff'
+export const Theme = () => {
+  const greyPrimary = [
+    '#ffffff', // 0
+    '#fafafa', // 50
+    '#f5f5f5', // 100
+    '#f0f0f0', // 200
+    '#d9d9d9', // 300
+    '#bfbfbf', // 400
+    '#8c8c8c', // 500
+    '#595959', // 600
+    '#262626', // 700
+    '#141414', // 800
+    '#000000', // 900
+  ]
+  const greyAscent = ['#fafafa', '#bfbfbf', '#434343', '#1f1f1f']
+  const greyConstant = ['#fafafb', '#e6ebf1']
+
+  const grey = [...greyPrimary, ...greyAscent, ...greyConstant]
 
   return {
     primary: {
-      lighter: blue[0],
-      100: blue[1],
-      200: blue[2],
-      light: blue[3],
-      400: blue[4],
-      main: blue[5],
-      dark: blue[6],
-      700: blue[7],
-      darker: blue[8],
-      900: blue[9],
-      contrastText,
+      lighter: 'hsl(239, 84%, 95%)', // #eef2ff
+      100: 'hsl(239, 84%, 90%)',
+      200: 'hsl(239, 84%, 85%)', // #c7d2fe
+      light: 'hsl(239, 84%, 75%)',
+      400: '#818CF8', // Indigo 400
+      main: '#6366F1', // Indigo 500 — brand accent
+      dark: '#4F46E5', // Indigo 600
+      700: '#4338CA', // Indigo 700
+      darker: '#3730A3', // Indigo 800
+      900: '#312E81', // Indigo 900
+      contrastText: '#FFFFFF',
     },
     secondary: {
-      lighter: greyColors[100],
-      100: greyColors[100],
-      200: greyColors[200],
-      light: greyColors[300],
-      400: greyColors[400],
-      main: greyColors[500],
-      600: greyColors[600],
-      dark: greyColors[700],
-      800: greyColors[800],
-      darker: greyColors[900],
-      A100: greyColors[0],
-      A200: greyColors.A400,
-      A300: greyColors.A700,
-      contrastText: greyColors[0],
+      lighter: grey[1],
+      100: grey[2],
+      200: grey[3],
+      light: grey[4],
+      400: grey[5],
+      main: grey[6],
+      600: grey[7],
+      dark: grey[8],
+      800: grey[9],
+      darker: grey[10],
+      A50: grey[11],
+      A100: grey[0],
+      A200: grey[13],
+      A300: grey[14],
+      contrastText: grey[0],
     },
     error: {
-      lighter: red[0],
-      light: red[2],
-      main: red[4],
-      dark: red[7],
-      darker: red[9],
-      contrastText,
+      lighter: '#fde8e8',
+      light: '#F87171',
+      main: '#EF4444',
+      dark: '#DC2626',
+      darker: '#B91C1C',
+      contrastText: '#FFFFFF',
     },
     warning: {
-      lighter: gold[0],
-      light: gold[3],
-      main: gold[5],
-      dark: gold[7],
-      darker: gold[9],
-      contrastText: greyColors[100],
+      lighter: '#fef3c7',
+      light: '#FCD34D',
+      main: '#F59E0B',
+      dark: '#D97706',
+      darker: '#B45309',
+      contrastText: '#FFFFFF',
     },
     info: {
-      lighter: cyan[0],
-      light: cyan[3],
-      main: cyan[5],
-      dark: cyan[7],
-      darker: cyan[9],
-      contrastText,
+      lighter: '#e0f2fe',
+      light: '#38BDF8',
+      main: '#0EA5E9',
+      dark: '#0284C7',
+      darker: '#0369A1',
+      contrastText: '#FFFFFF',
     },
     success: {
-      lighter: green[0],
-      light: green[3],
-      main: green[5],
-      dark: green[7],
-      darker: green[9],
-      contrastText,
+      lighter: '#d1fae5',
+      light: '#34D399',
+      main: '#10B981',
+      dark: '#059669',
+      darker: '#047857',
+      contrastText: '#FFFFFF',
     },
-    grey: greyColors,
+    grey,
   }
-}
-
-export const backgroundForm = '#f2fafd'
-
-export const antdTheme: ThemeConfig = {
-  token: {
-    colorPrimary: '#4f46e5', // Sleek premium Indigo
-    colorSuccess: '#10b981', // Emerald green
-    colorWarning: '#f59e0b', // Amber
-    colorError: '#ef4444', // Coral red
-    borderRadius: 16,
-    fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  },
-  components: {
-    Collapse: {
-      colorBgContainer: 'rgba(255, 255, 255, 0.4)',
-      borderRadiusLG: 16,
-    },
-    Card: {
-      colorBgContainer: 'rgba(255, 255, 255, 0.15)',
-      borderRadiusLG: 16,
-    },
-    Button: {
-      borderRadius: 10,
-      controlHeight: 38,
-      fontWeight: 500,
-    },
-    Input: {
-      borderRadius: 10,
-      controlHeight: 38,
-    },
-  },
 }

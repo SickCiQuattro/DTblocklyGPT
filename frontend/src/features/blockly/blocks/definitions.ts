@@ -28,6 +28,7 @@ import {
   MAP_PIN_ICON_URI,
   SCAN_EYE_ICON_URI,
   TAG_ICON_URI,
+  BOX_ICON_URI,
   WRENCH_ICON_URI,
   WORKFLOW_ICON_URI,
   USER_ICON_URI,
@@ -54,7 +55,9 @@ Blockly.defineBlocksWithJsonArray([
     type: 'object_block',
     message0: '%1 %2',
     args0: [
-      iconConfig(TAG_ICON_URI, 'OBJECT:'),
+      // MAPPING REFERENCE:
+      // - Block type: 'object_block' ➔ Displays user-facing Box icon to match Sidebar Objects
+      iconConfig(BOX_ICON_URI, 'OBJECT:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'object_block',
@@ -65,7 +68,9 @@ Blockly.defineBlocksWithJsonArray([
     type: 'location_block',
     message0: '%1 %2',
     args0: [
-      iconConfig(MAP_PIN_ICON_URI, 'DESTINATION:'),
+      // MAPPING REFERENCE:
+      // - Block type: 'location_block' ➔ Displays user-facing prefix 'LOCATION:'
+      iconConfig(MAP_PIN_ICON_URI, 'LOCATION:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'location_block',
@@ -76,7 +81,9 @@ Blockly.defineBlocksWithJsonArray([
     type: 'action_block',
     message0: '%1 %2',
     args0: [
-      iconConfig(WRENCH_ICON_URI, 'PROCEDURE:'),
+      // MAPPING REFERENCE:
+      // - Block type: 'action_block' ➔ Displays user-facing prefix 'ROUTINE:' (replaces PROCEDURE)
+      iconConfig(WRENCH_ICON_URI, 'ROUTINE:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'action_block',
@@ -201,7 +208,9 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'processing_block',
-    message0: '%1 Perform %2',
+    // MAPPING REFERENCE:
+    // - Block type: 'processing_block' ➔ Displays user-facing label 'Run [Routine]' (renamed from 'Perform')
+    message0: '%1 Run %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'ACTION', check: 'action_block' },
@@ -624,12 +633,14 @@ Blockly.defineBlocksWithJsonArray([
   createShadowEntityBlock(
     'shadow_location_block',
     'location_block',
-    'Select Destination',
+    // MAPPING REFERENCE: shadow placeholder for location_block ➔ Select Location
+    'Select Location',
   ),
   createShadowEntityBlock(
     'shadow_action_block',
     'action_block',
-    'Select Procedure',
+    // MAPPING REFERENCE: shadow placeholder for action_block ➔ Select Routine
+    'Select Routine',
   ),
   createShadowTriggerBlock(),
   createShadowSequenceBlock(),

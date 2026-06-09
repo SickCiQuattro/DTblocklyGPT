@@ -236,10 +236,17 @@ export const RightPanel = ({
           Edit
         </Button>
       )}
-
       {editMode && renderEditActions()}
-
-      <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.25rem', color: theme.palette.text.primary, marginTop: '1rem' }}>
+      <h2
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '1.25rem',
+          color: theme.palette.text.primary,
+          marginTop: '1rem',
+        }}
+      >
         <HelpCircle size={20} /> Instructions &amp; FAQ
       </h2>
       <p>In this graphic interface you can edit your task.</p>
@@ -257,15 +264,26 @@ export const RightPanel = ({
           All changes will be lost if you exit without clicking the <i>Save</i>{' '}
           button.
         </li>
-      </ul>      <Divider sx={{ my: 2 }} />
-
+      </ul>{' '}
+      <Divider sx={{ my: 2 }} />
       <Accordion defaultExpanded sx={{ mt: '1rem', mr: '1rem' }}>
         <AccordionSummary expandIcon={<ChevronDown size={16} />}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: '100%',
+              pr: 2,
+            }}
+          >
             <Typography variant="body2" sx={{ fontWeight: 500 }}>
               Task JSON
             </Typography>
-            <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', gap: 1 }}>
+            <Box
+              onClick={(e) => e.stopPropagation()}
+              sx={{ display: 'flex', gap: 1 }}
+            >
               <IconButton
                 size="small"
                 onClick={(e) => {

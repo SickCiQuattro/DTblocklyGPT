@@ -21,11 +21,14 @@ export const proposalSlice = createSlice({
   name: 'proposal',
   initialState,
   reducers: {
-    setProposedTask(state, action: PayloadAction<{
-      proposedTask: any[] | null,
-      validationWarnings: string[],
-      answer: string
-    }>) {
+    setProposedTask(
+      state,
+      action: PayloadAction<{
+        proposedTask: any[] | null
+        validationWarnings: string[]
+        answer: string
+      }>,
+    ) {
       state.proposedTask = action.payload.proposedTask
       state.validationWarnings = action.payload.validationWarnings
       state.answer = action.payload.answer
@@ -34,8 +37,8 @@ export const proposalSlice = createSlice({
       state.proposedTask = null
       state.validationWarnings = []
       state.answer = ''
-    }
-  }
+    },
+  },
 })
 
 export const { setProposedTask, clearProposedTask } = proposalSlice.actions

@@ -5,7 +5,6 @@ import { define } from './define'
 import { libraries } from './libraries'
 import { MenuItem } from './types'
 import { managementManager, managementOperator } from './management'
-import { homepage } from './homepage'
 
 export const getMenuItems = (): MenuItem[] => {
   const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
@@ -18,7 +17,7 @@ export const getMenuItems = (): MenuItem[] => {
     validGroups.includes(storedUser.group as USER_GROUP)
       ? (storedUser.group as USER_GROUP)
       : undefined
-  const defaultItems = [homepage, define, libraries]
+  const defaultItems = [define, libraries]
 
   if (group === USER_GROUP.MANAGER) return [...defaultItems, managementManager]
 

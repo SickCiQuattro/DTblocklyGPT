@@ -49,18 +49,16 @@ const DetailLocation = () => {
   const data = dataLocation && dataMyRobots
 
   const subtitle = insertMode
-    ? 'Here you can define the detail of the Location. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of the Location. Stay hover the fields to see the description.'
+    ? 'Here you can define the details of the Location. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the Location. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add location' : 'Location detail'}
+      title={insertMode ? 'Add Location' : 'Location Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic
-          ? 'Return to the task graphic'
-          : 'Return to the list of locations'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Locations'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}

@@ -19,7 +19,6 @@ import 'blockly/blocks'
 
 import { BlockState } from 'utils/blocklyTypes'
 import { getOwnBodyDescendants } from 'utils/blocklySelection'
-
 import {
   injectAllGhostBlocks,
   registerGhostRestoreListener,
@@ -27,6 +26,7 @@ import {
 } from 'utils/ghostBlockManager'
 
 import { isValidBlockState } from '../utils/serialization'
+
 import { updateStructureAndFireFakeChangeEvent } from './chatSync'
 import { INTERACTIVE_WORKSPACE_CONFIG } from './workspaceConfig'
 
@@ -172,9 +172,9 @@ export const BlocklyWorkspace = ({
                 x: DEFAULT_X_AXIS,
                 y: DEFAULT_Y_AXIS,
                 next: {
-                  block: defaultDataTask
-                }
-              } as any
+                  block: defaultDataTask,
+                },
+              }
             } else {
               defaultDataTask.x = dataTask?.x ?? DEFAULT_X_AXIS
               defaultDataTask.y = dataTask?.y ?? DEFAULT_Y_AXIS
@@ -226,7 +226,12 @@ export const BlocklyWorkspace = ({
     const x_axis = firstBlock?.x ?? DEFAULT_X_AXIS
     const y_axis = firstBlock?.y ?? DEFAULT_Y_AXIS
 
-    updateStructureAndFireFakeChangeEvent(workspace, pendingExternalTask, x_axis, y_axis)
+    updateStructureAndFireFakeChangeEvent(
+      workspace,
+      pendingExternalTask,
+      x_axis,
+      y_axis,
+    )
 
     onTaskLoadedRef.current?.()
     onExternalTaskStateAppliedRef.current?.()

@@ -1,18 +1,25 @@
-import React from 'react';
-import { Avatar } from '@mui/material';
-import { User } from 'lucide-react';
-import { formatTimeFrontend } from 'utils/date';
-import dayjs from 'dayjs';
+import React from 'react'
+import { Avatar } from '@mui/material'
+import { User } from 'lucide-react'
+import dayjs from 'dayjs'
+
+import { formatTimeFrontend } from 'utils/date'
 
 interface UserBubbleProps {
-  text: string;
-  timestamp: string | null;
-  user: string; // username
-  avatarUrl?: string;
+  text: string
+  timestamp: string | null
+  user: string // username
+  avatarUrl?: string
 }
 
-export const UserBubble: React.FC<UserBubbleProps> = ({ text, timestamp, user }) => {
-  const time = timestamp ? formatTimeFrontend(timestamp) : dayjs().format('HH:mm');
+export const UserBubble: React.FC<UserBubbleProps> = ({
+  text,
+  timestamp,
+  user,
+}) => {
+  const time = timestamp
+    ? formatTimeFrontend(timestamp)
+    : dayjs().format('HH:mm')
 
   return (
     <div
@@ -40,7 +47,14 @@ export const UserBubble: React.FC<UserBubbleProps> = ({ text, timestamp, user })
         }
       `}</style>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Avatar
               sx={{
@@ -54,14 +68,28 @@ export const UserBubble: React.FC<UserBubbleProps> = ({ text, timestamp, user })
             >
               <User size={16} style={{ color: '#4f46e5' }} />
             </Avatar>
-            <span style={{ fontWeight: 600, fontSize: '13px', color: '#1e1b4b' }}>{user}</span>
+            <span
+              style={{ fontWeight: 600, fontSize: '13px', color: '#1e1b4b' }}
+            >
+              {user}
+            </span>
           </div>
-          <span style={{ fontSize: '11px', color: '#6366f1', opacity: 0.8 }}>{time}</span>
+          <span style={{ fontSize: '11px', color: '#6366f1', opacity: 0.8 }}>
+            {time}
+          </span>
         </div>
-        <div style={{ fontSize: '14px', color: '#1e1b4b', lineHeight: '1.5', wordBreak: 'break-word', maxInlineSize: '65ch' }}>
+        <div
+          style={{
+            fontSize: '14px',
+            color: '#1e1b4b',
+            lineHeight: '1.5',
+            wordBreak: 'break-word',
+            maxInlineSize: '65ch',
+          }}
+        >
           {text}
         </div>
       </div>
     </div>
-  );
-};
+  )
+}

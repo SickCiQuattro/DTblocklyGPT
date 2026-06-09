@@ -141,7 +141,7 @@ export const FormMyRobot = ({
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.robot && errors.robot)}
-                    title="Select the robot at system level that will be used as your personal robot"
+                    title="Select the robot from the fleet that will be used as your personal robot"
                   >
                     {dataRobots?.map((robot) => (
                       <MenuItem value={robot.id} key={robot.id}>

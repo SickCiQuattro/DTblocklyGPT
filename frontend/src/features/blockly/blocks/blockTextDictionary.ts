@@ -14,8 +14,10 @@ export const blockDescriptionsByType = {
     'Checks if the camera sees a specific hand gesture (like a thumbs up).',
   timer_block: 'Checks if the set amount of time has passed.',
   pick_block: 'Tells the robot to pick up the chosen object.',
+  // MAPPING REFERENCE:
+  // - processing_block ➔ Represents the 'Run Routine' visual block
   processing_block:
-    'Makes the robot perform a custom procedure (like shaking or dispensing).',
+    'Makes the robot run a custom routine (like shaking or dispensing).',
   place_block: 'Tells the robot to place the object at the chosen destination.',
   move_to_block: 'Moves the robot to a specific location or safe area.',
   gripper_block: "Opens or closes the robot's gripper.",

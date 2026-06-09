@@ -37,18 +37,20 @@ const DetailUser = () => {
   const data = dataUser && dataRoles
 
   const subtitle = insertMode
-    ? 'Here you can define the detail of the User. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of the User. Stay hover the fields to see the description.'
+    ? 'Here you can define the details of the user account. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the user account. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add user' : 'User detail'}
+      title={insertMode ? 'Add User Account' : 'User Account Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle="Return to the list of users"
+      backTitle="Return to User Accounts"
     >
       {isLoading && !insertMode && <CircularProgress />}
-      {data === null && <Typography>User with ID {id} not found</Typography>}
+      {data === null && (
+        <Typography>User Account with ID {id} not found</Typography>
+      )}
       {(data || insertMode) && (
         <FormUser
           dataUser={dataUser}

@@ -1,59 +1,46 @@
 import React from 'react'
 import { useTheme } from '@mui/material/styles'
-import { Stack, Box } from '@mui/material'
+import { Box, IconButton, Tooltip } from '@mui/material'
+import { PanelLeftClose } from 'lucide-react'
 
 import { LogoSection } from 'components/Logo'
 
 interface DrawerHeaderProps {
   open: boolean
+  handleDrawerToggle?: () => void
 }
 
-export const DrawerHeader = ({ open }: DrawerHeaderProps) => {
+export const DrawerHeader = ({
+  open,
+  handleDrawerToggle,
+}: DrawerHeaderProps) => {
   const theme = useTheme()
 
   return (
     <Box
       sx={{
-        // ...theme.mixins.toolbar,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: open ? 'flex-start' : 'center',
-        paddingLeft: theme.spacing(open ? 3 : 0),
+        justifyContent: open ? 'space-between' : 'flex-start',
+        height: '56px',
+        width: '100%',
+        pl: '14px',
+        pr: open ? '8px' : '14px',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{ alignItems: 'center', mt: '0.5rem' }}
-      >
-        <LogoSection />
-        {/*         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <Chip
-            label={`C-${packageInfo.version}`}
+      <LogoSection open={open} />
+      {open && handleDrawerToggle && (
+        <Tooltip title="Collapse Sidebar" placement="right">
+          <IconButton
+            onClick={handleDrawerToggle}
             size="small"
-            title={`Client version ${packageInfo.version}`}
-            sx={{
-              height: 16,
-              marginBottom: '0.2rem',
-              '& .MuiChip-label': {
-                fontSize: '0.625rem',
-                py: 0.25,
-              },
-            }}
-            component="div"
-          />
-          <Chip
-            label={`S-${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
-            title={`Server version ${getFromLocalStorage(LocalStorageKey.USER)?.versionServer}`}
-            size="small"
-            sx={{
-              height: 16,
-              '& .MuiChip-label': { fontSize: '0.625rem', py: 0.25 },
-            }}
-            component="div"
-          />
-        </div> */}
-      </Stack>
+            sx={{ color: 'primary.main' }}
+          >
+            <PanelLeftClose size={18} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   )
 }

@@ -26,7 +26,10 @@ export const simulationSlice = createSlice({
       state.progress = 0
       state.message = 'Simulation stopped'
     },
-    setSimulationProgress(state, action: PayloadAction<{ progress: number; message?: string }>) {
+    setSimulationProgress(
+      state,
+      action: PayloadAction<{ progress: number; message?: string }>,
+    ) {
       state.progress = action.payload.progress
       if (action.payload.message) {
         state.message = action.payload.message
@@ -44,8 +47,8 @@ export const simulationSlice = createSlice({
       state.isRunning = false
       state.progress = 0
       state.message = action.payload
-    }
-  }
+    },
+  },
 })
 
 export const {
@@ -54,6 +57,6 @@ export const {
   setSimulationProgress,
   setSimulationMessage,
   setSimulationCompleted,
-  setSimulationError
+  setSimulationError,
 } = simulationSlice.actions
 export const simulationReducers = simulationSlice.reducer

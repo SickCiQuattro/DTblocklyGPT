@@ -20,7 +20,9 @@ interface ThemeCustomizationProps {
 
 const ThemeCustomization = ({ children }: ThemeCustomizationProps) => {
   const themePalette = Palette('light')
-  const themeTypography = Typography(`'Public Sans', sans-serif`)
+  const themeTypography = Typography(
+    "'Geist', 'Inter', 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+  )
   const themeCustomShadows = useMemo(
     () => CustomShadows(themePalette),
     [themePalette],
@@ -29,7 +31,7 @@ const ThemeCustomization = ({ children }: ThemeCustomizationProps) => {
   const themeOptions: ThemeOptions = useMemo(
     () => ({
       breakpoints: { values: { xs: 0, sm: 768, md: 1024, lg: 1266, xl: 1536 } },
-      direction: 'ltr' as Direction,
+      direction: 'ltr',
       mixins: { toolbar: { minHeight: 60, paddingTop: 8, paddingBottom: 8 } },
       palette: themePalette.palette,
       customShadows: themeCustomShadows,

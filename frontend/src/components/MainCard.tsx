@@ -93,7 +93,7 @@ export const MainCard = ({
   return (
     <Card
       elevation={elevation}
-      ref={ref as RefObject<HTMLDivElement>}
+      ref={ref}
       sx={{
         ...sx,
         border: border ? '1px solid' : 'none',

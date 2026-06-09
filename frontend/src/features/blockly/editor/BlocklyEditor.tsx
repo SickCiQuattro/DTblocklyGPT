@@ -44,7 +44,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
 
@@ -159,13 +159,11 @@ function insertStartBlock(
   block.moveBy(24, 24)
 
   if (block.nextConnection) {
-    const shadow = workspace.newBlock(
-      'shadow_start_sequence_block',
-    ) as Blockly.BlockSvg
+    const shadow = workspace.newBlock('shadow_start_sequence_block')
     shadow.setShadow(true)
     shadow.initSvg()
     shadow.render()
-    block.nextConnection.connect(shadow.previousConnection!)
+    block.nextConnection.connect(shadow.previousConnection)
   }
   return block
 }
@@ -196,8 +194,7 @@ function removeStartBlock(workspace: Blockly.WorkspaceSvg): void {
   Blockly.Events.disable()
   try {
     for (const startBlock of startBlocks) {
-      const target =
-        startBlock.nextConnection?.targetBlock() as Blockly.BlockSvg | null
+      const target = startBlock.nextConnection?.targetBlock()
       if (target) {
         startBlock.nextConnection?.disconnect()
         if (target.type === SHADOW_START_BLOCK_TYPE) {
@@ -235,9 +232,7 @@ function clearOrphanState(workspace: Blockly.WorkspaceSvg): void {
   for (const block of workspace.getAllBlocks(false)) {
     if (block.isShadow()) continue
     if (block.isInsertionMarker()) continue
-    ;(block as Blockly.BlockSvg)
-      .getSvgRoot?.()
-      ?.classList.remove('blockly-orphan')
+    block.getSvgRoot?.()?.classList.remove('blockly-orphan')
   }
 }
 
@@ -275,12 +270,10 @@ function normalizeVisibleStartBlock(workspace: Blockly.WorkspaceSvg): void {
       }
     }
 
-    const startTarget =
-      primaryStart.nextConnection?.targetBlock() as Blockly.BlockSvg | null
+    const startTarget = primaryStart.nextConnection?.targetBlock()
     if (startTarget?.type !== SHADOW_START_BLOCK_TYPE) return
 
-    const chainedBlock =
-      startTarget.nextConnection?.targetBlock() as Blockly.BlockSvg | null
+    const chainedBlock = startTarget.nextConnection?.targetBlock()
     if (chainedBlock?.previousConnection) {
       startTarget.nextConnection?.disconnect()
       primaryStart.nextConnection?.disconnect()
@@ -302,7 +295,7 @@ function normalizeVisibleStartBlock(workspace: Blockly.WorkspaceSvg): void {
           block.type !== START_BLOCK_TYPE &&
           block.type !== SHADOW_START_BLOCK_TYPE &&
           Boolean(block.previousConnection),
-      ) as Blockly.BlockSvg | undefined
+      )
 
     if (!candidate?.previousConnection) return
 
@@ -362,9 +355,7 @@ function syncOrphanState(workspace: Blockly.WorkspaceSvg): void {
     if (block.isShadow()) continue
     if (block.isInsertionMarker()) continue
     const isConnected = connectedIds.has(block.id)
-    ;(block as Blockly.BlockSvg)
-      .getSvgRoot?.()
-      ?.classList.toggle('blockly-orphan', !isConnected)
+    block.getSvgRoot?.()?.classList.toggle('blockly-orphan', !isConnected)
   }
 }
 
@@ -397,7 +388,9 @@ interface BlocklyEditorProps {
   editMode?: boolean
   applyExternalTaskState?: boolean
   onExternalTaskStateApplied?: () => void
-  onTaskStructureChange?: (task: AbstractStep[] | null) => void
+  onTaskStructureChange?: (
+    task: import('pages/tasks/types').ASTBranch[] | null,
+  ) => void
   onWorkspaceReady?: (workspace: Blockly.WorkspaceSvg | null) => void
   blockViewMode?: BlockViewMode
   deleteConfirmMode?: DeleteConfirmMode
@@ -470,9 +463,10 @@ export const BlocklyEditor = ({
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [isDeleting, setIsDeleting] = useState(false)
-  const [settingsAnchorEl, setSettingsAnchorEl] = useState<HTMLButtonElement | null>(null)
+  const [settingsAnchorEl, setSettingsAnchorEl] =
+    useState<HTMLButtonElement | null>(null)
   const handleOpenSettings = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setSettingsAnchorEl(event.currentTarget as HTMLButtonElement)
+    setSettingsAnchorEl(event.currentTarget)
   }
   const handleCloseSettings = () => {
     setSettingsAnchorEl(null)
@@ -592,7 +586,9 @@ export const BlocklyEditor = ({
     try {
       ws.getComponentManager().removeComponent(da.id)
       ws.recordDragTargets()
-    } catch {}
+    } catch {
+      /* component already unmounted or workspace not registered */
+    }
     toolboxRootRef.current?.classList.remove('custom-toolbox--delete-over')
     deleteAreaRef.current = null
     deleteAreaWorkspaceRef.current = null
@@ -683,7 +679,13 @@ export const BlocklyEditor = ({
         dataActions,
       })
     },
-    [availableMacros, macroDetailsById, dataObjects, dataLocations, dataActions],
+    [
+      availableMacros,
+      macroDetailsById,
+      dataObjects,
+      dataLocations,
+      dataActions,
+    ],
   )
 
   // ── Context menu bridge ────────────────────────────────────────────────────
@@ -715,7 +717,6 @@ export const BlocklyEditor = ({
       unregisterToolboxDeleteArea()
       workspaceRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── window.confirm monkey-patch for "Delete All" ──────────────────────────
@@ -838,7 +839,7 @@ export const BlocklyEditor = ({
       // ── Shadow block helpers (local to this workspace instance) ────────────
 
       const getShadowBlocks = (ws: Blockly.WorkspaceSvg): Blockly.BlockSvg[] =>
-        ws.getAllBlocks(false).filter((b) => b.isShadow()) as Blockly.BlockSvg[]
+        ws.getAllBlocks(false).filter((b) => b.isShadow())
 
       const getDescendantIds = (block: Blockly.Block): Set<string> => {
         const ids = new Set<string>()
@@ -1003,9 +1004,9 @@ export const BlocklyEditor = ({
           }
           workspace.hideChaff()
           setContextMenu(null)
-          const svgRoot = (clickedBlock as Blockly.BlockSvg).getSvgRoot?.()
+          const svgRoot = clickedBlock.getSvgRoot?.()
           svgRoot?.classList.add('shadow-block--selected')
-          setShadowIconState(clickedBlock as Blockly.BlockSvg, true)
+          setShadowIconState(clickedBlock, true)
           shadowPicker.open(
             clickedBlock.id,
             nextPopoverType,
@@ -1025,11 +1026,9 @@ export const BlocklyEditor = ({
         if (STRUCTURE_CHANGING_TYPES.has(event.type)) {
           if (onTaskStructureChangeRef.current) {
             const structure = getBlocklyStructure()
-            const mainBlock = Array.isArray(structure)
-              ? structure.find((b: any) => b.type === 'when_start') ||
-                structure[0]
-              : structure
-            const abstract = blocklyToAbstract(mainBlock as CustomBlock | null)
+            const abstract = blocklyToAbstractAll(
+              structure as CustomBlock[] | null,
+            )
             onTaskStructureChangeRef.current(abstract)
           }
         }
@@ -1535,7 +1534,8 @@ export const BlocklyEditor = ({
                   mt: 1,
                   width: 320,
                   borderRadius: 3,
-                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
+                  boxShadow:
+                    '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
                   border: '1px solid rgba(148, 163, 184, 0.12)',
                 },
               },
@@ -1543,16 +1543,30 @@ export const BlocklyEditor = ({
           >
             <Stack spacing={2.5}>
               <Box>
-                <Typography variant="h6" sx={{ fontSize: 15, fontWeight: 700, color: 'text.primary' }}>
+                <Typography
+                  variant="h6"
+                  sx={{ fontSize: 15, fontWeight: 700, color: 'text.primary' }}
+                >
                   Workspace Settings
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
+                >
                   Adjust the visual editor and safety controls.
                 </Typography>
               </Box>
 
               <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    mb: 1,
+                    fontWeight: 650,
+                    fontSize: 13,
+                    color: 'text.primary',
+                  }}
+                >
                   Block Visualization
                 </Typography>
                 <ToggleButtonGroup
@@ -1560,16 +1574,35 @@ export const BlocklyEditor = ({
                   fullWidth
                   size="small"
                   value={viewSettings.blockViewMode}
-                  onChange={(_e, val) => val && onViewSettingsChange({ blockViewMode: val })}
+                  onChange={(_e, val) =>
+                    val && onViewSettingsChange({ blockViewMode: val })
+                  }
                 >
-                  <ToggleButton value="complete" sx={{ fontSize: 12, py: 0.5 }}>Complete</ToggleButton>
-                  <ToggleButton value="essential" sx={{ fontSize: 12, py: 0.5 }}>Essential</ToggleButton>
-                  <ToggleButton value="minimal" sx={{ fontSize: 12, py: 0.5 }}>Minimal</ToggleButton>
+                  <ToggleButton value="complete" sx={{ fontSize: 12, py: 0.5 }}>
+                    Complete
+                  </ToggleButton>
+                  <ToggleButton
+                    value="essential"
+                    sx={{ fontSize: 12, py: 0.5 }}
+                  >
+                    Essential
+                  </ToggleButton>
+                  <ToggleButton value="minimal" sx={{ fontSize: 12, py: 0.5 }}>
+                    Minimal
+                  </ToggleButton>
                 </ToggleButtonGroup>
               </Box>
 
               <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    mb: 1,
+                    fontWeight: 650,
+                    fontSize: 13,
+                    color: 'text.primary',
+                  }}
+                >
                   Delete Confirmations
                 </Typography>
                 <ToggleButtonGroup
@@ -1577,34 +1610,67 @@ export const BlocklyEditor = ({
                   fullWidth
                   size="small"
                   value={viewSettings.deleteConfirmMode}
-                  onChange={(_e, val) => val && onViewSettingsChange({ deleteConfirmMode: val })}
+                  onChange={(_e, val) =>
+                    val && onViewSettingsChange({ deleteConfirmMode: val })
+                  }
                 >
-                  <ToggleButton value="always" sx={{ fontSize: 12, py: 0.5 }}>Always</ToggleButton>
-                  <ToggleButton value="multiple" sx={{ fontSize: 12, py: 0.5 }}>Multiple</ToggleButton>
-                  <ToggleButton value="never" sx={{ fontSize: 12, py: 0.5 }}>Never</ToggleButton>
+                  <ToggleButton value="always" sx={{ fontSize: 12, py: 0.5 }}>
+                    Always
+                  </ToggleButton>
+                  <ToggleButton value="multiple" sx={{ fontSize: 12, py: 0.5 }}>
+                    Multiple
+                  </ToggleButton>
+                  <ToggleButton value="never" sx={{ fontSize: 12, py: 0.5 }}>
+                    Never
+                  </ToggleButton>
                 </ToggleButtonGroup>
               </Box>
 
               <Box>
-                <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+                >
                   <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 650, fontSize: 13, color: 'text.primary' }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 650,
+                        fontSize: 13,
+                        color: 'text.primary',
+                      }}
+                    >
                       Show Start Block
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', maxWidth: 200 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        display: 'block',
+                        maxWidth: 200,
+                      }}
+                    >
                       Hiding start block disables orphan highlighting.
                     </Typography>
                   </Box>
                   <Switch
                     checked={viewSettings.showStartBlock}
-                    onChange={(_e, checked) => onViewSettingsChange({ showStartBlock: checked })}
+                    onChange={(_e, checked) =>
+                      onViewSettingsChange({ showStartBlock: checked })
+                    }
                     size="small"
                   />
                 </Stack>
               </Box>
 
               {onResetViewSettings && (
-                <Button variant="outlined" size="small" onClick={onResetViewSettings} fullWidth sx={{ borderRadius: 2, fontSize: 12 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={onResetViewSettings}
+                  fullWidth
+                  sx={{ borderRadius: 2, fontSize: 12 }}
+                >
                   Restore Defaults
                 </Button>
               )}

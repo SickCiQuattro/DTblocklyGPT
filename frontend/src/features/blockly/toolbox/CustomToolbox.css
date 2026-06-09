@@ -285,34 +285,41 @@
 .toolbox-pill {
   display: flex;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 7px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: grab;
   user-select: none;
   touch-action: none;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.12);
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
-  min-height: 34px;
+  min-height: 32px;
+  background-color: #FFFFFF;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toolbox-pill {
+    transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s ease, border-color 0.2s ease;
+  }
 }
 
 .toolbox-pill:hover {
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
   transform: translateY(-1px);
+  border-color: rgba(99, 102, 241, 0.2);
 }
 
 .toolbox-pill:active {
   cursor: grabbing;
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.05);
 }
 
 .toolbox-pill__label {
-  color: #FFFFFF;
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 500;
+  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;

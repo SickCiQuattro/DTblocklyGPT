@@ -178,9 +178,10 @@ export const computeConformance = (
   // If there are multiple disconnected top-level blocks, the workspace is
   // ambiguous. We enforce a single flow to consider the task 'ready'.
   if (topBlocks.length > 1) {
-    return buildResult([
-      { type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length },
-    ], [])
+    return buildResult(
+      [{ type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length }],
+      [],
+    )
   }
 
   // ── Rule 3: unresolved shadow blocks in the main flow ────────────────────

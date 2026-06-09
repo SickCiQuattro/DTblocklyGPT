@@ -20,9 +20,9 @@ export const closedMixin = (theme: Theme): CSSObject => ({
     duration: theme.transitions.duration.leavingScreen,
   }),
   overflowX: 'hidden',
-  width: 0,
-  borderRight: 'none',
-  boxShadow: theme.shadows[1],
+  width: 56,
+  borderRight: `1px solid ${theme.palette.divider}`,
+  boxShadow: 'none',
 })
 
 export const MiniDrawerStyled = styled(Drawer, {

@@ -1,26 +1,54 @@
-import React, { useEffect, useRef } from 'react'
-import { Box } from '@mui/material'
-import { X } from 'lucide-react'
-import { useDispatch, useSelector } from 'react-redux'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  Box,
+  Typography,
+  IconButton,
+  Button,
+  Chip,
+  Tooltip,
+} from '@mui/material'
+import { X, Pencil, Play, Square, Save, ArrowLeftRight } from 'lucide-react'
+import { useDispatch } from 'react-redux'
+import useSWR from 'swr'
 import dayjs from 'dayjs'
+import { useSpeechRecognition } from 'react-speech-recognition'
 
+import { useAppSelector } from 'store/reducers'
+import { clearProposedTask, setProposedTask } from 'store/reducers/proposal'
+import { toggleChatPosition } from 'store/reducers/task'
+import { endpoints } from 'services/endpoints'
+import { MethodHTTP, fetchApi } from 'services/api'
 import {
   MessageType,
   UserChatEnum,
   MessageTypeEnum,
+  INITIAL_MESSAGE_1,
   CHATGPT_ERROR,
   ChatResponse,
 } from 'utils/chat'
-import { setProposedTask, clearProposedTask } from 'store/reducers/proposal'
-import { endpoints } from 'services/endpoints'
-import { MethodHTTP, fetchApi } from 'services/api'
-import { formatTimeFrontend } from 'utils/date'
-import { blocklyToAbstract, CustomBlock } from 'utils/blocklyParser'
+import { ObjectListType } from 'pages/objects/types'
+import { LocationListType } from 'pages/locations/types'
+import { ActionListType } from 'pages/actions/types'
+import { abstractToBlockly } from 'utils/blocklyParser'
 
-import { TaskPreviewCard } from './TaskPreviewCard'
-import { ChatComposer } from './ChatComposer'
-import { AssistantBubble } from './AssistantBubble'
 import { UserBubble } from './UserBubble'
+import { AssistantBubble } from './AssistantBubble'
+import { ChatComposer } from './ChatComposer'
+import { TaskPreviewCard } from './TaskPreviewCard'
+
+export type BlockGeneratedPayload = {
+  blockType: string
+  blockXml: string
+  insertAt?: 'end' | 'cursor'
+}
+
+interface ChatThreadProps {
+  taskId: string | null
+  taskStructure: any[]
+  onBlocksGenerated?: (blocks: BlockGeneratedPayload[]) => void
+  onApplyProposedTask?: (proposedTask: any[]) => void
+  onClose?: () => void
+}
 
 const normalizeStep = (step: any): any => {
   if (!step || typeof step !== 'object') return step
@@ -34,7 +62,6 @@ const normalizeStep = (step: any): any => {
     if (val === null || val === undefined) continue
     if (Array.isArray(val) && val.length === 0) continue
 
-    // Coerce numeric strings to numbers for IDs and numeric properties
     if (
       (key.endsWith('Id') || key === 'seconds' || key === 'times') &&
       typeof val === 'string' &&
@@ -52,78 +79,49 @@ const areStepsIdentical = (a: any, b: any) => {
   return JSON.stringify(normalizeStep(a)) === JSON.stringify(normalizeStep(b))
 }
 
-interface ChatDrawerProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  speaker: boolean
-  setSpeaker: (speaker: boolean) => void
-  isProcessing: boolean
-  setIsProcessing: (isProcessing: boolean) => void
-  fineTunedModel: string
-  setFineTunedModel: (model: string) => void
-  fineTuningJobId: string
-  setFineTuningJobId: (jobId: string) => void
-  listMessages: MessageType[]
-  setListMessages: (messages: MessageType[]) => void
-  chatLog: any[]
-  setChatLog: (log: any[]) => void
-  message: string
-  setMessage: (message: string) => void
-  dataObjects: any[]
-  dataLocations: any[]
-  dataActions: any[]
-  isRecording: boolean
-  setIsRecording: (recording: boolean) => void
-  transcript: string
-  resetTranscript: () => void
-  browserSupportsSpeechRecognition: boolean
-  isMicrophoneAvailable: boolean
-  taskId: string
-  taskStructure: any // TaskChatStructure
-  setTaskStructure: (taskStructure: any) => void
-  onApplyProposedTask: (proposedTask: any[]) => void
-  setNewChatResponse: (response: boolean) => void
-}
-
-export const ChatDrawer: React.FC<ChatDrawerProps> = ({
-  open,
-  onOpenChange,
-  speaker,
-  setSpeaker,
-  isProcessing,
-  setIsProcessing,
-  fineTunedModel,
-  setFineTunedModel,
-  fineTuningJobId,
-  setFineTuningJobId,
-  listMessages,
-  setListMessages,
-  chatLog,
-  setChatLog,
-  message,
-  setMessage,
-  dataObjects,
-  dataLocations,
-  dataActions,
-  isRecording,
-  setIsRecording,
-  transcript,
-  resetTranscript,
-  browserSupportsSpeechRecognition,
-  isMicrophoneAvailable,
+export const ChatThread: React.FC<ChatThreadProps> = ({
   taskId,
   taskStructure,
-  setTaskStructure,
+  onBlocksGenerated,
   onApplyProposedTask,
-  setNewChatResponse,
+  onClose,
 }) => {
   const dispatch = useDispatch()
-  const proposal = useSelector((state: any) => state.proposal)
+  const proposal = useAppSelector((state) => state.proposal)
+  const chatOpen = useAppSelector((state) => state.task.chatOpen)
+  const chatPosition =
+    useAppSelector((state) => state.task.chatPosition) || 'right'
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  const [width, setWidth] = React.useState(450)
-  const [isResizing, setIsResizing] = React.useState(false)
-  const [showProposalOverlay, setShowProposalOverlay] = React.useState(false)
+  const [width, setWidth] = useState(360)
+  const [isResizing, setIsResizing] = useState(false)
+  const [showProposalOverlay, setShowProposalOverlay] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [listMessages, setListMessages] = useState<MessageType[]>([
+    INITIAL_MESSAGE_1,
+  ])
+  const [chatLog, setChatLog] = useState<any[]>([])
+  const [message, setMessage] = useState('')
+  const [speaker, setSpeaker] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+
+  const {
+    transcript,
+    resetTranscript,
+    browserSupportsSpeechRecognition,
+    isMicrophoneAvailable,
+  } = useSpeechRecognition()
+
+  // SWR local fetches for self-containment
+  const { data: dataObjects = [] } = useSWR<ObjectListType[], Error>({
+    url: endpoints.graphic.objectsGraphic,
+  })
+  const { data: dataActions = [] } = useSWR<ActionListType[], Error>({
+    url: endpoints.graphic.actionsGraphic,
+  })
+  const { data: dataLocations = [] } = useSWR<LocationListType[], Error>({
+    url: endpoints.graphic.locationsGraphic,
+  })
 
   // Auto-open overlay when a new proposal is received
   const prevProposedTaskRef = useRef<any>(null)
@@ -144,13 +142,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       const startX = pointerDownEvent.clientX
 
       const handlePointerMove = (pointerMoveEvent: PointerEvent) => {
-        const newWidth = startWidth + (pointerMoveEvent.clientX - startX)
-        if (newWidth >= 320 && newWidth <= 750) {
+        const delta = pointerMoveEvent.clientX - startX
+        const newWidth =
+          chatPosition === 'left' ? startWidth + delta : startWidth - delta
+        if (newWidth >= 320 && newWidth <= 600) {
           setWidth(newWidth)
         }
       }
 
-      const handlePointerUp = (pointerUpEvent: PointerEvent) => {
+      const handlePointerUp = () => {
         setIsResizing(false)
         window.removeEventListener('pointermove', handlePointerMove)
         window.removeEventListener('pointerup', handlePointerUp)
@@ -159,10 +159,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       window.addEventListener('pointermove', handlePointerMove)
       window.addEventListener('pointerup', handlePointerUp)
     },
-    [width],
+    [width, chatPosition],
   )
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [listMessages])
@@ -198,35 +197,37 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
       })
 
       if (res) {
-        if (res.fineTunedModel && res.fineTunedModel !== fineTunedModel)
-          setFineTunedModel(res.fineTunedModel)
-        if (res.fineTuningJobId && res.fineTuningJobId !== fineTuningJobId)
-          setFineTuningJobId(res.fineTuningJobId)
-
         if (speaker) {
           const utterance = new SpeechSynthesisUtterance(res.response.answer)
           utterance.lang = 'en-GB'
           window.speechSynthesis.speak(utterance)
         }
 
+        let answerText = res.response.answer || CHATGPT_ERROR
+        if (
+          res.response.validationWarnings &&
+          res.response.validationWarnings.length > 0
+        ) {
+          answerText +=
+            '\n\n⚠️ Errori di validazione:\n' +
+            res.response.validationWarnings.join('\n')
+        }
+
         const newRobotMessage: MessageType = {
-          text: res.response.answer || CHATGPT_ERROR,
+          text: answerText,
           id:
             messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
           user: UserChatEnum.ROBOT,
           timestamp: dayjs().toISOString(),
           type: MessageTypeEnum.TEXT,
         }
-        const newMessages: MessageType[] = [newRobotMessage]
 
-        // Always show the robot's message in the chat
-        setListMessages([...messagesWithUserRequest, ...newMessages])
+        setListMessages([...messagesWithUserRequest, newRobotMessage])
         setChatLog(res.chatLog)
 
         const taskModified = res.response?.taskModified ?? true
 
         if (!taskModified) {
-          // If the task was not modified, clear proposed task and do not apply anything to the workspace!
           dispatch(clearProposedTask())
         } else {
           const isIdentical = areStepsIdentical(
@@ -235,13 +236,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           )
 
           if (isIdentical) {
-            // If the task structure didn't change semantically, do not apply and clear proposed task
             dispatch(clearProposedTask())
           } else if (
             Array.isArray(res.response.task) &&
             res.response.task.length > 0
           ) {
-            // Se abbiamo ricevuto un task valido, lo impostiamo come proposta per chiedere la conferma dell'utente!
             dispatch(
               setProposedTask({
                 proposedTask: res.response.task,
@@ -315,23 +314,30 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
     <Box
       sx={{
         position: 'relative',
-        width: open ? width : 0,
-        minWidth: open ? width : 0,
+        width: chatOpen ? width : 0,
+        minWidth: chatOpen ? width : 0,
+        order: chatPosition === 'left' ? 1 : 2,
         transition: isResizing
           ? 'none'
           : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
-        background: 'rgba(246, 248, 251, 0.85)',
-        backdropFilter: 'blur(24px)',
-        border: '1px solid rgba(99, 102, 241, 0.12)',
-        borderRight: '2px solid rgba(99, 102, 241, 0.22)',
+        background: '#FFFFFF',
+        borderLeft:
+          chatPosition === 'right'
+            ? '1px solid rgba(99, 102, 241, 0.12)'
+            : 'none',
+        borderRight:
+          chatPosition === 'left'
+            ? '1px solid rgba(99, 102, 241, 0.12)'
+            : 'none',
         boxShadow:
-          '0 20px 40px -15px rgba(31, 38, 135, 0.06), 0 4px 12px 0 rgba(0, 0, 0, 0.02)',
+          chatPosition === 'right'
+            ? '-10px 0 30px -10px rgba(0, 0, 0, 0.03)'
+            : '10px 0 30px -10px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
         margin: '0',
-        borderRadius: '10px',
         boxSizing: 'border-box',
       }}
     >
@@ -391,20 +397,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
         }
       `}</style>
 
-      {open && (
+      {chatOpen && (
         <div
           onPointerDown={startResizing}
           style={{
             position: 'absolute',
             top: 0,
-            right: 0,
+            left: chatPosition === 'right' ? 0 : 'auto',
+            right: chatPosition === 'left' ? 0 : 'auto',
             width: '6px',
             height: '100%',
             cursor: 'col-resize',
             zIndex: 100,
             background: 'transparent',
-            borderTopRightRadius: '20px',
-            borderBottomRightRadius: '20px',
           }}
           className="resize-handle"
         />
@@ -417,35 +422,45 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           alignItems: 'center',
           padding: '16px 20px',
           borderBottom: '1px solid rgba(99, 102, 241, 0.08)',
-          background: 'rgba(238, 242, 246, 0.5)',
+          background: 'rgba(238, 242, 246, 0.3)',
         }}
       >
         <div
           style={{
-            fontWeight: 700,
-            fontSize: '16px',
-            color: '#1e1b4b',
-            letterSpacing: '-0.02em',
+            fontWeight: 600,
+            fontSize: '0.95rem',
+            color: '#1A1A2E',
+            letterSpacing: '-0.01em',
           }}
         >
-          Interactive Assistant
+          AI Copilot
         </div>
-        <button
-          onClick={() => onOpenChange(false)}
-          className="close-btn-premium"
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '8px',
-          }}
-        >
-          <X size={18} style={{ color: '#6366f1' }} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Tooltip
+            title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
+            placement="bottom"
+          >
+            <IconButton
+              onClick={() => dispatch(toggleChatPosition())}
+              size="small"
+              sx={{
+                color: '#6366F1',
+                '&:hover': {
+                  background: 'rgba(99, 102, 241, 0.08)',
+                },
+              }}
+            >
+              <ArrowLeftRight size={18} />
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            onClick={onClose}
+            size="small"
+            className="close-btn-premium"
+          >
+            <X size={18} style={{ color: '#6366F1' }} />
+          </IconButton>
+        </div>
       </div>
 
       <div
@@ -457,7 +472,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           flexDirection: 'column',
         }}
       >
-        {/* Chat message history list */}
         <div
           className="chat-messages-container"
           style={{
@@ -466,7 +480,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
             padding: '16px 20px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '4px',
+            gap: '8px',
           }}
         >
           {listMessages.map(renderMessage)}
@@ -474,10 +488,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           <div ref={chatEndRef} />
         </div>
 
-        {/* Slide-Up Details Overlay Panel */}
+        {/* Proposal Details Slide-Up Overlay */}
         {proposal.proposedTask && (
           <div
-            className={`proposal-overlay ${showProposalOverlay ? 'overlay-open' : ''}`}
+            className={`proposal-overlay ${
+              showProposalOverlay ? 'overlay-open' : ''
+            }`}
             style={{
               position: 'absolute',
               top: 0,
@@ -500,8 +516,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               dataLocations={dataLocations}
               dataActions={dataActions}
               onApply={() => {
-                onApplyProposedTask(proposal.proposedTask)
-                setNewChatResponse(true)
+                if (onApplyProposedTask && proposal.proposedTask) {
+                  onApplyProposedTask(proposal.proposedTask)
+                }
+                if (onBlocksGenerated && proposal.proposedTask) {
+                  const converted = abstractToBlockly(
+                    proposal.proposedTask,
+                    dataObjects,
+                    dataLocations,
+                    dataActions,
+                  )
+                  // Find all generated blocks inside converted state
+                  if (converted && Array.isArray(converted.blocks)) {
+                    const mappedPayloads = converted.blocks.map((b: any) => ({
+                      blockType: b.type,
+                      blockXml: b.xml || '',
+                    }))
+                    onBlocksGenerated(mappedPayloads)
+                  }
+                }
                 dispatch(clearProposedTask())
               }}
               onCancel={() => {
@@ -539,22 +572,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               animation: badge-entrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
             }
             .badge-action-btn {
-              background: #6366f1;
+              background: #6366F1;
               color: white;
               border: none;
-              padding: 4px 10px;
+              padding: 6px 12px;
               border-radius: 6px;
               font-size: 12px;
-              font-weight: 600;
+              font-weight: 500;
               cursor: pointer;
               transition: all 0.2s;
             }
             .badge-action-btn:hover {
               background: #4f46e5;
-              transform: scale(1.03);
+              transform: scale(1.02);
             }
             .badge-action-btn:active {
-              transform: scale(0.96);
+              transform: scale(0.98);
             }
           `}</style>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -562,16 +595,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               style={{
                 width: '6px',
                 height: '6px',
-                backgroundColor: '#6366f1',
+                backgroundColor: '#6366F1',
                 borderRadius: '50%',
                 display: 'inline-block',
-                boxShadow: '0 0 8px #6366f1',
+                boxShadow: '0 0 8px #6366F1',
               }}
             />
             <span
-              style={{ fontSize: '13px', fontWeight: 600, color: '#1e1b4b' }}
+              style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E' }}
             >
-              New Blockly task proposed
+              New blocks proposed
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -579,7 +612,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
               onClick={() => setShowProposalOverlay(true)}
               className="badge-action-btn"
             >
-              View Details
+              Review
             </button>
             <button
               onClick={() => dispatch(clearProposedTask())}

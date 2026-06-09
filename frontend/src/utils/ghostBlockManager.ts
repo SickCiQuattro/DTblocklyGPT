@@ -13,7 +13,9 @@ export const GHOST_INPUT_MAP: Record<
     __next__: { type: 'shadow_start_sequence_block', label: 'Add first step' },
   },
   processing_block: {
-    ACTION: { type: 'shadow_action_block', label: 'Select Procedure...' },
+    // MAPPING REFERENCE:
+    // - ACTION input ➔ ghost shadow block label 'Select Routine...' (replaces Select Procedure)
+    ACTION: { type: 'shadow_action_block', label: 'Select Routine...' },
   },
   pick_block: {
     OBJECT: { type: 'shadow_object_block', label: 'Select Object...' },
@@ -22,10 +24,14 @@ export const GHOST_INPUT_MAP: Record<
     OBJECT: { type: 'shadow_object_block', label: 'Select Object...' },
   },
   place_block: {
-    LOCATION: { type: 'shadow_location_block', label: 'Select Destination...' },
+    // MAPPING REFERENCE:
+    // - LOCATION input ➔ ghost shadow block label 'Select Location...' (replaces Select Destination)
+    LOCATION: { type: 'shadow_location_block', label: 'Select Location...' },
   },
   move_to_block: {
-    LOCATION: { type: 'shadow_location_block', label: 'Select Destination...' },
+    // MAPPING REFERENCE:
+    // - LOCATION input ➔ ghost shadow block label 'Select Location...' (replaces Select Destination)
+    LOCATION: { type: 'shadow_location_block', label: 'Select Location...' },
   },
   when_block: {
     WHEN: { type: 'shadow_trigger_block', label: 'Select Condition...' },
@@ -92,12 +98,8 @@ function stripGhostsFromBlock(block: AnyBlockState): AnyBlockState {
   const cleanedInputs: Record<string, AnyBlockState> = {}
 
   for (const [inputName, inputState] of Object.entries(inputs)) {
-    const shadow = (inputState as AnyBlockState).shadow as
-      | AnyBlockState
-      | undefined
-    const realBlock = (inputState as AnyBlockState).block as
-      | AnyBlockState
-      | undefined
+    const shadow = inputState.shadow as AnyBlockState | undefined
+    const realBlock = inputState.block as AnyBlockState | undefined
 
     /**
      * Logic:
@@ -166,7 +168,7 @@ function injectGhostBlock(
 
   Blockly.Events.disable()
   try {
-    const ghost = workspace.newBlock(ghostDef.type) as Blockly.BlockSvg
+    const ghost = workspace.newBlock(ghostDef.type)
     ghost.setFieldValue(ghostDef.label, 'name')
     ghost.setShadow(true)
     ghost.initSvg()

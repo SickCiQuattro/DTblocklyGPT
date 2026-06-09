@@ -16,8 +16,13 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
-import { parseJson, isAbstractStepArray, isValidBlockState } from '../utils/serialization'
 import { abstractToBlockly } from 'utils/blocklyParser'
+
+import {
+  parseJson,
+  isAbstractStepArray,
+  isValidBlockState,
+} from '../utils/serialization'
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -48,9 +53,7 @@ const cloneWorkspaceSnapshot = (
 const saveWorkspaceSnapshot = (
   workspace: Blockly.WorkspaceSvg,
 ): WorkspaceSnapshot =>
-  cloneWorkspaceSnapshot(
-    Blockly.serialization.workspaces.save(workspace) as WorkspaceSnapshot,
-  )
+  cloneWorkspaceSnapshot(Blockly.serialization.workspaces.save(workspace))
 
 // ─── TYPE GUARDS ──────────────────────────────────────────────────────────────
 
@@ -70,13 +73,12 @@ const isWorkspaceState = (value: unknown): value is BlocklyWorkspaceState =>
  * `MACRO_EXCLUDED_TYPES`, stripping scaffolding blocks (start / shadow-start).
  */
 const stripStartBlock = (state: State): State | null => {
-  if (!MACRO_EXCLUDED_TYPES.has(state.type as string)) return state
+  if (!MACRO_EXCLUDED_TYPES.has(state.type)) return state
 
-  let current: State | null =
-    (state.next as { block?: State } | undefined)?.block ?? null
+  let current: State | null = state.next?.block ?? null
 
-  while (current && MACRO_EXCLUDED_TYPES.has(current.type as string)) {
-    current = (current.next as { block?: State } | undefined)?.block ?? null
+  while (current && MACRO_EXCLUDED_TYPES.has(current.type)) {
+    current = current.next?.block ?? null
   }
 
   return current
@@ -174,13 +176,19 @@ const resolveMacroBlockState = (
   // macroDetail.code is populated from published_workspace by the macroList
   // endpoint (see index.tsx macroDetailsById mapping).
   const rawSource = macroDetail.code
-  const source = typeof rawSource === 'string' ? parseJson<unknown>(rawSource) : rawSource
+  const source =
+    typeof rawSource === 'string' ? parseJson<unknown>(rawSource) : rawSource
 
   if (!source) return null
 
   // If the payload is abstract steps, convert them to Blockly format first.
   if (isAbstractStepArray(source)) {
-    const converted = abstractToBlockly(source, dataObjects, dataLocations, dataActions)
+    const converted = abstractToBlockly(
+      source,
+      dataObjects,
+      dataLocations,
+      dataActions,
+    )
     if (isValidBlockState(converted)) {
       // It returns an array of blocks or a single root.
       // So `converted` is a single block state (the root of the chain).

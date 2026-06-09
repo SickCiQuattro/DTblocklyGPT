@@ -16,6 +16,12 @@ import { Routes } from 'routes'
 import { store } from './store'
 import 'regenerator-runtime'
 
+// ─── Geist font — Vercel OSS, 2023 (design system primary font) ──────────────
+import '@fontsource/geist/400.css'
+import '@fontsource/geist/500.css'
+import '@fontsource/geist/600.css'
+import '@fontsource/geist/700.css'
+
 locale('en-gb')
 
 const container = document.getElementById('root') as HTMLElement

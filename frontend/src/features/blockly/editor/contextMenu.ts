@@ -224,15 +224,15 @@ export const installContextMenuBridge = ({
 
   const originalBlockShowContextMenu =
     typeof blockPrototype?.showContextMenu === 'function'
-      ? blockPrototype.showContextMenu
+      ? (e: Event) => blockPrototype.showContextMenu(e)
       : null
   const originalWorkspaceShowContextMenu =
     typeof workspacePrototype?.showContextMenu === 'function'
-      ? workspacePrototype.showContextMenu
+      ? (e: Event) => workspacePrototype.showContextMenu(e)
       : null
   const originalConnectionShowContextMenu =
     typeof connectionPrototype?.showContextMenu === 'function'
-      ? connectionPrototype.showContextMenu
+      ? (e: Event) => connectionPrototype.showContextMenu(e)
       : null
 
   // Scope resolver
@@ -302,7 +302,7 @@ export const installContextMenuBridge = ({
           'scope' in option ? option.scope : resolveScope(fallbackScope)
 
         if (rawLabel.toLowerCase().includes('delete') && actionScope?.block) {
-          const block = actionScope.block as Blockly.BlockSvg
+          const block = actionScope.block
           const bodyCount = getOwnBodyDescendants(block).length
           const count = 1 + bodyCount
           rawLabel = count > 1 ? `Delete ${count} blocks` : `Delete block`
@@ -379,6 +379,7 @@ export const installContextMenuBridge = ({
         ? [...generatedOptions]
         : []
 
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       const sourceBlock = this
       const sourceWorkspace = toWorkspaceSvg(sourceBlock.workspace)
 

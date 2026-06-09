@@ -2,6 +2,7 @@ export interface ObjectListType {
   id: number
   name: string
   owner: number
+  owner__username?: string
   shared: boolean
   group?: string | null
   keywords: string[]

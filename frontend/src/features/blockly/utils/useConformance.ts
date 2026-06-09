@@ -97,7 +97,7 @@ export const useConformance = (
 
     const listener = (event: Blockly.Events.Abstract) => {
       // event.type is a string at runtime despite some TS overloads.
-      if (STRUCTURAL_EVENTS.has(event.type as string)) {
+      if (STRUCTURAL_EVENTS.has(event.type)) {
         recompute()
       }
     }

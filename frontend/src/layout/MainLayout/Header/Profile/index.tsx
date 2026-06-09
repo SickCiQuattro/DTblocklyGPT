@@ -15,7 +15,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
-import { UserOutlined } from '@ant-design/icons'
+import { User } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
 import { Transitions } from 'components/Transitions'
@@ -44,7 +44,11 @@ const TabPanel = ({ children = null, value, index, dir }: TabPanelProps) => (
   </div>
 )
 
-export const Profile = () => {
+interface ProfileProps {
+  drawerOpen?: boolean
+}
+
+export const Profile = ({ drawerOpen = true }: ProfileProps) => {
   const theme = useTheme()
   const storedUser = getFromLocalStorage(LocalStorageKey.USER) as
     | Partial<UserLoginInterface>
@@ -84,13 +88,14 @@ export const Profile = () => {
   const iconBackColorOpen = 'grey.300'
 
   return (
-    <Box sx={{ flexShrink: 0, ml: 0.75 }}>
+    <Box sx={{ flexShrink: 0, ml: 0, width: '100%' }}>
       <ButtonBase
         sx={{
-          p: 0.25,
+          p: 0.5,
           bgcolor: open ? iconBackColorOpen : 'transparent',
           borderRadius: 1,
           '&:hover': { bgcolor: 'secondary.lighter' },
+          width: '100%',
         }}
         aria-label="open profile"
         ref={anchorRef}
@@ -101,17 +106,40 @@ export const Profile = () => {
       >
         <Stack
           direction="row"
-          spacing={2}
-          sx={{ p: 0.5, alignItems: 'center' }}
+          spacing={0}
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            width: '100%',
+          }}
         >
-          <Avatar alt="user profile" sx={{ width: 32, height: 32 }}>
+          <Avatar
+            alt="user profile"
+            sx={{ width: 32, height: 32, flexShrink: 0 }}
+          >
             <RandomUserIcon />
           </Avatar>
-          <Typography variant="subtitle1">{userName}</Typography>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              margin: 0,
+              ml: drawerOpen ? 1.5 : 0,
+              opacity: drawerOpen ? 1 : 0,
+              maxWidth: drawerOpen ? '140px' : '0px',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              transition:
+                'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            {userName}
+          </Typography>
         </Stack>
       </ButtonBase>
       <Popper
-        placement="bottom-end"
+        placement={drawerOpen ? 'bottom-start' : 'right-end'}
         open={open}
         anchorEl={anchorRef.current}
         role={undefined}
@@ -184,7 +212,8 @@ export const Profile = () => {
                                 cursor: 'default',
                               }}
                               icon={
-                                <UserOutlined
+                                <User
+                                  size={16}
                                   style={{
                                     marginBottom: 0,
                                     marginRight: '10px',

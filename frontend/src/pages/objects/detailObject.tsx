@@ -44,18 +44,16 @@ const DetailObject = () => {
   const data = dataObject && dataMyRobots
 
   const subtitle = insertMode
-    ? 'Here you can define the detail of the Objects. Stay hover the fields to see the description.'
-    : 'Here you can edit the detail of the Object. Stay hover the fields to see the description.'
+    ? 'Here you can define the details of the Object. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the Object. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add object' : 'Object detail'}
+      title={insertMode ? 'Add Object' : 'Object Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic
-          ? 'Return to the task graphic'
-          : 'Return to the list of objects'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Objects'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}

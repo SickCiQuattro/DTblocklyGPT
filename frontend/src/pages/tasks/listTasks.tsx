@@ -1,38 +1,51 @@
 import React, { useState } from 'react'
-import {
-  Popconfirm,
-  TableColumnsType,
-  TablePaginationConfig,
-  Space,
-  Table,
-} from 'antd'
 import { useDispatch } from 'react-redux'
-import { Button, IconButton, Stack } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
 import {
-  EyeOutlined,
-  PlayCircleOutlined,
-  PlusCircleOutlined,
-  IssuesCloseOutlined,
-  BuildOutlined,
-  SafetyCertificateOutlined,
-  MergeCellsOutlined,
-} from '@ant-design/icons'
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Tooltip,
+  Typography,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+} from '@mui/material'
+import {
+  Eye,
+  Play,
+  Pencil,
+  Cpu,
+  ShieldCheck,
+  BrainCircuit,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  MoreVertical,
+} from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
+import { ConfirmPopover } from 'components/ConfirmPopover'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
-import { iconMap } from 'utils/iconMap'
-import { Palette } from 'themes/palette'
-import {
-  defaultCurrentPage,
-  defaultPageSizeSelection,
-  defaultPaginationConfig,
-} from 'utils/constants'
+import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
 import { formatDateTimeFrontend } from 'utils/date'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
@@ -45,41 +58,288 @@ import { TaskType } from './types'
 import { SimulateTaskModal } from './simulateTaskModal'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
 
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+const StatusBadge = ({ status }: { status?: string }) => {
+  const getStatusConfig = (status?: string) => {
+    const s = status?.toLowerCase() ?? 'draft'
+    if (s === 'published' || s === 'ready' || s === 'tested') {
+      return {
+        label: 'Published',
+        color: '#10B981',
+        bg: 'rgba(16, 185, 129, 0.08)',
+        border: 'rgba(16, 185, 129, 0.2)',
+      }
+    }
+    if (s === 'published_with_draft') {
+      return {
+        label: 'Draft in Progress',
+        color: '#3B82F6',
+        bg: 'rgba(59, 130, 246, 0.08)',
+        border: 'rgba(59, 130, 246, 0.2)',
+      }
+    }
+    return {
+      label: 'Draft',
+      color: '#D97706',
+      bg: 'rgba(217, 119, 6, 0.08)',
+      border: 'rgba(217, 119, 6, 0.2)',
+    }
+  }
+
+  const cfg = getStatusConfig(status)
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        px: 1,
+        py: 0.25,
+        borderRadius: '6px',
+        fontSize: '0.72rem',
+        fontWeight: 600,
+        letterSpacing: '0.04em',
+        color: cfg.color,
+        bgcolor: cfg.bg,
+        border: `1px solid ${cfg.border}`,
+        textTransform: 'uppercase',
+        fontFamily: "'Geist', 'Inter', sans-serif",
+      }}
+    >
+      {cfg.label}
+    </Box>
+  )
+}
+
+// ─── Column header ────────────────────────────────────────────────────────────
+
+const ColHead = ({ children }: { children: React.ReactNode }) => (
+  <TableCell
+    sx={{
+      fontSize: '0.72rem',
+      fontWeight: 700,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      color: 'text.secondary',
+      borderBottom: '1px solid',
+      borderColor: 'divider',
+      py: 1.5,
+      whiteSpace: 'nowrap',
+      fontFamily: "'Geist', 'Inter', sans-serif",
+      backgroundColor: '#FAFAFA',
+    }}
+  >
+    {children}
+  </TableCell>
+)
+
+// ─── Task Row Actions Overflow Menu ──────────────────────────────────────────
+
+const TaskRowActions = ({
+  row,
+  canManage,
+  handleOpenWorkspace,
+  handleOpenDetails,
+  setRunTaskModalVisible,
+  setRunningTask,
+  setSimulateTaskModalVisible,
+  setSimulatingTask,
+  setAnalyzeModalVisible,
+  setAnalyzingTask,
+  handleDelete,
+}: {
+  row: TaskType
+  canManage: (owner: any) => boolean
+  handleOpenWorkspace: (id: number) => void
+  handleOpenDetails: (id: number) => void
+  setRunTaskModalVisible: (v: boolean) => void
+  setRunningTask: (t: TaskType) => void
+  setSimulateTaskModalVisible: (v: boolean) => void
+  setSimulatingTask: (t: TaskType) => void
+  setAnalyzeModalVisible: (v: boolean) => void
+  setAnalyzingTask: (t: TaskType) => void
+  handleDelete: (id: number) => void
+}) => {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const open = Boolean(anchorEl)
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget)
+  }
+  const handleClose = () => {
+    setAnchorEl(null)
+  }
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+      <Tooltip title="Open workspace">
+        <span>
+          <IconButton
+            size="small"
+            color="primary"
+            disabled={!canManage(row.owner)}
+            onClick={() => handleOpenWorkspace(row.id)}
+            id={`btn-open-task-${row.id}`}
+            aria-label="open workspace"
+          >
+            <Pencil size={15} />
+          </IconButton>
+        </span>
+      </Tooltip>
+
+      <Tooltip title="Run task">
+        <IconButton
+          size="small"
+          sx={{ color: 'success.main' }}
+          onClick={() => {
+            setRunTaskModalVisible(true)
+            setRunningTask(row)
+          }}
+          id={`btn-run-task-${row.id}`}
+          aria-label="run task"
+        >
+          <Play size={15} />
+        </IconButton>
+      </Tooltip>
+
+      <IconButton size="small" onClick={handleClick} aria-label="more actions">
+        <MoreVertical size={16} />
+      </IconButton>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+              border: '1px solid',
+              borderColor: 'divider',
+              minWidth: '150px',
+            },
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => {
+            handleClose()
+            handleOpenDetails(row.id)
+          }}
+          disabled={!canManage(row.owner)}
+        >
+          <ListItemIcon>
+            <Eye size={15} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>View details</Typography>
+            }
+          />
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            handleClose()
+            setSimulateTaskModalVisible(true)
+            setSimulatingTask(row)
+          }}
+        >
+          <ListItemIcon>
+            <Cpu size={15} style={{ color: '#D97706' }} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>Simulate</Typography>
+            }
+          />
+        </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            handleClose()
+            setAnalyzeModalVisible(true)
+            setAnalyzingTask(row)
+          }}
+        >
+          <ListItemIcon>
+            <BrainCircuit size={15} style={{ color: '#0284C7' }} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem' }}>Verify Logic</Typography>
+            }
+          />
+        </MenuItem>
+
+        <ConfirmPopover
+          title="Delete this task?"
+          onConfirm={() => {
+            handleClose()
+            handleDelete(row.id)
+          }}
+        >
+          {(onOpen) => (
+            <MenuItem
+              onClick={(e) => {
+                if (!canManage(row.owner)) return
+                onOpen(e)
+              }}
+              disabled={!canManage(row.owner)}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon>
+                <Trash2 size={15} color="red" />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  <Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>
+                    Delete
+                  </Typography>
+                }
+              />
+            </MenuItem>
+          )}
+        </ConfirmPopover>
+      </Menu>
+    </Stack>
+  )
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const ListTasks = () => {
-  const [tablePageSize, setTablePageSize] = useState(defaultPageSizeSelection)
-  const [tableCurrentPage, setTableCurrentPage] = useState(defaultCurrentPage)
+  const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
+  const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const navigate = useNavigate()
   const dispatch = useDispatch()
+
   const {
     data: dataTasks,
     mutate,
     isLoading: isLoadingTasks,
   } = useSWR<TaskType[], Error>(
     { url: endpoints.home.libraries.tasks },
-    {
-      revalidateOnFocus: true,
-      revalidateOnMount: true,
-    },
+    { revalidateOnFocus: true, revalidateOnMount: true },
   )
-  const { data: dataMyRobots, isLoading: isLoadingMyRobots } = useSWR<
-    MyRobotType[],
-    Error
-  >({ url: endpoints.home.libraries.myRobots })
 
-  const { data: dataObjects, isLoading: isLoadingObjects } = useSWR<
-    ObjectListType[],
-    Error
-  >({ url: endpoints.home.libraries.objects })
+  const { data: dataMyRobots } = useSWR<MyRobotType[], Error>({
+    url: endpoints.home.libraries.myRobots,
+  })
+  const { data: dataObjects } = useSWR<ObjectListType[], Error>({
+    url: endpoints.home.libraries.objects,
+  })
+  const { data: dataLocations } = useSWR<LocationListType[], Error>({
+    url: endpoints.home.libraries.locations,
+  })
+  const { data: dataActions } = useSWR<ActionListType[], Error>({
+    url: endpoints.home.libraries.actions,
+  })
 
-  const { data: dataLocations, isLoading: isLoadingLocations } = useSWR<
-    LocationListType[],
-    Error
-  >({ url: endpoints.home.libraries.locations })
-
-  const { data: dataActions, isLoading: isLoadingActions } = useSWR<
-    ActionListType[],
-    Error
-  >({ url: endpoints.home.libraries.actions })
   const [runTaskModalVisible, setRunTaskModalVisible] = useState(false)
   const [runningTask, setRunningTask] = useState<TaskType | null>(null)
   const [simulateTaskModalVisible, setSimulateTaskModalVisible] =
@@ -87,6 +347,7 @@ const ListTasks = () => {
   const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
+
   const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
   const currentUserId =
     typeof storedUser === 'object' &&
@@ -96,25 +357,17 @@ const ListTasks = () => {
       ? String(storedUser.id)
       : null
 
-  const themePalette = Palette('light')
-  const canManageTask = (owner: TaskType['owner']) =>
+  const canManage = (owner: TaskType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
 
-  const handleDetail = (id: number) => {
+  const handleOpenWorkspace = (id: number) => {
     dispatch(activeItem(''))
     navigate(`/task/${id}`)
   }
 
-  const handleEdit = (id: number) => {
-    dispatch(openDrawer(false))
-    dispatch(activeItem('definegraphic'))
-    navigate(`/graphic/${id}`)
-  }
-
-  const handleMultimodal = (id: number) => {
-    dispatch(openDrawer(false))
-    dispatch(activeItem('multimodal'))
-    navigate(`/multimodal/${id}`)
+  const handleOpenDetails = (id: number) => {
+    dispatch(activeItem('tasks'))
+    navigate(`/task/${id}/details`)
   }
 
   const handleDelete = (id: number) => {
@@ -125,231 +378,215 @@ const ListTasks = () => {
     }).then(() => {
       toast.success(MessageText.success)
       mutate()
-      if (dataTasks?.length === 1 && tableCurrentPage > 1) {
-        setTableCurrentPage(tableCurrentPage - 1)
-      }
+      const remaining = (dataTasks?.length ?? 1) - 1
+      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
   }
 
-  const columns: TableColumnsType<TaskType> = [
-    {
-      key: 'detail',
-      title: 'Detail',
-      dataIndex: 'detail',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => handleDetail(record.id)}
-          color="primary"
-          aria-label="detail"
-          title="View task details"
-          disabled={!canManageTask(record.owner)}
-        >
-          <EyeOutlined style={{ fontSize: '2em' }} />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'graphic',
-      title: 'Graphic',
-      dataIndex: 'graphic',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => handleEdit(record.id)}
-          color="primary"
-          aria-label="graphic"
-          title="Go to graphic interface"
-          disabled={!canManageTask(record.owner)}
-        >
-          <BuildOutlined style={{ fontSize: '2em' }} />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'multimodal',
-      title: 'Multimodal',
-      dataIndex: 'multimodal',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => handleMultimodal(record.id)}
-          color="primary"
-          aria-label="multimodal"
-          title="Go to multimodal interface"
-          disabled={!canManageTask(record.owner)}
-        >
-          <MergeCellsOutlined style={{ fontSize: '2em' }} />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'run',
-      title: 'Run',
-      dataIndex: 'run',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => {
-            setRunTaskModalVisible(true)
-            setRunningTask(record)
-          }}
-          color="primary"
-          aria-label="run"
-          title="Run task"
-        >
-          <PlayCircleOutlined
-            style={{
-              color: themePalette.palette.success.main,
-              fontSize: '2em',
-            }}
-          />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'simulate',
-      title: 'Simulate',
-      dataIndex: 'simulate',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => {
-            setSimulateTaskModalVisible(true)
-            setSimulatingTask(record)
-          }}
-          color="primary"
-          aria-label="simulate"
-          title="Simulate task"
-        >
-          <SafetyCertificateOutlined
-            style={{
-              color: themePalette.palette.warning.main,
-              fontSize: '2em',
-            }}
-          />
-        </IconButton>
-      ),
-    },
-    {
-      key: 'analyze',
-      title: 'Analyze',
-      dataIndex: 'simulate',
-      width: 50,
-      render: (_, record) => (
-        <IconButton
-          onClick={() => {
-            setAnalyzeModalVisible(true)
-            setAnalyzingTask(record)
-          }}
-          color="primary"
-          aria-label="analyze"
-          title="Analyze task"
-        >
-          <IssuesCloseOutlined
-            style={{
-              color: themePalette.palette.warning.main,
-              fontSize: '2em',
-            }}
-          />
-        </IconButton>
-      ),
-    },
-    { key: 'name', title: 'Name', dataIndex: 'name' },
-    { key: 'description', title: 'Description', dataIndex: 'description' },
-    { key: 'owner__username', title: 'Owner', dataIndex: 'owner__username' },
-    {
-      key: 'shared',
-      title: 'Shared',
-      dataIndex: 'shared',
-      render: (shared) => {
-        if (shared > 0) {
-          return iconMap.successData
-        }
-        return iconMap.deleteCircle
-      },
-    },
-    {
-      key: 'last_modified',
-      title: 'Last modified',
-      dataIndex: 'last_modified',
-      render: (_, record) => formatDateTimeFrontend(record.last_modified),
-    },
-    {
-      title: 'Operations',
-      key: 'operation',
-      render: (_, record) => (
-        <Space size="middle">
-          <Popconfirm
-            title="Delete?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Ok"
-            cancelText="Cancel"
-            icon={iconMap.deleteCircle}
-          >
-            <Button
-              color="error"
-              disabled={!canManageTask(record.owner)}
-              title="Delete this task"
-            >
-              Delete
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
-  const PaginationConfig: TablePaginationConfig = {
-    pageSize: tablePageSize,
-    current: tableCurrentPage,
-    onChange: (page: number, pageSize: number) => {
-      setTableCurrentPage(page)
-      setTablePageSize(pageSize)
-    },
-    ...defaultPaginationConfig,
-  }
-
   const handleAdd = () => {
-    dispatch(activeItem('homepage'))
-    navigate('/')
+    dispatch(openDrawer(false))
+    navigate('/task/new')
   }
+
+  // Paginated rows
+  const rows = dataTasks ?? []
+  const paginated = rows.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage,
+  )
 
   return (
     <MainCard
-      title="Task list"
-      subtitle="Here you can see the list of the defined tasks."
+      title="Tasks"
+      subtitle="Manage and open your robot programming tasks."
     >
+      {/* ── Toolbar ── */}
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={{ xs: 2, sm: 2, md: 2 }}
-        sx={{ mb: 2, display: 'flex', justifyContent: 'space-between' }}
+        direction="row"
+        sx={{ mb: 2.5, alignItems: 'center', justifyContent: 'space-between' }}
       >
+        <Typography variant="body2" color="text.secondary">
+          {rows.length} task{rows.length !== 1 ? 's' : ''}
+        </Typography>
         <Button
-          size="large"
-          variant="text"
+          variant="contained"
           color="primary"
+          size="medium"
+          startIcon={<Plus size={16} />}
           onClick={handleAdd}
-          startIcon={<PlusCircleOutlined />}
-          title="Add a new task"
+          id="btn-add-task"
+          sx={{
+            borderRadius: '8px',
+            fontFamily: "'Geist', 'Inter', sans-serif",
+            fontWeight: 500,
+            fontSize: '0.875rem',
+            textTransform: 'none',
+          }}
         >
-          Add
+          New Task
         </Button>
       </Stack>
-      <Table
-        columns={columns}
-        dataSource={dataTasks || []}
-        pagination={PaginationConfig}
-        loading={
-          isLoadingTasks ||
-          isLoadingMyRobots ||
-          isLoadingObjects ||
-          isLoadingLocations ||
-          isLoadingActions
-        }
-        rowKey="id"
-        style={{ overflowX: 'auto' }}
-      />
+
+      {/* ── Table ── */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '10px',
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <TableContainer
+          sx={{
+            maxHeight: 'calc(100vh - 280px)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            pb: 2,
+          }}
+        >
+          <Table size="small" aria-label="tasks table" stickyHeader>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <ColHead>Name</ColHead>
+                <ColHead>Status</ColHead>
+                <ColHead>Owner</ColHead>
+                <ColHead>Shared</ColHead>
+                <ColHead>Last Modified</ColHead>
+                <ColHead>Actions</ColHead>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoadingTasks ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                    <CircularProgress
+                      size={28}
+                      sx={{ color: 'primary.main' }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No tasks yet. Create your first task.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginated.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    hover
+                    sx={{
+                      cursor: 'pointer',
+                      '&:last-child td': { border: 0 },
+                      '& td': { borderColor: 'divider' },
+                    }}
+                    onClick={() =>
+                      canManage(row.owner) && handleOpenWorkspace(row.id)
+                    }
+                  >
+                    {/* Name */}
+                    <TableCell>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 600,
+                          fontFamily: "'Geist', 'Inter', sans-serif",
+                          color: 'text.primary',
+                        }}
+                      >
+                        {row.name}
+                      </Typography>
+                      {row.description && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{
+                            display: 'block',
+                            mt: 0.25,
+                            maxWidth: 280,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {row.description}
+                        </Typography>
+                      )}
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <StatusBadge status={(row as any).status} />
+                    </TableCell>
+
+                    {/* Owner */}
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {(row as any).owner__username ?? '—'}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Shared */}
+                    <TableCell>
+                      {row.shared ? (
+                        <CheckCircle2 size={16} color="#10B981" />
+                      ) : (
+                        <XCircle size={16} color="#9CA3AF" />
+                      )}
+                    </TableCell>
+
+                    {/* Last Modified */}
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDateTimeFrontend(row.last_modified)}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Actions */}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TaskRowActions
+                        row={row}
+                        canManage={canManage}
+                        handleOpenWorkspace={handleOpenWorkspace}
+                        handleOpenDetails={handleOpenDetails}
+                        setRunTaskModalVisible={setRunTaskModalVisible}
+                        setRunningTask={setRunningTask}
+                        setSimulateTaskModalVisible={
+                          setSimulateTaskModalVisible
+                        }
+                        setSimulatingTask={setSimulatingTask}
+                        setAnalyzeModalVisible={setAnalyzeModalVisible}
+                        setAnalyzingTask={setAnalyzingTask}
+                        handleDelete={handleDelete}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 40]}
+          component="div"
+          count={rows.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10))
+            setPage(0)
+          }}
+          sx={{ borderTop: '1px solid', borderColor: 'divider' }}
+        />
+      </Paper>
+
+      {/* ── Modals ── */}
       <RunTaskModal
         task={runningTask}
         dataMyRobots={dataMyRobots || []}

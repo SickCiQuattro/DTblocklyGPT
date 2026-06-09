@@ -52,6 +52,8 @@ export interface CustomBlock {
     | 'logic_or_block'
     | 'logic_not_block'
     | 'wait_for_human_block' // kept for backwards compatibility
+    | 'when_start'
+    | 'macro_task_block'
   inputs?: {
     OBJECT?: { block?: CustomBlock; shadow?: CustomBlock }
     LOCATION?: { block?: CustomBlock; shadow?: CustomBlock }
@@ -254,7 +256,7 @@ export const abstractToBlockly = (
     }
   }
 
-  const stepsToSequence = (steps: AbstractStep[]): any | null => {
+  const stepsToSequence = (steps: AbstractStep[]): any => {
     if (!steps || !steps.length) return null
     const [first, ...rest] = steps
     const block = stepToBlock(first)
@@ -266,9 +268,7 @@ export const abstractToBlockly = (
     return block
   }
 
-  const conditionToBlock = (
-    condition: AbstractCondition | null,
-  ): any | null => {
+  const conditionToBlock = (condition: AbstractCondition | null): any => {
     if (!condition) return null
     switch (condition.type) {
       case 'sensor_signal': {
@@ -417,10 +417,7 @@ export const blocklyToAbstract = (
       case 'gesture_block':
         return {
           type: 'gesture',
-          gestureType: (block.fields?.GESTURE_TYPE ?? 'THUMBS_UP') as
-            | 'THUMBS_UP'
-            | 'STOP'
-            | 'OPEN_HAND',
+          gestureType: block.fields?.GESTURE_TYPE ?? 'THUMBS_UP',
         }
       case 'timer_block':
         return { type: 'timer', seconds: block.fields?.SECONDS ?? 5 }
@@ -529,6 +526,16 @@ export const blocklyToAbstract = (
             resolveBlock(block.inputs?.CONFIRM_EVENT),
           ),
         }
+      case 'macro_task_block':
+        return {
+          type: 'macro_task',
+          macroId: getIdFromBlock(block),
+          macroName: getNameFromBlock(block),
+        }
+      case 'when_start':
+        // when_start represents the start of a sequence but is not a step itself.
+        // Returning null allows sequenceToSteps to skip it and parse its next connected blocks.
+        return null
       default:
         return null
     }
@@ -546,4 +553,24 @@ export const blocklyToAbstract = (
   }
 
   return sequenceToSteps(blocklyRoot)
+}
+
+/**
+ * Converts multiple top-level Blockly blocks (or a single block) into a single flattened
+ * AbstractStep list. Useful for parsing workspaces with multiple disconnected branches or standalone blocks.
+ */
+export const blocklyToAbstractAll = (
+  blocks: CustomBlock[] | CustomBlock | null,
+): import('pages/tasks/types').ASTBranch[] => {
+  if (!blocks) return []
+  const blockArray = Array.isArray(blocks) ? blocks : [blocks]
+  const branches: import('pages/tasks/types').ASTBranch[] = []
+  for (const block of blockArray) {
+    const isMain = block.type === 'when_start'
+    const steps = blocklyToAbstract(block)
+    if (steps && steps.length > 0) {
+      branches.push({ isMain, steps })
+    }
+  }
+  return branches
 }

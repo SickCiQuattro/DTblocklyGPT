@@ -23,9 +23,9 @@ import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { Target, Plus } from 'lucide-react'
-import { ConfirmPopover } from 'components/ConfirmPopover'
 import { useSearchParams } from 'react-router-dom'
 
+import { ConfirmPopover } from 'components/ConfirmPopover'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
@@ -228,7 +228,7 @@ export const FormAction = ({
                     onChange={handleChange}
                     disabled={!!forcedName}
                     error={Boolean(touched.name && errors.name)}
-                    title="Name of the action"
+                    title="Name of the routine"
                   />
                   {touched.name && errors.name && (
                     <FormHelperText error id="helper-text-name">
@@ -253,7 +253,7 @@ export const FormAction = ({
                       />
                     }
                     label="Shared"
-                    title="Share this action with other users"
+                    title="Share this routine with other users"
                   />
                 </Stack>
               </Grid>
@@ -267,7 +267,7 @@ export const FormAction = ({
                     value={addKeyword || ''}
                     name="add_keyword"
                     label="Add keyword"
-                    title="You can define keywords for this action to be used as synonyms during the chat"
+                    title="You can define keywords for this routine to be used as synonyms during the chat"
                     onChange={(e) => setAddKeyword(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -381,7 +381,7 @@ export const FormAction = ({
                       onBlur={handleBlur}
                       onChange={handleChange}
                       error={Boolean(touched.pattern && errors.pattern)}
-                      title="Pattern of the action. You can use already defined pattern or define a custom list of points from the Points section"
+                      title="Pattern of the routine. You can use already defined pattern or define a custom list of points from the Points section"
                     >
                       {listPatterns.map((pattern) => (
                         <MenuItem value={pattern.id} key={pattern.id}>
@@ -480,7 +480,11 @@ export const FormAction = ({
                           }
                         >
                           {(onOpen) => (
-                            <Button color="error" title="Delete this point" onClick={onOpen}>
+                            <Button
+                              color="error"
+                              title="Delete this point"
+                              onClick={onOpen}
+                            >
                               Delete
                             </Button>
                           )}
@@ -499,7 +503,7 @@ export const FormAction = ({
                   type="submit"
                   variant="contained"
                   color="primary"
-                  title="Save this action"
+                  title="Save this routine"
                 >
                   Save
                 </Button>
