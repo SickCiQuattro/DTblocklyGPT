@@ -74,7 +74,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>6.0</damping>
-            <friction>20.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -147,7 +147,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>7.0</damping>
-            <friction>20.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -220,7 +220,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>5.0</damping>
-            <friction>15.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -293,7 +293,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>2.0</damping>
-            <friction>10.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -366,7 +366,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>3.0</damping>
-            <friction>4.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -507,7 +507,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>3.0</damping>
-            <friction>5.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -711,78 +711,78 @@
     <self_collide>1</self_collide>
     </link>
     <!--========================================================-->
-    <!-- Applicazione plugin a ogni joint per permettere il funzionamento del controller-->
+        <!-- Applicazione plugin a ogni joint per permettere il funzionamento del controller-->
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint1</joint_name>
             <topic>/model/Cobotta/joint/joint1/0/cmd_pos</topic>
-            <p_gain>50</p_gain>
-            <i_gain>5</i_gain>
-            <d_gain>10</d_gain>
-            <i_min>-20</i_min>
-            <i_max>20</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint2</joint_name>
             <topic>/model/Cobotta/joint/joint2/0/cmd_pos</topic>
-            <p_gain>50</p_gain>
-            <i_gain>10</i_gain>
-            <d_gain>10</d_gain>
-            <i_min>-20</i_min>
-            <i_max>20</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint3</joint_name>
             <topic>/model/Cobotta/joint/joint3/0/cmd_pos</topic>
-            <p_gain>50</p_gain>
-            <i_gain>10</i_gain>
-            <d_gain>10</d_gain>
-            <i_min>-20</i_min>
-            <i_max>20</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint4</joint_name>
             <topic>/model/Cobotta/joint/joint4/0/cmd_pos</topic>
-            <p_gain>50</p_gain>
-            <i_gain>10</i_gain>
-            <d_gain>10</d_gain>
-            <i_min>-20</i_min>
-            <i_max>20</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint5</joint_name>
             <topic>/model/Cobotta/joint/joint5/0/cmd_pos</topic>
-            <p_gain>50</p_gain>
-            <i_gain>10</i_gain>
-            <d_gain>10</d_gain>
-            <i_min>-10</i_min>
-            <i_max>10</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint6</joint_name>
             <topic>/model/Cobotta/joint/joint6/0/cmd_pos</topic>
-            <p_gain>180</p_gain>
-            <i_gain>3</i_gain>
-            <d_gain>5</d_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_left</joint_name>
             <topic>/model/Cobotta/joint/joint_left/0/cmd_pos</topic>
             <p_gain>2000</p_gain>
-            <i_gain>1</i_gain>
-            <d_gain>1</d_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <i_gain>5</i_gain>
+            <d_gain>5</d_gain>
+            <i_min>-10</i_min>
+            <i_max>10</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_right</joint_name>
             <topic>/model/Cobotta/joint/joint_right/0/cmd_pos</topic>
             <p_gain>2000</p_gain>
-            <i_gain>1</i_gain>
-            <d_gain>1</d_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <i_gain>5</i_gain>
+            <d_gain>5</d_gain>
+            <i_min>-10</i_min>
+            <i_max>10</i_max>
         </plugin>
     <!--========================================================-->
 
