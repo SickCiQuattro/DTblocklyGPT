@@ -76,28 +76,24 @@ This paper presents an End-User Development environment for collaborative robot 
 
 ---
 # Installing from scratch
-This guide covers installation on Windows with Linux via WSL.
-You can install everything directly on Linux, but the program is not optimized for that setting.  
-Run the following commands after installing Python 3.11.x and Poetry.
+This guide covers installation on Windows with Linux via WSL, or directly on Linux (such as inside a VM).
 
-## Powershell
-### Poetry Environment Installation
+## Environment Configurations
+The environment configuration files are ignored by git and must be created first:
+1. **Backend Environment:** Copy `backend/.env.example` to `backend/.env` and edit it to include your OpenAI/Gemini API key.
+2. **Frontend Environment:** Copy `frontend/.env.example` to `frontend/.env` (the defaults are pre-configured for local/SSH-forwarded setups).
+
+## Backend & Database Setup
+The SQLite database file `db.sqlite3` is tracked and committed to the repository, meaning it already contains all pre-configured mock users (`operator1`, `manager1`, `admin`), robots, simulation locations, and tasks. You do not need to run migrations or seeding commands.
+
+Simply install Python dependencies and run the server from the project root:
 
 ```bash
-# Fresh install
+# Install Poetry dependencies
 poetry install
 
-# Start the server
-poetry run start
-```
-### Update Dependencies
-Update project dependencies from `pyproject.toml` :
-```bash
-poetry update 
-```
-Update `pyproject.toml`  to the latest available versions:
-```bash
-poetry run poetryup 
+# Start the Django server
+poetry run python manage.py runserver
 ```
 
 ## WSL
@@ -171,14 +167,17 @@ To launch the application, you need to open multiple terminals and execute comma
 
 ## 3. ROS nodes
 For the ROS nodes
-- `flask_node.py`
+- `flask_node`
   <!-- Flask application that receives API calls from the main application, and based on these calls, acts on the ROS architecture (creates nodes, sends messages, etc.); -->
-- `cobotta_node.py`
+- `cobotta_node`
   <!-- receives ROS messages (subscriber) and connects directly to the Cobotta to move the robot; -->
-- `gazebo_node.py`
-- `polling_socket_node.py`
+- `gazebo_command_node`
+  <!-- executes commands in the Gazebo simulation; -->
+- `gazebo_state_node`
+  <!-- publishes joint states from Gazebo simulation; -->
+- `polling_socket_node`
 
-located in the folder `ros2_ws\src\cobotta_rest_api\cobotta_rest_api` repeat for each node (in the order indicated above) the following launch procedure in separate terminals.
+located in the package `cobotta_rest_api` (under `ros2_ws`). Repeat for each node (in the order indicated above, or run `launch_sim.sh` to start them all automatically) the following launch procedure in separate terminals.
 
 ### Environment setup
 Open a `wsl` terminal and source the ROS2 system environment:
