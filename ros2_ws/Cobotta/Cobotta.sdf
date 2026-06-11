@@ -791,5 +791,19 @@
                 name="gz::sim::systems::JointStatePublisher">
             <topic>joint_states</topic>
         </plugin>
+
+        <!-- Rigid grasp: welds the dynamically spawned "object" model to the hand.
+             Starts with a pending attach (gz-sim8 default); simulate.py publishes
+             detach right after each spawn and attach/detach around grasp/release. -->
+        <plugin filename="gz-sim-detachable-joint-system"
+                name="gz::sim::systems::DetachableJoint">
+            <parent_link>link_j6</parent_link>
+            <child_model>object</child_model>
+            <child_link>link</child_link>
+            <attach_topic>/model/Cobotta/detachable_joint/attach</attach_topic>
+            <detach_topic>/model/Cobotta/detachable_joint/detach</detach_topic>
+            <output_topic>/model/Cobotta/detachable_joint/state</output_topic>
+            <suppress_child_warning>true</suppress_child_warning>
+        </plugin>
 </model>
 </sdf>

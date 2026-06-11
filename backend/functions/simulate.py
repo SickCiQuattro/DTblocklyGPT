@@ -575,18 +575,36 @@ DEFAULT_PLACE_Y_REL = -0.21
 # Safe intermediate pose used before/after MOVE_TO and as IK fallback (degrees)
 SAFE_INTERMEDIATE_POSE = [51.56, 20.05, 87.08, 0.0, 48.70, 0.0]
 
+# DetachableJoint topics (plugin in Cobotta.sdf, parent_link=link_j6, child_model=object)
+ATTACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/attach -m gz.msgs.Empty -p 'unused: true'"
+DETACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/detach -m gz.msgs.Empty -p 'unused: true'"
+
+
+def attach_object_to_gripper() -> bool:
+    print("[GRASP] Attach: welding 'object' to link_j6 via DetachableJoint")
+    ok = launch_wsl_ros_command(ATTACH_CMD)
+    if not ok:
+        print("[GRASP] WARNING: attach command failed (gz topic returned error)")
+    return ok
+
+
+def detach_object_from_gripper() -> bool:
+    print("[GRASP] Detach: releasing 'object' from DetachableJoint weld")
+    ok = launch_wsl_ros_command(DETACH_CMD)
+    if not ok:
+        print("[GRASP] WARNING: detach command failed (gz topic returned error)")
+    return ok
+
+
 # Gazebo world spawn positions (absolute, Gazebo frame)
 TABLE_TOP_Z_ABS = 1.04          # Z of table surface (m)
 OBJECT_SPAWN_X = -9.05          # X of object spawn point
 OBJECT_SPAWN_Y = -1.48
 LOCATION_SPAWN_X = -8.8         # X of location model spawn point
 LOCATION_SPAWN_Y = -1.41
-PLACE_REPLICA_X = -9.16         # X of place-replica object spawn
-PLACE_REPLICA_Y = -1.18
-PLACE_REPLICA_Z = 1.25
 
 
-def simulate_ros_pick(obj, sdf_name: str = ""):
+def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
     try:
         # Sync state from ROS first to anchor the IK seeds
         sync_current_state_from_ros()
@@ -643,14 +661,18 @@ def simulate_ros_pick(obj, sdf_name: str = ""):
         pick_joints = final_path[-1] if final_path else final_seed
         debug_fk(pick_joints, label="Pick Point")
         
-        if os.path.basename(sdf_name).lower() in {"flask", "blue_cylinder"}:
-            hand_close = 0  # collision 15mm = visivo, hand=0 → ~3mm interferenza reale
-        else:
-            hand_close = min(30, max(0, int(width_mm - 4.0)))  # Stringi di più la pinza in generale
-        
+        hand_close = min(30, max(0, int(width_mm - 4.0)))  # Stringi di più la pinza in generale
+
         # Chiudi pinza e attendi stabilizzazione
         smooth_move(pick_joints, hand_close, duration_s=0.7)
         time.sleep(0.3)
+
+        # Weld oggetto alla pinza via DetachableJoint (presa rigida, evita slipping)
+        if do_attach:
+            attach_object_to_gripper()
+            time.sleep(0.2)
+        else:
+            print("[GRASP] Attach skipped (do_attach=False: spawn failed or disabled)")
 
         # 4. Lift Cartesian Z-down to carry height (preserves tool orientation)
         z_carry = z_approach + CARRY_MARGIN
@@ -707,7 +729,7 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
         print(str(e))
 
 
-def simulate_ros_place(create_object_place_command, picked_obj_name: str = "", objectsOfUser = None, location_name: str = "collector"):
+def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_name: str = "collector"):
     try:
         # Sync state from ROS
         sync_current_state_from_ros()
@@ -815,12 +837,10 @@ def simulate_ros_place(create_object_place_command, picked_obj_name: str = "", o
             place_joints = vertical_path[-1] if vertical_path else q_up
             q_retreat = q_up
 
-        # 3. Open gripper
+        # 3. Detach + open gripper
+        detach_object_from_gripper()
+        time.sleep(0.3)
         smooth_move(place_joints, ROS_OPEN_GRIPPER, duration_s=0.6)
-        time.sleep(0.5)
-
-        # Spawn the replica object in Gazebo
-        launch_wsl_ros_command(create_object_place_command)
         time.sleep(0.5)
 
         # 4. Retreat up (empty gripper from here: joint interp OK)
@@ -871,6 +891,12 @@ def reset_simulation_world():
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
+        # Detach before delete: removing a welded child without detaching first
+        # can leave the plugin in a stale attached state across the next spawn.
+        print("[GRASP] Reset: detaching before world cleanup")
+        detach_object_from_gripper()
+        time.sleep(0.2)
+
         # Delete failures are tolerated — entities may not exist on first run.
         if not launch_wsl_ros_command(delete_object):
             print("[SIMULATOR] reset: delete 'object' failed (may not exist)")
@@ -891,6 +917,10 @@ def delete_spawned_object_and_place():
     try:
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_object_place = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
+        # Detach before delete: prevents stale weld state across repeated runs.
+        print("[GRASP] Cleanup: detaching welded child before removing 'object'")
+        detach_object_from_gripper()
+        time.sleep(0.2)
         launch_wsl_ros_command(delete_object)
         time.sleep(0.4)
         launch_wsl_ros_command(delete_object_place)
@@ -1093,11 +1123,17 @@ def simulation_recursive_blockly_parser(
                 f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_spawn_abs}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
-            if not launch_wsl_ros_command(cmd):
-                print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick may fail")
+            spawn_ok = launch_wsl_ros_command(cmd)
+            if not spawn_ok:
+                print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
+            else:
+                print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_spawn_abs:.3f}")
             time.sleep(1)
+            # Neutralize pending DetachableJoint auto-attach from previous spawn or startup
+            print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
+            detach_object_from_gripper()
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
-            simulate_ros_pick(obj, sdf_name)
+            simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok)
             _next()
 
         elif block_type == StepsItems.PLACE.value:
@@ -1115,18 +1151,8 @@ def simulation_recursive_blockly_parser(
             )
             if not launch_wsl_ros_command(loc_cmd):
                 print(f"[SIMULATOR] WARNING: location spawn failed for '{sdf_name}' — place may fail")
-
-            # Spawn replica dell'oggetto effettivamente preso
             picked_obj_name = getattr(simulation_recursive_blockly_parser, "last_picked_object", "flask")
-            obj_cmd = (
-                'gz service -s /world/worldCobotta/create '
-                '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
-                '--timeout 5000 --req \'name: "object_place"; '
-                f'sdf_filename: "objects/{picked_obj_name}/model.sdf"; '
-                f'pose: {{position: {{x: {PLACE_REPLICA_X}, y: {PLACE_REPLICA_Y}, z: {PLACE_REPLICA_Z}}}, '
-                'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
-            )
-            simulate_ros_place(obj_cmd, picked_obj_name, objectsOfUser, sdf_name)
+            simulate_ros_place(picked_obj_name, objectsOfUser, sdf_name)
             time.sleep(1)
             _next()
 

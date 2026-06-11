@@ -1155,6 +1155,26 @@ files = [
 all = ["mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2)"]
 
 [[package]]
+name = "ikpy"
+version = "3.4.2"
+description = "An inverse kinematics library aiming performance and modularity"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "ikpy-3.4.2-py3-none-any.whl", hash = "sha256:9ead7b2085f057822e563786a70b52a4f5d0db03de9d562f1488df38ccef36af"},
+    {file = "ikpy-3.4.2.tar.gz", hash = "sha256:f7cc9c54055735deaf89a79ce676e6f5acabc72954e769d1043febfdbfb57840"},
+]
+
+[package.dependencies]
+numpy = "*"
+scipy = "*"
+sympy = "*"
+
+[package.extras]
+plot = ["graphviz", "matplotlib"]
+
+[[package]]
 name = "installer"
 version = "0.7.0"
 description = "A library for installing Python wheels."
@@ -3939,4 +3959,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "c42621dee947e65a2ca06aab343fa67c2ded9d9043309bde09de2067da1d2b07"
+content-hash = "633a5b0f8f4b136fe06b44051c4f7ce2963041d758c2f029f7d683da9045ea4e"
