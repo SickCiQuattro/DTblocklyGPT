@@ -8,32 +8,126 @@ from ..flask_node import sendRequestPosition
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+# Joint limits in degrees — from cobotta_description/urdf/cobotta.urdf (converted rad→deg).
+JOINT_LIMITS_DEG = {
+    "joint_1": (-150.0, 150.0),
+    "joint_2": (-60.0, 100.0),
+    "joint_3": (18.0, 140.0),
+    "joint_4": (-170.0, 170.0),
+    "joint_5": (-95.0, 135.0),
+    "joint_6": (-170.0, 170.0),
+    "hand":    (0.0, 30.0),
+}
+MAX_WAYPOINTS = 5000
+
+
+def _clamp(value, lo, hi):
+    return max(lo, min(hi, value))
+
+
+def _validate_waypoints(data):
+    """Validate and normalise a waypoints list from request JSON.
+
+    Returns (clean_waypoints, None) on success or (None, error_string) on failure.
+    """
+    wps = data.get("waypoints")
+    if not isinstance(wps, list) or not wps:
+        return None, "waypoints must be a non-empty array"
+    if len(wps) > MAX_WAYPOINTS:
+        return None, f"waypoints exceeds max allowed ({MAX_WAYPOINTS})"
+
+    clean = []
+    joint_keys = ["j1", "j2", "j3", "j4", "j5", "j6"]
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
+    for i, wp in enumerate(wps):
+        if not isinstance(wp, dict):
+            return None, f"waypoint {i}: must be an object"
+        cleaned = {}
+        for jk, lk in zip(joint_keys, limit_keys):
+            v = wp.get(jk)
+            if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None, f"waypoint {i}: {jk} must be a numeric value"
+            lo, hi = JOINT_LIMITS_DEG[lk]
+            cleaned[jk] = _clamp(float(v), lo, hi)
+
+        hand = wp.get("hand", 0.0)
+        if isinstance(hand, bool) or not isinstance(hand, (int, float)):
+            return None, f"waypoint {i}: hand must be numeric"
+        cleaned["hand"] = _clamp(float(hand), *JOINT_LIMITS_DEG["hand"])
+
+        dt = wp.get("dt", 0.05)
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)):
+            return None, f"waypoint {i}: dt must be numeric"
+        cleaned["dt"] = _clamp(float(dt), 0.005, 10.0)
+
+        clean.append(cleaned)
+
+    return clean, None
+
 
 @bp.route("/move-joints")
 def moveCobotta():
-    joint_delta = get_joints_delta_from_request()
-    joint_state = createJointState(joint_delta, request.args.get("joint_abs", type=str))
+    joint_delta = []
+    missing = []
+    for i in range(1, 7):
+        v = request.args.get(f"joint_{i}", type=float)
+        if v is None:
+            missing.append(f"joint_{i}")
+        joint_delta.append(v)
+
+    hand = request.args.get("hand", type=float)
+    if hand is None:
+        missing.append("hand")
+    joint_delta.append(hand)
+
+    if missing:
+        return jsonify({"error": "missing or non-numeric params", "params": missing}), 400
+
+    # Clamp to joint limits before publishing.
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "hand"]
+    joint_delta = [
+        _clamp(joint_delta[k], *JOINT_LIMITS_DEG[limit_keys[k]])
+        for k in range(7)
+    ]
+
+    # joint_abs query param accepted for backwards compatibility but ignored —
+    # all positions are absolute; the legacy abs/delta frame_id flag is retired.
+    joint_state = createJointState(joint_delta)
     flask_pub.publisher.publish(joint_state)
     flask_pub.get_logger().info('Publishing: "%s"' % joint_state.position)
-    actual_joints_position = None  # list(sendRequestPosition())
-    return "OK"  # {"position": actual_joints_position}
+    return jsonify({"status": "ok"})
 
 
-def get_joints_delta_from_request():
-    joint_delta = []
-    for i in range(1, 7):
-        joint_delta.append(request.args.get(f"joint_{i}", type=float))
-    joint_delta.append(request.args.get("hand", type=float))
-    return joint_delta
+@bp.route("/move-path", methods=["POST"])
+def movePath():
+    data = request.get_json()
+    if not data or "waypoints" not in data:
+        return jsonify({"error": "missing waypoints array"}), 400
+
+    clean, err = _validate_waypoints(data)
+    if err:
+        return jsonify({"error": err}), 400
+
+    flask_pub.execute_path(clean)
+    return jsonify({"status": "path started"})
 
 
-def createJointState(joint_delta, joint_abs):
+@bp.route("/stop", methods=["POST"])
+def stopPath():
+    was_active = flask_pub.stop_path()
+    return jsonify({"status": "stopped", "was_executing": was_active})
+
+
+def createJointState(joint_positions):
     joint_state = JointState()
     joint_state.header.stamp = flask_pub.get_clock().now().to_msg()
-    joint_state.header.frame_id = joint_abs
+    # Positions are absolute joint targets in degrees.
+    # The legacy abs/delta flag (frame_id="true"/"false") is retired — gazebo_command_node ignores it.
+    joint_state.header.frame_id = ""
     joint_state.name = [f"joint_{i}" for i in range(1, 7)]
     joint_state.name.append("hand")
-    joint_state.position = joint_delta
+    joint_state.position = joint_positions
     joint_state.velocity = []
     joint_state.effort = []
     return joint_state
@@ -153,7 +247,7 @@ def playTrajectory(id):
 
 def createListPosJoint(points, req):
     for point in points:
-        joint_state = createJointState(getJointsPosFromPoint(point), "true")
+        joint_state = createJointState(getJointsPosFromPoint(point))
         req.joints_position.append(joint_state)
 
 

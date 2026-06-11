@@ -48,7 +48,7 @@ from .functions.graphic import (
 )
 
 from .functions.task import run_task, analyze_task
-from .functions.simulate import simulate_task
+from .functions.simulate import simulate_task, stop_simulation
 
 from .functions.task_lifecycle import (
     save_draft,
@@ -145,7 +145,8 @@ urlpatterns = [
     ),
     # TASK
     path(TASK + "run/",           run_task,      name="run_task"),
-    path(TASK + "simulate/",      simulate_task, name="simulate_task"),
+    path(TASK + "simulate/",      simulate_task,      name="simulate_task"),
+    path(TASK + "simulate/stop/", stop_simulation,    name="stop_simulation"),
     path(TASK + "analyze/",       analyze_task,  name="analyze_task"),
     path(TASK + "save-draft/",    save_draft,    name="save_draft"),
     path(TASK + "publish/",       publish_task,  name="publish_task"),

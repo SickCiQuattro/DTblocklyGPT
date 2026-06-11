@@ -1,4 +1,3 @@
-import math
 import sys
 
 import rclpy
@@ -9,11 +8,11 @@ from .cobotta_utils import convert_rad_to_grad
 
 
 class GazeboStateNode(Node):
-    joint_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    current_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     def __init__(self):
         super().__init__("gazebo_state_node")
+        self.joint_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.current_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # Subscription al topic unificato /joint_states da Gazebo
         self.subscriber_gazebo = self.create_subscription(
             JointState, "/joint_states", self.get_joint_states_gazebo, 10
@@ -61,12 +60,12 @@ class GazeboStateNode(Node):
 
     def publish_current_pos(self):
         msg = self.createJointState()
-        
-        # Pubblica sempre per garantire continuità
+
+        # Check BEFORE updating current_pos so the comparison is against the previous value.
+        changed = self.isPositionChanged(msg.position, epsilon=0.1, epsilon_hand=0.001)
         self.current_pos = list(msg.position)
         self.publisher.publish(msg)
-        
-        if self.isPositionChanged(msg.position, epsilon=0.1, epsilon_hand=0.001):
+        if changed:
             self.get_logger().info('Publishing: "%s"' % self.current_pos)
 
     def isPositionChanged(self, new_joint_position, epsilon=sys.float_info.epsilon,

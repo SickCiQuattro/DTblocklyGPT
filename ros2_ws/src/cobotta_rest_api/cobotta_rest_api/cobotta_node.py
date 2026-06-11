@@ -3,9 +3,8 @@ import sys
 import rclpy
 from rclpy.node import Node
 
-import math
-
 from .orin.bcapclient import BCAPClient as bcapclient
+from .cobotta_utils import convert_grad_to_rad, convert_hand_cobotta_gazebo, convert_hand_gazebo_cobotta
 
 from sensor_msgs.msg import JointState
 from my_robot_interfaces.srv import PositionJoint
@@ -15,15 +14,30 @@ from std_msgs.msg import Float64
 
 
 class HardwareControl(Node):
-    joint_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    current_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    """Physical-robot node (Denso Cobotta via B-CAP/RC8).
+
+    The B-CAP connection bootstrap is disabled — the node subscribes to /move_joint
+    but does not drive real hardware until the bcapclient block is re-enabled.
+    See git history for the original connection code.
+    Not launched by launch_sim.sh (Gazebo-only stack).
+    Override hardware connection params at runtime:
+        ros2 run cobotta_rest_api cobotta_node --ros-args -p bcap_host:=192.168.x.y
+    """
 
     def __init__(self):
+        super().__init__("cobotta_node")
+
+        # B-CAP connection params — configurable via ROS parameters.
+        self.declare_parameter("bcap_host", "192.168.0.1")
+        self.declare_parameter("bcap_port", 5007)
+        self.declare_parameter("bcap_timeout", 2000)
+        self.host = self.get_parameter("bcap_host").value
+        self.port = self.get_parameter("bcap_port").value
+        self.timeout = self.get_parameter("bcap_timeout").value
+
         self.movements = 0
-        # set IP Address , Port number and Timeout of connected RC8
-        self.host = "192.168.0.1"
-        self.port = 5007
-        self.timeout = 2000
+        self.joint_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.current_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         # set Parameter
         self.Name = ""
@@ -34,41 +48,9 @@ class HardwareControl(Node):
         self.comp = 1
         self.loopflg = True
         self.ESC = 0x1B  # [ESC] virtual key code
-
-        # Connection processing of tcp communication
-        # self.m_bcapclient = bcapclient(self.host, self.port, self.timeout)
-        # start b_cap Service
-        # self.m_bcapclient.service_start("")
-
-        # Connect to RC8 (RC8(VRC)provider)
-        # self.hCtrl = self.m_bcapclient.controller_connect(
-        #    self.Name, self.Provider, self.Machine, self.Option
-        # )
-
-        # self.HRobot = self.m_bcapclient.controller_getrobot(self.hCtrl, "Arm", "")
-
-        super().__init__("cobotta_node")
         self.sub_joint_states = self.create_subscription(
             JointState, "/move_joint", self.move_joint_callback, 10
         )
-
-        # self.play_trajectory_service = self.create_service(
-        #     ListPosJoint, "/play_trajectory", self.play_trajectory_callback
-        # )
-
-        # self.pub_joint_states = self.create_publisher(
-        #     PosJoint, "/actual_joint_position", 10
-        # )
-        # timer_period = 0.5
-        # self.timer = self.create_timer(timer_period, self.current_position)
-
-        # self.current_joints_service = self.create_service(
-        #     PositionJoint, "/get_position_joints", self.get_current_position_callback
-        # )
-
-        # self.sub_gazebo_joint_states = self.create_subscription(
-        #     JointState, "/gazebo_position", self.update_cobotta_from_gazebo_callback, 10
-        # )
 
         self.pub_gazebo_j1 = self.create_publisher(Float64, "/joint1_cmd", 10)
         self.pub_gazebo_j2 = self.create_publisher(Float64, "/joint2_cmd", 10)
@@ -155,24 +137,18 @@ class HardwareControl(Node):
         j1, j2, j3, j4, j5, j6, hand = joint_msg.position[:7]
 
         self.get_logger().info("Received")
-        # self.move_cobotta(j1, j2, j3, j4, j5, j6, hand, is_joints_abs)
-
-        # self.update_gazebo_pos()
         self.update_gazebo_pos_only(joint_msg)
-
-    def convert_hand_cobotta_gazebo(self, num):
-        return num / 2000 - 0.015
 
     def update_gazebo_pos_only(self, joint_msg):
         j1, j2, j3, j4, j5, j6, hand = joint_msg.position[:7]
         msg_j = [
-            Float64(data=self.convert_grad_to_rad(j1)),
-            Float64(data=self.convert_grad_to_rad(j2)),
-            Float64(data=self.convert_grad_to_rad(j3)),
-            Float64(data=self.convert_grad_to_rad(j4)),
-            Float64(data=self.convert_grad_to_rad(j5)),
-            Float64(data=self.convert_grad_to_rad(j6)),
-            Float64(data=self.convert_hand_cobotta_gazebo(hand)),
+            Float64(data=convert_grad_to_rad(j1)),
+            Float64(data=convert_grad_to_rad(j2)),
+            Float64(data=convert_grad_to_rad(j3)),
+            Float64(data=convert_grad_to_rad(j4)),
+            Float64(data=convert_grad_to_rad(j5)),
+            Float64(data=convert_grad_to_rad(j6)),
+            Float64(data=convert_hand_cobotta_gazebo(hand)),
         ]
         msg_j1, msg_j2, msg_j3, msg_j4, msg_j5, msg_j6, msg_hand = msg_j
 
@@ -197,8 +173,8 @@ class HardwareControl(Node):
 
         cur_joints = self.m_bcapclient.robot_execute(self.HRobot, "CurJnt")
         for i, msg_j_var in enumerate([msg_j1, msg_j2, msg_j3, msg_j4, msg_j5, msg_j6]):
-            msg_j_var.data = self.convert_grad_to_rad(cur_joints[i])
-        msg_hand.data = self.convert_hand_cobotta_gazebo(
+            msg_j_var.data = convert_grad_to_rad(cur_joints[i])
+        msg_hand.data = convert_hand_cobotta_gazebo(
             self.m_bcapclient.controller_execute(self.hCtrl, "HandCurPos")
         )
 
@@ -222,17 +198,10 @@ class HardwareControl(Node):
         for joint_state in request.joints_position:
             is_joints_abs = joint_state.header.frame_id
             j1, j2, j3, j4, j5, j6, hand = joint_state.position[:7]
-            # self.move_cobotta(j1, j2, j3, j4, j5, j6, hand, is_joints_abs)
             self.update_gazebo_pos()
             self.current_position()
         response.completed = True
         return response
-
-    def convert_grad_to_rad(self, num):
-        return num * (math.pi / 180)
-
-    def convert_hand_gazebo_cobotta(self, num):
-        return (num + 0.015) * 2000
 
     def update_cobotta_from_gazebo_callback(self, joint_msg):
         print(joint_msg.position)
@@ -242,8 +211,6 @@ class HardwareControl(Node):
         is_joints_abs = joint_msg.header.frame_id
         j1, j2, j3, j4, j5, j6, hand = joint_msg.position[:7]
         self.get_logger().info("Received")
-        # self.move_cobotta(j1, j2, j3, j4, j5, j6, self.convert_hand_gazebo_cobotta(hand), is_joints_abs)
-
 
 def main(args=None):
     rclpy.init(args=args)

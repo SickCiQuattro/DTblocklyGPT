@@ -12,54 +12,7 @@ source "$WS_ROOT/install/setup.bash"
 # 2. Setup model path
 export GZ_SIM_RESOURCE_PATH="$SCRIPT_DIR:$GZ_SIM_RESOURCE_PATH"
 
-# 3. Launch Gazebo (background)
-echo "|> Start Gazebo..."
-gz sim -s -r "$SCRIPT_DIR/worldCobotta.sdf" &
-GZ_PID=$!
-
-# 4. Launch ROS-Gazebo bridge (background)
-echo "|> Start ROS-Gazebo bridge..."
-ros2 run ros_gz_bridge parameter_bridge \
-    --ros-args -p config_file:="$SCRIPT_DIR/map.yaml" &
-BRIDGE_PID=$!
-
-# 5. Health check - wait for /joint_states to be available
-echo "|> Waiting for Gazebo..."
-TIMEOUT=30
-ELAPSED=0
-until ros2 topic list 2>/dev/null | grep -q "/joint_states"; do
-    sleep 0.5
-    ELAPSED=$((ELAPSED + 1))
-    if [ $ELAPSED -ge $((TIMEOUT * 2)) ]; then
-        echo "X Timeout: /joint_states not available after ${TIMEOUT}s"
-        kill $GZ_PID $BRIDGE_PID 2>/dev/null
-        exit 1
-    fi
-done
-echo "Gazebo ready. /joint_states available."
-
-# 6. Start ROS2 nodes (all in background)
-echo "|> Start ROS2 nodes..."
-ros2 run cobotta_rest_api gazebo_command_node &
-CMD_PID=$!
-ros2 run cobotta_rest_api gazebo_state_node &
-STATE_PID=$!
-ros2 run cobotta_rest_api flask_node &
-FLASK_PID=$!
-ros2 run cobotta_rest_api polling_socket_node &
-SOCKET_PID=$!
-
-echo ""
-echo "===================================="
-echo "  Digital Twin started successfully"
-echo "  Gazebo PID: $GZ_PID"
-echo "  Flask API:  http://localhost:5000"
-echo "  SocketIO:   http://localhost:5001"
-echo "===================================="
-echo ""
-echo "Press Ctrl+C to terminate everything."
-
-# 7. Robust cleanup function
+# 3. Cleanup function — defined early so both health checks can call it on timeout.
 cleanup() {
     echo ""
     echo "|> Shutdown Digital Twin..."
@@ -77,4 +30,65 @@ cleanup() {
 }
 
 trap cleanup SIGINT SIGTERM EXIT
+
+# 4. Launch Gazebo (background)
+echo "|> Start Gazebo..."
+gz sim -r "$SCRIPT_DIR/worldCobotta.sdf" &
+GZ_PID=$!
+
+# 5. Launch ROS-Gazebo bridge (background)
+echo "|> Start ROS-Gazebo bridge..."
+ros2 run ros_gz_bridge parameter_bridge \
+    --ros-args -p config_file:="$SCRIPT_DIR/map.yaml" &
+BRIDGE_PID=$!
+
+# 6. Health check - wait for /joint_states to be available
+echo "|> Waiting for Gazebo..."
+TIMEOUT=30
+ELAPSED=0
+until ros2 topic list 2>/dev/null | grep -q "/joint_states"; do
+    sleep 0.5
+    ELAPSED=$((ELAPSED + 1))
+    if [ $ELAPSED -ge $((TIMEOUT * 2)) ]; then
+        echo "X Timeout: /joint_states not available after ${TIMEOUT}s"
+        cleanup; exit 1
+    fi
+done
+echo "Gazebo ready. /joint_states available."
+
+# 7. Start ROS2 nodes (all in background)
+echo "|> Start ROS2 nodes..."
+ros2 run cobotta_rest_api gazebo_command_node &
+CMD_PID=$!
+ros2 run cobotta_rest_api gazebo_state_node &
+STATE_PID=$!
+ros2 run cobotta_rest_api flask_node &
+FLASK_PID=$!
+ros2 run cobotta_rest_api polling_socket_node &
+SOCKET_PID=$!
+
+# 8. Health check - wait for Flask API to be reachable
+echo "|> Waiting for Flask API..."
+FLASK_PORT="${FLASK_NODE_PORT:-5000}"
+ELAPSED=0
+until curl -sf "http://localhost:${FLASK_PORT}/api/actual-joints-pos" >/dev/null 2>&1; do
+    sleep 0.5
+    ELAPSED=$((ELAPSED + 1))
+    if [ $ELAPSED -ge $((TIMEOUT * 2)) ]; then
+        echo "X Timeout: Flask API not responding on :${FLASK_PORT} after ${TIMEOUT}s"
+        cleanup; exit 1
+    fi
+done
+echo "Flask API ready on :${FLASK_PORT}."
+
+echo ""
+echo "===================================="
+echo "  Digital Twin started successfully"
+echo "  Gazebo PID: $GZ_PID"
+echo "  Flask API:  http://localhost:${FLASK_PORT}"
+echo "  SocketIO:   http://localhost:${POLLING_NODE_PORT:-5001}"
+echo "===================================="
+echo ""
+echo "Press Ctrl+C to terminate everything."
+
 wait

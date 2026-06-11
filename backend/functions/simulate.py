@@ -1,4 +1,3 @@
-from math import inf
 import subprocess
 from typing import List
 from django.http import HttpResponse, HttpRequest
@@ -22,12 +21,29 @@ import ikpy.chain
 import numpy as np
 import threading
 
+FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip("/")
+
+
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
     return (gazebo_hand_value + 0.015) * 2000
 
 CURRENT_JOINTS = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 CURRENT_HAND = 30.0  # Open gripper
 STATE_LOCK = threading.Lock()
+
+# Set by stop_simulation view; checked by the parser and sleep helpers to abort early.
+# NOTE: works only with single-process Django (runserver); a multi-process WSGI
+# deployment would need shared state (e.g. Redis-backed flag).
+SIMULATION_STOP_EVENT = threading.Event()
+
+
+def _interruptible_sleep(seconds):
+    """Sleep in 0.1 s slices, returning early if SIMULATION_STOP_EVENT is set."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if SIMULATION_STOP_EVENT.is_set():
+            return
+        time.sleep(min(0.1, end - time.time()))
 
 def get_current_state():
     with STATE_LOCK:
@@ -40,21 +56,22 @@ def set_current_state(joints, hand):
         CURRENT_HAND = hand
 
 def sync_current_state_from_ros():
+    """Sync joint state from the Flask bridge. Returns True on success, False if state is stale."""
     try:
-        response = requests.get("http://localhost:5000/api/actual-joints-pos", timeout=(0.3, 1.2))
+        response = requests.get(f"{FLASK_BRIDGE_URL}/api/actual-joints-pos", timeout=(0.3, 1.2))
         response.raise_for_status()
         data = response.json()
         pos = data.get("position", [])
         if len(pos) >= 7:
-            # pos: [j1, j2, j3, j4, j5, j6, joint_left]
             joints = pos[:6]
             hand_gazebo = pos[6]
             hand_cobotta = max(0.0, min(30.0, convert_hand_gazebo_cobotta(hand_gazebo)))
             set_current_state(joints, hand_cobotta)
-            return joints, hand_cobotta
+            return True
     except Exception as e:
         print(f"[SIMULATOR] Error syncing state from ROS: {e}")
-    return get_current_state()
+    print("[SIMULATOR] WARNING: could not sync joint state from ROS — IK seed may be stale")
+    return False
 
 # Dynamically calculate the base project directory (DTblocklyGPT root)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -79,11 +96,29 @@ if URDF_PATH and os.path.exists(URDF_PATH):
         joint_names = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
         active_mask = [link.name in joint_names for link in links]
         COBOTTA_CHAIN = ikpy.chain.Chain(name='cobotta', links=links, active_links_mask=active_mask)
+        
+        print("[SIMULATOR] COBOTTA_CHAIN initialized successfully.")
+        print("[SIMULATOR] Link map:")
+        for i, link in enumerate(COBOTTA_CHAIN.links):
+            print(f"  {i}: {link.name} (bounds={link.bounds})")
     except Exception as e:
         print(f"Error initializing ikpy chain: {e}")
         COBOTTA_CHAIN = None
 else:
     COBOTTA_CHAIN = None
+
+def debug_fk(q_deg, label="FK"):
+    if COBOTTA_CHAIN is None:
+        return
+    joints_full = [0.0] * len(COBOTTA_CHAIN.links)
+    name_to_idx = {'joint1':0, 'joint2':1, 'joint3':2, 'joint4':3, 'joint5':4, 'joint6':5}
+    for i, link in enumerate(COBOTTA_CHAIN.links):
+        if link.name in name_to_idx:
+            joints_full[i] = math.radians(q_deg[name_to_idx[link.name]])
+    T = COBOTTA_CHAIN.forward_kinematics(joints_full)
+    pos = T[:3, 3]
+    # In Gazebo: X = Y_urdf, Y = -X_urdf, Z = Z_urdf - 0.085
+    print(f"[{label}] TCP (URDF) x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} | (Gazebo) x={pos[1]:.3f}, y={-pos[0]:.3f}, z={pos[2]-URDF_GAZEBO_Z_OFFSET:.3f}")
 
 
 def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
@@ -155,10 +190,10 @@ def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
     
     # Transform Gazebo relative coordinates to URDF base frame.
     # URDF X maps to Gazebo -Y, and URDF Y maps to Gazebo X.
-    target_urdf = np.array([-y_rel, x_rel, z_rel + 0.085])
+    target_urdf = np.array([-y_rel, x_rel, z_rel + URDF_GAZEBO_Z_OFFSET])
     
-    # Grasp orientation: roll=pi (pointing down), pitch=0.0, yaw=grasp_yaw
-    target_orientation = ikpy.utils.geometry.rpy_matrix(math.pi, 0.0, grasp_yaw)
+    # Grasp orientation: point Z-axis downward in URDF frame
+    target_orientation = [0.0, 0.0, -1.0]
     
     initial_position = [0.0] * len(COBOTTA_CHAIN.links)
     
@@ -194,7 +229,7 @@ def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
         ik_solution = COBOTTA_CHAIN.inverse_kinematics(
             target_urdf,
             target_orientation=target_orientation,
-            orientation_mode="all",
+            orientation_mode="Z",
             initial_position=initial_position
         )
         
@@ -279,30 +314,40 @@ from backend.block_types import (
     LogicItems,
     StepsItems,
     EventsItems,
-    LibrariesItems,
     MacroItems,
 )
 from backend.functions.task import _resolve_runtime_workspace
 
 
-def launch_wsl_ros_command(command: str):
+def launch_wsl_ros_command(command: str) -> bool:
+    """Run a shell command. Returns True on success (exit code 0), False otherwise."""
     try:
         if platform.system() == "Windows":
-            subprocess.run(
+            result = subprocess.run(
                 ["wsl", "-d", "Ubuntu-24.04", "bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
         elif platform.system() == "Linux":
-            subprocess.run(
+            result = subprocess.run(
                 ["bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
         else:
-            print("Unsupported OS")
+            print("[SIMULATOR] Unsupported OS for launch_wsl_ros_command")
+            return False
+        if result.returncode != 0:
+            tail = command.split("--req")[-1][:80] if "--req" in command else command[-80:]
+            print(f"[SIMULATOR] Command failed (rc={result.returncode}): ...{tail}")
+            stderr_out = result.stderr.decode(errors="replace").strip()
+            if stderr_out:
+                print(f"[SIMULATOR] stderr: {stderr_out[:200]}")
+            return False
+        return True
     except Exception as e:
-        print(str(e))
+        print(f"[SIMULATOR] launch_wsl_ros_command exception: {e}")
+        return False
 
 
 def start_ros_architecture():
@@ -365,7 +410,7 @@ def simulate_ros_move(
     joint_abs: bool = False,
 ):
     try:
-        ros_url = "http://localhost:5000/api/move-joints"
+        ros_url = f"{FLASK_BRIDGE_URL}/api/move-joints"
         ros_params = {
             "joint_1": joint_1,
             "joint_2": joint_2,
@@ -395,11 +440,12 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     if max_delta < 0.01 and hand_delta < 0.5:
         simulate_ros_move(*target_joints, hand)
         set_current_state(target_joints, hand)
-        time.sleep(duration_s)
+        _interruptible_sleep(duration_s)
         return
     steps = max(2, int(duration_s * hz))
     dt = duration_s / steps
 
+    waypoints = []
     for i in range(1, steps + 1):
         a = i / steps
         a = 0.5 - 0.5 * math.cos(math.pi * a)  # ease-in-out
@@ -411,10 +457,48 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
         
         current_hand_interp = start_hand + a * (hand - start_hand)
 
-        simulate_ros_move(*q, current_hand_interp)
-        time.sleep(dt)
+        waypoints.append({
+            "j1": q[0],
+            "j2": q[1],
+            "j3": q[2],
+            "j4": q[3],
+            "j5": q[4],
+            "j6": q[5],
+            "hand": current_hand_interp,
+            "dt": dt
+        })
+
+    try:
+        ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
+        response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"[SIMULATOR] Failed to send move-path: {e}")
 
     set_current_state(target_joints, hand)
+    _interruptible_sleep(duration_s)
+
+
+def send_waypoints(joints_list, hand, dt):
+    """Send a pre-computed IK path as a single move-path POST (no interpolation)."""
+    if not joints_list:
+        return
+    waypoints = [
+        {
+            "j1": float(q[0]), "j2": float(q[1]), "j3": float(q[2]),
+            "j4": float(q[3]), "j5": float(q[4]), "j6": float(q[5]),
+            "hand": float(hand), "dt": float(dt)
+        }
+        for q in joints_list
+    ]
+    try:
+        ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
+        response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"[SIMULATOR] Failed to send move-path: {e}")
+    set_current_state(joints_list[-1], hand)
+    _interruptible_sleep(len(joints_list) * dt)
 
 
 def build_vertical_ik_path(x_rel, y_rel, z_start, z_end, grasp_yaw, seed_joints, n=10):
@@ -445,9 +529,61 @@ def build_vertical_ik_path(x_rel, y_rel, z_start, z_end, grasp_yaw, seed_joints,
     return path
 
 
+def build_cartesian_ik_path(x_start, y_start, z_start, x_end, y_end, z_end, grasp_yaw, seed_joints, n=10):
+    """
+    Builds a Cartesian path between two 3D points, solving IK at each step.
+    Seed-chained: each step seeded from previous solution. Checks for kinematic jumps.
+    """
+    xs = np.linspace(x_start, x_end, n)
+    ys = np.linspace(y_start, y_end, n)
+    zs = np.linspace(z_start, z_end, n)
+    path = []
+    seed = seed_joints
+
+    for x, y, z in zip(xs, ys, zs):
+        q = solve_gazebo_ik(float(x), float(y), float(z), grasp_yaw, seed_joints=seed)
+        if not q:
+            print(f"[SIMULATOR] Cartesian IK failed at x={x:.3f}, y={y:.3f}, z={z:.3f}")
+            return None
+        if seed is not None:
+            max_delta = max(abs(q_new - q_old) for q_new, q_old in zip(q, seed))
+            if max_delta > 30.0:
+                print(f"[SIMULATOR] Kinematic jump {max_delta:.1f}° at x={x:.3f}, y={y:.3f}, z={z:.3f}")
+                return None
+        path.append(q)
+        seed = q
+
+    return path
+
+
 ROS_OPEN_GRIPPER = 30
 ROS_GRIPPER_GENTLE_CLOSE = 10
 ROS_CLOSE_GRIPPER_WITH_OBJECT = 10  # Default safe close gap (10mm) for generic blocks
+
+CARRY_Z_MIN = 0.15    # minimum carry height above robot base (Gazebo relative, m)
+CARRY_MARGIN = 0.03   # safety margin above highest obstacle in workspace
+
+# URDF→Gazebo frame offset: Z_gazebo = Z_urdf - URDF_GAZEBO_Z_OFFSET
+URDF_GAZEBO_Z_OFFSET = 0.085
+
+# Default pick/place coordinates relative to robot base (Gazebo frame, m)
+DEFAULT_PICK_X_REL = -0.05
+DEFAULT_PICK_Y_REL = -0.28
+DEFAULT_PLACE_X_REL = 0.20
+DEFAULT_PLACE_Y_REL = -0.21
+
+# Safe intermediate pose used before/after MOVE_TO and as IK fallback (degrees)
+SAFE_INTERMEDIATE_POSE = [51.56, 20.05, 87.08, 0.0, 48.70, 0.0]
+
+# Gazebo world spawn positions (absolute, Gazebo frame)
+TABLE_TOP_Z_ABS = 1.04          # Z of table surface (m)
+OBJECT_SPAWN_X = -9.05          # X of object spawn point
+OBJECT_SPAWN_Y = -1.48
+LOCATION_SPAWN_X = -8.8         # X of location model spawn point
+LOCATION_SPAWN_Y = -1.41
+PLACE_REPLICA_X = -9.16         # X of place-replica object spawn
+PLACE_REPLICA_Y = -1.18
+PLACE_REPLICA_Z = 1.25
 
 
 def simulate_ros_pick(obj, sdf_name: str = ""):
@@ -460,13 +596,13 @@ def simulate_ros_pick(obj, sdf_name: str = ""):
         width_mm = width_m * 1000.0
         
         # Object relative coordinates
-        x_rel = -0.05
-        y_rel = -0.28
+        x_rel = DEFAULT_PICK_X_REL
+        y_rel = DEFAULT_PICK_Y_REL
         grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
         
-        # Flask: target conservativo sul collo stretto
+        # Flask: target sul corpo (sotto il tappo), non sul collo stretto
         if os.path.basename(sdf_name).lower() in {"flask", "blue_cylinder"}:
-            z_pick = -0.01 + 0.038  # abbassato leggermente da 42mm a 38mm
+            z_pick = -0.01 + 0.024  # corpo flask: dita afferrano sotto il tappo
         elif height_m > 0.04:
             z_pick = -0.01 + max(height_m / 2.0, height_m - 0.03)
         else:
@@ -480,8 +616,10 @@ def simulate_ros_pick(obj, sdf_name: str = ""):
         # 1. Approach (high clearance)
         q_approach = solve_gazebo_ik(x_rel, y_rel, z_approach, grasp_yaw, seed_joints=current_joints)
         if not q_approach:
-            print("[SIMULATOR] Warning: IK solving failed for approach, using fallback")
-            q_approach = [0.0, 70.0, 80.0, 0.0, 0.0, 0.0]
+            print(f"[SIMULATOR] ERROR: IK failed for pick approach at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f} — aborting pick")
+            return
+            
+        debug_fk(q_approach, label="Approach")
             
         smooth_move(q_approach, ROS_OPEN_GRIPPER, duration_s=2.0)
         
@@ -491,9 +629,8 @@ def simulate_ros_pick(obj, sdf_name: str = ""):
             seed_joints=q_approach, n=8
         )
         if vertical_path:
-            for q in vertical_path:
-                smooth_move(q, ROS_OPEN_GRIPPER, duration_s=0.20)
-                
+            send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
+
         # 3. Rampa verticale finale al punto di pick
         final_seed = vertical_path[-1] if vertical_path else q_approach
         final_path = build_vertical_ik_path(
@@ -501,25 +638,41 @@ def simulate_ros_pick(obj, sdf_name: str = ""):
             seed_joints=final_seed, n=6
         )
         if final_path:
-            for q in final_path:
-                smooth_move(q, ROS_OPEN_GRIPPER, duration_s=0.20)
+            send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
                 
         pick_joints = final_path[-1] if final_path else final_seed
+        debug_fk(pick_joints, label="Pick Point")
         
         if os.path.basename(sdf_name).lower() in {"flask", "blue_cylinder"}:
-            hand_close = 10  # Stringi molto la pinza per il collo sottile
+            hand_close = 0  # collision 15mm = visivo, hand=0 → ~3mm interferenza reale
         else:
             hand_close = min(30, max(0, int(width_mm - 4.0)))  # Stringi di più la pinza in generale
         
         # Chiudi pinza e attendi stabilizzazione
         smooth_move(pick_joints, hand_close, duration_s=0.7)
         time.sleep(0.3)
-        
-        # 4. Sollevamento interpolato fino alla quota di approach
-        smooth_move(q_approach, hand_close, duration_s=1.5)
-            
-        # Lift arm back to initial position with gripped object
-        simulate_ros_initial_position(False, hand_close)
+
+        # 4. Lift Cartesian Z-down to carry height (preserves tool orientation)
+        z_carry = z_approach + CARRY_MARGIN
+        lift_path = build_vertical_ik_path(
+            x_rel, y_rel, z_pick, z_carry, grasp_yaw,
+            seed_joints=pick_joints, n=8
+        )
+        if lift_path:
+            send_waypoints(lift_path, hand_close, dt=0.15)
+            carry_joints = lift_path[-1]
+        else:
+            smooth_move(q_approach, hand_close, duration_s=1.5)
+            carry_joints = q_approach
+
+        # Store pick context for place phase (gantry transit Z-down)
+        simulation_recursive_blockly_parser.last_pick_x = x_rel
+        simulation_recursive_blockly_parser.last_pick_y = y_rel
+        simulation_recursive_blockly_parser.last_pick_z_carry = z_carry
+        simulation_recursive_blockly_parser.last_pick_grasp_yaw = grasp_yaw
+        simulation_recursive_blockly_parser.last_pick_hand_close = hand_close
+        simulation_recursive_blockly_parser.last_pick_carry_joints = carry_joints
+        # Arm stays at carry pose Z-down with object; no home until place releases
 
     except Exception as e:
         print(str(e))
@@ -539,14 +692,15 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
         else:
             hand_val = hand_value
 
-        simulate_ros_move(
-            J1_INITIAL_POSITION,
-            J2_INITIAL_POSITION,
-            J3_INITIAL_POSITION,
-            J4_INITIAL_POSITION,
-            J5_INITIAL_POSITION,
-            J6_INITIAL_POSITION,
+        smooth_move(
+            [J1_INITIAL_POSITION,
+             J2_INITIAL_POSITION,
+             J3_INITIAL_POSITION,
+             J4_INITIAL_POSITION,
+             J5_INITIAL_POSITION,
+             J6_INITIAL_POSITION],
             hand_val,
+            duration_s=2.0
         )
 
     except Exception as e:
@@ -570,8 +724,8 @@ def simulate_ros_place(create_object_place_command, picked_obj_name: str = "", o
         hand_close = int(max(0.0, min(30.0, width_mm - 0.5)))
         
         # Target coordinates
-        x_rel = 0.20
-        y_rel = -0.21
+        x_rel = DEFAULT_PLACE_X_REL
+        y_rel = DEFAULT_PLACE_Y_REL
         
         loc_height = resolve_location_metrics(location_name)
         
@@ -587,38 +741,97 @@ def simulate_ros_place(create_object_place_command, picked_obj_name: str = "", o
         grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
         
         current_joints, current_hand = get_current_state()
-        
-        # 1. Approach
-        q_up = solve_gazebo_ik(x_rel, y_rel, z_up, grasp_yaw, seed_joints=current_joints)
-        if not q_up:
-            print("[SIMULATOR] Warning: IK solving failed for place approach")
-            q_up = [51.56, 20.05, 87.08, 0.0, 48.70, 0.0]
-            
-        smooth_move(q_up, hand_close, duration_s=2.0)
-        
-        # 2. Rampa verticale di discesa
-        vertical_path = build_vertical_ik_path(
-            x_rel, y_rel, z_up, z_place, grasp_yaw,
-            seed_joints=q_up, n=8
-        )
-        if vertical_path:
-            for q in vertical_path:
-                smooth_move(q, hand_close, duration_s=0.20)
-                
+
+        # Read pick context for loaded gantry transit
+        pick_x = getattr(simulation_recursive_blockly_parser, 'last_pick_x', None)
+        pick_y = getattr(simulation_recursive_blockly_parser, 'last_pick_y', None)
+        pick_z_carry = getattr(simulation_recursive_blockly_parser, 'last_pick_z_carry', None)
+        pick_grasp_yaw = getattr(simulation_recursive_blockly_parser, 'last_pick_grasp_yaw', grasp_yaw)
+        pick_hand_close = getattr(simulation_recursive_blockly_parser, 'last_pick_hand_close', None)
+        pick_carry_joints = getattr(simulation_recursive_blockly_parser, 'last_pick_carry_joints', None)
+        has_pick_context = pick_x is not None and pick_carry_joints is not None
+
+        if pick_hand_close is not None:
+            hand_close = pick_hand_close
+
+        if has_pick_context:
+            z_carry = max(pick_z_carry, z_up, CARRY_Z_MIN) + CARRY_MARGIN
+
+            # 0. Pre-lift: bridge gap between pick z_carry and required z_carry
+            seed_for_transit = pick_carry_joints
+            if z_carry > pick_z_carry + 0.005:
+                prelift_path = build_vertical_ik_path(
+                    pick_x, pick_y, pick_z_carry, z_carry, pick_grasp_yaw,
+                    seed_joints=pick_carry_joints, n=8
+                )
+                if prelift_path:
+                    send_waypoints(prelift_path, hand_close, dt=0.15)
+                    seed_for_transit = prelift_path[-1]
+                    print(f"[SIMULATOR] Pre-lift OK: z={pick_z_carry:.3f} → z={z_carry:.3f}")
+
+            # 1. Horizontal transit Cartesian Z-down: above pick → above place
+            transit_path = build_cartesian_ik_path(
+                pick_x, pick_y, z_carry,
+                x_rel, y_rel, z_carry,
+                pick_grasp_yaw, seed_joints=seed_for_transit, n=12
+            )
+            if transit_path:
+                send_waypoints(transit_path, hand_close, dt=0.15)
+                q_above_place = transit_path[-1]
+                print(f"[SIMULATOR] Gantry transit OK: ({pick_x:.2f},{pick_y:.2f}) → ({x_rel:.2f},{y_rel:.2f}) @ z={z_carry:.3f}")
+            else:
+                q_ik_fallback = solve_gazebo_ik(x_rel, y_rel, z_carry, pick_grasp_yaw, seed_joints=seed_for_transit)
+                if not q_ik_fallback:
+                    print("[SIMULATOR] WARNING: gantry transit IK fallback also failed — using last known joint state")
+                q_above_place = q_ik_fallback or current_joints
+                smooth_move(q_above_place, hand_close, duration_s=2.0)
+                print("[SIMULATOR] DEGRADED FALLBACK: gantry transit failed, using joint interp")
+
+            # 2. Vertical descent Cartesian Z-down: z_carry → z_place
+            descent_path = build_vertical_ik_path(
+                x_rel, y_rel, z_carry, z_place, pick_grasp_yaw,
+                seed_joints=q_above_place, n=10
+            )
+            if descent_path:
+                send_waypoints(descent_path, hand_close, dt=0.20)
+            place_joints = descent_path[-1] if descent_path else q_above_place
+            q_retreat = q_above_place
+
+        else:
+            # DEGRADED FALLBACK: no pick context (place called without pick)
+            print("[SIMULATOR] DEGRADED FALLBACK: no pick context, using joint interp approach")
+            q_up = solve_gazebo_ik(x_rel, y_rel, z_up, grasp_yaw, seed_joints=current_joints)
+            if not q_up:
+                print("[SIMULATOR] Warning: IK solving failed for place approach")
+                q_up = list(SAFE_INTERMEDIATE_POSE)
+            smooth_move(q_up, hand_close, duration_s=2.0)
+
+            vertical_path = build_vertical_ik_path(
+                x_rel, y_rel, z_up, z_place, grasp_yaw,
+                seed_joints=q_up, n=8
+            )
+            if vertical_path:
+                send_waypoints(vertical_path, hand_close, dt=0.20)
+            place_joints = vertical_path[-1] if vertical_path else q_up
+            q_retreat = q_up
+
         # 3. Open gripper
-        place_joints = vertical_path[-1] if vertical_path else q_up
         smooth_move(place_joints, ROS_OPEN_GRIPPER, duration_s=0.6)
         time.sleep(0.5)
-        
+
         # Spawn the replica object in Gazebo
         launch_wsl_ros_command(create_object_place_command)
         time.sleep(0.5)
-        
-        # 4. Ritorno in quota
-        smooth_move(q_up, ROS_OPEN_GRIPPER, duration_s=1.5)
-        
+
+        # 4. Retreat up (empty gripper from here: joint interp OK)
+        smooth_move(q_retreat, ROS_OPEN_GRIPPER, duration_s=1.5)
+
         # 5. Return to home
         simulate_ros_initial_position(gripper_open=True)
+
+        # Clear pick context
+        simulation_recursive_blockly_parser.last_pick_carry_joints = None
+        simulation_recursive_blockly_parser.last_pick_x = None
 
     except Exception as e:
         print(f"[SIMULATOR] Error in simulate_ros_place: {e}")
@@ -628,16 +841,26 @@ def simulate_ros_place(create_object_place_command, picked_obj_name: str = "", o
 def simulate_ros_action(action_points: list = []):
     try:
         if len(action_points) > 0:
+            sync_current_state_from_ros()
+            waypoints = []
             for point in action_points:
-                simulate_ros_move(
-                    point["j1"],
-                    point["j2"],
-                    point["j3"],
-                    point["j4"],
-                    point["j5"],
-                    point["j6"],
-                    0,
-                )
+                waypoints.append({
+                    "j1": point["j1"],
+                    "j2": point["j2"],
+                    "j3": point["j3"],
+                    "j4": point["j4"],
+                    "j5": point["j5"],
+                    "j6": point["j6"],
+                    "hand": 0,
+                    "dt": 1.0
+                })
+            try:
+                ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
+                response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
+                response.raise_for_status()
+            except Exception as e:
+                print(f"[SIMULATOR] Failed to send move-path: {e}")
+            _interruptible_sleep(len(waypoints) * 1.0)
 
     except Exception as e:
         print(str(e))
@@ -648,15 +871,18 @@ def reset_simulation_world():
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
-        launch_wsl_ros_command(delete_object)
+        # Delete failures are tolerated — entities may not exist on first run.
+        if not launch_wsl_ros_command(delete_object):
+            print("[SIMULATOR] reset: delete 'object' failed (may not exist)")
         time.sleep(0.3)
-        launch_wsl_ros_command(delete_location)
+        if not launch_wsl_ros_command(delete_location):
+            print("[SIMULATOR] reset: delete 'location' failed (may not exist)")
 
         time.sleep(1.0)
         simulate_ros_initial_position(gripper_open=True)
         time.sleep(3.0)
     except Exception as e:
-        print(str(e))
+        print(f"[SIMULATOR] reset_simulation_world failed: {e}")
 
 
 def delete_spawned_object_and_place():
@@ -736,6 +962,10 @@ def simulation_recursive_blockly_parser(
     Human    : human_action_block, notify_action_block
     Macro    : macro_task_block
     """
+    if SIMULATION_STOP_EVENT.is_set():
+        print("[SIMULATOR] Stop requested — aborting simulation")
+        return
+
     try:
         block_type = code["type"]
 
@@ -743,6 +973,9 @@ def simulation_recursive_blockly_parser(
 
         def _next():
             """Continue execution with the next chained block."""
+            if SIMULATION_STOP_EVENT.is_set():
+                print("[SIMULATOR] Stop requested — skipping next block")
+                return
             if code.get("next") is not None:
                 simulation_recursive_blockly_parser(
                     code["next"]["block"],
@@ -851,16 +1084,17 @@ def simulation_recursive_blockly_parser(
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             print(f"[ROBOT] PICK: {sdf_name}")
             height_m, _ = resolve_object_metrics(obj, sdf_name)
-            z_spawn_abs = 1.04 + height_m / 2.0
+            z_spawn_abs = TABLE_TOP_Z_ABS + height_m / 2.0
             cmd = (
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object"; '
                 f'sdf_filename: "objects/{sdf_name}/model.sdf"; '
-                f'pose: {{position: {{x: -9.05, y: -1.48, z: {z_spawn_abs}}}, '
+                f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_spawn_abs}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
-            launch_wsl_ros_command(cmd)
+            if not launch_wsl_ros_command(cmd):
+                print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick may fail")
             time.sleep(1)
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
             simulate_ros_pick(obj, sdf_name)
@@ -876,11 +1110,12 @@ def simulation_recursive_blockly_parser(
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "location"; '
                 f'sdf_filename: "locations/{sdf_name}/model.sdf"; '
-                'pose: {position: {x: -8.8, y: -1.41, z: 1.04}, '
+                f'pose: {{position: {{x: {LOCATION_SPAWN_X}, y: {LOCATION_SPAWN_Y}, z: {TABLE_TOP_Z_ABS}}}, '
                 'orientation: {x: 0, y: 0, z: 0.7071, w: 0.7071}}\''
             )
-            launch_wsl_ros_command(loc_cmd)
-            
+            if not launch_wsl_ros_command(loc_cmd):
+                print(f"[SIMULATOR] WARNING: location spawn failed for '{sdf_name}' — place may fail")
+
             # Spawn replica dell'oggetto effettivamente preso
             picked_obj_name = getattr(simulation_recursive_blockly_parser, "last_picked_object", "flask")
             obj_cmd = (
@@ -888,7 +1123,7 @@ def simulation_recursive_blockly_parser(
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object_place"; '
                 f'sdf_filename: "objects/{picked_obj_name}/model.sdf"; '
-                'pose: {position: {x: -9.16, y: -1.18, z: 1.25}, '
+                f'pose: {{position: {{x: {PLACE_REPLICA_X}, y: {PLACE_REPLICA_Y}, z: {PLACE_REPLICA_Z}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
             simulate_ros_place(obj_cmd, picked_obj_name, objectsOfUser, sdf_name)
@@ -932,7 +1167,7 @@ def simulation_recursive_blockly_parser(
 
             if not moved:
                 print(f"[ROBOT]   No joint data in DB for '{location_name}' → using default intermediate position")
-                simulate_ros_move(51.56, 20.05, 87.08, 0.0, 48.70, 0.0, ROS_CLOSE_GRIPPER_WITH_OBJECT)
+                simulate_ros_move(*SAFE_INTERMEDIATE_POSE, ROS_CLOSE_GRIPPER_WITH_OBJECT)
 
             time.sleep(2)
             _next()
@@ -1011,6 +1246,7 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 if code is None:
                     return error_response("No published workspace available")
 
+                SIMULATION_STOP_EVENT.clear()
                 reset_simulation_world()
 
                 if isinstance(code, list):
@@ -1025,6 +1261,27 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                         simulate_event, inside_conditional=False,
                     )
 
+                return success_response()
+            else:
+                return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))
+
+
+def stop_simulation(request: HttpRequest) -> HttpResponse:
+    try:
+        if request.user.is_authenticated:
+            if request.method == HttpMethod.POST.value:
+                SIMULATION_STOP_EVENT.set()
+                try:
+                    requests.post(
+                        f"{FLASK_BRIDGE_URL}/api/stop",
+                        timeout=(0.3, 1.2),
+                    )
+                except Exception as e:
+                    print(f"[SIMULATOR] Could not forward stop to Flask bridge: {e}")
                 return success_response()
             else:
                 return invalid_request_method()

@@ -37,10 +37,15 @@ class GazeboCommandNode(Node):
     def move_joint_callback(self, joint_msg):
         """
         Callback che riceve comandi di movimento e li inoltra a Gazebo
-        
+
         Args:
             joint_msg: JointState con posizioni joint in GRADI (da convertire in radianti per Gazebo)
         """
+        if len(joint_msg.position) < 7:
+            self.get_logger().error(
+                f"/move_joint expects >= 7 positions, got {len(joint_msg.position)} — ignoring"
+            )
+            return
         j1, j2, j3, j4, j5, j6, hand = joint_msg.position[:7]
 
         self.get_logger().info(f"Received movement command (deg): joints=[{j1:.2f}, {j2:.2f}, {j3:.2f}, {j4:.2f}, {j5:.2f}, {j6:.2f}], hand={hand:.2f}")
