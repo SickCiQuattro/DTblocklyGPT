@@ -44,3 +44,10 @@
   gz_topic_name: "/joint_states"
   ros_type_name: "sensor_msgs/msg/JointState"
   gz_type_name: "ignition.msgs.Model"
+
+# Overhead camera bridge (Gazebo Harmonic / ROS2 Jazzy)
+# gz.msgs.Image is the correct namespace for Harmonic; fall back to ignition.msgs.Image if bridge rejects it
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "/gz/camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"

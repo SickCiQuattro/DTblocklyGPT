@@ -25,6 +25,7 @@ setup(
                'polling_socket_node = cobotta_rest_api.polling_socket_node:main',
                'gazebo_command_node = cobotta_rest_api.gazebo_command_node:main',
                'gazebo_state_node = cobotta_rest_api.gazebo_state_node:main',
+               'vision_node = cobotta_rest_api.vision_node:main',
         ],
     },
 )

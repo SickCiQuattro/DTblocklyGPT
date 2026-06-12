@@ -1,3 +1,4 @@
+import json
 import os
 import signal
 from threading import Thread
@@ -5,6 +6,7 @@ from threading import Thread
 import rclpy
 from rclpy.node import Node
 from my_robot_interfaces.msg import PosJoint
+from std_msgs.msg import String
 
 from flask import Flask
 from flask_socketio import SocketIO
@@ -16,13 +18,40 @@ class FlaskNode(Node):
     def __init__(self):
         rclpy.init()
         super().__init__("polling_socket_node")
+
         self.subscriber = self.create_subscription(
             PosJoint, "/actual_joint_position", self.actual_position_callback, 10
+        )
+        self.gesture_sub = self.create_subscription(
+            String, "/human/gesture", self.gesture_callback, 10
+        )
+        self.object_sub = self.create_subscription(
+            String, "/vision/object_detected", self.object_callback, 10
+        )
+        self.step_status_sub = self.create_subscription(
+            String, "/human/step_status", self.step_status_callback, 10
         )
 
     def actual_position_callback(self, msg):
         actual_position = list(msg.position)
         socketio.emit('robot_position', actual_position)
+
+    def gesture_callback(self, msg):
+        socketio.emit('gesture_detected', msg.data)
+
+    def object_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+        except json.JSONDecodeError:
+            data = msg.data
+        socketio.emit('object_detected', data)
+
+    def step_status_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+        except json.JSONDecodeError:
+            data = msg.data
+        socketio.emit('human_step', data)
 
 
 polling_node = FlaskNode()

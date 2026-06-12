@@ -5,6 +5,8 @@ from ..db import get_db
 from ..flask_node import flask_pub
 from ..flask_node import sendRequestPosition
 
+import time
+
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -272,3 +274,57 @@ def getActualJointsPos():
         position_dict.get('joint_left', 0.0),
     ]
     return {"position": actual_joints_position}
+
+
+# ── Human step lifecycle ──────────────────────────────────────────────────────
+
+@bp.route("/human-step-start", methods=["POST"])
+def humanStepStart():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "started",
+        "description": data.get("description", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/human-step-complete", methods=["POST"])
+def humanStepComplete():
+    flask_pub.publish_step_status({
+        "status": "completed",
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/human-step-timeout", methods=["POST"])
+def humanStepTimeout():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "timeout",
+        "condition": data.get("condition", ""),
+        "value": data.get("value", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+# ── Vision wait endpoints ─────────────────────────────────────────────────────
+
+@bp.route("/vision/wait-gesture")
+def visionWaitGesture():
+    gesture = request.args.get("gesture", "THUMBS_UP")
+    timeout = float(request.args.get("timeout", 30))
+    detected = flask_pub.wait_for_gesture(gesture, timeout)
+    return jsonify({"detected": detected, "gesture": gesture})
+
+
+@bp.route("/vision/wait-object")
+def visionWaitObject():
+    target_class = request.args.get("target_class", "")
+    timeout = float(request.args.get("timeout", 30))
+    if not target_class:
+        return jsonify({"error": "target_class required"}), 400
+    detected = flask_pub.wait_for_object(target_class, timeout)
+    return jsonify({"detected": detected, "target_class": target_class})

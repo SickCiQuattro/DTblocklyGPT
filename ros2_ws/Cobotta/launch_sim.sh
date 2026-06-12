@@ -17,12 +17,12 @@ cleanup() {
     echo ""
     echo "|> Shutdown Digital Twin..."
     # Terminate processes in a clean way (SIGTERM)
-    kill $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID 2>/dev/null || true
+    kill $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID 2>/dev/null || true
     sleep 1
     # Force shutdown if still active (SIGKILL)
-    kill -9 $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID 2>/dev/null || true
+    kill -9 $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID 2>/dev/null || true
     # Clean up network ports
-    fuser -k 5000/tcp 5001/tcp 2>/dev/null || true
+    fuser -k 5000/tcp 5001/tcp 8080/tcp 2>/dev/null || true
     # Ensure proper shutdown of Gazebo internal processes
     pkill -9 -f "gz sim" || true
     pkill -9 -f "ruby" || true
@@ -31,18 +31,28 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM EXIT
 
-# 4. Launch Gazebo (background)
+# 4. Kill stale processes from any previous run
+echo "|> Cleanup stale processes..."
+pkill -9 -f "gz sim" 2>/dev/null || true
+pkill -9 -f "ruby" 2>/dev/null || true
+pkill -9 -f "cobotta_rest_api" 2>/dev/null || true
+pkill -9 -f "web_video_server" 2>/dev/null || true
+pkill -9 -f "parameter_bridge" 2>/dev/null || true
+fuser -k 5000/tcp 5001/tcp 8080/tcp 2>/dev/null || true
+sleep 1
+
+# 5. Launch Gazebo (background)
 echo "|> Start Gazebo..."
-gz sim -r "$SCRIPT_DIR/worldCobotta.sdf" &
+gz sim -s -r --headless-rendering "$SCRIPT_DIR/worldCobotta.sdf" &
 GZ_PID=$!
 
-# 5. Launch ROS-Gazebo bridge (background)
+# 6. Launch ROS-Gazebo bridge (background)
 echo "|> Start ROS-Gazebo bridge..."
 ros2 run ros_gz_bridge parameter_bridge \
     --ros-args -p config_file:="$SCRIPT_DIR/map.yaml" &
 BRIDGE_PID=$!
 
-# 6. Health check - wait for /joint_states to be available
+# 7. Health check - wait for /joint_states to be available
 echo "|> Waiting for Gazebo..."
 TIMEOUT=30
 ELAPSED=0
@@ -56,7 +66,7 @@ until ros2 topic list 2>/dev/null | grep -q "/joint_states"; do
 done
 echo "Gazebo ready. /joint_states available."
 
-# 7. Start ROS2 nodes (all in background)
+# 8. Start ROS2 nodes (all in background)
 echo "|> Start ROS2 nodes..."
 ros2 run cobotta_rest_api gazebo_command_node &
 CMD_PID=$!
@@ -67,7 +77,12 @@ FLASK_PID=$!
 ros2 run cobotta_rest_api polling_socket_node &
 SOCKET_PID=$!
 
-# 8. Health check - wait for Flask API to be reachable
+# Optional: web_video_server for Gazebo camera streaming
+echo "|> Start web_video_server (camera stream :8080)..."
+ros2 run web_video_server web_video_server &
+WVS_PID=$!
+
+# 9. Health check - wait for Flask API to be reachable
 echo "|> Waiting for Flask API..."
 FLASK_PORT="${FLASK_NODE_PORT:-5000}"
 ELAPSED=0

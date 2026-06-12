@@ -1,9 +1,11 @@
+import json
 import threading
 import time
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 from .cobotta_utils import convert_rad_to_grad
 
 
@@ -12,9 +14,22 @@ class BridgeNodeROS(Node):
         super().__init__("bridge_node_ros")
 
         self.publisher = self.create_publisher(JointState, "/move_joint", 10)
+        self.step_status_pub = self.create_publisher(String, "/human/step_status", 10)
+
         self.subscriber = self.create_subscription(
             JointState, "/joint_states", self.position_callback, 10
         )
+        self.create_subscription(String, "/human/gesture", self._gesture_callback, 10)
+        self.create_subscription(String, "/vision/object_detected", self._object_callback, 10)
+
+        # Latest-value cache for vision topics (Fix 1: no rclpy.wait_for_message)
+        self._gesture_lock = threading.Lock()
+        self._latest_gesture = "NONE"
+        self._latest_gesture_time = 0.0
+
+        self._object_lock = threading.Lock()
+        self._latest_detections: list = []
+        self._latest_object_time = 0.0
 
         self.current_position = {
             'joint1': 0.0,
@@ -137,3 +152,47 @@ class BridgeNodeROS(Node):
             float(wp.get("hand", 0.0)),
         ]
         self.publish_joint_state(joint_state)
+
+    # ── vision topic callbacks (latest-value cache) ──────────────────────────
+
+    def _gesture_callback(self, msg: String):
+        with self._gesture_lock:
+            self._latest_gesture = msg.data
+            self._latest_gesture_time = time.monotonic()
+
+    def _object_callback(self, msg: String):
+        try:
+            data = json.loads(msg.data)
+            detections = data.get("detections", [])
+        except (json.JSONDecodeError, AttributeError):
+            detections = []
+        with self._object_lock:
+            self._latest_detections = detections
+            self._latest_object_time = time.monotonic()
+
+    # ── human step status publisher ──────────────────────────────────────────
+
+    def publish_step_status(self, payload: dict):
+        msg = String()
+        msg.data = json.dumps(payload)
+        self.step_status_pub.publish(msg)
+
+    # ── vision wait helpers (polling, no rclpy.wait_for_message) ────────────
+
+    def wait_for_gesture(self, target_gesture: str, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._gesture_lock:
+                if self._latest_gesture == target_gesture:
+                    return True
+            time.sleep(0.1)
+        return False
+
+    def wait_for_object(self, target_class: str, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._object_lock:
+                if any(d.get("class") == target_class for d in self._latest_detections):
+                    return True
+            time.sleep(0.1)
+        return False

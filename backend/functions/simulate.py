@@ -10,6 +10,7 @@ from backend.utils.response import (
     unauthorized_request,
 )
 from backend.models import Task, Object, Location, Action
+from backend.functions.vision_mapping import to_coco_class
 from json import loads
 from django.db.models import Q
 import time
@@ -969,6 +970,81 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     return bool(simulate_event)
 
 
+def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
+    """Wait for a vision/human condition via Flask bridge (live mode only).
+
+    On timeout: continues and posts a timeout notification to the frontend.
+    """
+    block_type = condition_block.get("type", "")
+
+    if block_type == EventsItems.GESTURE.value:
+        gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
+        print(f"[CONDITION] Waiting for gesture: {gesture} (timeout {timeout}s)...")
+        try:
+            resp = requests.get(
+                f"{FLASK_BRIDGE_URL}/api/vision/wait-gesture",
+                params={"gesture": gesture, "timeout": timeout},
+                timeout=timeout + 5,
+            )
+            detected = resp.json().get("detected", False)
+        except Exception as e:
+            print(f"[WARNING] wait-gesture failed: {e}")
+            detected = False
+        if not detected:
+            print(f"[WARNING] Gesture '{gesture}' not detected within {timeout}s — continuing")
+            try:
+                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-timeout",
+                              json={"condition": "gesture", "value": gesture}, timeout=5)
+            except Exception:
+                pass
+        else:
+            print(f"[CONDITION] Gesture '{gesture}' detected!")
+        return detected
+
+    elif block_type == EventsItems.FIND.value:
+        obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+        obj_name = obj_data.get("name", "")
+        coco_class = to_coco_class(obj_name)
+        print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}' (timeout {timeout}s)...")
+        try:
+            resp = requests.get(
+                f"{FLASK_BRIDGE_URL}/api/vision/wait-object",
+                params={"target_class": coco_class, "timeout": timeout},
+                timeout=timeout + 5,
+            )
+            detected = resp.json().get("detected", False)
+        except Exception as e:
+            print(f"[WARNING] wait-object failed: {e}")
+            detected = False
+        if not detected:
+            print(f"[WARNING] Object '{obj_name}' not detected within {timeout}s — continuing")
+            try:
+                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-timeout",
+                              json={"condition": "object", "value": obj_name}, timeout=5)
+            except Exception:
+                pass
+        else:
+            print(f"[CONDITION] Object '{obj_name}' detected!")
+        return detected
+
+    elif block_type == EventsItems.TIMER.value:
+        seconds = int(condition_block.get("fields", {}).get("SECONDS", 5))
+        print(f"[CONDITION] Timer: waiting {seconds} seconds...")
+        _interruptible_sleep(seconds)
+        print("[CONDITION] Timer expired → condition fulfilled")
+        return True
+
+    # Fallback: sensor_signal, touch_detect, human_feedback → treat as fulfilled
+    return _log_condition(condition_block, simulate_event=True)
+
+
+def _resolve_condition(condition_block: dict, simulate_event: bool) -> bool:
+    """Route to real wait or simulated log based on simulate_event flag."""
+    if not simulate_event:
+        return _wait_for_condition(condition_block)
+    return _log_condition(condition_block, simulate_event=True)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN RECURSIVE PARSER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1048,16 +1124,14 @@ def simulation_recursive_blockly_parser(
             _next()
 
         elif block_type == LogicItems.REPEAT_UNTIL.value:
-            # In simulation real sensor events cannot be injected in real-time.
-            # The condition is treated as fulfilled after the first iteration.
             MAX_ITERATIONS = 10
-            print(f"[LOGIC] Repeat-Until (max {MAX_ITERATIONS} iterations in simulation)")
+            print(f"[LOGIC] Repeat-Until (max {MAX_ITERATIONS} iterations)")
             condition_block = code.get("inputs", {}).get("CONDITION", {}).get("block")
             for i in range(MAX_ITERATIONS):
                 print(f"[LOGIC]   repeat-until iteration {i + 1}/{MAX_ITERATIONS}")
                 _recurse("DO")
                 fulfilled = (
-                    _log_condition(condition_block, simulate_event)
+                    _resolve_condition(condition_block, simulate_event)
                     if condition_block else True
                 )
                 if fulfilled:
@@ -1069,7 +1143,7 @@ def simulation_recursive_blockly_parser(
 
         elif block_type == LogicItems.WHEN.value:
             condition_block = code["inputs"]["WHEN"]["block"]
-            fulfilled = _log_condition(condition_block, simulate_event)
+            fulfilled = _resolve_condition(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
                 time.sleep(3)
@@ -1077,7 +1151,7 @@ def simulation_recursive_blockly_parser(
 
         elif block_type == LogicItems.WHEN_OTHERWISE.value:
             condition_block = code["inputs"]["WHEN"]["block"]
-            fulfilled = _log_condition(condition_block, simulate_event)
+            fulfilled = _resolve_condition(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
             else:
@@ -1092,10 +1166,18 @@ def simulation_recursive_blockly_parser(
         elif block_type == StepsItems.HUMAN_ACTION.value:
             task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
             print(f"\n[!] HUMAN ACTION REQUIRED: {task_desc}")
+            try:
+                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-start",
+                              json={"description": task_desc}, timeout=5)
+            except Exception:
+                pass
             confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
             if confirm_event:
-                # Always execute the wait/log regardless of simulate_event flag
-                _log_condition(confirm_event, simulate_event=True)
+                _resolve_condition(confirm_event, simulate_event)
+            try:
+                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-complete", timeout=5)
+            except Exception:
+                pass
             _next()
 
         elif block_type == StepsItems.NOTIFY_ACTION.value:
