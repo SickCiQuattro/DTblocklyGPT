@@ -312,6 +312,20 @@ def humanStepTimeout():
 
 # ── Vision wait endpoints ─────────────────────────────────────────────────────
 
+@bp.route("/vision/report", methods=["POST"])
+def visionReport():
+    data = request.get_json(silent=True) or {}
+    gesture = data.get("gesture", "NONE")
+    detections = data.get("detections", [])
+    flask_pub.report_vision(gesture, detections)
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/vision/state")
+def visionState():
+    return jsonify(flask_pub.get_vision_state())
+
+
 @bp.route("/vision/wait-gesture")
 def visionWaitGesture():
     gesture = request.args.get("gesture", "THUMBS_UP")

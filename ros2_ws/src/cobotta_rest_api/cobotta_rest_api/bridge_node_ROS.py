@@ -15,6 +15,8 @@ class BridgeNodeROS(Node):
 
         self.publisher = self.create_publisher(JointState, "/move_joint", 10)
         self.step_status_pub = self.create_publisher(String, "/human/step_status", 10)
+        self._gesture_pub = self.create_publisher(String, "/human/gesture", 10)
+        self._object_pub = self.create_publisher(String, "/vision/object_detected", 10)
 
         self.subscriber = self.create_subscription(
             JointState, "/joint_states", self.position_callback, 10
@@ -196,3 +198,30 @@ class BridgeNodeROS(Node):
                     return True
             time.sleep(0.1)
         return False
+
+    # ── browser-vision report (called by Django vision_live.py) ─────────────
+
+    def report_vision(self, gesture: str, detections: list):
+        with self._gesture_lock:
+            self._latest_gesture = gesture
+            self._latest_gesture_time = time.monotonic()
+
+        with self._object_lock:
+            self._latest_detections = detections
+            self._latest_object_time = time.monotonic()
+
+        g_msg = String()
+        g_msg.data = gesture
+        self._gesture_pub.publish(g_msg)
+
+        d_msg = String()
+        d_msg.data = json.dumps({"detections": detections})
+        self._object_pub.publish(d_msg)
+
+    def get_vision_state(self) -> dict:
+        with self._gesture_lock:
+            gesture = self._latest_gesture
+            gesture_age = time.monotonic() - self._latest_gesture_time
+        with self._object_lock:
+            detections = list(self._latest_detections)
+        return {"gesture": gesture, "detections": detections, "gesture_age_s": round(gesture_age, 2)}

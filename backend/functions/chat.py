@@ -1474,7 +1474,7 @@ class TouchDetectCondition:
 @dataclass
 class GestureCondition:
     type: Literal["gesture"]
-    gestureType: str  # "THUMBS_UP" | "STOP" | "OPEN_HAND"
+    gestureType: str  # "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK" | "THREE_FINGERS" | "PINCH" | "POINTING" | "STOP"
 
 
 @dataclass
@@ -1683,7 +1683,7 @@ Conditions (AbstractCondition) can be one of:
 - {{"type": "find_object", "objectId": number, "objectName": string}}
 - {{"type": "human_feedback"}}
 - {{"type": "touch_detect"}}
-- {{"type": "gesture", "gestureType": "THUMBS_UP" | "OPEN_HAND"}}
+- {{"type": "gesture", "gestureType": "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK" | "THREE_FINGERS" | "PINCH" | "POINTING"}}
 - {{"type": "timer", "seconds": number}}
 
 # BLOCKLY TOOLBOX & CATEGORIES #
@@ -1716,7 +1716,7 @@ In the visual Blockly interface, blocks are organized into the following collaps
 5. "Conditions" (Yellow/Amber):
    - "Object detected" (find_object_block): Detects if a specific object is present.
    - "Contact detected" (touch_detect_block): Detects physical contact.
-   - "Gesture detected" (gesture_block): Detects human gestures (e.g., THUMBS_UP, OPEN_HAND, STOP).
+   - "Gesture detected" (gesture_block): Detects human gestures (THUMBS_UP, THUMBS_DOWN, OPEN_HAND, FIST, PEACE, OK, THREE_FINGERS, PINCH, POINTING).
    - "Time passed" (timer_block): Triggered after a set amount of seconds.
    - "External signal received" (sensor_signal_block): Listens to a sensor signal (camera, ir).
    - "AND" (logic_and_block): Combines two conditions (both must be true).
@@ -2282,7 +2282,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                                 condition["objectName"] = obj["name"]
                         elif cond_type == "gesture":
                             gesture_type = condition.get("gestureType")
-                            if gesture_type not in ["THUMBS_UP", "OPEN_HAND", "STOP"]:
+                            if gesture_type not in ["THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK", "THREE_FINGERS", "PINCH", "POINTING", "STOP"]:
                                 warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid gestureType."})
                         elif cond_type == "timer":
                             if not isinstance(condition.get("seconds"), int) or condition.get("seconds") < 0:

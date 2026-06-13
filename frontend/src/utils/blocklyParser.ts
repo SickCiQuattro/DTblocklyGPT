@@ -78,7 +78,17 @@ export interface CustomBlock {
     AXIS?: 'X' | 'Y' | 'Z'
     DISTANCE?: number
     GRIPPER_STATE?: 'OPEN' | 'CLOSE'
-    GESTURE_TYPE?: 'THUMBS_UP' | 'STOP' | 'OPEN_HAND'
+    GESTURE_TYPE?:
+      | 'THUMBS_UP'
+      | 'THUMBS_DOWN'
+      | 'OPEN_HAND'
+      | 'FIST'
+      | 'PEACE'
+      | 'OK'
+      | 'THREE_FINGERS'
+      | 'PINCH'
+      | 'POINTING'
+      | 'STOP'
     SECONDS?: number
     sensor?: string
   }

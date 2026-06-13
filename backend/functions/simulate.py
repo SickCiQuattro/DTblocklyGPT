@@ -161,7 +161,7 @@ def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
                     c_max_z = pose_z + size_z / 2.0
                     min_z = min(min_z, c_min_z)
                     max_z = max(max_z, c_max_z)
-                    max_width = max(max_width, size_x, size_y)
+                    max_width = max(max_width, min(size_x, size_y))
                     
                 cylinder = geom.find("cylinder")
                 if cylinder is not None:
@@ -184,68 +184,118 @@ def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
     return None, None
 
 
-def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
+IK_POS_TOL = 0.004   # 4 mm max FK residual
+IK_AXIS_TOL_DEG = 6.0  # 6° max Z-axis misalignment
+
+
+def fk_position_error(angles_deg, target_urdf):
+    """Return (pos_err_m, axis_err_deg) for an IK solution vs the desired target."""
     if COBOTTA_CHAIN is None:
-        print("[SIMULATOR] Error: ikpy chain not initialized")
-        return None
-    
-    # Transform Gazebo relative coordinates to URDF base frame.
-    # URDF X maps to Gazebo -Y, and URDF Y maps to Gazebo X.
-    target_urdf = np.array([-y_rel, x_rel, z_rel + URDF_GAZEBO_Z_OFFSET])
-    
-    # Grasp orientation: point Z-axis downward in URDF frame
-    target_orientation = [0.0, 0.0, -1.0]
-    
-    initial_position = [0.0] * len(COBOTTA_CHAIN.links)
-    
-    if seed_joints is not None:
-        seed_map = {
-            'joint1': math.radians(seed_joints[0]),
-            'joint2': math.radians(seed_joints[1]),
-            'joint3': math.radians(seed_joints[2]),
-            'joint4': math.radians(seed_joints[3]),
-            'joint5': math.radians(seed_joints[4]),
-            'joint6': math.radians(seed_joints[5]),
-        }
-        for i, link in enumerate(COBOTTA_CHAIN.links):
-            if link.name in seed_map:
-                initial_position[i] = seed_map[link.name]
-    else:
-        target_j1 = math.atan2(x_rel, -y_rel)
-        for i, link in enumerate(COBOTTA_CHAIN.links):
-            if link.name == 'joint1':
-                initial_position[i] = target_j1
-            elif link.name == 'joint2':
-                initial_position[i] = math.radians(45.0)
-            elif link.name == 'joint3':
-                initial_position[i] = math.radians(70.0)
-            elif link.name == 'joint4':
-                initial_position[i] = 0.0
-            elif link.name == 'joint5':
-                initial_position[i] = math.radians(45.0)
-            elif link.name == 'joint6':
-                initial_position[i] = grasp_yaw
-            
+        return float('inf'), float('inf')
+    joints_full = [0.0] * len(COBOTTA_CHAIN.links)
+    joint_names = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
+    name_to_rad = {n: math.radians(angles_deg[i]) for i, n in enumerate(joint_names)}
+    for i, link in enumerate(COBOTTA_CHAIN.links):
+        if link.name in name_to_rad:
+            joints_full[i] = name_to_rad[link.name]
+    T = COBOTTA_CHAIN.forward_kinematics(joints_full)
+    pos_err = float(np.linalg.norm(T[:3, 3] - np.array(target_urdf)))
+    # Angle between FK Z-column and desired downward direction [0,0,-1]
+    z_col = T[:3, 2]
+    dot = float(np.clip(np.dot(z_col, [0.0, 0.0, -1.0]), -1.0, 1.0))
+    axis_err_deg = math.degrees(math.acos(dot))
+    return pos_err, axis_err_deg
+
+
+def _ik_with_verification(target_urdf, target_orientation, initial_position, label=""):
+    """Run IK once, verify with FK, return angles_deg or None."""
     try:
-        ik_solution = COBOTTA_CHAIN.inverse_kinematics(
+        ik_sol = COBOTTA_CHAIN.inverse_kinematics(
             target_urdf,
             target_orientation=target_orientation,
             orientation_mode="Z",
-            initial_position=initial_position
+            initial_position=initial_position,
         )
-        
-        # Extract angles in degrees for joint1-6
         angles_deg = []
         joint_names = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
         for name in joint_names:
             for i, link in enumerate(COBOTTA_CHAIN.links):
                 if link.name == name:
-                    angles_deg.append(math.degrees(ik_solution[i]))
+                    angles_deg.append(math.degrees(ik_sol[i]))
                     break
-        return angles_deg
+        pos_err, axis_err = fk_position_error(angles_deg, target_urdf)
+        if pos_err > IK_POS_TOL or axis_err > IK_AXIS_TOL_DEG:
+            print(f"[IK{label}] FK residual pos={pos_err*1000:.1f}mm axis={axis_err:.1f}° — rejected")
+            return None, pos_err
+        return angles_deg, pos_err
     except Exception as e:
-        print(f"[SIMULATOR] IK solver failed: {e}")
+        print(f"[IK{label}] solver exception: {e}")
+        return None, float('inf')
+
+
+def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
+    if COBOTTA_CHAIN is None:
+        print("[SIMULATOR] Error: ikpy chain not initialized")
         return None
+
+    target_urdf = np.array([-y_rel, x_rel, z_rel + URDF_GAZEBO_Z_OFFSET])
+    target_orientation = [0.0, 0.0, -1.0]
+
+    def _make_seed(seed):
+        pos = [0.0] * len(COBOTTA_CHAIN.links)
+        if seed is not None:
+            seed_map = {
+                'joint1': math.radians(seed[0]),
+                'joint2': math.radians(seed[1]),
+                'joint3': math.radians(seed[2]),
+                'joint4': math.radians(seed[3]),
+                'joint5': math.radians(seed[4]),
+                'joint6': math.radians(seed[5]),
+            }
+            for i, link in enumerate(COBOTTA_CHAIN.links):
+                if link.name in seed_map:
+                    pos[i] = seed_map[link.name]
+        else:
+            target_j1 = math.atan2(x_rel, -y_rel)
+            for i, link in enumerate(COBOTTA_CHAIN.links):
+                if link.name == 'joint1':
+                    pos[i] = target_j1
+                elif link.name == 'joint2':
+                    pos[i] = math.radians(45.0)
+                elif link.name == 'joint3':
+                    pos[i] = math.radians(70.0)
+                elif link.name == 'joint4':
+                    pos[i] = 0.0
+                elif link.name == 'joint5':
+                    pos[i] = math.radians(45.0)
+                elif link.name == 'joint6':
+                    pos[i] = grasp_yaw
+        return pos
+
+    # Attempt 1: provided seed (or heuristic)
+    angles, err = _ik_with_verification(target_urdf, target_orientation, _make_seed(seed_joints))
+    if angles:
+        return angles
+
+    # Attempt 2: heuristic seed (ignore provided seed)
+    if seed_joints is not None:
+        angles, err = _ik_with_verification(target_urdf, target_orientation, _make_seed(None), " retry-heuristic")
+        if angles:
+            return angles
+
+    # Attempt 3: perturbed heuristic seed (joint2 +10°, joint3 -10°)
+    perturbed = _make_seed(None)
+    for i, link in enumerate(COBOTTA_CHAIN.links):
+        if link.name == 'joint2':
+            perturbed[i] += math.radians(10.0)
+        elif link.name == 'joint3':
+            perturbed[i] -= math.radians(10.0)
+    angles, err = _ik_with_verification(target_urdf, target_orientation, perturbed, " retry-perturb")
+    if angles:
+        return angles
+
+    print(f"[SIMULATOR] IK failed all attempts for x={x_rel:.3f} y={y_rel:.3f} z={z_rel:.3f} (last pos_err={err*1000:.1f}mm)")
+    return None
 
 
 def resolve_object_metrics(obj, sdf_name):
@@ -292,14 +342,15 @@ def resolve_object_metrics(obj, sdf_name):
 def resolve_location_metrics(sdf_name: str) -> float:
     # Standard location heights in meters
     location_heights = {
-        "collector": 0.06,  # test tube rack
+        "collector": 0.06,
         "cup": 0.08,
         "pot": 0.06,
         "pulvis": 0.05,
         "plate": 0.02,
         "divider": 0.05,
         "box": 0.08,
-        "pillbox": 0.04
+        "pillbox": 0.04,
+        "tube_rack": 0.045,
     }
     if not sdf_name:
         return 0.05
@@ -308,6 +359,77 @@ def resolve_location_metrics(sdf_name: str) -> float:
     if sdf_height is not None and sdf_height > 0.001:
         return sdf_height
     return location_heights.get(safe_name, 0.05)
+
+
+def get_location_profile(sdf_name: str):
+    """
+    Return (rim_height, floor_height, is_container) for a location SDF.
+    rim_height  = max Z of any collision (the top of the container walls)
+    floor_height = top Z of the lowest horizontal floor surface
+    is_container = rim_height - floor_height >= 0.015
+
+    For mesh-based locations (no box/cylinder primitives) returns (rim_h, None, False).
+    """
+    try:
+        safe_name = sdf_name.replace(" ", "_").lower()
+        sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "locations", safe_name, "model.sdf")
+        if not os.path.exists(sdf_path):
+            return None, None, False
+
+        tree = ET.parse(sdf_path)
+        root = tree.getroot()
+        collisions = root.findall(".//collision")
+        if not collisions:
+            return None, None, False
+
+        rim_z = float('-inf')
+        candidate_floor_z = float('inf')
+
+        for col in collisions:
+            pose_elem = col.find("pose")
+            px, py, pz = 0.0, 0.0, 0.0
+            if pose_elem is not None and pose_elem.text:
+                parts = pose_elem.text.strip().split()
+                if len(parts) >= 3:
+                    px, py, pz = float(parts[0]), float(parts[1]), float(parts[2])
+
+            geom = col.find("geometry")
+            if geom is None:
+                continue
+
+            box = geom.find("box")
+            if box is not None and box.find("size") is not None:
+                sz = box.find("size").text.strip().split()
+                sx, sy, sz_v = float(sz[0]), float(sz[1]), float(sz[2])
+                top_z = pz + sz_v / 2.0
+                rim_z = max(rim_z, top_z)
+                # Candidate floor: thin horizontal surface (height << width) near origin
+                if sz_v < min(sx, sy) * 0.5 and top_z < candidate_floor_z + 0.001:
+                    candidate_floor_z = top_z
+
+            cyl = geom.find("cylinder")
+            if cyl is not None:
+                l = float(cyl.find("length").text.strip())
+                top_z = pz + l / 2.0
+                rim_z = max(rim_z, top_z)
+
+        if rim_z == float('-inf'):
+            return None, None, False
+
+        floor_height = candidate_floor_z if candidate_floor_z != float('inf') else None
+        is_container = floor_height is not None and (rim_z - floor_height) >= 0.015
+        return rim_z, floor_height, is_container
+
+    except Exception as e:
+        print(f"[SIMULATOR] get_location_profile error for {sdf_name}: {e}")
+        return None, None, False
+
+
+# Slot cycling config for multi-slot locations.
+# y_offsets: list of Y-axis offsets (robot frame) to each slot, relative to DEFAULT_PLACE_Y_REL.
+LOCATION_PROFILES = {
+    "tube_rack": {"slot_y_offsets": [0.0, 0.027, -0.027]},
+}
 
 
 # All block type identifiers: shared source of truth
@@ -349,6 +471,16 @@ def launch_wsl_ros_command(command: str) -> bool:
     except Exception as e:
         print(f"[SIMULATOR] launch_wsl_ros_command exception: {e}")
         return False
+
+
+def _set_world_paused(paused: bool):
+    req = "pause: true" if paused else "pause: false"
+    cmd = (
+        f"gz service -s /world/worldCobotta/control "
+        f"--reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean "
+        f"--timeout 3000 --req '{req}'"
+    )
+    launch_wsl_ros_command(cmd)
 
 
 def start_ros_architecture():
@@ -647,22 +779,32 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
             x_rel, y_rel, z_approach, z_pregrasp, grasp_yaw,
             seed_joints=q_approach, n=8
         )
-        if vertical_path:
-            send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
+        if not vertical_path:
+            print(f"[SIMULATOR] ERROR: vertical approach IK path failed — aborting pick")
+            return
+        send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
 
         # 3. Rampa verticale finale al punto di pick
-        final_seed = vertical_path[-1] if vertical_path else q_approach
         final_path = build_vertical_ik_path(
             x_rel, y_rel, z_pregrasp, z_pick, grasp_yaw,
-            seed_joints=final_seed, n=6
+            seed_joints=vertical_path[-1], n=6
         )
-        if final_path:
-            send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
-                
-        pick_joints = final_path[-1] if final_path else final_seed
+        if not final_path:
+            print(f"[SIMULATOR] ERROR: final descent IK path failed — aborting pick")
+            return
+
+        send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
+        pick_joints = final_path[-1]
         debug_fk(pick_joints, label="Pick Point")
-        
-        hand_close = min(30, max(0, int(width_mm - 4.0)))  # Stringi di più la pinza in generale
+
+        # FK guard: verify TCP is within tolerance of pick target before closing
+        target_urdf = np.array([-y_rel, x_rel, z_pick + URDF_GAZEBO_Z_OFFSET])
+        pos_err, _ = fk_position_error(pick_joints, target_urdf)
+        if pos_err > IK_POS_TOL:
+            print(f"[SIMULATOR] ERROR: FK guard failed at pick — pos_err={pos_err*1000:.1f}mm > {IK_POS_TOL*1000:.0f}mm — aborting pick")
+            return
+
+        hand_close = min(30, max(0, int(width_mm - 4.0)))
 
         # Chiudi pinza e attendi stabilizzazione
         smooth_move(pick_joints, hand_close, duration_s=0.7)
@@ -746,19 +888,37 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         # Close gap
         hand_close = int(max(0.0, min(30.0, width_mm - 0.5)))
         
-        # Target coordinates
+        # Target coordinates (slot cycling for multi-slot locations)
         x_rel = DEFAULT_PLACE_X_REL
-        y_rel = DEFAULT_PLACE_Y_REL
-        
+        safe_loc_name = location_name.replace(" ", "_").lower()
+        slot_cfg = LOCATION_PROFILES.get(safe_loc_name)
+        if slot_cfg:
+            slot_idx = getattr(simulation_recursive_blockly_parser, "place_slot_index", 0)
+            offsets = slot_cfg["slot_y_offsets"]
+            y_offset = offsets[slot_idx % len(offsets)]
+            y_rel = DEFAULT_PLACE_Y_REL + y_offset
+            simulation_recursive_blockly_parser.place_slot_index = slot_idx + 1
+            print(f"[SIMULATOR] Slot {slot_idx % len(offsets)}: y_rel={y_rel:.3f}")
+        else:
+            y_rel = DEFAULT_PLACE_Y_REL
+
         loc_height = resolve_location_metrics(location_name)
-        
+
+        # Container detection: lower object into interior rather than depositing on rim
+        _, floor_height, is_container = get_location_profile(safe_loc_name)
+
         # Calculate dynamic grip Z offset
         if height_m > 0.04:
             z_grip = max(height_m / 2.0, height_m - 0.03)
         else:
             z_grip = height_m / 2.0
-            
-        z_place = -0.01 + loc_height + 0.02 + z_grip
+
+        if is_container and floor_height is not None:
+            # Place object 3 mm above the floor interior
+            z_place = -0.01 + floor_height + 0.003 + z_grip
+            print(f"[SIMULATOR] Container place: floor={floor_height:.3f} z_place={z_place:.3f}")
+        else:
+            z_place = -0.01 + loc_height + 0.02 + z_grip
         z_up = z_place + 0.12
         
         grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
@@ -892,6 +1052,9 @@ def reset_simulation_world():
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
+        # Reset slot cycling counter
+        simulation_recursive_blockly_parser.place_slot_index = 0
+
         # Detach before delete: removing a welded child without detaching first
         # can leave the plugin in a stale attached state across the next spawn.
         print("[GRASP] Reset: detaching before world cleanup")
@@ -980,16 +1143,21 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
     if block_type == EventsItems.GESTURE.value:
         gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
         print(f"[CONDITION] Waiting for gesture: {gesture} (timeout {timeout}s)...")
-        try:
-            resp = requests.get(
-                f"{FLASK_BRIDGE_URL}/api/vision/wait-gesture",
-                params={"gesture": gesture, "timeout": timeout},
-                timeout=timeout + 5,
-            )
-            detected = resp.json().get("detected", False)
-        except Exception as e:
-            print(f"[WARNING] wait-gesture failed: {e}")
-            detected = False
+        deadline = time.monotonic() + timeout
+        detected = False
+        while time.monotonic() < deadline:
+            try:
+                resp = requests.get(
+                    f"{FLASK_BRIDGE_URL}/api/vision/state",
+                    timeout=(0.3, 1.5),
+                )
+                state = resp.json()
+                if state.get("gesture") == gesture:
+                    detected = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
         if not detected:
             print(f"[WARNING] Gesture '{gesture}' not detected within {timeout}s — continuing")
             try:
@@ -1006,16 +1174,21 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
         obj_name = obj_data.get("name", "")
         coco_class = to_coco_class(obj_name)
         print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}' (timeout {timeout}s)...")
-        try:
-            resp = requests.get(
-                f"{FLASK_BRIDGE_URL}/api/vision/wait-object",
-                params={"target_class": coco_class, "timeout": timeout},
-                timeout=timeout + 5,
-            )
-            detected = resp.json().get("detected", False)
-        except Exception as e:
-            print(f"[WARNING] wait-object failed: {e}")
-            detected = False
+        deadline = time.monotonic() + timeout
+        detected = False
+        while time.monotonic() < deadline:
+            try:
+                resp = requests.get(
+                    f"{FLASK_BRIDGE_URL}/api/vision/state",
+                    timeout=(0.3, 1.5),
+                )
+                state = resp.json()
+                if any(d.get("class") == coco_class for d in state.get("detections", [])):
+                    detected = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
         if not detected:
             print(f"[WARNING] Object '{obj_name}' not detected within {timeout}s — continuing")
             try:
@@ -1166,12 +1339,25 @@ def simulation_recursive_blockly_parser(
         elif block_type == StepsItems.HUMAN_ACTION.value:
             task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
             print(f"\n[!] HUMAN ACTION REQUIRED: {task_desc}")
+            confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
+            step_start_payload = {"description": task_desc, "timeout": 60}
+            if confirm_event:
+                ev_type = confirm_event.get("type", "")
+                if ev_type == EventsItems.GESTURE.value:
+                    step_start_payload["condition"] = "gesture"
+                    step_start_payload["value"] = confirm_event.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
+                elif ev_type == EventsItems.FIND.value:
+                    try:
+                        obj_data = loads(confirm_event["inputs"]["OBJECT"]["block"]["data"])
+                        step_start_payload["condition"] = "object"
+                        step_start_payload["value"] = obj_data.get("name", "")
+                    except Exception:
+                        pass
             try:
                 requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-start",
-                              json={"description": task_desc}, timeout=5)
+                              json=step_start_payload, timeout=5)
             except Exception:
                 pass
-            confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
             if confirm_event:
                 _resolve_condition(confirm_event, simulate_event)
             try:
@@ -1194,6 +1380,7 @@ def simulation_recursive_blockly_parser(
             object_data = loads(code["inputs"]["OBJECT"]["block"]["data"])
             obj = objectsOfUser.filter(id=object_data["id"]).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
+            safe_sdf_name = sdf_name.replace(" ", "_").lower()
             print(f"[ROBOT] PICK: {sdf_name}")
             height_m, _ = resolve_object_metrics(obj, sdf_name)
             z_spawn_abs = TABLE_TOP_Z_ABS + height_m / 2.0
@@ -1201,7 +1388,7 @@ def simulation_recursive_blockly_parser(
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object"; '
-                f'sdf_filename: "objects/{sdf_name}/model.sdf"; '
+                f'sdf_filename: "objects/{safe_sdf_name}/model.sdf"; '
                 f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_spawn_abs}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
@@ -1222,12 +1409,13 @@ def simulation_recursive_blockly_parser(
             location_data = loads(code["inputs"]["LOCATION"]["block"]["data"])
             location = locationsOfUser.filter(id=location_data["id"]).first()
             sdf_name = location.name if location else location_data.get("name", "unknown")
+            safe_loc_sdf_name = sdf_name.replace(" ", "_").lower()
             print(f"[ROBOT] PLACE: {sdf_name}")
             loc_cmd = (
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "location"; '
-                f'sdf_filename: "locations/{sdf_name}/model.sdf"; '
+                f'sdf_filename: "locations/{safe_loc_sdf_name}/model.sdf"; '
                 f'pose: {{position: {{x: {LOCATION_SPAWN_X}, y: {LOCATION_SPAWN_Y}, z: {TABLE_TOP_Z_ABS}}}, '
                 'orientation: {x: 0, y: 0, z: 0.7071, w: 0.7071}}\''
             )
@@ -1355,21 +1543,24 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                     return error_response("No published workspace available")
 
                 SIMULATION_STOP_EVENT.clear()
+                _set_world_paused(False)
                 reset_simulation_world()
 
-                if isinstance(code, list):
-                    for block in code:
+                try:
+                    if isinstance(code, list):
+                        for block in code:
+                            simulation_recursive_blockly_parser(
+                                block, objectsOfUser, actionsOfUser, locationsOfUser,
+                                simulate_event, inside_conditional=False,
+                            )
+                    else:
                         simulation_recursive_blockly_parser(
-                            block, objectsOfUser, actionsOfUser, locationsOfUser,
+                            code, objectsOfUser, actionsOfUser, locationsOfUser,
                             simulate_event, inside_conditional=False,
                         )
-                else:
-                    simulation_recursive_blockly_parser(
-                        code, objectsOfUser, actionsOfUser, locationsOfUser,
-                        simulate_event, inside_conditional=False,
-                    )
-
-                return success_response()
+                    return success_response()
+                finally:
+                    _set_world_paused(True)
             else:
                 return invalid_request_method()
         else:
@@ -1390,6 +1581,7 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                     )
                 except Exception as e:
                     print(f"[SIMULATOR] Could not forward stop to Flask bridge: {e}")
+                _set_world_paused(True)
                 return success_response()
             else:
                 return invalid_request_method()

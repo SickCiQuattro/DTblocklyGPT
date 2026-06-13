@@ -25,6 +25,9 @@ _OBJECT_TO_COCO: dict[str, str] = {
     "bicchiere": "cup",
     "contenitore": "bowl",
     "ciotola": "bowl",
+    # Fruit / food
+    "mela": "apple",
+    "banana": "banana",
     # Common lab/workshop objects
     "forbici": "scissors",
     "libro": "book",

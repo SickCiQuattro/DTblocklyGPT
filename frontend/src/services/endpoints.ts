@@ -11,6 +11,7 @@ const HOME_API = `${SERVER_API}/home`
 const GRAPHIC_API = `${SERVER_API}/graphic`
 const CHAT_API = `${SERVER_API}/chat`
 const TASK_API = `${SERVER_API}/task`
+const VISION_API = `${SERVER_API}/vision`
 
 export const endpoints = {
   auth: {
@@ -67,6 +68,9 @@ export const endpoints = {
     saveDraft: `${TASK_API}/save-draft/`,
     publish: `${TASK_API}/publish/`,
     discardDraft: `${TASK_API}/discard-draft/`,
+  },
+  vision: {
+    frame: `${VISION_API}/frame/`,
   },
   // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
   get macro() {

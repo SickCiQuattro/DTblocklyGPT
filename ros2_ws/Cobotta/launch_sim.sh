@@ -96,6 +96,10 @@ until curl -sf "http://localhost:${FLASK_PORT}/api/actual-joints-pos" >/dev/null
 done
 echo "Flask API ready on :${FLASK_PORT}."
 
+echo "|> Pausing world (idle until simulation starts)..."
+gz service -s /world/worldCobotta/control --reqtype gz.msgs.WorldControl \
+    --reptype gz.msgs.Boolean --timeout 3000 --req 'pause: true' >/dev/null 2>&1 || true
+
 echo ""
 echo "===================================="
 echo "  Digital Twin started successfully"

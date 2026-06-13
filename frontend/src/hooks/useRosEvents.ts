@@ -11,6 +11,7 @@ export interface HumanStepStatus {
   description?: string
   condition?: string
   value?: string
+  timeout?: number
   timestamp?: number
 }
 
@@ -39,12 +40,16 @@ export function useRosEvents() {
       setGesture(data)
     })
 
-    socket.on('object_detected', (data: { detections: Array<{ class: string; confidence: number }> }) => {
-      setObjectDetection({
-        detected: Array.isArray(data?.detections) && data.detections.length > 0,
-        detections: data?.detections ?? [],
-      })
-    })
+    socket.on(
+      'object_detected',
+      (data: { detections: Array<{ class: string; confidence: number }> }) => {
+        setObjectDetection({
+          detected:
+            Array.isArray(data?.detections) && data.detections.length > 0,
+          detections: data?.detections ?? [],
+        })
+      },
+    )
 
     socket.on('human_step', (data: HumanStepStatus) => {
       setHumanStep(data)

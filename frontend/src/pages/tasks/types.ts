@@ -218,7 +218,20 @@ export type AbstractCondition =
   | { type: 'find_object'; objectId: number | string; objectName: string }
   | { type: 'human_feedback' }
   | { type: 'touch_detect' }
-  | { type: 'gesture'; gestureType: 'THUMBS_UP' | 'STOP' | 'OPEN_HAND' }
+  | {
+      type: 'gesture'
+      gestureType:
+        | 'THUMBS_UP'
+        | 'THUMBS_DOWN'
+        | 'OPEN_HAND'
+        | 'FIST'
+        | 'PEACE'
+        | 'OK'
+        | 'THREE_FINGERS'
+        | 'PINCH'
+        | 'POINTING'
+        | 'STOP'
+    }
   | { type: 'timer'; seconds: number }
   | { type: 'and'; left: AbstractCondition; right: AbstractCondition }
   | { type: 'or'; left: AbstractCondition; right: AbstractCondition }

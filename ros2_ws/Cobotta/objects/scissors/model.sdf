@@ -1,0 +1,32 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <!-- Scissors: box 0.016 x 0.090 x 0.008 → min(x,z) width = 8mm... but grip on 16mm axis: hand_close=12 -->
+  <model name="scissors">
+    <link name="link">
+      <pose>0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.010</mass>
+        <inertia>
+          <ixx>6.18e-6</ixx>
+          <ixy>0</ixy><ixz>0</ixz>
+          <iyy>6.87e-6</iyy>
+          <iyz>0</iyz>
+          <izz>8.53e-7</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <box><size>0.016 0.090 0.008</size></box>
+        </geometry>
+        <surface>
+          <contact><ode><kp>1000000</kp><kd>100</kd><max_vel>0.1</max_vel><min_depth>0.001</min_depth></ode></contact>
+          <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode><torsional><coefficient>1.0</coefficient><use_patch_radius>0</use_patch_radius><surface_radius>0.008</surface_radius></torsional></friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.016 0.090 0.008</size></box></geometry>
+        <material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>
