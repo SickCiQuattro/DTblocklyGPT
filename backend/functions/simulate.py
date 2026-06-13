@@ -77,15 +77,9 @@ def sync_current_state_from_ros():
 # Dynamically calculate the base project directory (DTblocklyGPT root)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# Dynamically locate the URDF file
-URDF_PATH = None
-for root, dirs, files in os.walk(BASE_DIR):
-    for f in files:
-        if f == "cobotta.urdf" and "cobotta_description" in root:
-            URDF_PATH = os.path.join(root, f)
-            break
+URDF_PATH = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "urdf", "cobotta_ik.urdf")
 
-if URDF_PATH and os.path.exists(URDF_PATH):
+if os.path.exists(URDF_PATH):
     try:
         full_chain = ikpy.chain.Chain.from_urdf_file(URDF_PATH, base_elements=["base_link"])
         # Keep only links up to joint_hand to use hand center as TCP (no X/Y offset)
