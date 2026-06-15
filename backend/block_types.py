@@ -17,7 +17,6 @@ from enum import Enum
 
 class LogicItems(Enum):
     REPEAT = "repeat_block"
-    LOOP = "loop_block"
     REPEAT_UNTIL = "repeat_until_block"
     WHEN_OTHERWISE = "when_otherwise_block"
     WHEN = "when_block"
@@ -33,16 +32,14 @@ class StepsItems(Enum):
     NOTIFY_ACTION = "notify_action_block"
     MOVE_TO = "move_to_block"
     GRIPPER = "gripper_block"
+    WAIT = "wait_block"
 
 
 # ── Events / Conditions ────────────────────────────────────────────────────────
 
 class EventsItems(Enum):
     FIND = "find_object_block"
-    SENSOR = "sensor_signal_block"
-    HUMAN = "human_feedback_block"
     TIMER = "timer_block"
-    TOUCH = "touch_detect_block"
     GESTURE = "gesture_block"
 
 

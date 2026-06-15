@@ -7,17 +7,18 @@ import { AbstractCondition, AbstractStep } from 'pages/tasks/types'
  * Parser for bidirectional conversion between Blockly blocks and abstract task representation.
  *
  * BLOCK SUPPORT STATUS:
- *  FULLY SUPPORTED:
- *    - pick, place, processing, move_to, gripper, repeat, when, human_action
- *    - sensor_signal, find_object, touch_detect, gesture, timer
- *    - logic_and, logic_or, logic_not, human_feedback
+ *  FULLY SUPPORTED (Blockly ↔ backend):
+ *    - pick, place, processing, move_to, gripper, wait
+ *    - repeat, repeat_until, when, when_otherwise
+ *    - human_action, notify_action
+ *    - find_object, gesture, timer
+ *    - logic_and, logic_or, logic_not
  *
- *  FRONTEND ONLY (Blockly UI exists, not saved to backend):
- *    - loop_block: infinite loop (would need backend support)
- *    - repeat_until_block: conditional loop (would need AbstractRepeatUntilStep)
- *    - notify_action_block: non-blocking message (would need backend support)
- *
- * These UI-only blocks return null from blocklyToAbstract and are skipped in sequences.
+ *  REMOVED (no longer in toolbox or backend):
+ *    - loop_block: unsafe on non-replenishing real cell; serialization was null
+ *    - sensor_signal_block: redundant with program Stop + robot panic button
+ *    - touch_detect_block: collision-stop, not a readable condition
+ *    - human_feedback_block: no frontend definition; orphaned
  */
 
 // ---------------------------------------------
@@ -35,16 +36,12 @@ export interface CustomBlock {
     | 'move_to_block'
     | 'gripper_block'
     | 'repeat_block'
-    | 'loop_block'
     | 'repeat_until_block'
     | 'when_block'
     | 'when_otherwise_block'
-    | 'sensor_signal_block'
     | 'find_object_block'
-    | 'touch_detect_block'
     | 'gesture_block'
     | 'timer_block'
-    | 'human_feedback_block'
     | 'human_action_block'
     | 'notify_action_block'
     | 'wait_block'
@@ -281,18 +278,6 @@ export const abstractToBlockly = (
   const conditionToBlock = (condition: AbstractCondition | null): any => {
     if (!condition) return null
     switch (condition.type) {
-      case 'sensor_signal': {
-        if (!condition.sensor) return null
-        const labelMap: Record<string, string> = {
-          camera: 'Camera sensor signal',
-          ir: 'IR sensor signal',
-        }
-        return {
-          type: 'sensor_signal_block',
-          fields: { sensor: labelMap[condition.sensor] ?? condition.sensor },
-          data: JSON.stringify({ sensor: condition.sensor }),
-        }
-      }
       case 'find_object': {
         const object = dataObjects.find((obj) => obj.id === condition.objectId)
         return {
@@ -312,8 +297,6 @@ export const abstractToBlockly = (
           },
         }
       }
-      case 'touch_detect':
-        return { type: 'touch_detect_block' }
       case 'gesture':
         return {
           type: 'gesture_block',
@@ -353,8 +336,6 @@ export const abstractToBlockly = (
           inputs: { BOOL: inner ? { block: inner } : {} },
         }
       }
-      case 'human_feedback':
-        return { type: 'human_feedback_block' }
       default:
         return null
     }
@@ -407,23 +388,12 @@ export const blocklyToAbstract = (
   ): AbstractCondition | null => {
     if (!block) return null
     switch (block.type) {
-      case 'sensor_signal_block': {
-        if (!block.data) return null
-        try {
-          const data = JSON.parse(block.data)
-          return { type: 'sensor_signal', sensor: data.sensor }
-        } catch {
-          return null
-        }
-      }
       case 'find_object_block':
         return {
           type: 'find_object',
           objectId: getIdFromBlock(resolveBlock(block.inputs?.OBJECT)),
           objectName: getNameFromBlock(resolveBlock(block.inputs?.OBJECT)),
         }
-      case 'touch_detect_block':
-        return { type: 'touch_detect' }
       case 'gesture_block':
         return {
           type: 'gesture',
@@ -448,8 +418,6 @@ export const blocklyToAbstract = (
         if (!condition) return null
         return { type: 'not', condition }
       }
-      case 'human_feedback_block':
-        return { type: 'human_feedback' }
       case 'notify_action_block':
         return null
       default:
@@ -500,9 +468,6 @@ export const blocklyToAbstract = (
           times: block.fields?.times ?? 1,
           steps: sequenceToSteps(resolveBlock(block.inputs?.DO)),
         }
-      case 'loop_block':
-        // Frontend-only blocks — skip and continue sequence traversal via next
-        return null
       case 'repeat_until_block':
         return {
           type: 'repeat_until',

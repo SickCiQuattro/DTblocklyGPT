@@ -123,15 +123,12 @@ const getPreviewCategoryBadgeMeta = (
     case 'gripper_block':
       return { label: 'Robot Actions', Icon: Bot }
     case 'find_object_block':
-    case 'touch_detect_block':
     case 'gesture_block':
     case 'timer_block':
-    case 'sensor_signal_block':
       return { label: 'Conditions', Icon: ScanEye }
     case 'macro_task_block':
       return { label: 'Saved Tasks', Icon: Workflow }
     case 'repeat_block':
-    case 'loop_block':
     case 'when_block':
     case 'when_otherwise_block':
     case 'repeat_until_block':

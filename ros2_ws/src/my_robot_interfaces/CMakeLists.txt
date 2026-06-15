@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PosJoint.msg"
   "srv/PositionJoint.srv"
   "srv/ListPosJoint.srv"
+  "srv/MoveTarget.srv"
   DEPENDENCIES sensor_msgs
 )
 

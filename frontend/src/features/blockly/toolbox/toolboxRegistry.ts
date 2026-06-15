@@ -68,14 +68,6 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         outputs: 'None',
       },
       {
-        type: 'loop_block',
-        label: 'Repeat forever', // Loop
-        colour: blocksColours.logicControl,
-        description: blockDescriptionsByType.loop_block,
-        inputs: 'Steps to repeat',
-        outputs: 'None',
-      },
-      {
         type: 'repeat_until_block',
         label: 'Repeat until',
         colour: blocksColours.logicControl,
@@ -228,13 +220,6 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         inputs: 'Object to look for',
       },
       {
-        type: 'touch_detect_block',
-        label: 'Contact detected', // Touch Detect
-        colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.touch_detect_block,
-        outputs: 'Yes or No',
-      },
-      {
         type: 'gesture_block',
         label: 'Gesture detected', // Gesture Detect
         colour: blocksColours.eventsConditions,
@@ -248,13 +233,6 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.timer_block,
         inputs: 'Seconds',
-        outputs: 'Yes or No',
-      },
-      {
-        type: 'sensor_signal_block',
-        label: 'External signal received', // Sensor Signal
-        colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.sensor_signal_block,
         outputs: 'Yes or No',
       },
       {

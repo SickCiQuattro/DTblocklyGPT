@@ -12,27 +12,27 @@ class VisionNode(Node):
     def __init__(self):
         super().__init__("vision_node")
 
-        self._gesture_pub = self.create_publisher(String, "/human/gesture", 10)
         self._object_pub = self.create_publisher(String, "/vision/object_detected", 10)
 
-        # Lazy-import heavy deps here so ROS2 init is not blocked
-        from hand_gesture.engine import GestureEngine
-        self._gesture_engine = GestureEngine()
+        # camera_source param: integer index or device path string
+        self.declare_parameter("camera_source", "0")
+        src = str(self.get_parameter("camera_source").value)
+        self._cap = cv2.VideoCapture(int(src) if src.isdigit() else src)
 
+        # Lazy-import heavy deps here so ROS2 init is not blocked
         from ultralytics import YOLO
         self._yolo = YOLO("yolov8n.pt")
 
-        self._cap = cv2.VideoCapture(0)
         self._frame_counter = 0
 
         if not self._cap.isOpened():
             self.get_logger().fatal(
-                "VisionNode: webcam (index 0) unavailable — "
-                "gesture and object detection will be skipped."
+                f"VisionNode: camera source '{src}' unavailable — "
+                "object detection will be skipped."
             )
-            self._webcam_ok = False
+            self._cam_ok = False
         else:
-            self._webcam_ok = True
+            self._cam_ok = True
 
         # 10 Hz timer
         self.create_timer(0.1, self._timer_callback)
@@ -41,32 +41,17 @@ class VisionNode(Node):
     # Timer callback — runs at 10 Hz
     # ------------------------------------------------------------------
     def _timer_callback(self):
-        if not self._webcam_ok:
-            self._publish_gesture("NONE")
+        if not self._cam_ok:
             self._publish_detections([])
             return
 
         ret, frame = self._cap.read()
         if not ret:
-            self.get_logger().warning("VisionNode: failed to read frame from webcam.")
-            self._publish_gesture("NONE")
+            self.get_logger().warning("VisionNode: failed to read frame from camera.")
             self._publish_detections([])
             return
 
         self._frame_counter += 1
-
-        # --- Gesture every frame ---
-        try:
-            _processed_frame, stable_gesture = self._gesture_engine.process(frame)
-            if stable_gesture is None:
-                gesture_label = "NONE"
-            else:
-                gesture_label = stable_gesture.upper().replace(" ", "_")
-        except Exception as exc:  # noqa: BLE001
-            self.get_logger().warning(f"VisionNode: gesture detection error: {exc}")
-            gesture_label = "NONE"
-
-        self._publish_gesture(gesture_label)
 
         # --- YOLO every 5 frames ---
         if self._frame_counter % 5 == 0:
@@ -94,11 +79,6 @@ class VisionNode(Node):
     # ------------------------------------------------------------------
     # Publishers
     # ------------------------------------------------------------------
-    def _publish_gesture(self, label: str):
-        msg = String()
-        msg.data = label
-        self._gesture_pub.publish(msg)
-
     def _publish_detections(self, detections: list):
         msg = String()
         msg.data = json.dumps({"detections": detections})

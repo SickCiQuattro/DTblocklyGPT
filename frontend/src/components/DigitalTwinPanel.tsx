@@ -9,10 +9,22 @@ import {
   Switch,
   Tooltip,
   LinearProgress,
+  ToggleButton,
+  ToggleButtonGroup,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material'
 import {
-  PlayCircle,
-  StopCircle,
+  Play,
+  Square,
+  MonitorPlay,
+  Cpu,
   X,
   Camera,
   Hand,
@@ -22,8 +34,12 @@ import {
   Wifi,
   WifiOff,
   VideoOff,
+  Bell,
 } from 'lucide-react'
+import useSWR from 'swr'
 import { useDispatch, useSelector } from 'react-redux'
+
+import { MyRobotType } from 'pages/myrobots/types'
 
 import { useAppSelector } from 'store/reducers'
 import { toggleSim } from 'store/reducers/task'
@@ -55,6 +71,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [notifyBanner, setNotifyBanner] = useState<string | null>(null)
+  const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
+  const [selectedRobot, setSelectedRobot] = useState<number | string>('')
+  const [confirmRealRun, setConfirmRealRun] = useState(false)
+
+  const { data: dataMyRobots } = useSWR<MyRobotType[], Error>({
+    url: endpoints.home.libraries.myRobots,
+  })
 
   const {
     gesture: rosGesture,
@@ -110,7 +134,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     return () => clearTimeout(t)
   }, [humanStep])
 
-  const startSimulation = async () => {
+  // Notify banner (auto-dismisses)
+  useEffect(() => {
+    if (humanStep?.status !== 'notify') return
+    setNotifyBanner(humanStep.description || 'Notification')
+    const t = setTimeout(() => setNotifyBanner(null), 4000)
+    return () => clearTimeout(t)
+  }, [humanStep])
+
+  const runSimulation = async () => {
     if (!taskId) return
     dispatch(startSimAction())
     try {
@@ -126,6 +158,40 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         setSimulationError(error?.message || 'Error starting simulation'),
       )
     }
+  }
+
+  const runOnRobot = async () => {
+    if (!taskId || !selectedRobot) return
+    dispatch(startSimAction())
+    try {
+      await fetchApi({
+        url: endpoints.task.run,
+        method: MethodHTTP.POST,
+        body: {
+          id: Number(taskId),
+          robot: selectedRobot,
+          sensorhuman: !liveEvents,
+        },
+      })
+      dispatch(setSimulationCompleted())
+    } catch (error: any) {
+      console.error('Error running on robot:', error)
+      dispatch(setSimulationError(error?.message || 'Error running on robot'))
+    }
+  }
+
+  // Real-robot runs go through a confirm dialog (irreversible physical motion).
+  const handleRun = () => {
+    if (executionTarget === 'real') {
+      setConfirmRealRun(true)
+      return
+    }
+    runSimulation()
+  }
+
+  const confirmAndRun = () => {
+    setConfirmRealRun(false)
+    runOnRobot()
   }
 
   const stopSimulation = () => dispatch(stopSimAction())
@@ -222,6 +288,26 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           overflowY: 'auto',
         }}
       >
+        {/* ── Notify banner (transient) ── */}
+        {notifyBanner && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 14px',
+              background: 'rgba(99,102,241,0.1)',
+              border: '1px solid rgba(99,102,241,0.3)',
+              borderRadius: '8px',
+            }}
+          >
+            <Bell size={15} color="#818CF8" />
+            <Typography sx={{ fontSize: '0.78rem', color: '#A5B4FC' }}>
+              {notifyBanner}
+            </Typography>
+          </Box>
+        )}
+
         {/* ── Timeout warning ── */}
         {isTimeout && (
           <Box
@@ -785,6 +871,111 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Box>
         </Box>
 
+        {/* ── Execution target (Simulation vs Real Robot) ── */}
+        <Box>
+          <ToggleButtonGroup
+            value={executionTarget}
+            exclusive
+            fullWidth
+            size="small"
+            disabled={simulation.isRunning}
+            onChange={(_, v) => v && setExecutionTarget(v)}
+            sx={{
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontSize: '0.78rem',
+                fontWeight: 500,
+                color: '#94A3B8',
+                borderColor: 'rgba(255,255,255,0.1)',
+                py: 0.6,
+              },
+              '& .MuiToggleButton-root.Mui-selected': {
+                color: '#fff',
+                background: 'rgba(99,102,241,0.25)',
+                '&:hover': { background: 'rgba(99,102,241,0.32)' },
+              },
+            }}
+          >
+            <ToggleButton value="sim">
+              <MonitorPlay size={14} style={{ marginRight: 6 }} />
+              Simulation
+            </ToggleButton>
+            <ToggleButton value="real">
+              <Cpu size={14} style={{ marginRight: 6 }} />
+              Real Robot
+            </ToggleButton>
+          </ToggleButtonGroup>
+
+          {/* Safety banner */}
+          <Box
+            sx={{
+              mt: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background:
+                executionTarget === 'real'
+                  ? 'rgba(245,158,11,0.12)'
+                  : 'rgba(99,102,241,0.1)',
+              border:
+                executionTarget === 'real'
+                  ? '1px solid rgba(245,158,11,0.4)'
+                  : '1px solid rgba(99,102,241,0.3)',
+            }}
+          >
+            {executionTarget === 'real' ? (
+              <AlertTriangle size={15} color="#F59E0B" />
+            ) : (
+              <MonitorPlay size={15} color="#818CF8" />
+            )}
+            <Typography
+              sx={{
+                fontSize: '0.72rem',
+                color: executionTarget === 'real' ? '#FCD34D' : '#A5B4FC',
+              }}
+            >
+              {executionTarget === 'real'
+                ? 'Live hardware — the real robot will move'
+                : 'Safe — runs in the simulation only'}
+            </Typography>
+          </Box>
+
+          {/* Robot picker (real mode only) */}
+          {executionTarget === 'real' && (
+            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+              <InputLabel id="dt-robot-label" sx={{ color: '#94A3B8' }}>
+                Robot
+              </InputLabel>
+              <Select
+                labelId="dt-robot-label"
+                label="Robot"
+                value={selectedRobot || ''}
+                disabled={simulation.isRunning}
+                onChange={(e) => setSelectedRobot(e.target.value)}
+                sx={{
+                  color: '#E2E8F0',
+                  fontSize: '0.82rem',
+                  '.MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255,255,255,0.15)',
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255,255,255,0.3)',
+                  },
+                  '.MuiSvgIcon-root': { color: '#94A3B8' },
+                }}
+              >
+                {(dataMyRobots ?? []).map((r) => (
+                  <MenuItem key={r.id} value={r.id}>
+                    {r.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </Box>
+
         {/* ── System status ── */}
         <Box
           sx={{
@@ -835,21 +1026,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         >
           <Box>
             <Typography sx={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-              Live vision events
+              Use live camera
             </Typography>
-            {liveEvents && webcam.active && (
-              <Typography
-                sx={{ fontSize: '0.65rem', color: '#6366F1', mt: 0.2 }}
-              >
-                Webcam active
-              </Typography>
-            )}
+            <Typography sx={{ fontSize: '0.65rem', color: '#64748B', mt: 0.2 }}>
+              {liveEvents && webcam.active
+                ? 'Webcam on — detecting gestures & objects'
+                : 'Detect real gestures & objects from webcam'}
+            </Typography>
           </Box>
           <Tooltip
             title={
               liveEvents
-                ? 'Webcam active — gesture & object detection block execution'
-                : 'Simulated — all events auto-fulfilled'
+                ? 'Webcam on — gestures & objects must really happen'
+                : 'Events auto-completed'
             }
           >
             <Switch
@@ -867,59 +1056,98 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Tooltip>
         </Box>
 
-        {/* ── Controls ── */}
-        <Stack direction="row" spacing={1.5}>
+        {/* ── Run / Stop (single action, swaps while running) ── */}
+        <Box>
           <Button
-            onClick={startSimulation}
-            disabled={simulation.isRunning}
+            fullWidth
+            onClick={simulation.isRunning ? stopSimulation : handleRun}
+            disabled={
+              !simulation.isRunning &&
+              executionTarget === 'real' &&
+              !selectedRobot
+            }
             variant="contained"
-            startIcon={<PlayCircle size={15} />}
+            color={simulation.isRunning ? 'error' : 'primary'}
+            startIcon={
+              simulation.isRunning ? <Square size={15} /> : <Play size={15} />
+            }
             sx={{
-              flex: 1,
               borderRadius: '8px',
               textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.82rem',
-              background: '#6366F1',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              py: 1,
               boxShadow: 'none',
-              '&:hover': { background: '#4F46E5', boxShadow: 'none' },
+              '&:hover': { boxShadow: 'none' },
+              ...(simulation.isRunning
+                ? {}
+                : {
+                    background: '#6366F1',
+                    '&:hover': { background: '#4F46E5', boxShadow: 'none' },
+                  }),
               '&.Mui-disabled': {
-                background: 'rgba(99,102,241,0.2)',
-                color: 'rgba(255,255,255,0.3)',
+                background: 'rgba(99,102,241,0.18)',
+                color: 'rgba(255,255,255,0.4)',
               },
             }}
           >
-            {liveEvents ? 'Start Live' : 'Start'}
+            {simulation.isRunning
+              ? 'Stop'
+              : executionTarget === 'real'
+                ? 'Run on Robot'
+                : 'Run'}
+          </Button>
+          {executionTarget === 'real' && (
+            <Typography
+              sx={{
+                fontSize: '0.66rem',
+                color: '#94A3B8',
+                mt: 0.8,
+                textAlign: 'center',
+              }}
+            >
+              Use the teach-pendant e-stop to stop the arm immediately.
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {/* ── Confirm real-robot run ── */}
+      <Dialog
+        open={confirmRealRun}
+        onClose={() => setConfirmRealRun(false)}
+        slotProps={{
+          paper: { sx: { borderRadius: '12px', p: 1, maxWidth: 420 } },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.05rem' }}>
+          Run on the real robot?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            The physical robot will move and execute this task. Make sure the
+            workcell is clear and the e-stop is within reach.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 1.5, justifyContent: 'space-between' }}>
+          <Button
+            variant="text"
+            onClick={() => setConfirmRealRun(false)}
+            sx={{ fontWeight: 500 }}
+          >
+            Cancel
           </Button>
           <Button
-            onClick={stopSimulation}
-            disabled={!simulation.isRunning}
-            variant="outlined"
-            startIcon={<StopCircle size={15} />}
-            sx={{
-              flex: 1,
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.82rem',
-              borderColor: 'rgba(239,68,68,0.4)',
-              color: '#F87171',
-              boxShadow: 'none',
-              '&:hover': {
-                borderColor: '#EF4444',
-                background: 'rgba(239,68,68,0.08)',
-                boxShadow: 'none',
-              },
-              '&.Mui-disabled': {
-                borderColor: 'rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.2)',
-              },
-            }}
+            variant="contained"
+            color="error"
+            onClick={confirmAndRun}
+            startIcon={<AlertTriangle size={15} />}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
           >
-            Stop
+            Run on robot
           </Button>
-        </Stack>
-      </Box>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

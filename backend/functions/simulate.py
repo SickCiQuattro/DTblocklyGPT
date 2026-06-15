@@ -1,7 +1,6 @@
 import subprocess
 from typing import List
 from django.http import HttpResponse, HttpRequest
-import requests
 from backend.utils.response import (
     HttpMethod,
     invalid_request_method,
@@ -21,11 +20,37 @@ import xml.etree.ElementTree as ET
 import ikpy.chain
 import numpy as np
 import threading
+from backend.functions.env_utils import get_bool_env
+from backend.functions.flask_ros_client import FlaskRosClient
+from backend.functions.calibration import (
+    URDF_GAZEBO_Z_OFFSET,
+    TABLE_TOP_Z_ABS,
+    PICK_Z_REF_OFFSET,
+    DEFAULT_PICK_X_REL,
+    DEFAULT_PICK_Y_REL,
+    DEFAULT_PLACE_X_REL,
+    DEFAULT_PLACE_Y_REL,
+    SAFE_INTERMEDIATE_POSE,
+    SCAN_POSE,
+    LOCATION_PROFILES,
+)
 
 FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip("/")
 
+# Shared client for all Flask-ROS bridge calls (centralizes URL + timeouts).
+_bridge = FlaskRosClient(FLASK_BRIDGE_URL)
+
+# When set, each key pose is also forwarded to the real arm via /api/move-target.
+# cobotta_node must be running with enable_hardware:=true.
+# Default off — sim stack unchanged when unset.
+DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
+MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
+
 
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
+    """Convert a Gazebo gripper joint value (metres, per finger) to the Cobotta
+    hand aperture scale (~0-30). The +0.015 m re-centres the Gazebo zero and the
+    ×2000 scales metres to the controller's native units."""
     return (gazebo_hand_value + 0.015) * 2000
 
 CURRENT_JOINTS = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
@@ -59,10 +84,7 @@ def set_current_state(joints, hand):
 def sync_current_state_from_ros():
     """Sync joint state from the Flask bridge. Returns True on success, False if state is stale."""
     try:
-        response = requests.get(f"{FLASK_BRIDGE_URL}/api/actual-joints-pos", timeout=(0.3, 1.2))
-        response.raise_for_status()
-        data = response.json()
-        pos = data.get("position", [])
+        pos = _bridge.get_actual_joints()
         if len(pos) >= 7:
             joints = pos[:6]
             hand_gazebo = pos[6]
@@ -419,13 +441,6 @@ def get_location_profile(sdf_name: str):
         return None, None, False
 
 
-# Slot cycling config for multi-slot locations.
-# y_offsets: list of Y-axis offsets (robot frame) to each slot, relative to DEFAULT_PLACE_Y_REL.
-LOCATION_PROFILES = {
-    "tube_rack": {"slot_y_offsets": [0.0, 0.027, -0.027]},
-}
-
-
 # All block type identifiers: shared source of truth
 from backend.block_types import (
     LogicItems,
@@ -536,22 +551,35 @@ def simulate_ros_move(
     hand: float,
     joint_abs: bool = False,
 ):
+    ros_params = {
+        "joint_1": joint_1,
+        "joint_2": joint_2,
+        "joint_3": joint_3,
+        "joint_4": joint_4,
+        "joint_5": joint_5,
+        "joint_6": joint_6,
+        "hand": hand,
+        "joint_abs": joint_abs,
+    }
     try:
-        ros_url = f"{FLASK_BRIDGE_URL}/api/move-joints"
-        ros_params = {
-            "joint_1": joint_1,
-            "joint_2": joint_2,
-            "joint_3": joint_3,
-            "joint_4": joint_4,
-            "joint_5": joint_5,
-            "joint_6": joint_6,
-            "hand": hand,
-            "joint_abs": joint_abs,
-        }
-        response = requests.get(ros_url, params=ros_params, timeout=(0.3, 1.2))
-        response.raise_for_status()
+        _bridge.move_joints(ros_params)
     except Exception as e:
         print(f"[SIMULATOR] simulate_ros_move failed params={ros_params}: {e}")
+
+
+def _send_hw_target(joints, hand, hand_only=False):
+    """Forward one key pose to the real arm via /api/move-target (best-effort, blocking)."""
+    if not DRIVE_HARDWARE:
+        return
+    try:
+        payload = {"hand": hand, "hand_only": hand_only}
+        if not hand_only:
+            j1, j2, j3, j4, j5, j6 = joints
+            payload.update({"j1": j1, "j2": j2, "j3": j3, "j4": j4, "j5": j5, "j6": j6})
+        _bridge.move_target(payload)
+    except Exception as e:
+        print(f"[HARDWARE] _send_hw_target failed: {e}")
+
 
 def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     """
@@ -567,6 +595,7 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     if max_delta < 0.01 and hand_delta < 0.5:
         simulate_ros_move(*target_joints, hand)
         set_current_state(target_joints, hand)
+        _send_hw_target(target_joints, hand)
         _interruptible_sleep(duration_s)
         return
     steps = max(2, int(duration_s * hz))
@@ -596,13 +625,12 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
         })
 
     try:
-        ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
-        response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
-        response.raise_for_status()
+        _bridge.move_path(waypoints)
     except Exception as e:
         print(f"[SIMULATOR] Failed to send move-path: {e}")
 
     set_current_state(target_joints, hand)
+    _send_hw_target(target_joints, hand)
     _interruptible_sleep(duration_s)
 
 
@@ -619,12 +647,11 @@ def send_waypoints(joints_list, hand, dt):
         for q in joints_list
     ]
     try:
-        ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
-        response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
-        response.raise_for_status()
+        _bridge.move_path(waypoints)
     except Exception as e:
         print(f"[SIMULATOR] Failed to send move-path: {e}")
     set_current_state(joints_list[-1], hand)
+    _send_hw_target(joints_list[-1], hand)
     _interruptible_sleep(len(joints_list) * dt)
 
 
@@ -646,8 +673,8 @@ def build_vertical_ik_path(x_rel, y_rel, z_start, z_end, grasp_yaw, seed_joints,
         # Check for kinematic jumps
         if seed is not None:
             max_delta = max(abs(q_new - q_old) for q_new, q_old in zip(q, seed))
-            if max_delta > 30.0:
-                print(f"[SIMULATOR] Kinematic jump detected: max delta {max_delta} > 30.0 degrees at z={z}")
+            if max_delta > KINEMATIC_JUMP_THRESHOLD_DEG:
+                print(f"[SIMULATOR] Kinematic jump detected: max delta {max_delta} > {KINEMATIC_JUMP_THRESHOLD_DEG} degrees at z={z}")
                 return None
                 
         path.append(q)
@@ -674,7 +701,7 @@ def build_cartesian_ik_path(x_start, y_start, z_start, x_end, y_end, z_end, gras
             return None
         if seed is not None:
             max_delta = max(abs(q_new - q_old) for q_new, q_old in zip(q, seed))
-            if max_delta > 30.0:
+            if max_delta > KINEMATIC_JUMP_THRESHOLD_DEG:
                 print(f"[SIMULATOR] Kinematic jump {max_delta:.1f}° at x={x:.3f}, y={y:.3f}, z={z:.3f}")
                 return None
         path.append(q)
@@ -690,17 +717,17 @@ ROS_CLOSE_GRIPPER_WITH_OBJECT = 10  # Default safe close gap (10mm) for generic 
 CARRY_Z_MIN = 0.15    # minimum carry height above robot base (Gazebo relative, m)
 CARRY_MARGIN = 0.03   # safety margin above highest obstacle in workspace
 
-# URDF→Gazebo frame offset: Z_gazebo = Z_urdf - URDF_GAZEBO_Z_OFFSET
-URDF_GAZEBO_Z_OFFSET = 0.085
+# Max per-joint change (deg) between consecutive IK solutions along a Cartesian
+# path. A larger jump signals an elbow flip / singularity, so the path is rejected.
+KINEMATIC_JUMP_THRESHOLD_DEG = 30.0
 
-# Default pick/place coordinates relative to robot base (Gazebo frame, m)
-DEFAULT_PICK_X_REL = -0.05
-DEFAULT_PICK_Y_REL = -0.28
-DEFAULT_PLACE_X_REL = 0.20
-DEFAULT_PLACE_Y_REL = -0.21
+# A flask body is gripped below the cap: lift the pick point by this offset (m)
+# above the reference height so the fingers close on the body, not the neck.
+FLASK_BODY_PICK_OFFSET_M = 0.024
 
-# Safe intermediate pose used before/after MOVE_TO and as IK fallback (degrees)
-SAFE_INTERMEDIATE_POSE = [51.56, 20.05, 87.08, 0.0, 48.70, 0.0]
+# Gripper closes this many mm tighter than the object width so the fingers grip
+# firmly rather than just touching the surface.
+GRIPPER_GRIP_CLEARANCE_MM = 4.0
 
 # DetachableJoint topics (plugin in Cobotta.sdf, parent_link=link_j6, child_model=object)
 ATTACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/attach -m gz.msgs.Empty -p 'unused: true'"
@@ -724,7 +751,6 @@ def detach_object_from_gripper() -> bool:
 
 
 # Gazebo world spawn positions (absolute, Gazebo frame)
-TABLE_TOP_Z_ABS = 1.04          # Z of table surface (m)
 OBJECT_SPAWN_X = -9.05          # X of object spawn point
 OBJECT_SPAWN_Y = -1.48
 LOCATION_SPAWN_X = -8.8         # X of location model spawn point
@@ -733,11 +759,17 @@ LOCATION_SPAWN_Y = -1.41
 
 def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
     try:
-        # Sync state from ROS first to anchor the IK seeds
-        sync_current_state_from_ros()
-        
+        # Sync state from ROS first to anchor the IK seeds. Abort if it fails —
+        # planning from a stale seed risks singularities / collisions.
+        if not sync_current_state_from_ros():
+            print("[ROBOT] PICK aborted: could not sync joint state from ROS")
+            return
+
         # Resolve dimensions
         height_m, width_m = resolve_object_metrics(obj, sdf_name)
+        if height_m is None or width_m is None:
+            print(f"[ROBOT] PICK aborted: could not resolve dimensions for '{sdf_name}'")
+            return
         width_mm = width_m * 1000.0
         
         # Object relative coordinates
@@ -747,11 +779,11 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
         
         # Flask: target sul corpo (sotto il tappo), non sul collo stretto
         if os.path.basename(sdf_name).lower() in {"flask", "blue_cylinder"}:
-            z_pick = -0.01 + 0.024  # corpo flask: dita afferrano sotto il tappo
+            z_pick = PICK_Z_REF_OFFSET + FLASK_BODY_PICK_OFFSET_M  # corpo flask: dita afferrano sotto il tappo
         elif height_m > 0.04:
-            z_pick = -0.01 + max(height_m / 2.0, height_m - 0.03)
+            z_pick = PICK_Z_REF_OFFSET + max(height_m / 2.0, height_m - 0.03)
         else:
-            z_pick = -0.01 + height_m / 2.0
+            z_pick = PICK_Z_REF_OFFSET + height_m / 2.0
 
         z_approach = z_pick + 0.12
         z_pregrasp = z_pick + 0.02
@@ -798,16 +830,16 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
             print(f"[SIMULATOR] ERROR: FK guard failed at pick — pos_err={pos_err*1000:.1f}mm > {IK_POS_TOL*1000:.0f}mm — aborting pick")
             return
 
-        hand_close = min(30, max(0, int(width_mm - 4.0)))
+        hand_close = min(30, max(0, int(width_mm - GRIPPER_GRIP_CLEARANCE_MM)))
 
         # Chiudi pinza e attendi stabilizzazione
         smooth_move(pick_joints, hand_close, duration_s=0.7)
-        time.sleep(0.3)
+        _interruptible_sleep(0.3)
 
         # Weld oggetto alla pinza via DetachableJoint (presa rigida, evita slipping)
         if do_attach:
             attach_object_to_gripper()
-            time.sleep(0.2)
+            _interruptible_sleep(0.2)
         else:
             print("[GRASP] Attach skipped (do_attach=False: spawn failed or disabled)")
 
@@ -868,15 +900,21 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
 
 def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_name: str = "collector"):
     try:
-        # Sync state from ROS
-        sync_current_state_from_ros()
-        
+        # Sync state from ROS. Abort if it fails — a stale IK seed risks
+        # singularities / collisions on the descent.
+        if not sync_current_state_from_ros():
+            print("[ROBOT] PLACE aborted: could not sync joint state from ROS")
+            return
+
         # Retrieve picked object's metrics if available
         obj = None
         if objectsOfUser is not None and picked_obj_name:
             obj = objectsOfUser.filter(name=picked_obj_name).first()
-            
+
         height_m, width_m = resolve_object_metrics(obj, picked_obj_name)
+        if height_m is None or width_m is None:
+            print(f"[ROBOT] PLACE aborted: could not resolve dimensions for '{picked_obj_name}'")
+            return
         width_mm = width_m * 1000.0
         
         # Close gap
@@ -909,10 +947,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
         if is_container and floor_height is not None:
             # Place object 3 mm above the floor interior
-            z_place = -0.01 + floor_height + 0.003 + z_grip
+            z_place = PICK_Z_REF_OFFSET + floor_height + 0.003 + z_grip
             print(f"[SIMULATOR] Container place: floor={floor_height:.3f} z_place={z_place:.3f}")
         else:
-            z_place = -0.01 + loc_height + 0.02 + z_grip
+            z_place = PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
         z_up = z_place + 0.12
         
         grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
@@ -994,9 +1032,9 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
         # 3. Detach + open gripper
         detach_object_from_gripper()
-        time.sleep(0.3)
+        _interruptible_sleep(0.3)
         smooth_move(place_joints, ROS_OPEN_GRIPPER, duration_s=0.6)
-        time.sleep(0.5)
+        _interruptible_sleep(0.5)
 
         # 4. Retreat up (empty gripper from here: joint interp OK)
         smooth_move(q_retreat, ROS_OPEN_GRIPPER, duration_s=1.5)
@@ -1030,9 +1068,7 @@ def simulate_ros_action(action_points: list = []):
                     "dt": 1.0
                 })
             try:
-                ros_url = f"{FLASK_BRIDGE_URL}/api/move-path"
-                response = requests.post(ros_url, json={"waypoints": waypoints}, timeout=5.0)
-                response.raise_for_status()
+                _bridge.move_path(waypoints)
             except Exception as e:
                 print(f"[SIMULATOR] Failed to send move-path: {e}")
             _interruptible_sleep(len(waypoints) * 1.0)
@@ -1053,18 +1089,18 @@ def reset_simulation_world():
         # can leave the plugin in a stale attached state across the next spawn.
         print("[GRASP] Reset: detaching before world cleanup")
         detach_object_from_gripper()
-        time.sleep(0.2)
+        _interruptible_sleep(0.2)
 
         # Delete failures are tolerated — entities may not exist on first run.
         if not launch_wsl_ros_command(delete_object):
             print("[SIMULATOR] reset: delete 'object' failed (may not exist)")
-        time.sleep(0.3)
+        _interruptible_sleep(0.3)
         if not launch_wsl_ros_command(delete_location):
             print("[SIMULATOR] reset: delete 'location' failed (may not exist)")
 
-        time.sleep(1.0)
+        _interruptible_sleep(1.0)
         simulate_ros_initial_position(gripper_open=True)
-        time.sleep(3.0)
+        _interruptible_sleep(3.0)
     except Exception as e:
         print(f"[SIMULATOR] reset_simulation_world failed: {e}")
 
@@ -1078,11 +1114,11 @@ def delete_spawned_object_and_place():
         # Detach before delete: prevents stale weld state across repeated runs.
         print("[GRASP] Cleanup: detaching welded child before removing 'object'")
         detach_object_from_gripper()
-        time.sleep(0.2)
+        _interruptible_sleep(0.2)
         launch_wsl_ros_command(delete_object)
-        time.sleep(0.4)
+        _interruptible_sleep(0.4)
         launch_wsl_ros_command(delete_object_place)
-        time.sleep(0.8)
+        _interruptible_sleep(0.8)
     except Exception as e:
         print(str(e))
 
@@ -1104,19 +1140,13 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     if block_type == EventsItems.FIND.value:
         obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
         label = f"Object detected '{obj_data.get('name', '?')}'"
-    elif block_type == EventsItems.SENSOR.value:
-        label = "External sensor signal"
-    elif block_type == EventsItems.HUMAN.value:
-        label = "Human feedback"
-    elif block_type == EventsItems.TOUCH.value:
-        label = "Touch detect"
     elif block_type == EventsItems.GESTURE.value:
         gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
         label = f"Gesture detected ({gesture})"
     elif block_type == EventsItems.TIMER.value:
         seconds = int(condition_block.get("fields", {}).get("SECONDS", 5))
         print(f"[CONDITION] Timer: waiting {seconds} seconds...")
-        time.sleep(seconds)
+        _interruptible_sleep(seconds)
         print("[CONDITION] Timer expired → condition fulfilled")
         return True
     else:
@@ -1140,23 +1170,21 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
         deadline = time.monotonic() + timeout
         detected = False
         while time.monotonic() < deadline:
+            if SIMULATION_STOP_EVENT.is_set():
+                break
             try:
-                resp = requests.get(
-                    f"{FLASK_BRIDGE_URL}/api/vision/state",
-                    timeout=(0.3, 1.5),
-                )
-                state = resp.json()
+                state = _bridge.get_vision_state()
                 if state.get("gesture") == gesture:
                     detected = True
                     break
             except Exception:
                 pass
-            time.sleep(0.5)
+            _interruptible_sleep(0.5)
         if not detected:
             print(f"[WARNING] Gesture '{gesture}' not detected within {timeout}s — continuing")
             try:
-                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-timeout",
-                              json={"condition": "gesture", "value": gesture}, timeout=5)
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "gesture", "value": gesture})
             except Exception:
                 pass
         else:
@@ -1171,23 +1199,21 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
         deadline = time.monotonic() + timeout
         detected = False
         while time.monotonic() < deadline:
+            if SIMULATION_STOP_EVENT.is_set():
+                break
             try:
-                resp = requests.get(
-                    f"{FLASK_BRIDGE_URL}/api/vision/state",
-                    timeout=(0.3, 1.5),
-                )
-                state = resp.json()
+                state = _bridge.get_vision_state()
                 if any(d.get("class") == coco_class for d in state.get("detections", [])):
                     detected = True
                     break
             except Exception:
                 pass
-            time.sleep(0.5)
+            _interruptible_sleep(0.5)
         if not detected:
             print(f"[WARNING] Object '{obj_name}' not detected within {timeout}s — continuing")
             try:
-                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-timeout",
-                              json={"condition": "object", "value": obj_name}, timeout=5)
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "object", "value": obj_name})
             except Exception:
                 pass
         else:
@@ -1203,6 +1229,61 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
 
     # Fallback: sensor_signal, touch_detect, human_feedback → treat as fulfilled
     return _log_condition(condition_block, simulate_event=True)
+
+
+def _move_to_scan_pose():
+    """Move robot to SCAN_POSE if not already there, then settle for detection."""
+    current_joints, _ = get_current_state()
+    max_delta = max(abs(t - s) for t, s in zip(SCAN_POSE, current_joints))
+    if max_delta > 2.0:  # degrees threshold — skip move if already in scan pose
+        print(f"[SCAN] Moving to scan pose {SCAN_POSE}")
+        smooth_move(SCAN_POSE, ROS_OPEN_GRIPPER)
+        _interruptible_sleep(0.8)  # camera settle before detection
+    else:
+        print("[SCAN] Already at scan pose — skipping move")
+
+
+def _condition_contains_find(block: dict) -> bool:
+    """Return True if the condition tree contains any find_object_block."""
+    if block is None:
+        return False
+    if block.get("type") == EventsItems.FIND.value:
+        return True
+    inputs = block.get("inputs", {})
+    return any(
+        _condition_contains_find(inputs.get(k, {}).get("block"))
+        for k in ("A", "B", "BOOL")
+    )
+
+
+def _eval_condition_tree(block: dict, simulate_event: bool) -> bool:
+    """Evaluate a condition block tree, handling AND/OR/NOT recursively.
+
+    AND/OR/NOT blocks route to child branches; leaf blocks fall through to
+    _resolve_condition (gesture, find_object, timer, etc.).
+    """
+    if block is None:
+        return True
+
+    btype = block.get("type", "")
+    inputs = block.get("inputs", {})
+
+    if btype == "logic_and_block":
+        a = _eval_condition_tree(inputs.get("A", {}).get("block"), simulate_event)
+        b = _eval_condition_tree(inputs.get("B", {}).get("block"), simulate_event)
+        return a and b
+
+    if btype == "logic_or_block":
+        a = _eval_condition_tree(inputs.get("A", {}).get("block"), simulate_event)
+        b = _eval_condition_tree(inputs.get("B", {}).get("block"), simulate_event)
+        return a or b
+
+    if btype == "logic_not_block":
+        inner = _eval_condition_tree(inputs.get("BOOL", {}).get("block"), simulate_event)
+        return not inner
+
+    # Leaf block: gesture, find_object, timer, etc.
+    return _resolve_condition(block, simulate_event)
 
 
 def _resolve_condition(condition_block: dict, simulate_event: bool) -> bool:
@@ -1228,7 +1309,7 @@ def simulation_recursive_blockly_parser(
 
     Supported blocks
     ────────────────
-    Logic    : repeat_block, loop_block, repeat_until_block,
+    Logic    : repeat_block, repeat_until_block,
                when_block, when_otherwise_block
     Robot    : pick_block, place_block, processing_block,
                move_to_block, gripper_block
@@ -1265,72 +1346,99 @@ def simulation_recursive_blockly_parser(
                     simulate_event, inside_conditional=True,
                 )
 
+        def _safe_block_data(input_name: str, label: str):
+            """Parse a value-input block's JSON ``data`` payload.
+
+            Returns the decoded dict, or ``None`` if the input is missing or the
+            JSON is malformed. Callers should skip the block (and continue the
+            chain via ``_next()``) when this returns ``None`` so a single bad
+            block does not abort the rest of the program.
+            """
+            try:
+                return loads(code["inputs"][input_name]["block"]["data"])
+            except (KeyError, TypeError, ValueError) as exc:
+                print(f"[ERROR] {label}: malformed/missing block data, skipping: {exc}")
+                return None
+
         # ══════════════════════════════════════════════════════════════════════
         # LOGIC / CONTROL FLOW
         # ══════════════════════════════════════════════════════════════════════
 
-        if block_type == LogicItems.REPEAT.value:
+        # ── Block handlers ────────────────────────────────────────────────────
+        # Each handler runs one block type and is responsible for continuing the
+        # chain via _next(). They are dispatched through BLOCK_HANDLERS below
+        # (a registry keyed by block type) instead of a long if/elif chain.
+
+        def _h_repeat():
             times = int(code["fields"]["times"])
             print(f"[LOGIC] Repeat x{times}")
             for i in range(times):
+                if SIMULATION_STOP_EVENT.is_set():
+                    break
                 print(f"[LOGIC]   iteration {i + 1}/{times}")
                 _recurse("DO")
                 delete_spawned_object_and_place()
-            time.sleep(3)
+            _interruptible_sleep(3)
             _next()
 
-        elif block_type == LogicItems.LOOP.value:
-            # Safety cap: a true infinite loop would block the Django thread.
-            MAX_LOOP_ITERATIONS = 10
-            print(f"[LOGIC] Loop forever (capped at {MAX_LOOP_ITERATIONS} in simulation)")
-            for i in range(MAX_LOOP_ITERATIONS):
-                print(f"[LOGIC]   loop iteration {i + 1}/{MAX_LOOP_ITERATIONS}")
-                _recurse("DO")
-                delete_spawned_object_and_place()
-            time.sleep(3)
-            _next()
-
-        elif block_type == LogicItems.REPEAT_UNTIL.value:
-            MAX_ITERATIONS = 10
-            print(f"[LOGIC] Repeat-Until (max {MAX_ITERATIONS} iterations)")
+        def _h_repeat_until():
+            print(f"[LOGIC] Repeat-Until (max {MAX_LOOP_ITERATIONS} iterations)")
             condition_block = code.get("inputs", {}).get("CONDITION", {}).get("block")
-            for i in range(MAX_ITERATIONS):
-                print(f"[LOGIC]   repeat-until iteration {i + 1}/{MAX_ITERATIONS}")
+            _fulfilled = False
+            for i in range(MAX_LOOP_ITERATIONS):
+                if SIMULATION_STOP_EVENT.is_set():
+                    break
+                print(f"[LOGIC]   repeat-until iteration {i + 1}/{MAX_LOOP_ITERATIONS}")
                 _recurse("DO")
-                fulfilled = (
-                    _resolve_condition(condition_block, simulate_event)
-                    if condition_block else True
-                )
-                if fulfilled:
+                if condition_block:
+                    if _condition_contains_find(condition_block):
+                        _move_to_scan_pose()
+                    _fulfilled = _eval_condition_tree(condition_block, simulate_event)
+                else:
+                    _fulfilled = True
+                if _fulfilled:
                     print("[LOGIC] Repeat-Until: condition met, exiting loop")
                     break
                 delete_spawned_object_and_place()
-            time.sleep(3)
+            if not _fulfilled and not SIMULATION_STOP_EVENT.is_set():
+                print(f"[WARNING] Repeat-Until: cap ({MAX_LOOP_ITERATIONS}) reached, condition never met")
+                try:
+                    _bridge.notify(
+                        "/api/human-step-timeout",
+                        {"condition": "repeat_until", "value": "cap_reached"},
+                    )
+                except Exception:
+                    pass
+            _interruptible_sleep(3)
             _next()
 
-        elif block_type == LogicItems.WHEN.value:
+        def _h_when():
             condition_block = code["inputs"]["WHEN"]["block"]
-            fulfilled = _resolve_condition(condition_block, simulate_event)
+            if _condition_contains_find(condition_block):
+                _move_to_scan_pose()
+            fulfilled = _eval_condition_tree(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
-                time.sleep(3)
+                _interruptible_sleep(3)
             _next()
 
-        elif block_type == LogicItems.WHEN_OTHERWISE.value:
+        def _h_when_otherwise():
             condition_block = code["inputs"]["WHEN"]["block"]
-            fulfilled = _resolve_condition(condition_block, simulate_event)
+            if _condition_contains_find(condition_block):
+                _move_to_scan_pose()
+            fulfilled = _eval_condition_tree(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
             else:
                 _recurse("OTHERWISE")
-            time.sleep(3)
+            _interruptible_sleep(3)
             _next()
 
         # ══════════════════════════════════════════════════════════════════════
         # HUMAN ACTIONS
         # ══════════════════════════════════════════════════════════════════════
 
-        elif block_type == StepsItems.HUMAN_ACTION.value:
+        def _h_human_action():
             task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
             print(f"\n[!] HUMAN ACTION REQUIRED: {task_desc}")
             confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
@@ -1348,30 +1456,37 @@ def simulation_recursive_blockly_parser(
                     except Exception:
                         pass
             try:
-                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-start",
-                              json=step_start_payload, timeout=5)
+                _bridge.notify("/api/human-step-start", step_start_payload)
             except Exception:
                 pass
             if confirm_event:
-                _resolve_condition(confirm_event, simulate_event)
+                if _condition_contains_find(confirm_event):
+                    _move_to_scan_pose()
+                _eval_condition_tree(confirm_event, simulate_event)
             try:
-                requests.post(f"{FLASK_BRIDGE_URL}/api/human-step-complete", timeout=5)
+                _bridge.notify("/api/human-step-complete")
             except Exception:
                 pass
             _next()
 
-        elif block_type == StepsItems.NOTIFY_ACTION.value:
-            # Non-blocking: log only, robot continues immediately.
+        def _h_notify_action():
             task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
             print(f"\n[NOTIFY] Operator message: {task_desc}")
+            try:
+                _bridge.notify("/api/notify", {"description": task_desc})
+            except Exception:
+                pass
             _next()
 
         # ══════════════════════════════════════════════════════════════════════
         # ROBOT STEP ACTIONS
         # ══════════════════════════════════════════════════════════════════════
 
-        elif block_type == StepsItems.PICK.value:
-            object_data = loads(code["inputs"]["OBJECT"]["block"]["data"])
+        def _h_pick():
+            object_data = _safe_block_data("OBJECT", "PICK")
+            if object_data is None:
+                _next()
+                return
             obj = objectsOfUser.filter(id=object_data["id"]).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             safe_sdf_name = sdf_name.replace(" ", "_").lower()
@@ -1391,7 +1506,7 @@ def simulation_recursive_blockly_parser(
                 print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
             else:
                 print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_spawn_abs:.3f}")
-            time.sleep(1)
+            _interruptible_sleep(1)
             # Neutralize pending DetachableJoint auto-attach from previous spawn or startup
             print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
             detach_object_from_gripper()
@@ -1399,8 +1514,11 @@ def simulation_recursive_blockly_parser(
             simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok)
             _next()
 
-        elif block_type == StepsItems.PLACE.value:
-            location_data = loads(code["inputs"]["LOCATION"]["block"]["data"])
+        def _h_place():
+            location_data = _safe_block_data("LOCATION", "PLACE")
+            if location_data is None:
+                _next()
+                return
             location = locationsOfUser.filter(id=location_data["id"]).first()
             sdf_name = location.name if location else location_data.get("name", "unknown")
             safe_loc_sdf_name = sdf_name.replace(" ", "_").lower()
@@ -1417,11 +1535,14 @@ def simulation_recursive_blockly_parser(
                 print(f"[SIMULATOR] WARNING: location spawn failed for '{sdf_name}' — place may fail")
             picked_obj_name = getattr(simulation_recursive_blockly_parser, "last_picked_object", "flask")
             simulate_ros_place(picked_obj_name, objectsOfUser, sdf_name)
-            time.sleep(1)
+            _interruptible_sleep(1)
             _next()
 
-        elif block_type == StepsItems.PROCESSING.value:
-            action_data = loads(code["inputs"]["ACTION"]["block"]["data"])
+        def _h_processing():
+            action_data = _safe_block_data("ACTION", "PROCESSING")
+            if action_data is None:
+                _next()
+                return
             action = actionsOfUser.filter(id=action_data["id"]).first()
             action_name = action.name if action else action_data.get("name", "unknown")
             print(f"[ROBOT] PROCESSING action: {action_name}")
@@ -1433,8 +1554,11 @@ def simulation_recursive_blockly_parser(
                     pass
             _next()
 
-        elif block_type == StepsItems.MOVE_TO.value:
-            location_data = loads(code["inputs"]["LOCATION"]["block"]["data"])
+        def _h_move_to():
+            location_data = _safe_block_data("LOCATION", "MOVE_TO")
+            if location_data is None:
+                _next()
+                return
             location_name = location_data.get("name", "Unknown")
             motion_type = code.get("fields", {}).get("MOTION_TYPE", "LINEAR")
             print(f"[ROBOT] MOVE_TO ({motion_type}) → {location_name}")
@@ -1448,21 +1572,24 @@ def simulation_recursive_blockly_parser(
                 j_keys = ["j1", "j2", "j3", "j4", "j5", "j6"]
                 if all(k in pos for k in j_keys):
                     print(f"[ROBOT]   Using stored joint positions from DB for '{location_name}'")
+                    target_q = [pos["j1"], pos["j2"], pos["j3"], pos["j4"], pos["j5"], pos["j6"]]
                     simulate_ros_move(
                         pos["j1"], pos["j2"], pos["j3"],
                         pos["j4"], pos["j5"], pos["j6"],
                         ROS_OPEN_GRIPPER,
                     )
+                    _send_hw_target(target_q, ROS_OPEN_GRIPPER)
                     moved = True
 
             if not moved:
                 print(f"[ROBOT]   No joint data in DB for '{location_name}' → using default intermediate position")
                 simulate_ros_move(*SAFE_INTERMEDIATE_POSE, ROS_CLOSE_GRIPPER_WITH_OBJECT)
+                _send_hw_target(list(SAFE_INTERMEDIATE_POSE), ROS_OPEN_GRIPPER)
 
-            time.sleep(2)
+            _interruptible_sleep(2)
             _next()
 
-        elif block_type == StepsItems.GRIPPER.value:
+        def _h_gripper():
             state = code.get("fields", {}).get("GRIPPER_STATE", "CLOSE")
             if state == "OPEN":
                 print("[ROBOT] Opening gripper")
@@ -1472,15 +1599,27 @@ def simulation_recursive_blockly_parser(
                 hand_value = ROS_CLOSE_GRIPPER_WITH_OBJECT
             # Send only the hand command, keeping arm at safe home (J3=90°)
             simulate_ros_move(0, 0, 90, 0, 0, 0, hand_value, joint_abs=True)
-            time.sleep(1)
+            _send_hw_target([], hand_value, hand_only=True)
+            _interruptible_sleep(1)
+            _next()
+
+        def _h_wait():
+            seconds = int(code.get("fields", {}).get("SECONDS", 1))
+            print(f"[ROBOT] Wait {seconds}s (interruptible)")
+            _interruptible_sleep(seconds)
             _next()
 
         # ══════════════════════════════════════════════════════════════════════
         # MACRO TASKS
         # ══════════════════════════════════════════════════════════════════════
 
-        elif block_type == MacroItems.MACRO_TASK.value:
-            macro_data = loads(code["data"])
+        def _h_macro():
+            try:
+                macro_data = loads(code["data"])
+            except (KeyError, TypeError, ValueError) as exc:
+                print(f"[ERROR] MACRO: malformed/missing block data, skipping: {exc}")
+                _next()
+                return
             macro_id = macro_data["id"]
             macro_name = macro_data.get("name", str(macro_id))
             print(f"[MACRO] Starting macro: {macro_name}")
@@ -1496,10 +1635,31 @@ def simulation_recursive_blockly_parser(
             print(f"[MACRO] Macro complete: {macro_name}")
             _next()
 
-        elif block_type == "when_start":
+        def _h_when_start():
             print("[LOGIC] Start sequence")
             _next()
 
+        # Registry: block type → handler. Replaces the former if/elif chain.
+        BLOCK_HANDLERS = {
+            LogicItems.REPEAT.value: _h_repeat,
+            LogicItems.REPEAT_UNTIL.value: _h_repeat_until,
+            LogicItems.WHEN.value: _h_when,
+            LogicItems.WHEN_OTHERWISE.value: _h_when_otherwise,
+            StepsItems.HUMAN_ACTION.value: _h_human_action,
+            StepsItems.NOTIFY_ACTION.value: _h_notify_action,
+            StepsItems.PICK.value: _h_pick,
+            StepsItems.PLACE.value: _h_place,
+            StepsItems.PROCESSING.value: _h_processing,
+            StepsItems.MOVE_TO.value: _h_move_to,
+            StepsItems.GRIPPER.value: _h_gripper,
+            StepsItems.WAIT.value: _h_wait,
+            MacroItems.MACRO_TASK.value: _h_macro,
+            "when_start": _h_when_start,
+        }
+
+        handler = BLOCK_HANDLERS.get(block_type)
+        if handler is not None:
+            handler()
         else:
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 
@@ -1569,10 +1729,7 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.POST.value:
                 SIMULATION_STOP_EVENT.set()
                 try:
-                    requests.post(
-                        f"{FLASK_BRIDGE_URL}/api/stop",
-                        timeout=(0.3, 1.2),
-                    )
+                    _bridge.stop()
                 except Exception as e:
                     print(f"[SIMULATOR] Could not forward stop to Flask bridge: {e}")
                 _set_world_paused(True)

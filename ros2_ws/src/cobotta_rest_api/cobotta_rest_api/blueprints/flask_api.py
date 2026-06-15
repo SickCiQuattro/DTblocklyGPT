@@ -22,9 +22,26 @@ JOINT_LIMITS_DEG = {
 }
 MAX_WAYPOINTS = 5000
 
+# Bounds for caller-supplied vision-wait timeouts (seconds).
+MIN_WAIT_TIMEOUT_S = 0.1
+MAX_WAIT_TIMEOUT_S = 300.0
+
 
 def _clamp(value, lo, hi):
     return max(lo, min(hi, value))
+
+
+def _parse_timeout(raw, default=30.0):
+    """Parse a query-string timeout into a clamped float.
+
+    Returns ``default`` when ``raw`` is missing or non-numeric, then clamps to
+    [MIN_WAIT_TIMEOUT_S, MAX_WAIT_TIMEOUT_S] so a bad value can't hang a worker.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = default
+    return _clamp(value, MIN_WAIT_TIMEOUT_S, MAX_WAIT_TIMEOUT_S)
 
 
 def _validate_waypoints(data):
@@ -310,14 +327,66 @@ def humanStepTimeout():
     return jsonify({"status": "ok"})
 
 
+@bp.route("/notify", methods=["POST"])
+def notifyAction():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "notify",
+        "description": data.get("description", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
 # ── Vision wait endpoints ─────────────────────────────────────────────────────
+
+@bp.route("/move-target", methods=["POST"])
+def moveTarget():
+    """Receive one absolute PTP target pose and call /cobotta/move_target service.
+
+    Body: {"j1": float, ..., "j6": float, "hand": float, "hand_only": bool} (degrees).
+    When hand_only=true only the gripper moves; joint values are ignored.
+    Used by simulate.py when DRIVE_HARDWARE is set to drive the real arm alongside Gazebo.
+    Blocks until the service call completes (natural backpressure).
+    """
+    data = request.get_json(silent=True) or {}
+    hand_only = bool(data.get("hand_only", False))
+
+    joint_keys = ["j1", "j2", "j3", "j4", "j5", "j6"]
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
+    joints = []
+    missing = []
+
+    if not hand_only:
+        for jk, lk in zip(joint_keys, limit_keys):
+            v = data.get(jk)
+            if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+                missing.append(jk)
+                joints.append(0.0)
+            else:
+                lo, hi = JOINT_LIMITS_DEG[lk]
+                joints.append(_clamp(float(v), lo, hi))
+
+    hand_raw = data.get("hand", 0.0)
+    if isinstance(hand_raw, bool) or not isinstance(hand_raw, (int, float)):
+        missing.append("hand")
+        hand = 0.0
+    else:
+        hand = _clamp(float(hand_raw), *JOINT_LIMITS_DEG["hand"])
+
+    if missing and not hand_only:
+        return jsonify({"error": "missing or non-numeric params", "params": missing}), 400
+
+    result = flask_pub.call_move_target(joints, hand, hand_only)
+    return jsonify(result)
+
 
 @bp.route("/vision/report", methods=["POST"])
 def visionReport():
     data = request.get_json(silent=True) or {}
     gesture = data.get("gesture", "NONE")
-    detections = data.get("detections", [])
-    flask_pub.report_vision(gesture, detections)
+    flask_pub.report_vision(gesture)
     return jsonify({"status": "ok"})
 
 
@@ -329,7 +398,7 @@ def visionState():
 @bp.route("/vision/wait-gesture")
 def visionWaitGesture():
     gesture = request.args.get("gesture", "THUMBS_UP")
-    timeout = float(request.args.get("timeout", 30))
+    timeout = _parse_timeout(request.args.get("timeout"))
     detected = flask_pub.wait_for_gesture(gesture, timeout)
     return jsonify({"detected": detected, "gesture": gesture})
 
@@ -337,7 +406,7 @@ def visionWaitGesture():
 @bp.route("/vision/wait-object")
 def visionWaitObject():
     target_class = request.args.get("target_class", "")
-    timeout = float(request.args.get("timeout", 30))
+    timeout = _parse_timeout(request.args.get("timeout"))
     if not target_class:
         return jsonify({"error": "target_class required"}), 400
     detected = flask_pub.wait_for_object(target_class, timeout)

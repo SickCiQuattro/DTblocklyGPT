@@ -66,9 +66,6 @@ export const GHOST_INPUT_MAP: Record<
   repeat_block: {
     DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
   },
-  loop_block: {
-    DO: { type: 'shadow_sequence_block', label: 'Add a step...' },
-  },
 }
 
 /**

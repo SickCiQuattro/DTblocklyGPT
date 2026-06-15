@@ -31,14 +31,6 @@ import {
  */
 export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
   {
-    id: 1,
-    name: 'External signal received',
-    description: 'A connected machine or button sends a digital signal.',
-    group: 'Conditions',
-    keywords: ['sensor', 'signal', 'machine', 'external'],
-    blockType: 'sensor_signal_block',
-  },
-  {
     id: 2,
     name: 'Object detected',
     description: 'Camera checks if a specific object is visible.',
@@ -46,14 +38,6 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
     paramHint: 'object',
     keywords: ['object', 'vision', 'camera', 'find'],
     blockType: 'find_object_block',
-  },
-  {
-    id: 3,
-    name: 'Contact detected',
-    description: 'Someone or something is physically touching the robot.',
-    group: 'Conditions',
-    keywords: ['touch', 'collision', 'contact', 'force'],
-    blockType: 'touch_detect_block',
   },
   {
     id: 4,
@@ -197,14 +181,6 @@ export const buildSequencePickerItems = (
       group: 'Task Flow',
     },
     {
-      id: -10,
-      name: 'Repeat forever',
-      description: 'Repeat a sequence indefinitely',
-      keywords: ['loop', 'forever', 'infinite'],
-      blockType: 'loop_block',
-      group: 'Task Flow',
-    },
-    {
       id: -11,
       name: 'Repeat until',
       description: 'Repeat until a condition is met',
@@ -313,7 +289,7 @@ export const filterShadowItems = (
  * Determine which real block type to create when an item is selected from the
  * picker for a given shadow block type.
  *
- * - `shadow_trigger_block` always maps to `sensor_signal_block` as the default.
+ * - `shadow_trigger_block` maps to `gesture_block` as the default.
  * - `shadow_object/location/action_block` strip the `shadow_` prefix.
  * - Any block type already in `DIRECT_BLOCK_TYPES` is returned as-is.
  *
@@ -324,7 +300,7 @@ export const resolveRealBlockTypeFromShadow = (
   blockType: string,
 ): SelectableShadowBlockType | null => {
   if (blockType === 'shadow_trigger_block') {
-    return 'sensor_signal_block'
+    return 'gesture_block'
   }
 
   if (blockType.startsWith('shadow_')) {
