@@ -32,11 +32,19 @@ class HardwareControl(Node):
         self.declare_parameter("bcap_timeout", 120)
         self.declare_parameter("enable_hardware", False)
         self.declare_parameter("ext_speed", 20)
+        # ORiN/CAO provider: "CaoProv.DENSO.RC8" for the physical COBOTTA/RC8
+        # controller; "CaoProv.DENSO.VRC" is the virtual (WINCAPS) simulator only.
+        self.declare_parameter("bcap_provider", "CaoProv.DENSO.VRC")
+        # COBOTTA servo-on preparation (ManualResetPreparation + MotionPreparation)
+        # before Motor-on. Required on the physical COBOTTA; harmless to leave on.
+        self.declare_parameter("cobotta_prep", True)
 
         self.host = self.get_parameter("bcap_host").value
         self.port = self.get_parameter("bcap_port").value
         self._connect_timeout = self.get_parameter("bcap_connect_timeout").value
         self._op_timeout = self.get_parameter("bcap_timeout").value
+        self._provider = self.get_parameter("bcap_provider").value
+        self._cobotta_prep = self.get_parameter("cobotta_prep").value
         enable_hardware = self.get_parameter("enable_hardware").value
         self._ext_speed = int(self.get_parameter("ext_speed").value)
 
@@ -72,17 +80,44 @@ class HardwareControl(Node):
     def _connect(self):
         try:
             self.get_logger().info(
-                f"cobotta_node: connecting B-CAP to {self.host}:{self.port} (connect_timeout={self._connect_timeout}s, op_timeout={self._op_timeout}s) ..."
+                f"cobotta_node: connecting B-CAP to {self.host}:{self.port} provider={self._provider} (connect_timeout={self._connect_timeout}s, op_timeout={self._op_timeout}s) ..."
             )
             self.m_bcapclient = bcapclient(self.host, self.port, self._connect_timeout)
+            self.get_logger().info("cobotta_node:  [1/8] service_start ...")
             self.m_bcapclient.service_start("")
             self.m_bcapclient.settimeout(self._op_timeout)
+            self.get_logger().info("cobotta_node:  [2/8] controller_connect ...")
             self.hCtrl = self.m_bcapclient.controller_connect(
-                "", "CaoProv.DENSO.VRC", "localhost", ""
+                "", self._provider, "localhost", ""
             )
+            self.get_logger().info("cobotta_node:  [3/8] controller_getrobot ...")
             self.HRobot = self.m_bcapclient.controller_getrobot(self.hCtrl, "Arm0")
+            # Pre-clear any latched error (yellow LED) so TakeArm is allowed
+            # (otherwise 0x81501025 "command not available while an error occurs").
+            # ManualResetPreparation must precede ClearError (0x83500372).
+            if self._cobotta_prep:
+                self.get_logger().info("cobotta_node:  [4/8] ManualResetPreparation + ClearError ...")
+                try:
+                    self.m_bcapclient.controller_execute(self.hCtrl, "ManualResetPreparation")
+                    self.m_bcapclient.controller_execute(self.hCtrl, "ClearError")
+                except Exception as exc:
+                    self.get_logger().warning(f"cobotta_node: pre-clear failed (continuing): {exc}")
+            self.get_logger().info("cobotta_node:  [5/8] TakeArm ...")
             self.m_bcapclient.robot_execute(self.HRobot, "TakeArm", [0, 0])
+            # COBOTTA servo-on prep (ROBOT-level commands, not controller):
+            # ManualResetPreparation then MotionPreparation, else Motor-on fails
+            # 0x81501069 "Operation preparation is necessary".
+            if self._cobotta_prep:
+                self.get_logger().info("cobotta_node:  [6/8] robot ManualResetPreparation + MotionPreparation ...")
+                self.m_bcapclient.robot_execute(self.HRobot, "ManualResetPreparation")
+                self.m_bcapclient.robot_execute(self.HRobot, "MotionPreparation")
+            # Motor-on requires this client to hold the controller's Executable
+            # Token. If it errors 0x83501029 "Set IP address for the executable
+            # token", set Executable Token to "Any" (or Ethernet + this client IP)
+            # in the COBOTTA config (WINCAPS / pendant). See docs.
+            self.get_logger().info("cobotta_node:  [7/8] Motor on ...")
             self.m_bcapclient.robot_execute(self.HRobot, "Motor", [1, 0])
+            self.get_logger().info("cobotta_node:  [8/8] ExtSpeed ...")
             self.m_bcapclient.robot_execute(self.HRobot, "ExtSpeed", self._ext_speed)
             self._hw_ok = True
             self.get_logger().info(
