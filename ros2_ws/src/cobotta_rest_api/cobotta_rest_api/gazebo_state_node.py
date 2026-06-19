@@ -26,7 +26,7 @@ class GazeboStateNode(Node):
         Riceve il messaggio JointState unificato da Gazebo con tutti i joint.
         Il messaggio contiene: joint1, joint2, joint3, joint4, joint5, joint6, joint_left, joint_right
         """
-        
+
         # Mappa i nomi dei joint agli indici nel nostro array
         joint_name_to_index = {
             'joint1': 0,
@@ -37,14 +37,14 @@ class GazeboStateNode(Node):
             'joint6': 5,
             'joint_left': 6
         }
-        
+
         # Estrai le posizioni dal messaggio (e convertile in gradi)
         for i, name in enumerate(msg.name):
             if name in joint_name_to_index:
                 idx = joint_name_to_index[name]
                 # Gazebo usa radianti, qui convertiamo in gradi come richiede l'interfaccia verso polling_socket_node
                 self.joint_position[idx] = convert_rad_to_grad(msg.position[i])
-        
+
         self.get_logger().debug(f'Joint states received: {self.joint_position}')
 
     def createJointState(self):

@@ -1,3 +1,5 @@
+from .blueprints import flask_api
+from . import db
 import os
 import signal
 from threading import Thread
@@ -21,10 +23,8 @@ def sendRequestPosition():
     return flask_pub.send_request_position()
 
 
-from . import db
 db.init_app(app)
 
-from .blueprints import flask_api
 app.register_blueprint(flask_api.bp)
 
 

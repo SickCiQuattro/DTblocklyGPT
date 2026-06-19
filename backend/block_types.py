@@ -32,6 +32,8 @@ class StepsItems(Enum):
     NOTIFY_ACTION = "notify_action_block"
     MOVE_TO = "move_to_block"
     GRIPPER = "gripper_block"
+    OPEN_GRIPPER = "open_gripper_block"
+    CLOSE_GRIPPER = "close_gripper_block"
     WAIT = "wait_block"
 
 

@@ -96,19 +96,22 @@ class HardwareControl(Node):
             # (otherwise 0x81501025 "command not available while an error occurs").
             # ManualResetPreparation must precede ClearError (0x83500372).
             if self._cobotta_prep:
-                self.get_logger().info("cobotta_node:  [4/8] ManualResetPreparation + ClearError ...")
+                self.get_logger().info(
+                    "cobotta_node:  [4/8] ManualResetPreparation + ClearError ...")
                 try:
                     self.m_bcapclient.controller_execute(self.hCtrl, "ManualResetPreparation")
                     self.m_bcapclient.controller_execute(self.hCtrl, "ClearError")
                 except Exception as exc:
-                    self.get_logger().warning(f"cobotta_node: pre-clear failed (continuing): {exc}")
+                    self.get_logger().warning(
+                        f"cobotta_node: pre-clear failed (continuing): {exc}")
             self.get_logger().info("cobotta_node:  [5/8] TakeArm ...")
             self.m_bcapclient.robot_execute(self.HRobot, "TakeArm", [0, 0])
             # COBOTTA servo-on prep (ROBOT-level commands, not controller):
             # ManualResetPreparation then MotionPreparation, else Motor-on fails
             # 0x81501069 "Operation preparation is necessary".
             if self._cobotta_prep:
-                self.get_logger().info("cobotta_node:  [6/8] robot ManualResetPreparation + MotionPreparation ...")
+                self.get_logger().info(
+                    "cobotta_node:  [6/8] robot ManualResetPreparation + MotionPreparation ...")
                 self.m_bcapclient.robot_execute(self.HRobot, "ManualResetPreparation")
                 self.m_bcapclient.robot_execute(self.HRobot, "MotionPreparation")
             # Motor-on requires this client to hold the controller's Executable
@@ -118,7 +121,11 @@ class HardwareControl(Node):
             self.get_logger().info("cobotta_node:  [7/8] Motor on ...")
             self.m_bcapclient.robot_execute(self.HRobot, "Motor", [1, 0])
             self.get_logger().info("cobotta_node:  [8/8] ExtSpeed ...")
-            self.m_bcapclient.robot_execute(self.HRobot, "ExtSpeed", self._ext_speed)
+            # ExtSpeed takes [speed, accel, decel] (%), per the official DENSO
+            # b-CAP samples — a scalar errors 0x80070057 (E_INVALIDARG).
+            self.m_bcapclient.robot_execute(
+                self.HRobot, "ExtSpeed", [self._ext_speed, self._ext_speed, self._ext_speed]
+            )
             self._hw_ok = True
             self.get_logger().info(
                 f"cobotta_node: B-CAP connected (ExtSpeed={self._ext_speed})"

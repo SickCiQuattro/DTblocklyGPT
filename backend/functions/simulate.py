@@ -1,4 +1,13 @@
+from backend.functions.task import _resolve_runtime_workspace
+from backend.block_types import (
+    LogicItems,
+    StepsItems,
+    EventsItems,
+    MacroItems,
+)
 import subprocess
+import logging
+from dataclasses import dataclass, field
 from typing import List
 from django.http import HttpResponse, HttpRequest
 from backend.utils.response import (
@@ -20,6 +29,7 @@ import xml.etree.ElementTree as ET
 import ikpy.chain
 import numpy as np
 import threading
+import requests.exceptions
 from backend.functions.env_utils import get_bool_env
 from backend.functions.flask_ros_client import FlaskRosClient
 from backend.functions.calibration import (
@@ -33,7 +43,11 @@ from backend.functions.calibration import (
     SAFE_INTERMEDIATE_POSE,
     SCAN_POSE,
     LOCATION_PROFILES,
+    CONDITION_TIMEOUT_S,
+    PICK_Z_FINE_TUNE,
 )
+
+logger = logging.getLogger(__name__)
 
 FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip("/")
 
@@ -53,6 +67,7 @@ def convert_hand_gazebo_cobotta(gazebo_hand_value):
     ×2000 scales metres to the controller's native units."""
     return (gazebo_hand_value + 0.015) * 2000
 
+
 CURRENT_JOINTS = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 CURRENT_HAND = 30.0  # Open gripper
 STATE_LOCK = threading.Lock()
@@ -61,6 +76,11 @@ STATE_LOCK = threading.Lock()
 # NOTE: works only with single-process Django (runserver); a multi-process WSGI
 # deployment would need shared state (e.g. Redis-backed flag).
 SIMULATION_STOP_EVENT = threading.Event()
+
+# Tracks Gazebo model names spawned in the current simulation run.
+# Used by find_object bypass: if object is in world, skip vision polling.
+# Cleared on reset_simulation_world(), delete_spawned_object_and_place(), and STOP.
+_spawned_in_world: set = set()
 
 
 def _interruptible_sleep(seconds):
@@ -71,15 +91,18 @@ def _interruptible_sleep(seconds):
             return
         time.sleep(min(0.1, end - time.time()))
 
+
 def get_current_state():
     with STATE_LOCK:
         return list(CURRENT_JOINTS), CURRENT_HAND
+
 
 def set_current_state(joints, hand):
     global CURRENT_JOINTS, CURRENT_HAND
     with STATE_LOCK:
         CURRENT_JOINTS = list(joints)
         CURRENT_HAND = hand
+
 
 def sync_current_state_from_ros():
     """Sync joint state from the Flask bridge. Returns True on success, False if state is stale."""
@@ -95,6 +118,7 @@ def sync_current_state_from_ros():
         print(f"[SIMULATOR] Error syncing state from ROS: {e}")
     print("[SIMULATOR] WARNING: could not sync joint state from ROS — IK seed may be stale")
     return False
+
 
 # Dynamically calculate the base project directory (DTblocklyGPT root)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -113,7 +137,7 @@ if os.path.exists(URDF_PATH):
         joint_names = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
         active_mask = [link.name in joint_names for link in links]
         COBOTTA_CHAIN = ikpy.chain.Chain(name='cobotta', links=links, active_links_mask=active_mask)
-        
+
         print("[SIMULATOR] COBOTTA_CHAIN initialized successfully.")
         print("[SIMULATOR] Link map:")
         for i, link in enumerate(COBOTTA_CHAIN.links):
@@ -124,18 +148,19 @@ if os.path.exists(URDF_PATH):
 else:
     COBOTTA_CHAIN = None
 
+
 def debug_fk(q_deg, label="FK"):
     if COBOTTA_CHAIN is None:
         return
     joints_full = [0.0] * len(COBOTTA_CHAIN.links)
-    name_to_idx = {'joint1':0, 'joint2':1, 'joint3':2, 'joint4':3, 'joint5':4, 'joint6':5}
+    name_to_idx = {'joint1': 0, 'joint2': 1, 'joint3': 2, 'joint4': 3, 'joint5': 4, 'joint6': 5}
     for i, link in enumerate(COBOTTA_CHAIN.links):
         if link.name in name_to_idx:
             joints_full[i] = math.radians(q_deg[name_to_idx[link.name]])
     T = COBOTTA_CHAIN.forward_kinematics(joints_full)
     pos = T[:3, 3]
     # In Gazebo: X = Y_urdf, Y = -X_urdf, Z = Z_urdf - 0.085
-    print(f"[{label}] TCP (URDF) x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} | (Gazebo) x={pos[1]:.3f}, y={-pos[0]:.3f}, z={pos[2]-URDF_GAZEBO_Z_OFFSET:.3f}")
+    print(f"[{label}] TCP (URDF) x={pos[0]:.3f}, y={pos[1]:.3f}, z={pos[2]:.3f} | (Gazebo) x={pos[1]:.3f}, y={-pos[0]:.3f}, z={pos[2] - URDF_GAZEBO_Z_OFFSET:.3f}")
 
 
 def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
@@ -144,18 +169,18 @@ def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
         safe_name = sdf_name.replace(" ", "_").lower()
         sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", folder, safe_name, "model.sdf")
         if not os.path.exists(sdf_path):
-            return None, None
-        
+            return None, None, 0.0
+
         tree = ET.parse(sdf_path)
         root = tree.getroot()
         collisions = root.findall(".//collision")
         if not collisions:
-            return None, None
-        
+            return None, None, 0.0
+
         min_z = float('inf')
         max_z = float('-inf')
         max_width = 0.0
-        
+
         for col in collisions:
             pose_elem = col.find("pose")
             pose_z = 0.0
@@ -163,7 +188,7 @@ def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
                 parts = pose_elem.text.strip().split()
                 if len(parts) >= 3:
                     pose_z = float(parts[2])
-            
+
             geom = col.find("geometry")
             if geom is not None:
                 box = geom.find("box")
@@ -172,32 +197,32 @@ def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
                     size_x = float(size_str[0])
                     size_y = float(size_str[1])
                     size_z = float(size_str[2])
-                    
+
                     c_min_z = pose_z - size_z / 2.0
                     c_max_z = pose_z + size_z / 2.0
                     min_z = min(min_z, c_min_z)
                     max_z = max(max_z, c_max_z)
                     max_width = max(max_width, min(size_x, size_y))
-                    
+
                 cylinder = geom.find("cylinder")
                 if cylinder is not None:
                     radius_elem = cylinder.find("radius")
                     length_elem = cylinder.find("length")
                     if radius_elem is not None and length_elem is not None:
                         r = float(radius_elem.text.strip())
-                        l = float(length_elem.text.strip())
-                        
-                        c_min_z = pose_z - l / 2.0
-                        c_max_z = pose_z + l / 2.0
+                        length_val = float(length_elem.text.strip())
+
+                        c_min_z = pose_z - length_val / 2.0
+                        c_max_z = pose_z + length_val / 2.0
                         min_z = min(min_z, c_min_z)
                         max_z = max(max_z, c_max_z)
                         max_width = max(max_width, 2.0 * r)
-                        
+
         if min_z != float('inf') and max_z != float('-inf'):
-            return max_z - min_z, max_width
+            return max_z - min_z, max_width, min_z
     except Exception as e:
         print(f"[SIMULATOR] Error parsing SDF {sdf_name}: {e}")
-    return None, None
+    return None, None, 0.0
 
 
 IK_POS_TOL = 0.004   # 4 mm max FK residual
@@ -241,7 +266,7 @@ def _ik_with_verification(target_urdf, target_orientation, initial_position, lab
                     break
         pos_err, axis_err = fk_position_error(angles_deg, target_urdf)
         if pos_err > IK_POS_TOL or axis_err > IK_AXIS_TOL_DEG:
-            print(f"[IK{label}] FK residual pos={pos_err*1000:.1f}mm axis={axis_err:.1f}° — rejected")
+            print(f"[IK{label}] FK residual pos={pos_err * 1000:.1f}mm axis={axis_err:.1f}° — rejected")
             return None, pos_err
         return angles_deg, pos_err
     except Exception as e:
@@ -310,7 +335,7 @@ def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
     if angles:
         return angles
 
-    print(f"[SIMULATOR] IK failed all attempts for x={x_rel:.3f} y={y_rel:.3f} z={z_rel:.3f} (last pos_err={err*1000:.1f}mm)")
+    print(f"[SIMULATOR] IK failed all attempts for x={x_rel:.3f} y={y_rel:.3f} z={z_rel:.3f} (last pos_err={err * 1000:.1f}mm)")
     return None
 
 
@@ -318,10 +343,10 @@ def resolve_object_metrics(obj, sdf_name):
     # Try reading database height & width
     db_height = getattr(obj, "height", 0.0) or 0.0
     db_width = getattr(obj, "obj_width", 0.0) or 0.0
-    
+
     height_m = None
     width_m = None
-    
+
     if db_height != 0.0:
         # Check if negative/real robot raw TCP coordinate (table at -32.5 mm)
         if db_height < 0.0 or db_height > 1.0:
@@ -331,28 +356,302 @@ def resolve_object_metrics(obj, sdf_name):
                 height_m = db_height / 1000.0
             else:
                 height_m = db_height
-                
+
     if db_width > 0.0:
         if db_width > 0.5:
             width_m = db_width / 1000.0
         else:
             width_m = db_width
-            
+
     # Try parsing SDF model file
-    sdf_height, sdf_width = get_sdf_dimensions(sdf_name)
-    
+    sdf_height, sdf_width, _ = get_sdf_dimensions(sdf_name)
+
     # Prioritize SDF dimensions as they are the true physical dimensions in Gazebo
     if sdf_height is not None and sdf_height > 0.001:
         height_m = sdf_height
     elif height_m is None or height_m <= 0.001:
-        height_m = 0.015 # default pill height (15mm)
-        
+        height_m = 0.015  # default pill height (15mm)
+
     if sdf_width is not None and sdf_width > 0.001:
         width_m = sdf_width
     elif width_m is None or width_m <= 0.001 or width_m > 0.03:
-        width_m = 0.015 # default width
-        
+        width_m = 0.015  # default width
+
     return height_m, width_m
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PHASE 2 — Generic TOP-grasp planning from collision geometry
+#
+# normalize_object_for_grasp(sdf) -> ObjectModel : object normalization
+# plan_pick_for_object(model, ...) -> PickPlan   : grasp synthesis
+# (execution stays the Phase-1 deterministic snap+weld in simulate_ros_pick).
+#
+# Scope: custom-object support for TOP-graspable shapes only. Side grasps,
+# concave/multi-collision shapes and richer grasp families are Phase 3.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class ObjectModel:
+    """Normalized graspable description derived from an object's COLLISION
+    geometry (never the visual). For complex meshes it falls back to a
+    bbox/cylinder proxy — that mesh→proxy boundary is the supported frontier."""
+    sdf_name: str
+    collision_type: str            # 'cylinder' | 'box' | 'mesh_proxy' | 'unknown'
+    size_x: float                  # AABB extents (m), model frame
+    size_y: float
+    size_z: float
+    min_z: float                   # bottom offset from origin (m)
+    center_x: float                # AABB centre X/Y (m) — top-grasp alignment
+    center_y: float
+    graspable_width: float         # finger-closing width at grasp height (m)
+    grasp_center_offset: float     # grasp height ABOVE the object bottom (m)
+    grasp_classification: str      # 'top' | 'needs_side' | 'unsupported'
+    yaw_symmetric: bool
+    tool_yaw: float                # gripper yaw (rad)
+    place_support_offset: float    # rest offset on a surface (= -min_z)
+    attach_mode: str               # 'snap_weld' (DT) | 'physical' (real robot)
+    feasible: bool
+    reason: str
+    source: str                    # 'heuristic' | 'meta_override'
+    proxy_used: bool               # a mesh collision forced a primitive proxy
+
+
+@dataclass
+class PickPlan:
+    """Grasp parameters for one pick, with explicit poses so the executor never
+    reaches back into module globals."""
+    spawn_pose: tuple              # (x_rel, y_rel) robot-relative pick target
+    x_rel: float
+    y_rel: float
+    z_pick: float                  # robot-relative grasp height for IK
+    tool_yaw: float
+    hand_close: int
+    grasp_center_offset: float
+    feasible: bool
+    reason: str
+    planning_notes: dict = field(default_factory=dict)
+
+
+def _load_object_meta(safe_name: str):
+    """Optional Level-2 metadata sidecar: objects/<name>/object.meta.json."""
+    path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_name, "object.meta.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            return loads(f.read())
+    except Exception as e:
+        print(f"[GRASP] meta parse error for '{safe_name}': {e}")
+        return None
+
+
+def _parse_object_collisions(safe_name: str):
+    """Parse the UNION of all <collision> primitives (compose each <pose>).
+
+    Returns dict {aabb, bands, collision_type, has_mesh} or None. `bands` is a
+    list of (z_lo, z_hi, horiz_width) per primitive — used to read the graspable
+    width at the grasp height. Rotation is ignored (demo collisions are
+    axis-aligned). Mesh/sphere/other collisions set has_mesh and are skipped for
+    sizing (proxy comes from any box/cylinder present)."""
+    sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_name, "model.sdf")
+    if not os.path.exists(sdf_path):
+        return None
+    try:
+        root = ET.parse(sdf_path).getroot()
+    except Exception as e:
+        print(f"[GRASP] SDF parse error for '{safe_name}': {e}")
+        return None
+    collisions = root.findall(".//collision")
+    if not collisions:
+        return None
+
+    min_x = min_y = min_z = float('inf')
+    max_x = max_y = max_z = float('-inf')
+    bands = []
+    n_box = n_cyl = 0
+    has_mesh = False
+
+    for col in collisions:
+        px = py = pz = 0.0
+        pose_elem = col.find("pose")
+        if pose_elem is not None and pose_elem.text:
+            parts = pose_elem.text.strip().split()
+            if len(parts) >= 3:
+                px, py, pz = float(parts[0]), float(parts[1]), float(parts[2])
+        geom = col.find("geometry")
+        if geom is None:
+            continue
+        box = geom.find("box")
+        cyl = geom.find("cylinder")
+        if box is not None and box.find("size") is not None:
+            s = box.find("size").text.strip().split()
+            sx, sy, sz = float(s[0]), float(s[1]), float(s[2])
+            hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
+            horiz_w = min(sx, sy)
+            n_box += 1
+        elif cyl is not None and cyl.find("radius") is not None and cyl.find("length") is not None:
+            r = float(cyl.find("radius").text.strip())
+            ln = float(cyl.find("length").text.strip())
+            hx = hy = r
+            hz = ln / 2.0
+            horiz_w = 2.0 * r
+            n_cyl += 1
+        else:
+            has_mesh = True   # mesh / sphere / unsupported primitive
+            continue
+        min_x, max_x = min(min_x, px - hx), max(max_x, px + hx)
+        min_y, max_y = min(min_y, py - hy), max(max_y, py + hy)
+        min_z, max_z = min(min_z, pz - hz), max(max_z, pz + hz)
+        bands.append((pz - hz, pz + hz, horiz_w))
+
+    if not bands:
+        # only meshes/spheres: cannot size a primitive proxy
+        return {"aabb": None, "bands": [], "collision_type": "mesh_proxy", "has_mesh": has_mesh}
+
+    if n_box > 0 and n_cyl == 0:
+        collision_type = "box"
+    elif n_cyl > 0 and n_box == 0:
+        collision_type = "cylinder"
+    elif n_cyl > 0 and n_box > 0:
+        collision_type = "box"   # mixed → treat as box-ish (needs yaw)
+    else:
+        collision_type = "unknown"
+
+    aabb = {"min_x": min_x, "max_x": max_x, "min_y": min_y,
+            "max_y": max_y, "min_z": min_z, "max_z": max_z}
+    return {"aabb": aabb, "bands": bands, "collision_type": collision_type, "has_mesh": has_mesh}
+
+
+def _infeasible_model(sdf_name, reason, collision_type="unknown", proxy_used=False):
+    return ObjectModel(
+        sdf_name=sdf_name, collision_type=collision_type,
+        size_x=0.0, size_y=0.0, size_z=0.0, min_z=0.0, center_x=0.0, center_y=0.0,
+        graspable_width=0.0, grasp_center_offset=0.0,
+        grasp_classification="unsupported", yaw_symmetric=True, tool_yaw=0.0,
+        place_support_offset=0.0, attach_mode="snap_weld",
+        feasible=False, reason=reason, source="heuristic", proxy_used=proxy_used)
+
+
+def normalize_object_for_grasp(sdf_name: str, obj=None) -> ObjectModel:
+    """Build an ObjectModel from collision geometry, classify it, and apply an
+    optional object.meta.json override. Geometry, not object name, decides the
+    grasp — this subsumes the legacy flask/blue_cylinder special-case."""
+    safe_name = sdf_name.replace(" ", "_").lower()
+    parsed = _parse_object_collisions(safe_name)
+    if parsed is None:
+        return _infeasible_model(sdf_name, "no parseable collision geometry")
+    if parsed["aabb"] is None:
+        return _infeasible_model(
+            sdf_name, "mesh/sphere collision with no primitive proxy; add object.meta.json",
+            collision_type="mesh_proxy", proxy_used=True)
+
+    aabb = parsed["aabb"]
+    bands = parsed["bands"]
+    collision_type = parsed["collision_type"]
+    proxy_used = parsed["has_mesh"]
+
+    size_x = aabb["max_x"] - aabb["min_x"]
+    size_y = aabb["max_y"] - aabb["min_y"]
+    size_z = aabb["max_z"] - aabb["min_z"]
+    min_z = aabb["min_z"]
+    center_x = (aabb["min_x"] + aabb["max_x"]) / 2.0
+    center_y = (aabb["min_y"] + aabb["max_y"]) / 2.0
+
+    # Grasp height above the object bottom (same intuition as the old height
+    # heuristic, now from the model): upper third for tall, mid for short.
+    if size_z > 0.04:
+        grasp_center_offset = max(size_z / 2.0, size_z - 0.03)
+    else:
+        grasp_center_offset = size_z / 2.0
+
+    # graspable_width = narrowest horizontal width among primitives that span the
+    # grasp height (fingers close on the part actually at the TCP). Flask: this
+    # picks the body (15 mm), not the wider cap (18 mm) — no name special-case.
+    grasp_z_origin = min_z + grasp_center_offset
+    covering = [w for (zlo, zhi, w) in bands if zlo - 1e-6 <= grasp_z_origin <= zhi + 1e-6]
+    if covering:
+        graspable_width = min(covering)
+    elif size_x > 0 and size_y > 0:
+        graspable_width = min(size_x, size_y)
+    else:
+        graspable_width = min(w for _, _, w in bands)
+
+    yaw_symmetric = (collision_type == "cylinder")
+    if yaw_symmetric:
+        tool_yaw = 0.0
+    else:
+        # box-like: close fingers across the shorter horizontal side (convention:
+        # yaw=0 closes along world-Y; rotate 90° when X is the shorter side).
+        tool_yaw = 0.0 if size_y <= size_x else math.pi / 2.0
+    db_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
+    if db_yaw:
+        tool_yaw = db_yaw
+
+    source = "heuristic"
+    # Optional Level-2 metadata override (custom-object robustness).
+    meta = _load_object_meta(safe_name)
+    if meta:
+        source = "meta_override"
+        gco_meta = meta.get("grasp_center_offset")
+        if isinstance(gco_meta, (list, tuple)) and len(gco_meta) >= 3:
+            grasp_center_offset = float(gco_meta[2])
+        if meta.get("max_grasp_width") is not None:
+            graspable_width = float(meta["max_grasp_width"])
+        psf_meta = meta.get("place_support_offset")
+        if isinstance(psf_meta, (list, tuple)) and len(psf_meta) >= 3:
+            min_z = -abs(float(psf_meta[2]))
+        if meta.get("yaw_symmetry") is True:
+            yaw_symmetric, tool_yaw = True, 0.0
+
+    place_support_offset = -min_z
+
+    # Classification + feasibility (only 'top' is executable in Phase 2).
+    if graspable_width > MAX_GRIP_WIDTH_MM / 1000.0:
+        classification, feasible = "needs_side", False
+        reason = (f"graspable_width={graspable_width * 1000:.1f}mm > "
+                  f"MAX={MAX_GRIP_WIDTH_MM:.0f}mm (side grasp = Phase 3, out of scope)")
+    elif graspable_width <= 0.0:
+        classification, feasible = "unsupported", False
+        reason = "could not derive a graspable width"
+    else:
+        classification, feasible, reason = "top", True, "top-graspable"
+
+    return ObjectModel(
+        sdf_name=sdf_name, collision_type=collision_type,
+        size_x=size_x, size_y=size_y, size_z=size_z, min_z=min_z,
+        center_x=center_x, center_y=center_y,
+        graspable_width=graspable_width, grasp_center_offset=grasp_center_offset,
+        grasp_classification=classification, yaw_symmetric=yaw_symmetric, tool_yaw=tool_yaw,
+        place_support_offset=place_support_offset, attach_mode="snap_weld",
+        feasible=feasible, reason=reason, source=source, proxy_used=proxy_used)
+
+
+def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: float) -> PickPlan:
+    """Synthesize TOP-grasp parameters from an ObjectModel. Keeps Phase-1 snap
+    algebra: z_pick = PICK_Z_REF_OFFSET + grasp_center_offset (grasp point lands
+    on the TCP). Infeasible models produce a PickPlan the caller must skip."""
+    notes = {
+        "source": model.source,
+        "proxy_used": model.proxy_used,
+        "top_grasp_only": True,
+        "collision_type": model.collision_type,
+        "classification": model.grasp_classification,
+    }
+    if not model.feasible:
+        return PickPlan(
+            spawn_pose=(pick_x_rel, pick_y_rel), x_rel=pick_x_rel, y_rel=pick_y_rel,
+            z_pick=0.0, tool_yaw=0.0, hand_close=0,
+            grasp_center_offset=model.grasp_center_offset,
+            feasible=False, reason=model.reason, planning_notes=notes)
+    z_pick = PICK_Z_REF_OFFSET + model.grasp_center_offset + PICK_Z_FINE_TUNE
+    hand_close = int(min(30, max(0, round(model.graspable_width * 1000.0 - GRIPPER_GRIP_CLEARANCE_MM))))
+    return PickPlan(
+        spawn_pose=(pick_x_rel, pick_y_rel), x_rel=pick_x_rel, y_rel=pick_y_rel,
+        z_pick=z_pick, tool_yaw=model.tool_yaw, hand_close=hand_close,
+        grasp_center_offset=model.grasp_center_offset,
+        feasible=True, reason=model.reason, planning_notes=notes)
 
 
 def resolve_location_metrics(sdf_name: str) -> float:
@@ -371,7 +670,7 @@ def resolve_location_metrics(sdf_name: str) -> float:
     if not sdf_name:
         return 0.05
     safe_name = os.path.basename(sdf_name)
-    sdf_height, _ = get_sdf_dimensions(safe_name, folder="locations")
+    sdf_height, _, _ = get_sdf_dimensions(safe_name, folder="locations")
     if sdf_height is not None and sdf_height > 0.001:
         return sdf_height
     return location_heights.get(safe_name, 0.05)
@@ -403,11 +702,11 @@ def get_location_profile(sdf_name: str):
 
         for col in collisions:
             pose_elem = col.find("pose")
-            px, py, pz = 0.0, 0.0, 0.0
+            pz = 0.0
             if pose_elem is not None and pose_elem.text:
                 parts = pose_elem.text.strip().split()
                 if len(parts) >= 3:
-                    px, py, pz = float(parts[0]), float(parts[1]), float(parts[2])
+                    pz = float(parts[2])
 
             geom = col.find("geometry")
             if geom is None:
@@ -425,8 +724,8 @@ def get_location_profile(sdf_name: str):
 
             cyl = geom.find("cylinder")
             if cyl is not None:
-                l = float(cyl.find("length").text.strip())
-                top_z = pz + l / 2.0
+                length_val = float(cyl.find("length").text.strip())
+                top_z = pz + length_val / 2.0
                 rim_z = max(rim_z, top_z)
 
         if rim_z == float('-inf'):
@@ -442,13 +741,6 @@ def get_location_profile(sdf_name: str):
 
 
 # All block type identifiers: shared source of truth
-from backend.block_types import (
-    LogicItems,
-    StepsItems,
-    EventsItems,
-    MacroItems,
-)
-from backend.functions.task import _resolve_runtime_workspace
 
 
 def launch_wsl_ros_command(command: str) -> bool:
@@ -587,11 +879,11 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     Uses the currently stored STATE as starting point.
     """
     start_joints, start_hand = get_current_state()
-    
+
     # Calculate angular distance to check if movement is needed
     max_delta = max(abs(t - s) for t, s in zip(target_joints, start_joints))
     hand_delta = abs(hand - start_hand)
-    
+
     if max_delta < 0.01 and hand_delta < 0.5:
         simulate_ros_move(*target_joints, hand)
         set_current_state(target_joints, hand)
@@ -610,7 +902,7 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
             start_joints[k] + a * (target_joints[k] - start_joints[k])
             for k in range(6)
         ]
-        
+
         current_hand_interp = start_hand + a * (hand - start_hand)
 
         waypoints.append({
@@ -669,14 +961,14 @@ def build_vertical_ik_path(x_rel, y_rel, z_start, z_end, grasp_yaw, seed_joints,
         if not q:
             print("[SIMULATOR] Vertical path IK failed at z =", z)
             return None
-            
+
         # Check for kinematic jumps
         if seed is not None:
             max_delta = max(abs(q_new - q_old) for q_new, q_old in zip(q, seed))
             if max_delta > KINEMATIC_JUMP_THRESHOLD_DEG:
                 print(f"[SIMULATOR] Kinematic jump detected: max delta {max_delta} > {KINEMATIC_JUMP_THRESHOLD_DEG} degrees at z={z}")
                 return None
-                
+
         path.append(q)
         seed = q
 
@@ -721,13 +1013,13 @@ CARRY_MARGIN = 0.03   # safety margin above highest obstacle in workspace
 # path. A larger jump signals an elbow flip / singularity, so the path is rejected.
 KINEMATIC_JUMP_THRESHOLD_DEG = 30.0
 
-# A flask body is gripped below the cap: lift the pick point by this offset (m)
-# above the reference height so the fingers close on the body, not the neck.
-FLASK_BODY_PICK_OFFSET_M = 0.024
-
 # Gripper closes this many mm tighter than the object width so the fingers grip
 # firmly rather than just touching the surface.
 GRIPPER_GRIP_CLEARANCE_MM = 4.0
+
+# Cobotta hand max opening (mm). Objects wider than this cannot be top-grasped;
+# the planner marks them infeasible (a side grasp would be Phase 3, out of scope).
+MAX_GRIP_WIDTH_MM = 30.0
 
 # DetachableJoint topics (plugin in Cobotta.sdf, parent_link=link_j6, child_model=object)
 ATTACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/attach -m gz.msgs.Empty -p 'unused: true'"
@@ -750,14 +1042,39 @@ def detach_object_from_gripper() -> bool:
     return ok
 
 
+def set_object_world_pose(x: float, y: float, z: float, yaw: float = 0.0) -> bool:
+    """Teleport Gazebo model 'object' to the given world pose. Hard gate before weld."""
+    qz = math.sin(yaw / 2.0)
+    qw = math.cos(yaw / 2.0)
+    cmd = (
+        'gz service -s /world/worldCobotta/set_pose '
+        '--reqtype gz.msgs.Pose --reptype gz.msgs.Boolean '
+        '--timeout 3000 '
+        f'--req \'name: "object"; '
+        f'position: {{x: {x:.4f}, y: {y:.4f}, z: {z:.4f}}}; '
+        f'orientation: {{x: 0, y: 0, z: {qz:.4f}, w: {qw:.4f}}}\''
+    )
+    ok = launch_wsl_ros_command(cmd)
+    if not ok:
+        print(f"[GRASP] set_object_world_pose FAILED (x={x:.4f} y={y:.4f} z={z:.4f})")
+    return ok
+
+
 # Gazebo world spawn positions (absolute, Gazebo frame)
 OBJECT_SPAWN_X = -9.05          # X of object spawn point
 OBJECT_SPAWN_Y = -1.48
 LOCATION_SPAWN_X = -8.8         # X of location model spawn point
 LOCATION_SPAWN_Y = -1.41
 
+# Robot base world pose in Gazebo (worldCobotta.sdf, Cobotta include pose)
+ROBOT_BASE_X = -9.0
+ROBOT_BASE_Y = -1.2
+ROBOT_BASE_Z = 1.05
 
-def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
+
+def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
+                      pick_x_rel: float = None, pick_y_rel: float = None,
+                      obj_min_z: float = None):
     try:
         # Sync state from ROS first to anchor the IK seeds. Abort if it fails —
         # planning from a stale seed risks singularities / collisions.
@@ -765,48 +1082,58 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
             print("[ROBOT] PICK aborted: could not sync joint state from ROS")
             return
 
-        # Resolve dimensions
-        height_m, width_m = resolve_object_metrics(obj, sdf_name)
-        if height_m is None or width_m is None:
-            print(f"[ROBOT] PICK aborted: could not resolve dimensions for '{sdf_name}'")
+        # Object relative coordinates — use the deterministic spawn XY (Phase 1)
+        x_rel = pick_x_rel if pick_x_rel is not None else DEFAULT_PICK_X_REL
+        y_rel = pick_y_rel if pick_y_rel is not None else DEFAULT_PICK_Y_REL
+
+        # Phase 2: normalize the object from collision geometry and plan a top-grasp.
+        # No object-name branch; infeasible (e.g. too wide for the hand) → skip cleanly.
+        model = normalize_object_for_grasp(sdf_name, obj)
+        plan = plan_pick_for_object(model, x_rel, y_rel)
+        if not plan.feasible:
+            print(f"[GRASP] infeasible: {plan.reason} — skipping pick for '{sdf_name}' "
+                  f"(type={model.collision_type}, width={model.graspable_width * 1000:.1f}mm)")
             return
-        width_mm = width_m * 1000.0
-        
-        # Object relative coordinates
-        x_rel = DEFAULT_PICK_X_REL
-        y_rel = DEFAULT_PICK_Y_REL
-        grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
-        
-        # Flask: target sul corpo (sotto il tappo), non sul collo stretto
-        if os.path.basename(sdf_name).lower() in {"flask", "blue_cylinder"}:
-            z_pick = PICK_Z_REF_OFFSET + FLASK_BODY_PICK_OFFSET_M  # corpo flask: dita afferrano sotto il tappo
-        elif height_m > 0.04:
-            z_pick = PICK_Z_REF_OFFSET + max(height_m / 2.0, height_m - 0.03)
-        else:
-            z_pick = PICK_Z_REF_OFFSET + height_m / 2.0
+        if obj_min_z is None:
+            obj_min_z = model.min_z
+        z_pick = plan.z_pick
+        grasp_yaw = plan.tool_yaw
+        hand_close = plan.hand_close
+        logger.info("pick_plan", extra={
+            "sdf_name": sdf_name,
+            "collision_type": model.collision_type,
+            "graspable_width_mm": round(model.graspable_width * 1000, 1),
+            "z_pick_target": round(z_pick, 4),
+            "tool_yaw": round(grasp_yaw, 4),
+            "hand_close": hand_close,
+            "notes": plan.planning_notes,
+        })
+        print(f"[PICK-PLAN] type={model.collision_type} z_pick={z_pick:.4f} "
+              f"yaw={grasp_yaw:.3f} hand_close={hand_close} "
+              f"width={model.graspable_width * 1000:.1f}mm src={model.source}")
 
         z_approach = z_pick + 0.12
-        z_pregrasp = z_pick + 0.02
-        
+        z_pregrasp = z_pick + 0.01
+
         current_joints, _ = get_current_state()
-        
+
         # 1. Approach (high clearance)
         q_approach = solve_gazebo_ik(x_rel, y_rel, z_approach, grasp_yaw, seed_joints=current_joints)
         if not q_approach:
             print(f"[SIMULATOR] ERROR: IK failed for pick approach at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f} — aborting pick")
             return
-            
+
         debug_fk(q_approach, label="Approach")
-            
+
         smooth_move(q_approach, ROS_OPEN_GRIPPER, duration_s=2.0)
-        
+
         # 2. Rampa verticale d'approccio
         vertical_path = build_vertical_ik_path(
             x_rel, y_rel, z_approach, z_pregrasp, grasp_yaw,
-            seed_joints=q_approach, n=8
+            seed_joints=q_approach, n=10
         )
         if not vertical_path:
-            print(f"[SIMULATOR] ERROR: vertical approach IK path failed — aborting pick")
+            print("[SIMULATOR] ERROR: vertical approach IK path failed — aborting pick")
             return
         send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
 
@@ -816,7 +1143,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
             seed_joints=vertical_path[-1], n=6
         )
         if not final_path:
-            print(f"[SIMULATOR] ERROR: final descent IK path failed — aborting pick")
+            print("[SIMULATOR] ERROR: final descent IK path failed — aborting pick")
             return
 
         send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
@@ -827,17 +1154,31 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True):
         target_urdf = np.array([-y_rel, x_rel, z_pick + URDF_GAZEBO_Z_OFFSET])
         pos_err, _ = fk_position_error(pick_joints, target_urdf)
         if pos_err > IK_POS_TOL:
-            print(f"[SIMULATOR] ERROR: FK guard failed at pick — pos_err={pos_err*1000:.1f}mm > {IK_POS_TOL*1000:.0f}mm — aborting pick")
+            print(f"[SIMULATOR] ERROR: FK guard failed at pick — pos_err={pos_err * 1000:.1f}mm > {IK_POS_TOL * 1000:.0f}mm — aborting pick")
             return
 
-        hand_close = min(30, max(0, int(width_mm - GRIPPER_GRIP_CLEARANCE_MM)))
+        # hand_close already comes from plan_pick_for_object (graspable_width).
 
         # Chiudi pinza e attendi stabilizzazione
         smooth_move(pick_joints, hand_close, duration_s=0.7)
         _interruptible_sleep(0.3)
 
-        # Weld oggetto alla pinza via DetachableJoint (presa rigida, evita slipping)
+        # Snap object to exact TCP grasp pose before weld (hard gate: abort if set_pose fails).
+        # snap_z = TABLE_TOP_Z_ABS - sdf_min_z puts model origin at resting height, which
+        # coincides with TCP grasp height by design (PICK_Z_REF_OFFSET = TABLE_TOP_Z_ABS - ROBOT_BASE_Z).
         if do_attach:
+            snap_x = ROBOT_BASE_X + x_rel
+            snap_y = ROBOT_BASE_Y + y_rel
+            if obj_min_z is None:
+                _, _, obj_min_z = get_sdf_dimensions(sdf_name)
+            snap_z = TABLE_TOP_Z_ABS - (obj_min_z or 0.0) + PICK_Z_FINE_TUNE
+            print(f"[GRASP] snap pose x={snap_x:.4f} y={snap_y:.4f} z={snap_z:.4f} yaw={grasp_yaw:.4f}")
+            if not set_object_world_pose(snap_x, snap_y, snap_z, yaw=grasp_yaw):
+                print("[GRASP] ABORT: set_pose failed, refusing to weld (would float)")
+                return
+            # Object is already held at rest, so the snap is authoritative; tight
+            # delay just lets the re-parent settle before the weld.
+            _interruptible_sleep(0.05)
             attach_object_to_gripper()
             _interruptible_sleep(0.2)
         else:
@@ -916,10 +1257,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             print(f"[ROBOT] PLACE aborted: could not resolve dimensions for '{picked_obj_name}'")
             return
         width_mm = width_m * 1000.0
-        
+
         # Close gap
         hand_close = int(max(0.0, min(30.0, width_mm - 0.5)))
-        
+
         # Target coordinates (slot cycling for multi-slot locations)
         x_rel = DEFAULT_PLACE_X_REL
         safe_loc_name = location_name.replace(" ", "_").lower()
@@ -952,9 +1293,9 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         else:
             z_place = PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
         z_up = z_place + 0.12
-        
+
         grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
-        
+
         current_joints, current_hand = get_current_state()
 
         # Read pick context for loaded gantry transit
@@ -1010,6 +1351,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             if descent_path:
                 send_waypoints(descent_path, hand_close, dt=0.20)
             place_joints = descent_path[-1] if descent_path else q_above_place
+            if descent_path:
+                target_urdf_place = np.array([-y_rel, x_rel, z_place + URDF_GAZEBO_Z_OFFSET])
+                place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
+                print(f"[PLACE] FK guard: pos_err={place_pos_err * 1000:.1f}mm (x={x_rel:.3f} y={y_rel:.3f} z={z_place:.3f})")
             q_retreat = q_above_place
 
         else:
@@ -1030,9 +1375,22 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             place_joints = vertical_path[-1] if vertical_path else q_up
             q_retreat = q_up
 
-        # 3. Detach + open gripper
+        # 3. Detach → snap object to slot → open gripper
         detach_object_from_gripper()
-        _interruptible_sleep(0.3)
+        _interruptible_sleep(0.1)
+        # Snap-to-slot: teleport object to exact slot centre so it always lands in the hole.
+        # Best-effort (not a hard gate): if set_pose fails, log and continue.
+        snap_x = ROBOT_BASE_X + x_rel
+        snap_y = ROBOT_BASE_Y + y_rel
+        _, _, obj_place_min_z = get_sdf_dimensions(picked_obj_name)
+        if is_container and floor_height is not None:
+            snap_z_slot = TABLE_TOP_Z_ABS + floor_height - (obj_place_min_z or 0.0)
+        else:
+            snap_z_slot = TABLE_TOP_Z_ABS + loc_height - (obj_place_min_z or 0.0)
+        print(f"[PLACE] snap-to-slot x={snap_x:.4f} y={snap_y:.4f} z={snap_z_slot:.4f} yaw={grasp_yaw:.4f}")
+        if not set_object_world_pose(snap_x, snap_y, snap_z_slot, yaw=grasp_yaw):
+            print("[PLACE] snap-to-slot failed (best-effort: object may miss)")
+        _interruptible_sleep(0.2)
         smooth_move(place_joints, ROS_OPEN_GRIPPER, duration_s=0.6)
         _interruptible_sleep(0.5)
 
@@ -1048,7 +1406,6 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
     except Exception as e:
         print(f"[SIMULATOR] Error in simulate_ros_place: {e}")
-
 
 
 def simulate_ros_action(action_points: list = []):
@@ -1082,8 +1439,9 @@ def reset_simulation_world():
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
-        # Reset slot cycling counter
+        # Reset slot cycling counter and spawned-object tracking.
         simulation_recursive_blockly_parser.place_slot_index = 0
+        _spawned_in_world.clear()
 
         # Detach before delete: removing a welded child without detaching first
         # can leave the plugin in a stale attached state across the next spawn.
@@ -1119,6 +1477,7 @@ def delete_spawned_object_and_place():
         _interruptible_sleep(0.4)
         launch_wsl_ros_command(delete_object_place)
         _interruptible_sleep(0.8)
+        _spawned_in_world.clear()
     except Exception as e:
         print(str(e))
 
@@ -1157,15 +1516,32 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     return bool(simulate_event)
 
 
-def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
+def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
     """Wait for a vision/human condition via Flask bridge (live mode only).
 
     On timeout: continues and posts a timeout notification to the frontend.
+    Bridge-unreachable bypasses gesture and find_object with structured log.
     """
+    if timeout is None:
+        timeout = CONDITION_TIMEOUT_S
     block_type = condition_block.get("type", "")
 
     if block_type == EventsItems.GESTURE.value:
         gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
+        # Probe bridge once before entering the wait loop.
+        # If unreachable (camera/gesture engine off) bypass immediately.
+        try:
+            _bridge.get_vision_state()
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
+            print(f"[CONDITION] Gesture bridge unreachable — bypassing gesture '{gesture}'")
+            try:
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "gesture", "value": gesture,
+                                "bypass_reason": "bridge_unreachable"})
+            except Exception:
+                pass
+            return True
         print(f"[CONDITION] Waiting for gesture: {gesture} (timeout {timeout}s)...")
         deadline = time.monotonic() + timeout
         detected = False
@@ -1195,6 +1571,27 @@ def _wait_for_condition(condition_block: dict, timeout: int = 60) -> bool:
         obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
         obj_name = obj_data.get("name", "")
         coco_class = to_coco_class(obj_name)
+        # If bridge is unreachable, bypass immediately.
+        try:
+            state = _bridge.get_vision_state()
+            if any(d.get("class") == coco_class for d in state.get("detections", [])):
+                print(f"[CONDITION] Object '{obj_name}' detected immediately!")
+                return True
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "find_object_block"})
+            print(f"[CONDITION] Vision bridge unreachable — bypassing find_object '{obj_name}'")
+            try:
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "object", "value": obj_name,
+                                "bypass_reason": "bridge_unreachable"})
+            except Exception:
+                pass
+            return True
+        # Bridge reachable but object not seen yet — check Gazebo world as secondary.
+        if obj_name in _spawned_in_world:
+            logger.warning("condition_bypassed", extra={"reason": "object_in_world", "block": "find_object_block"})
+            print(f"[CONDITION] Object '{obj_name}' in Gazebo world — bypassing find_object")
+            return True
         print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}' (timeout {timeout}s)...")
         deadline = time.monotonic() + timeout
         detected = False
@@ -1491,27 +1888,44 @@ def simulation_recursive_blockly_parser(
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             safe_sdf_name = sdf_name.replace(" ", "_").lower()
             print(f"[ROBOT] PICK: {sdf_name}")
-            height_m, _ = resolve_object_metrics(obj, sdf_name)
-            z_spawn_abs = TABLE_TOP_Z_ABS + height_m / 2.0
+            _, _, obj_min_z = get_sdf_dimensions(safe_sdf_name)
+            z_rest = TABLE_TOP_Z_ABS - obj_min_z
             cmd = (
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object"; '
                 f'sdf_filename: "objects/{safe_sdf_name}/model.sdf"; '
-                f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_spawn_abs}}}, '
+                f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_rest}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
+            # Pick aims at the KNOWN spawn XY (deterministic) — the deterministic
+            # hold below keeps the object there, so no physics-settle read is needed.
+            pick_x_rel = OBJECT_SPAWN_X - ROBOT_BASE_X
+            pick_y_rel = OBJECT_SPAWN_Y - ROBOT_BASE_Y
             spawn_ok = launch_wsl_ros_command(cmd)
             if not spawn_ok:
                 print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
             else:
-                print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_spawn_abs:.3f}")
-            _interruptible_sleep(1)
-            # Neutralize pending DetachableJoint auto-attach from previous spawn or startup
-            print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
-            detach_object_from_gripper()
+                print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_rest:.4f} (min_z={obj_min_z:.4f})")
+                _spawned_in_world.add(sdf_name)
+                # Detach-FIRST: clear the pending DetachableJoint auto-weld before any
+                # hold/read, so the object never free-falls from the arm home pose.
+                print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
+                detach_object_from_gripper()
+                _interruptible_sleep(0.1)
+                detach_object_from_gripper()
+                # Deterministic hold: assert the object upright at its known rest pose
+                # (kills the home-drop + tip of tall/thin objects). No polling settle.
+                if set_object_world_pose(OBJECT_SPAWN_X, OBJECT_SPAWN_Y, z_rest, yaw=0.0):
+                    print(f"[GRASP] hold: set upright at rest "
+                          f"({OBJECT_SPAWN_X},{OBJECT_SPAWN_Y},z={z_rest:.4f})")
+                else:
+                    print("[GRASP] hold: set_pose failed (object may be unstable)")
+                _interruptible_sleep(0.3)
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
-            simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok)
+            simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok,
+                              pick_x_rel=pick_x_rel, pick_y_rel=pick_y_rel,
+                              obj_min_z=obj_min_z)
             _next()
 
         def _h_place():
@@ -1603,6 +2017,20 @@ def simulation_recursive_blockly_parser(
             _interruptible_sleep(1)
             _next()
 
+        def _h_open_gripper():
+            print("[ROBOT] Opening gripper")
+            simulate_ros_move(0, 0, 90, 0, 0, 0, ROS_OPEN_GRIPPER, joint_abs=True)
+            _send_hw_target([], ROS_OPEN_GRIPPER, hand_only=True)
+            _interruptible_sleep(1)
+            _next()
+
+        def _h_close_gripper():
+            print("[ROBOT] Closing gripper")
+            simulate_ros_move(0, 0, 90, 0, 0, 0, ROS_CLOSE_GRIPPER_WITH_OBJECT, joint_abs=True)
+            _send_hw_target([], ROS_CLOSE_GRIPPER_WITH_OBJECT, hand_only=True)
+            _interruptible_sleep(1)
+            _next()
+
         def _h_wait():
             seconds = int(code.get("fields", {}).get("SECONDS", 1))
             print(f"[ROBOT] Wait {seconds}s (interruptible)")
@@ -1652,6 +2080,8 @@ def simulation_recursive_blockly_parser(
             StepsItems.PROCESSING.value: _h_processing,
             StepsItems.MOVE_TO.value: _h_move_to,
             StepsItems.GRIPPER.value: _h_gripper,
+            StepsItems.OPEN_GRIPPER.value: _h_open_gripper,
+            StepsItems.CLOSE_GRIPPER.value: _h_close_gripper,
             StepsItems.WAIT.value: _h_wait,
             MacroItems.MACRO_TASK.value: _h_macro,
             "when_start": _h_when_start,
@@ -1689,8 +2119,11 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 locationsOfUser = Location.objects.filter(
                     Q(owner=request.user.id) | Q(shared=True)
                 )
-                if task.status not in ("published", "published_with_draft"):
-                    return error_response("Task not published")
+                if task.status != "published":
+                    return error_response(
+                        "Only a fully published task can be simulated. "
+                        "Publish or discard the current draft first."
+                    )
 
                 code = _resolve_runtime_workspace(task)
                 if code is None:
@@ -1728,6 +2161,7 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
                 SIMULATION_STOP_EVENT.set()
+                _spawned_in_world.clear()
                 try:
                     _bridge.stop()
                 except Exception as e:

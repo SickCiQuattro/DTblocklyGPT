@@ -3,16 +3,20 @@
   <model name="test_tube">
     <link name="link">
       <pose>0 0 0 0 0 0</pose>
+      <velocity_decay>
+        <linear>0.02</linear>
+        <angular>0.05</angular>
+      </velocity_decay>
       <inertial>
         <mass>0.010</mass>
         <inertia>
-          <!-- cylinder r=0.0075 l=0.10 -->
-          <ixx>8.47e-6</ixx>
+          <!-- cylinder r=0.0075 l=0.10; floored to mass/1000=1e-5 for Gazebo stability -->
+          <ixx>1e-5</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>8.47e-6</iyy>
+          <iyy>1e-5</iyy>
           <iyz>0</iyz>
-          <izz>2.81e-7</izz>
+          <izz>1e-5</izz>
         </inertia>
       </inertial>
 

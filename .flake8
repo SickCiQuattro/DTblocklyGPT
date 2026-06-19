@@ -1,6 +1,8 @@
 [flake8]
 max-line-length = 230
 ignore = E203,W503
+per-file-ignores =
+    backend/functions/chat.py:E501
 exclude =
     .venv/**/*.py
     backend/pybcapclient/*.py

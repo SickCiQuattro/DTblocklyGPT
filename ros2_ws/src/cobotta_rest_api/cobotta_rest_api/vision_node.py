@@ -1,5 +1,4 @@
 import json
-from threading import Thread
 
 import cv2
 import rclpy
@@ -96,21 +95,13 @@ class VisionNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = VisionNode()
-
-    spin_thread = Thread(target=rclpy.spin, args=(node,), daemon=True)
-    spin_thread.start()
-
     try:
-        spin_thread.join()
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        node.destroy_node()
         rclpy.shutdown()
-        spin_thread.join(timeout=2.0)
-        try:
-            node.destroy_node()
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":

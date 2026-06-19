@@ -16,6 +16,7 @@ from backend.utils.date import getDateTimeNow
 from backend.utils.signature import build_task_signature
 from json import loads
 
+
 def save_draft(request: HttpRequest) -> HttpResponse:
     """
     PUT api/task/save-draft/

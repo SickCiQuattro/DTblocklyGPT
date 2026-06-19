@@ -16,7 +16,7 @@ from .cobotta_utils import convert_hand_cobotta_gazebo, convert_grad_to_rad
 class GazeboCommandNode(Node):
     def __init__(self):
         super().__init__("gazebo_command_node")
-        
+
         # Subscriber per comandi di movimento
         self.sub_joint_states = self.create_subscription(
             JointState, "/move_joint", self.move_joint_callback, 10
@@ -48,7 +48,8 @@ class GazeboCommandNode(Node):
             return
         j1, j2, j3, j4, j5, j6, hand = joint_msg.position[:7]
 
-        self.get_logger().info(f"Received movement command (deg): joints=[{j1:.2f}, {j2:.2f}, {j3:.2f}, {j4:.2f}, {j5:.2f}, {j6:.2f}], hand={hand:.2f}")
+        self.get_logger().info(
+            f"Received movement command (deg): joints=[{j1:.2f}, {j2:.2f}, {j3:.2f}, {j4:.2f}, {j5:.2f}, {j6:.2f}], hand={hand:.2f}")
 
         # Passa i valori a Gazebo convertendo i gradi in radianti
         msg_j = [
@@ -73,7 +74,7 @@ class GazeboCommandNode(Node):
             self.pub_gazebo_hand_left,
             self.pub_gazebo_hand_right,
         ]
-        
+
         for msg, publisher in zip([msg_j1, msg_j2, msg_j3, msg_j4, msg_j5, msg_j6, msg_hand, msg_hand], publishers):
             publisher.publish(msg)
 
@@ -83,7 +84,7 @@ def main(args=None):
 
     gazebo_node = GazeboCommandNode()
     print("gazebo_command_node started")
-    
+
     rclpy.spin(gazebo_node)
 
     gazebo_node.destroy_node()
