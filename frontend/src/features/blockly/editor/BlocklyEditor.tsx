@@ -33,7 +33,15 @@ import {
   Typography,
   Button,
 } from '@mui/material'
-import { Maximize, Minus, Plus, Redo2, Undo2, Settings } from 'lucide-react'
+import {
+  Maximize,
+  Minus,
+  Plus,
+  Redo2,
+  Undo2,
+  Settings,
+  Keyboard,
+} from 'lucide-react'
 
 import {
   AbstractStep,
@@ -76,7 +84,11 @@ import {
   explodeMacro as expandMacroTask,
   getMacroIdFromBlockData,
 } from './macroExplosion'
-import { ConfirmDeleteDialog, InlineTaskDialog } from './dialogs'
+import {
+  ConfirmDeleteDialog,
+  InlineTaskDialog,
+  KeyboardHelpDialog,
+} from './dialogs'
 import {
   ShadowPickerMenu,
   useShadowPicker,
@@ -163,7 +175,9 @@ function insertStartBlock(
     shadow.setShadow(true)
     shadow.initSvg()
     shadow.render()
-    block.nextConnection.connect(shadow.previousConnection)
+    if (shadow.previousConnection) {
+      block.nextConnection.connect(shadow.previousConnection)
+    }
   }
   return block
 }
@@ -472,6 +486,15 @@ export const BlocklyEditor = ({
     setSettingsAnchorEl(null)
   }
   const isSettingsOpen = Boolean(settingsAnchorEl)
+  const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false)
+
+  // a11y: when the user opts into keyboard mode, force Blockly's keyboard-nav
+  // visuals always-on. When off, Blockly auto-activates them on key use (v13).
+  useEffect(() => {
+    if (viewSettings?.keyboardMode) {
+      Blockly.keyboardNavigationController.setIsActive(true)
+    }
+  }, [viewSettings?.keyboardMode])
   const [toolboxDeleteZoneState, setToolboxDeleteZoneState] =
     useState<DeleteZoneState>('idle')
   const [historyState, setHistoryState] = useState({
@@ -1309,6 +1332,9 @@ export const BlocklyEditor = ({
         showStartBlock ? 'workspace-start--visible' : 'workspace-start--hidden',
       ].join(' ')}
     >
+      <a href="#blocklyDiv" className="skip-to-workspace">
+        Skip to blocks workspace
+      </a>
       <CustomToolbox
         dataObjects={dataObjects}
         dataLocations={dataLocations}
@@ -1513,6 +1539,11 @@ export const BlocklyEditor = ({
           />
         )}
 
+        <KeyboardHelpDialog
+          open={keyboardHelpOpen}
+          onClose={() => setKeyboardHelpOpen(false)}
+        />
+
         {/* Workspace settings popover */}
         {onViewSettingsChange && viewSettings && (
           <Popover
@@ -1662,6 +1693,54 @@ export const BlocklyEditor = ({
                   />
                 </Stack>
               </Box>
+
+              <Box>
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <Box>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ fontWeight: 650, fontSize: 13, color: 'text.primary' }}
+                    >
+                      Keyboard mode
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        display: 'block',
+                        maxWidth: 200,
+                      }}
+                    >
+                      Always show the keyboard cursor (for keyboard / screen-reader
+                      use).
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={viewSettings.keyboardMode}
+                    onChange={(_e, checked) =>
+                      onViewSettingsChange({ keyboardMode: checked })
+                    }
+                    size="small"
+                  />
+                </Stack>
+              </Box>
+
+              <Button
+                variant="text"
+                size="small"
+                startIcon={<Keyboard size={16} />}
+                onClick={() => {
+                  handleCloseSettings()
+                  setKeyboardHelpOpen(true)
+                }}
+                fullWidth
+                sx={{ borderRadius: 2, fontSize: 12, justifyContent: 'flex-start' }}
+              >
+                Keyboard shortcuts
+              </Button>
 
               {onResetViewSettings && (
                 <Button

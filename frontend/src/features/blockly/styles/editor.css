@@ -1,6 +1,30 @@
+/* ─── Accessibility ───────────────────────────────────────────────────────── */
+
+/* Skip-link: hidden until keyboard-focused, then visible top-left. */
+.skip-to-workspace {
+    position: absolute;
+    left: 8px;
+    top: -48px;
+    z-index: 2000;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: #4F46E5;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.15s ease;
+}
+.skip-to-workspace:focus {
+    top: 8px;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
 /* ─── Layout ──────────────────────────────────────────────────────────────── */
 
 .custom-dragdrop-layout {
+    position: relative;
     display: flex;
     flex-direction: row;
     width: 100%;

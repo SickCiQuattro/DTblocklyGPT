@@ -6,3 +6,4 @@
 
 export { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 export { InlineTaskDialog } from './InlineTaskDialog'
+export { KeyboardHelpDialog } from './KeyboardHelpDialog'

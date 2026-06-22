@@ -82,7 +82,7 @@ export const PREVIEW_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 0,
     length: 0,
-    colour: '#transparent',
+    colour: 'transparent',
     snap: false,
   },
   sounds: false,

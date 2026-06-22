@@ -109,8 +109,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       {
         type: 'processing_block',
         // MAPPING REFERENCE:
-        // - Block type: 'processing_block' ➔ User-facing pill label: 'Run' (renamed from 'Perform')
-        label: 'Run',
+        // - Block type: 'processing_block' ➔ User-facing pill label: 'Run routine'
+        label: 'Run routine',
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
         inputs: 'Routine to run',
@@ -158,7 +158,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'human-actions',
-    name: 'Human Step', // Human Actions -> Opeator Interaction
+    name: 'Operator', // Human Actions -> Operator (the real person at the cell)
     colour: blocksColours.humanActions,
     blocks: [
       {
@@ -182,8 +182,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   {
     key: 'objects-positions',
     // MAPPING REFERENCE:
-    // - Category key: 'objects-positions' ➔ User-facing accordion name: 'Twin Library'
-    name: 'Twin Library',
+    // - Category key: 'objects-positions' ➔ User-facing accordion name: 'Library'
+    name: 'Library',
     colour: blocksColours.objectsPositions,
     blocks: [
       // Dynamic blocks — pills are generated from props (dataObjects, dataLocations, dataActions).

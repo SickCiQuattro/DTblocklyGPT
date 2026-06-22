@@ -200,8 +200,8 @@ Blockly.defineBlocksWithJsonArray([
   {
     type: 'processing_block',
     // MAPPING REFERENCE:
-    // - Block type: 'processing_block' ➔ Displays user-facing label 'Run [Routine]' (renamed from 'Perform')
-    message0: '%1 Run %2',
+    // - Block type: 'processing_block' ➔ Displays user-facing sentence 'Run routine [Routine]'
+    message0: '%1 Run routine %2',
     args0: [
       iconConfig(BOT_ICON_URI, 'ROBOT:'),
       { type: 'input_value', name: 'ACTION', check: 'action_block' },

@@ -116,9 +116,9 @@ export const buildSequencePickerItems = (
     {
       id: -2,
       // MAPPING REFERENCE:
-      // - User-facing block name: 'Run' (renamed from 'Perform' to align with Run Routines)
+      // - User-facing block name: 'Run routine'
       // - Internally creates a 'processing_block' (which maps to /actions DB records)
-      name: 'Run',
+      name: 'Run routine',
       description: 'Run a pre-configured routine',
       keywords: ['run', 'routine', 'execute', 'perform', 'skill'],
       blockType: 'processing_block',
@@ -162,7 +162,7 @@ export const buildSequencePickerItems = (
       description: 'Pause and prompt a human operator to act',
       keywords: ['human', 'pause', 'operator', 'show'],
       blockType: 'human_action_block',
-      group: 'Human Steps',
+      group: 'Operator',
     },
     {
       id: -8,
@@ -170,11 +170,11 @@ export const buildSequencePickerItems = (
       description: 'Display a notification and continue',
       keywords: ['notify', 'message', 'info', 'continue'],
       blockType: 'notify_action_block',
-      group: 'Human Steps',
+      group: 'Operator',
     },
     {
       id: -9,
-      name: 'Repeat N times',
+      name: 'Repeat times',
       description: 'Repeat a sequence a fixed number of times',
       keywords: ['repeat', 'loop', 'times', 'count'],
       blockType: 'repeat_block',
@@ -377,7 +377,7 @@ export const getDotColour = (group: string): string => {
       return blocksColours.eventsConditions
     case 'Robot Actions':
       return blocksColours.robotActions
-    case 'Human Steps':
+    case 'Operator':
       return blocksColours.humanActions
     case 'Task Flow':
       return blocksColours.logicControl

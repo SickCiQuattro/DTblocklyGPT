@@ -115,7 +115,7 @@ const getPreviewCategoryBadgeMeta = (
       return { label: 'Routines', Icon: Zap }
     case 'human_action_block':
     case 'notify_action_block':
-      return { label: 'Human Step', Icon: User }
+      return { label: 'Operator', Icon: User }
     case 'pick_block':
     case 'processing_block':
     case 'place_block':
@@ -141,8 +141,8 @@ const getPreviewCategoryBadgeMeta = (
   const hint = (fallbackCategoryName || '').toLowerCase()
   if (hint.includes('block'))
     return { label: fallbackCategoryName ?? 'Task Flow', Icon: Repeat2 }
-  if (hint.includes('human'))
-    return { label: fallbackCategoryName ?? 'Human', Icon: User }
+  if (hint.includes('human') || hint.includes('operator'))
+    return { label: fallbackCategoryName ?? 'Operator', Icon: User }
   if (hint.includes('robot') || hint.includes('actions'))
     return {
       label: fallbackCategoryName ?? 'Robot Actions',
@@ -150,8 +150,8 @@ const getPreviewCategoryBadgeMeta = (
     }
   if (hint.includes('condition') || hint.includes('events'))
     return { label: fallbackCategoryName ?? 'Conditions', Icon: Eye }
-  if (hint.includes('workspace') || hint.includes('objects'))
-    return { label: fallbackCategoryName ?? 'Twin Library', Icon: Box }
+  if (hint.includes('workspace') || hint.includes('objects') || hint.includes('library'))
+    return { label: fallbackCategoryName ?? 'Library', Icon: Box }
   if (hint.includes('tasks') || hint.includes('macro'))
     return { label: fallbackCategoryName ?? 'Saved Tasks', Icon: Pointer }
 

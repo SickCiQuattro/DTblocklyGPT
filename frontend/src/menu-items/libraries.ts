@@ -3,11 +3,11 @@ import { Box, MapPin, Zap } from 'lucide-react'
 import { MenuItem } from './types'
 
 // MAPPING REFERENCE:
-// - Internal variable/import name: libraries ➔ External group label: TWIN LIBRARY
+// - Internal variable/import name: libraries ➔ External group label: LIBRARY
 // - Internal child ID: actions (URL: /actions) ➔ External item label: Routines
 export const libraries: MenuItem = {
   id: 'twin-library',
-  title: 'TWIN LIBRARY',
+  title: 'LIBRARY',
   type: 'group',
   children: [
     {
