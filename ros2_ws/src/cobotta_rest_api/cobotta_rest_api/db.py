@@ -1,8 +1,7 @@
 import sqlite3
 
 import click
-from flask import  g
-from .flask_node import app
+from flask import g
 
 
 def get_db():
@@ -24,6 +23,7 @@ def close_db(e=None):
 
 
 def init_db():
+    from .flask_node import app   # lazy: avoids db↔flask_node load-time cycle
     db = get_db()
 
     with app.open_resource('schema.sql') as f:
@@ -35,6 +35,7 @@ def init_db_command():
     """Clear the existing data and create new tables."""
     init_db()
     click.echo('Initialized the database.')
+
 
 def init_app(app):
     app.teardown_appcontext(close_db)

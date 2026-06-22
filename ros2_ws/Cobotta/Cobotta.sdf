@@ -74,7 +74,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>6.0</damping>
-            <friction>20.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -147,7 +147,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>7.0</damping>
-            <friction>20.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -220,7 +220,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>5.0</damping>
-            <friction>15.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -293,7 +293,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>2.0</damping>
-            <friction>10.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -366,7 +366,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>3.0</damping>
-            <friction>4.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -507,7 +507,7 @@
             <spring_reference>0</spring_reference>
             <spring_stiffness>0</spring_stiffness>
             <damping>3.0</damping>
-            <friction>5.0</friction>
+            <friction>0.1</friction>
         </dynamics>
     </axis>
     </joint>
@@ -619,8 +619,8 @@
             </contact>
             <friction>
                 <ode>
-                    <mu>0.8</mu>
-                    <mu2>0.8</mu2>
+                    <mu>5.0</mu>
+                    <mu2>5.0</mu2>
                 </ode>
             </friction>
         </surface>
@@ -693,8 +693,8 @@
             </contact>
             <friction>
                 <ode>
-                    <mu>0.8</mu>
-                    <mu2>0.8</mu2>
+                    <mu>5.0</mu>
+                    <mu2>5.0</mu2>
                 </ode>
             </friction>
         </surface>
@@ -711,105 +711,99 @@
     <self_collide>1</self_collide>
     </link>
     <!--========================================================-->
-    <!-- Applicazione plugin a ogni joint per permettere il funzionamento del controller-->
+        <!-- Applicazione plugin a ogni joint per permettere il funzionamento del controller-->
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint1</joint_name>
-            <p_gain>650</p_gain>
-            <d_gain>15</d_gain>
+            <topic>/model/Cobotta/joint/joint1/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
             <i_gain>100</i_gain>
-            <i_min>-70</i_min>
-            <i_max>70</i_max>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint2</joint_name>
-            <p_gain>600</p_gain>
-            <d_gain>20</d_gain>
-            <i_gain>80</i_gain>
-            <i_min>-60</i_min>
-            <i_max>60</i_max>
+            <topic>/model/Cobotta/joint/joint2/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint3</joint_name>
-            <p_gain>600</p_gain>
-            <d_gain>20</d_gain>
-            <i_gain>110</i_gain>
-            <i_min>-80</i_min>
-            <i_max>80</i_max>
+            <topic>/model/Cobotta/joint/joint3/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint4</joint_name>
-            <p_gain>550</p_gain>
-            <d_gain>12</d_gain>
-            <i_gain>110</i_gain>
-            <i_min>-80</i_min>
-            <i_max>80</i_max>
+            <topic>/model/Cobotta/joint/joint4/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint5</joint_name>
-            <p_gain>550</p_gain>
-            <d_gain>12</d_gain>
-            <i_gain>140</i_gain>
-            <i_min>-80</i_min>
-            <i_max>80</i_max>
+            <topic>/model/Cobotta/joint/joint5/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint6</joint_name>
-            <p_gain>550</p_gain>
-            <d_gain>10</d_gain>
-            <i_gain>110</i_gain>
-            <i_min>-80</i_min>
-            <i_max>80</i_max>
+            <topic>/model/Cobotta/joint/joint6/0/cmd_pos</topic>
+            <p_gain>5000</p_gain>
+            <i_gain>100</i_gain>
+            <d_gain>200</d_gain>
+            <i_min>-100</i_min>
+            <i_max>100</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_left</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <topic>/model/Cobotta/joint/joint_left/0/cmd_pos</topic>
+            <p_gain>2000</p_gain>
+            <i_gain>5</i_gain>
+            <d_gain>5</d_gain>
+            <i_min>-10</i_min>
+            <i_max>10</i_max>
         </plugin>
         <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
             <joint_name>joint_right</joint_name>
-            <p_gain>500</p_gain>
-            <d_gain>0</d_gain>
-            <i_gain>0</i_gain>
-            <i_min>-1</i_min>
-            <i_max>1</i_max>
+            <topic>/model/Cobotta/joint/joint_right/0/cmd_pos</topic>
+            <p_gain>2000</p_gain>
+            <i_gain>5</i_gain>
+            <d_gain>5</d_gain>
+            <i_min>-10</i_min>
+            <i_max>10</i_max>
         </plugin>
     <!--========================================================-->
 
     <!-- applicazione del plugin per la visualizzazione della posizione dei joint tramite topic-->
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint1</joint_name>
-            <topic>/joint1</topic>
+        <plugin filename="gz-sim-joint-state-publisher-system"
+                name="gz::sim::systems::JointStatePublisher">
+            <topic>joint_states</topic>
         </plugin>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint2</joint_name>
-            <topic>/joint2</topic>
-        </plugin>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint3</joint_name>
-            <topic>/joint3</topic>
-        </plugin>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint4</joint_name>
-            <topic>/joint4</topic>
-        </plugin>
-            <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint5</joint_name>
-            <topic>/joint5</topic>
-        </plugin>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint6</joint_name>
-            <topic>/joint6</topic>
-        </plugin>
-            <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint_right</joint_name>
-            <topic>/joint_right</topic>
-        </plugin>
-        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-            <joint_name>joint_left</joint_name>
-            <topic>/joint_left</topic>
+
+        <!-- Rigid grasp: welds the dynamically spawned "object" model to the hand.
+             Starts with a pending attach (gz-sim8 default); simulate.py publishes
+             detach right after each spawn and attach/detach around grasp/release. -->
+        <plugin filename="gz-sim-detachable-joint-system"
+                name="gz::sim::systems::DetachableJoint">
+            <parent_link>link_j6</parent_link>
+            <child_model>object</child_model>
+            <child_link>link</child_link>
+            <attach_topic>/model/Cobotta/detachable_joint/attach</attach_topic>
+            <detach_topic>/model/Cobotta/detachable_joint/detach</detach_topic>
+            <output_topic>/model/Cobotta/detachable_joint/state</output_topic>
+            <suppress_child_warning>true</suppress_child_warning>
         </plugin>
 </model>
 </sdf>

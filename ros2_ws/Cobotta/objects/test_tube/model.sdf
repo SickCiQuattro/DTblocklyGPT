@@ -1,0 +1,68 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="test_tube">
+    <link name="link">
+      <pose>0 0 0 0 0 0</pose>
+      <velocity_decay>
+        <linear>0.02</linear>
+        <angular>0.05</angular>
+      </velocity_decay>
+      <inertial>
+        <mass>0.010</mass>
+        <inertia>
+          <!-- cylinder r=0.0075 l=0.10; floored to mass/1000=1e-5 for Gazebo stability -->
+          <ixx>1e-5</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-5</iyy>
+          <iyz>0</iyz>
+          <izz>1e-5</izz>
+        </inertia>
+      </inertial>
+
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.0075</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode>
+              <kp>1000000</kp>
+              <kd>100</kd>
+              <max_vel>0.1</max_vel>
+              <min_depth>0.001</min_depth>
+            </ode>
+          </contact>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
+            </ode>
+            <torsional>
+              <coefficient>1.0</coefficient>
+              <use_patch_radius>0</use_patch_radius>
+              <surface_radius>0.0075</surface_radius>
+            </torsional>
+          </friction>
+        </surface>
+      </collision>
+
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius>0.0075</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.8 0.9 1.0 0.6</ambient>
+          <diffuse>0.8 0.9 1.0 0.6</diffuse>
+        </material>
+      </visual>
+
+    </link>
+  </model>
+</sdf>

@@ -38,6 +38,8 @@ ultralytics = "^8.4.62"
 pyyaml = "^6.0.3"
 torchvision = "^0.27.0"
 mediapipe = "0.10.14"
+ikpy = "^3.4.2"
+requests = "^2.32.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^26.3.1"

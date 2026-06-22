@@ -16,8 +16,7 @@ import { useDispatch } from 'react-redux'
 import {
   PanelLeftClose,
   PanelLeftOpen,
-  Play,
-  Square,
+  PanelRight,
   Save,
   Pencil,
   MessageSquare,
@@ -165,49 +164,30 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {simOpen ? (
-          <Button
-            variant="outlined"
-            color="error"
-            size="small"
-            startIcon={<Square size={14} />}
-            onClick={() => dispatch(toggleSim())}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.85rem',
-              borderColor: 'rgba(239, 68, 68, 0.2)',
-              bgcolor: 'rgba(239, 68, 68, 0.04)',
-              '&:hover': {
-                borderColor: 'error.main',
-                bgcolor: 'rgba(239, 68, 68, 0.08)',
-              },
-            }}
-          >
-            Stop
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            startIcon={<Play size={14} />}
-            onClick={() => dispatch(toggleSim())}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.85rem',
+        <Button
+          variant={simOpen ? 'contained' : 'outlined'}
+          color="primary"
+          size="small"
+          startIcon={<PanelRight size={14} />}
+          onClick={() => dispatch(toggleSim())}
+          title={
+            simOpen
+              ? 'Hide the Digital Twin panel'
+              : 'Show the Digital Twin panel'
+          }
+          sx={{
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 500,
+            fontSize: '0.85rem',
+            boxShadow: 'none',
+            '&:hover': {
               boxShadow: 'none',
-              '&:hover': {
-                boxShadow: 'none',
-              },
-            }}
-          >
-            Simulate
-          </Button>
-        )}
+            },
+          }}
+        >
+          Digital Twin
+        </Button>
         <Button
           variant={chatOpen ? 'contained' : 'outlined'}
           color="secondary"

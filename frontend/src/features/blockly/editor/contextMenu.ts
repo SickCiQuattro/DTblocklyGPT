@@ -439,7 +439,6 @@ export const installContextMenuBridge = ({
 
       const BLOCKS_WITH_COLLAPSIBLE_BODY = new Set([
         'repeat_block',
-        'loop_block',
         'repeat_until_block',
         'when_block',
         'when_otherwise_block',

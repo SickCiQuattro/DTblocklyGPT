@@ -98,14 +98,6 @@ Blockly.defineBlocksWithJsonArray([
 
 Blockly.defineBlocksWithJsonArray([
   {
-    type: 'sensor_signal_block',
-    message0: '%1 External signal received',
-    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
-    output: 'Boolean',
-    colour: blocksColours.eventsConditions,
-    tooltip: blockDescriptionsByType.sensor_signal_block,
-  },
-  {
     type: 'find_object_block',
     message0: '%1 Object detected %2',
     args0: [
@@ -117,14 +109,6 @@ Blockly.defineBlocksWithJsonArray([
     tooltip: blockDescriptionsByType.find_object_block,
   },
   {
-    type: 'touch_detect_block',
-    message0: '%1 Contact detected',
-    args0: [iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:')],
-    output: 'Boolean',
-    colour: blocksColours.eventsConditions,
-    tooltip: blockDescriptionsByType.touch_detect_block,
-  },
-  {
     type: 'gesture_block',
     message0: '%1 Gesture detected %2',
     args0: [
@@ -134,7 +118,14 @@ Blockly.defineBlocksWithJsonArray([
         name: 'GESTURE_TYPE',
         options: [
           ['Thumbs up', 'THUMBS_UP'],
+          ['Thumbs down', 'THUMBS_DOWN'],
           ['Open hand', 'OPEN_HAND'],
+          ['Fist', 'FIST'],
+          ['Peace sign', 'PEACE'],
+          ['OK sign', 'OK'],
+          ['Three fingers', 'THREE_FINGERS'],
+          ['Pinch', 'PINCH'],
+          ['Pointing', 'POINTING'],
         ],
       },
     ],
@@ -364,23 +355,6 @@ Blockly.defineBlocksWithJsonArray([
     nextStatement: ['robot_sequence', 'logic_sequence'],
     colour: blocksColours.logicControl,
     tooltip: blockDescriptionsByType.repeat_block,
-  },
-  {
-    type: 'loop_block',
-    message0: '%1 Repeat forever',
-    args0: [iconConfig(REPEAT2_ICON_URI, 'TASK:')],
-    message1: 'Do %1',
-    args1: [
-      {
-        type: 'input_statement',
-        name: 'DO',
-        check: ['robot_sequence', 'logic_sequence'],
-      },
-    ],
-    previousStatement: ['robot_sequence', 'logic_sequence'],
-    nextStatement: ['robot_sequence', 'logic_sequence'],
-    colour: blocksColours.logicControl,
-    tooltip: blockDescriptionsByType.loop_block,
   },
   {
     type: 'repeat_until_block',

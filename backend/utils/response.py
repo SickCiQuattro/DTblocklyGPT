@@ -63,40 +63,6 @@ def bad_request(error, payload=None, status=400):
     )
 
 
-def accepted_response(data=None, message="Accepted"):
-    """
-    202 Accepted — publish requires explicit confirmation.
-    Used when dependent macros exist with an incompatible signature
-    (breaking change). The client must repeat the request with
-    forcePublish=True in the payload to proceed.
-    """
-    return JsonResponse(
-        {
-            "message": message,
-            "status": 202,
-            "timestamp": getDateTimeNow(),
-            "payload": data,
-        },
-        status=202,
-    )
-
-
-def conflict_response(data=None, message="Conflict"):
-    """
-    409 Conflict — cycle detected in the macro dependency DAG.
-    The payload contains the identified cycle as a list of IDs.
-    The client must resolve the cycle before retrying the publish.
-    """
-    return JsonResponse(
-        {
-            "message": message,
-            "status": 409,
-            "timestamp": getDateTimeNow(),
-            "payload": data,
-        },
-        status=409,
-    )
-
 def accepted_response(message: str = "", data=None) -> HttpResponse:
     """202 — breaking changes detected, requires forcePublish confirmation."""
     payload = {"message": message}

@@ -4,37 +4,149 @@ from flask import Blueprint, request, jsonify
 from ..db import get_db
 from ..flask_node import flask_pub
 from ..flask_node import sendRequestPosition
-from my_robot_interfaces.srv import ListPosJoint
+
+import time
 
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+# Joint limits in degrees — from cobotta_description/urdf/cobotta.urdf (converted rad→deg).
+JOINT_LIMITS_DEG = {
+    "joint_1": (-150.0, 150.0),
+    "joint_2": (-60.0, 100.0),
+    "joint_3": (18.0, 140.0),
+    "joint_4": (-170.0, 170.0),
+    "joint_5": (-95.0, 135.0),
+    "joint_6": (-170.0, 170.0),
+    "hand": (0.0, 30.0),
+}
+MAX_WAYPOINTS = 5000
+
+# Bounds for caller-supplied vision-wait timeouts (seconds).
+MIN_WAIT_TIMEOUT_S = 0.1
+MAX_WAIT_TIMEOUT_S = 300.0
+
+
+def _clamp(value, lo, hi):
+    return max(lo, min(hi, value))
+
+
+def _parse_timeout(raw, default=30.0):
+    """Parse a query-string timeout into a clamped float.
+
+    Returns ``default`` when ``raw`` is missing or non-numeric, then clamps to
+    [MIN_WAIT_TIMEOUT_S, MAX_WAIT_TIMEOUT_S] so a bad value can't hang a worker.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = default
+    return _clamp(value, MIN_WAIT_TIMEOUT_S, MAX_WAIT_TIMEOUT_S)
+
+
+def _validate_waypoints(data):
+    """Validate and normalise a waypoints list from request JSON.
+
+    Returns (clean_waypoints, None) on success or (None, error_string) on failure.
+    """
+    wps = data.get("waypoints")
+    if not isinstance(wps, list) or not wps:
+        return None, "waypoints must be a non-empty array"
+    if len(wps) > MAX_WAYPOINTS:
+        return None, f"waypoints exceeds max allowed ({MAX_WAYPOINTS})"
+
+    clean = []
+    joint_keys = ["j1", "j2", "j3", "j4", "j5", "j6"]
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
+    for i, wp in enumerate(wps):
+        if not isinstance(wp, dict):
+            return None, f"waypoint {i}: must be an object"
+        cleaned = {}
+        for jk, lk in zip(joint_keys, limit_keys):
+            v = wp.get(jk)
+            if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None, f"waypoint {i}: {jk} must be a numeric value"
+            lo, hi = JOINT_LIMITS_DEG[lk]
+            cleaned[jk] = _clamp(float(v), lo, hi)
+
+        hand = wp.get("hand", 0.0)
+        if isinstance(hand, bool) or not isinstance(hand, (int, float)):
+            return None, f"waypoint {i}: hand must be numeric"
+        cleaned["hand"] = _clamp(float(hand), *JOINT_LIMITS_DEG["hand"])
+
+        dt = wp.get("dt", 0.05)
+        if isinstance(dt, bool) or not isinstance(dt, (int, float)):
+            return None, f"waypoint {i}: dt must be numeric"
+        cleaned["dt"] = _clamp(float(dt), 0.005, 10.0)
+
+        clean.append(cleaned)
+
+    return clean, None
+
 
 @bp.route("/move-joints")
 def moveCobotta():
-    joint_delta = get_joints_delta_from_request()
-    joint_state = createJointState(joint_delta, request.args.get("joint_abs", type=str))
+    joint_delta = []
+    missing = []
+    for i in range(1, 7):
+        v = request.args.get(f"joint_{i}", type=float)
+        if v is None:
+            missing.append(f"joint_{i}")
+        joint_delta.append(v)
+
+    hand = request.args.get("hand", type=float)
+    if hand is None:
+        missing.append("hand")
+    joint_delta.append(hand)
+
+    if missing:
+        return jsonify({"error": "missing or non-numeric params", "params": missing}), 400
+
+    # Clamp to joint limits before publishing.
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "hand"]
+    joint_delta = [
+        _clamp(joint_delta[k], *JOINT_LIMITS_DEG[limit_keys[k]])
+        for k in range(7)
+    ]
+
+    # joint_abs query param accepted for backwards compatibility but ignored —
+    # all positions are absolute; the legacy abs/delta frame_id flag is retired.
+    joint_state = createJointState(joint_delta)
     flask_pub.publisher.publish(joint_state)
     flask_pub.get_logger().info('Publishing: "%s"' % joint_state.position)
-    actual_joints_position = None  # list(sendRequestPosition())
-    return "OK"  # {"position": actual_joints_position}
+    return jsonify({"status": "ok"})
 
 
-def get_joints_delta_from_request():
-    joint_delta = []
-    for i in range(1, 7):
-        joint_delta.append(request.args.get(f"joint_{i}", type=float))
-    joint_delta.append(request.args.get("hand", type=float))
-    return joint_delta
+@bp.route("/move-path", methods=["POST"])
+def movePath():
+    data = request.get_json()
+    if not data or "waypoints" not in data:
+        return jsonify({"error": "missing waypoints array"}), 400
+
+    clean, err = _validate_waypoints(data)
+    if err:
+        return jsonify({"error": err}), 400
+
+    flask_pub.execute_path(clean)
+    return jsonify({"status": "path started"})
 
 
-def createJointState(joint_delta, joint_abs):
+@bp.route("/stop", methods=["POST"])
+def stopPath():
+    was_active = flask_pub.stop_path()
+    return jsonify({"status": "stopped", "was_executing": was_active})
+
+
+def createJointState(joint_positions):
     joint_state = JointState()
     joint_state.header.stamp = flask_pub.get_clock().now().to_msg()
-    joint_state.header.frame_id = joint_abs
+    # Positions are absolute joint targets in degrees.
+    # The legacy abs/delta flag (frame_id="true"/"false") is retired — gazebo_command_node ignores it.
+    joint_state.header.frame_id = ""
     joint_state.name = [f"joint_{i}" for i in range(1, 7)]
     joint_state.name.append("hand")
-    joint_state.position = joint_delta
+    joint_state.position = joint_positions
     joint_state.velocity = []
     joint_state.effort = []
     return joint_state
@@ -83,13 +195,13 @@ def savePoint(id):
     db.execute(
         "INSERT INTO points (j1,j2,j3,j4,j5,j6,hand,trajectory_id) values (?,?,?,?,?,?,?,?)",
         (
-            robot_position[0],
-            robot_position[1],
-            robot_position[2],
-            robot_position[3],
-            robot_position[4],
-            robot_position[5],
-            robot_position[6],
+            robot_position.get('joint1', 0.0),
+            robot_position.get('joint2', 0.0),
+            robot_position.get('joint3', 0.0),
+            robot_position.get('joint4', 0.0),
+            robot_position.get('joint5', 0.0),
+            robot_position.get('joint6', 0.0),
+            robot_position.get('joint_left', 0.0),
             trajectory_id,
         ),
     )
@@ -147,20 +259,14 @@ def showTrajectory(id):
 
 @bp.route("/trajectory/<int:id>/play")
 def playTrajectory(id):
-    db = get_db()
-    points = db.execute(
-        "SELECT * FROM points JOIN trajectories ON points.trajectory_id = trajectories.id WHERE trajectories.id = ?",
-        (id,),
-    ).fetchall()
-    req = ListPosJoint.Request()  # request client (service ros)
-    createListPosJoint(points, req)
-    future = flask_pub.client_play_trajectory.call(req)
-    return {"completed": future.completed}
+    # TODO: playTrajectory richiede il service ROS /play_trajectory disponibile solo con cobotta_node (robot fisico).
+    # Con BridgeNodeROS in modalità simulazione, questo endpoint non è supportato.
+    return jsonify({"error": "Trajectory playback not available in simulation mode"}), 501
 
 
 def createListPosJoint(points, req):
     for point in points:
-        joint_state = createJointState(getJointsPosFromPoint(point), "true")
+        joint_state = createJointState(getJointsPosFromPoint(point))
         req.joints_position.append(joint_state)
 
 
@@ -174,5 +280,134 @@ def getJointsPosFromPoint(point):
 
 @bp.route("/actual-joints-pos")
 def getActualJointsPos():
-    actual_joints_position = list(sendRequestPosition())
+    position_dict = sendRequestPosition()
+    actual_joints_position = [
+        position_dict.get('joint1', 0.0),
+        position_dict.get('joint2', 0.0),
+        position_dict.get('joint3', 0.0),
+        position_dict.get('joint4', 0.0),
+        position_dict.get('joint5', 0.0),
+        position_dict.get('joint6', 0.0),
+        position_dict.get('joint_left', 0.0),
+    ]
     return {"position": actual_joints_position}
+
+
+# ── Human step lifecycle ──────────────────────────────────────────────────────
+
+@bp.route("/human-step-start", methods=["POST"])
+def humanStepStart():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "started",
+        "description": data.get("description", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/human-step-complete", methods=["POST"])
+def humanStepComplete():
+    flask_pub.publish_step_status({
+        "status": "completed",
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/human-step-timeout", methods=["POST"])
+def humanStepTimeout():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "timeout",
+        "condition": data.get("condition", ""),
+        "value": data.get("value", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/notify", methods=["POST"])
+def notifyAction():
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "status": "notify",
+        "description": data.get("description", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
+# ── Vision wait endpoints ─────────────────────────────────────────────────────
+
+@bp.route("/move-target", methods=["POST"])
+def moveTarget():
+    """Receive one absolute PTP target pose and call /cobotta/move_target service.
+
+    Body: {"j1": float, ..., "j6": float, "hand": float, "hand_only": bool} (degrees).
+    When hand_only=true only the gripper moves; joint values are ignored.
+    Used by simulate.py when DRIVE_HARDWARE is set to drive the real arm alongside Gazebo.
+    Blocks until the service call completes (natural backpressure).
+    """
+    data = request.get_json(silent=True) or {}
+    hand_only = bool(data.get("hand_only", False))
+
+    joint_keys = ["j1", "j2", "j3", "j4", "j5", "j6"]
+    limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
+    joints = []
+    missing = []
+
+    if not hand_only:
+        for jk, lk in zip(joint_keys, limit_keys):
+            v = data.get(jk)
+            if v is None or isinstance(v, bool) or not isinstance(v, (int, float)):
+                missing.append(jk)
+                joints.append(0.0)
+            else:
+                lo, hi = JOINT_LIMITS_DEG[lk]
+                joints.append(_clamp(float(v), lo, hi))
+
+    hand_raw = data.get("hand", 0.0)
+    if isinstance(hand_raw, bool) or not isinstance(hand_raw, (int, float)):
+        missing.append("hand")
+        hand = 0.0
+    else:
+        hand = _clamp(float(hand_raw), *JOINT_LIMITS_DEG["hand"])
+
+    if missing and not hand_only:
+        return jsonify({"error": "missing or non-numeric params", "params": missing}), 400
+
+    result = flask_pub.call_move_target(joints, hand, hand_only)
+    return jsonify(result)
+
+
+@bp.route("/vision/report", methods=["POST"])
+def visionReport():
+    data = request.get_json(silent=True) or {}
+    gesture = data.get("gesture", "NONE")
+    flask_pub.report_vision(gesture)
+    return jsonify({"status": "ok"})
+
+
+@bp.route("/vision/state")
+def visionState():
+    return jsonify(flask_pub.get_vision_state())
+
+
+@bp.route("/vision/wait-gesture")
+def visionWaitGesture():
+    gesture = request.args.get("gesture", "THUMBS_UP")
+    timeout = _parse_timeout(request.args.get("timeout"))
+    detected = flask_pub.wait_for_gesture(gesture, timeout)
+    return jsonify({"detected": detected, "gesture": gesture})
+
+
+@bp.route("/vision/wait-object")
+def visionWaitObject():
+    target_class = request.args.get("target_class", "")
+    timeout = _parse_timeout(request.args.get("timeout"))
+    if not target_class:
+        return jsonify({"error": "target_class required"}), 400
+    detected = flask_pub.wait_for_object(target_class, timeout)
+    return jsonify({"detected": detected, "target_class": target_class})

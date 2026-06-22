@@ -39,42 +39,15 @@
   ros_type_name: "std_msgs/msg/Float64"
   gz_type_name: "ignition.msgs.Double"
 
-- ros_topic_name: "/joint1"
-  gz_topic_name: "/joint1"
+# Topic unificato per lo stato di tutti i joint
+- ros_topic_name: "/joint_states"
+  gz_topic_name: "/joint_states"
   ros_type_name: "sensor_msgs/msg/JointState"
   gz_type_name: "ignition.msgs.Model"
 
-- ros_topic_name: "/joint2"
-  gz_topic_name: "/joint2"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint3"
-  gz_topic_name: "/joint3"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint4"
-  gz_topic_name: "/joint4"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint5"
-  gz_topic_name: "/joint5"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint6"
-  gz_topic_name: "/joint6"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint_right"
-  gz_topic_name: "/joint_right"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
-
-- ros_topic_name: "/joint_left"
-  gz_topic_name: "/joint_left"
-  ros_type_name: "sensor_msgs/msg/JointState"
-  gz_type_name: "ignition.msgs.Model"
+# Overhead camera bridge (Gazebo Harmonic / ROS2 Jazzy)
+# gz.msgs.Image is the correct namespace for Harmonic; fall back to ignition.msgs.Image if bridge rejects it
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "/gz/camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"

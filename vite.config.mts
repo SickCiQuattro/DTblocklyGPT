@@ -7,6 +7,13 @@ export default defineConfig(() => {
   return {
     server: {
       port: 3000,
+      proxy: {
+        '/camera': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/camera/, ''),
+        },
+      },
     },
     build: {
       manifest: true,

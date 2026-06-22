@@ -37,9 +37,7 @@ export type SelectableShadowBlockType =
   | 'object_block'
   | 'location_block'
   | 'action_block'
-  | 'sensor_signal_block'
   | 'find_object_block'
-  | 'touch_detect_block'
   | 'gesture_block'
   | 'timer_block'
   | 'logic_and_block'
@@ -54,7 +52,6 @@ export type SelectableShadowBlockType =
   | 'human_action_block'
   | 'notify_action_block'
   | 'repeat_block'
-  | 'loop_block'
   | 'repeat_until_block'
   | 'when_block'
   | 'when_otherwise_block'
@@ -166,9 +163,7 @@ export const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
  * require selecting a specific entity from the list.
  */
 export const DIRECT_BLOCK_TYPES = new Set<SelectableShadowBlockType>([
-  'sensor_signal_block',
   'find_object_block',
-  'touch_detect_block',
   'gesture_block',
   'timer_block',
   'logic_and_block',

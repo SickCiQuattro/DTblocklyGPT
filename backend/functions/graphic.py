@@ -14,6 +14,7 @@ from json import loads, dumps
 from django.contrib.auth.models import User
 from copy import deepcopy
 
+
 def save_graphic_task(request: HttpRequest) -> HttpResponse:
     """
     Saves the editor workspace for a regular task.

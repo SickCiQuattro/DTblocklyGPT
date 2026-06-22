@@ -27,15 +27,19 @@
             <poissons_ratio>0.347</poissons_ratio>
             <elastic_modulus>8.8e+09</elastic_modulus>
             <ode>
-              <kp>100000</kp>
-              <kd>100</kd>
-              <max_vel>100.0</max_vel>
+              <kp>1000000.0</kp>
+              <kd>10000.0</kd>
+              <max_vel>0.0</max_vel>
               <min_depth>0.001</min_depth>
             </ode>
           </contact>
           <friction>
+            <ode>
+              <mu>5.0</mu>
+              <mu2>5.0</mu2>
+            </ode>
             <torsional>
-              <coefficient>1.0</coefficient>
+              <coefficient>5.0</coefficient>
               <use_patch_radius>0</use_patch_radius>
               <surface_radius>0.01</surface_radius>
             </torsional>
@@ -55,15 +59,19 @@
             <poissons_ratio>0.347</poissons_ratio>
             <elastic_modulus>8.8e+09</elastic_modulus>
             <ode>
-              <kp>100000</kp>
-              <kd>100</kd>
-              <max_vel>100.0</max_vel>
+              <kp>1000000.0</kp>
+              <kd>10000.0</kd>
+              <max_vel>0.0</max_vel>
               <min_depth>0.001</min_depth>
             </ode>
           </contact>
           <friction>
+            <ode>
+              <mu>5.0</mu>
+              <mu2>5.0</mu2>
+            </ode>
             <torsional>
-              <coefficient>1.0</coefficient>
+              <coefficient>5.0</coefficient>
               <use_patch_radius>0</use_patch_radius>
               <surface_radius>0.01</surface_radius>
             </torsional>

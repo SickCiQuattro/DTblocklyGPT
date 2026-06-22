@@ -1,0 +1,6 @@
+float64[] joints     # 6 absolute joint targets (deg); ignored when hand_only=true
+float64 hand         # gripper width (mm)
+bool hand_only       # true → HandMoveA only, keep current arm pose
+---
+bool ok
+string message

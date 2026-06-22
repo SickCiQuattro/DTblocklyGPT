@@ -33,9 +33,7 @@ from .functions.robot import (
 )
 
 from .functions.chat import (
-    new_message,
     new_message_multimodal,
-    save_chat_task,
 )
 
 from .functions.graphic import (
@@ -48,7 +46,8 @@ from .functions.graphic import (
 )
 
 from .functions.task import run_task, analyze_task
-from .functions.simulate import simulate_task
+from .functions.simulate import simulate_task, stop_simulation
+from .functions.vision_live import process_vision_frame
 
 from .functions.task_lifecycle import (
     save_draft,
@@ -101,16 +100,10 @@ urlpatterns = [
     path(HOME + "resetPassword/", reset_password, name="reset_password"),
     path(HOME + "groups/", get_group_list, name="get_group_list"),
     # CHAT
-    path(CHAT + "newMessage/", new_message, name="new_message"),
     path(
         CHAT + "newMessageMultimodal/",
         new_message_multimodal,
         name="new_message_multimodal",
-    ),
-    path(
-        CHAT + "saveChatTask/",
-        save_chat_task,
-        name="save_chat_task",
     ),
     # GRAPHIC
     path(
@@ -144,12 +137,14 @@ urlpatterns = [
         name="get_macro_list",
     ),
     # TASK
-    path(TASK + "run/",           run_task,      name="run_task"),
-    path(TASK + "simulate/",      simulate_task, name="simulate_task"),
-    path(TASK + "analyze/",       analyze_task,  name="analyze_task"),
-    path(TASK + "save-draft/",    save_draft,    name="save_draft"),
-    path(TASK + "publish/",       publish_task,  name="publish_task"),
+    path(TASK + "run/", run_task, name="run_task"),
+    path(TASK + "simulate/", simulate_task, name="simulate_task"),
+    path(TASK + "simulate/stop/", stop_simulation, name="stop_simulation"),
+    path(TASK + "analyze/", analyze_task, name="analyze_task"),
+    path(TASK + "save-draft/", save_draft, name="save_draft"),
+    path(TASK + "publish/", publish_task, name="publish_task"),
     path(TASK + "discard-draft/", discard_draft, name="discard_draft"),
+    path(API + "vision/frame/", process_vision_frame, name="vision_frame"),
     # Static + SPA catch-all (must be LAST)
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
     re_path(r"^.*$", TemplateView.as_view(template_name="base.html")),

@@ -1,5 +1,3 @@
-from ast import dump
-from turtle import position
 from numpy import pi, absolute, array
 from math import cos, sin, radians, ceil, sqrt, atan2, degrees, asin
 from ..pybcapclient.bcapclient import BCAPClient
@@ -246,21 +244,21 @@ def acquire_photo(CVconv=True, wb=False, oneshotfocus=False, cameraip=0):
         "Server=" + str(cameraip) + ", Timeout=5000",
     )
     image_handle = ctrl.AddVariable("IMAGE")
-    if wb:
-        ctrl.Execute(CameraAction.ONE_SHOT_WHITE_BALANCE.value)
-    if oneshotfocus:
-        ctrl.Execute(CameraAction.ONE_SHOT_FOCUS.value)
-    image = image_handle.Value
-    stream = BytesIO(image)
-    img = Image.open(stream)
-    opencvImage = cv2.cvtColor(array(img), cv2.COLOR_RGB2BGR)
-    del image_handle
-    del ctrl
-    del eng
-    if CVconv:
-        return opencvImage
-    else:
-        return img
+    try:
+        if wb:
+            ctrl.Execute(CameraAction.ONE_SHOT_WHITE_BALANCE.value)
+        if oneshotfocus:
+            ctrl.Execute(CameraAction.ONE_SHOT_FOCUS.value)
+        image = image_handle.Value
+        stream = BytesIO(image)
+        img = Image.open(stream)
+        opencvImage = cv2.cvtColor(array(img), cv2.COLOR_RGB2BGR)
+        return opencvImage if CVconv else img
+    finally:
+        # Release COM handles even if capture/decoding raises above.
+        del image_handle
+        del ctrl
+        del eng
 
 
 def get_photo(request: HttpRequest) -> HttpResponse:
@@ -296,6 +294,11 @@ def get_photo(request: HttpRequest) -> HttpResponse:
                     (cnts, _) = cv2.findContours(
                         thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
                     )
+
+                    # Guard: no contours means nothing was detected — avoid an
+                    # IndexError on cnts[areaMaxi] below (areaMaxi would stay -1).
+                    if not cnts:
+                        return error_response("No object detected in the image")
 
                     areaMax = 0
                     areaMaxi = -1

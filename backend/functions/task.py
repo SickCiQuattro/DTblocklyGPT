@@ -54,17 +54,25 @@ else:
 from ..pybcapclient.bcapclient import BCAPClient
 import cv2
 from numpy import zeros
-from typing import Tuple
+import threading
+import time
+from dataclasses import dataclass
+from typing import Any, Tuple
 
 # All block type identifiers: shared source of truth
 # NOTE: task.py still uses a fixed Pick→[Processing]→Place chain; the
 # enums from block_types cover only the subset task.py currently handles.
 from backend.block_types import (
     LogicItems,
+    MacroItems,
     StepsItems,
     EventsItems,
-    LibrariesItems,
 )
+from backend.functions.env_utils import get_bool_env
+
+USE_HW_RECURSIVE_PARSER = get_bool_env("USE_HW_RECURSIVE_PARSER", default=False)
+MAX_HW_LOOP_ITERATIONS = 100
+HW_DEFAULT_GRIP_FORCE = 6
 
 
 class ActionPatterns(Enum):
@@ -92,6 +100,18 @@ ACTION_PATTERN_CROSS_POINTS = {
     ]
 }
 
+
+@dataclass
+class HWContext:
+    client: Any
+    hCtrl: Any
+    hRobot: Any
+    ctrl: Any
+    caoRobot: Any
+    robot: Any
+    stop_event: threading.Event
+
+
 def _resolve_runtime_workspace(task: Task) -> dict | None:
     """
     Runtime read path (published-only):
@@ -116,6 +136,292 @@ def _resolve_runtime_workspace(task: Task) -> dict | None:
         except (ValueError, TypeError):
             return None
     return None
+
+
+def hardware_recursive_blockly_parser(
+    code: dict,
+    ctx: HWContext,
+    objectsOfUser,
+    actionsOfUser,
+    locationsOfUser,
+):
+    if ctx.stop_event.is_set():
+        return
+
+    try:
+        block_type = code["type"]
+
+        def _next():
+            if ctx.stop_event.is_set():
+                return
+            if code.get("next") is not None:
+                hardware_recursive_blockly_parser(
+                    code["next"]["block"], ctx,
+                    objectsOfUser, actionsOfUser, locationsOfUser,
+                )
+
+        def _recurse(input_name: str):
+            blk = code.get("inputs", {}).get(input_name, {}).get("block")
+            if blk:
+                hardware_recursive_blockly_parser(
+                    blk, ctx, objectsOfUser, actionsOfUser, locationsOfUser,
+                )
+
+        def _safe_block_data(input_name: str, label: str):
+            try:
+                return loads(code["inputs"][input_name]["block"]["data"])
+            except (KeyError, TypeError, ValueError) as exc:
+                print(f"[HW] {label}: malformed block data, skipping: {exc}")
+                return None
+
+        def _hh_eval_condition(condition_block: dict) -> bool:
+            if condition_block is None:
+                return True
+            btype = condition_block.get("type", "")
+            inputs = condition_block.get("inputs", {})
+
+            if btype == "logic_and_block":
+                a = _hh_eval_condition(inputs.get("A", {}).get("block"))
+                b = _hh_eval_condition(inputs.get("B", {}).get("block"))
+                return a and b
+            if btype == "logic_or_block":
+                a = _hh_eval_condition(inputs.get("A", {}).get("block"))
+                b = _hh_eval_condition(inputs.get("B", {}).get("block"))
+                return a or b
+            if btype == "logic_not_block":
+                return not _hh_eval_condition(inputs.get("BOOL", {}).get("block"))
+
+            if btype == EventsItems.FIND.value:
+                try:
+                    obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+                    obj = objectsOfUser.filter(id=obj_data["id"]).first()
+                    find, _ = search_object(ctx.client, ctx.hRobot, obj, ctx.robot, 0)
+                    return find
+                except Exception as exc:
+                    print(f"[HW] find_object condition error: {exc}")
+                    return False
+            if btype == EventsItems.GESTURE.value:
+                print("[HW] gesture condition: confirmed by operator (webcam in UI)")
+                return True
+            if btype == EventsItems.TIMER.value:
+                seconds = int(condition_block.get("fields", {}).get("SECONDS", 1))
+                print(f"[HW] timer: {seconds}s")
+                time.sleep(seconds)
+                return True
+
+            print(f"[HW] unknown condition: {btype} → True")
+            return True
+
+        # ── Logic / Control flow ──────────────────────────────────────────────
+
+        def _hh_repeat():
+            times = int(code["fields"]["times"])
+            print(f"[HW] Repeat x{times}")
+            for _ in range(times):
+                if ctx.stop_event.is_set():
+                    break
+                _recurse("DO")
+            _next()
+
+        def _hh_repeat_until():
+            print(f"[HW] Repeat-Until (max {MAX_HW_LOOP_ITERATIONS})")
+            condition_block = code.get("inputs", {}).get("CONDITION", {}).get("block")
+            for _ in range(MAX_HW_LOOP_ITERATIONS):
+                if ctx.stop_event.is_set():
+                    break
+                _recurse("DO")
+                if _hh_eval_condition(condition_block):
+                    break
+            _next()
+
+        def _hh_when():
+            condition_block = code["inputs"]["WHEN"]["block"]
+            if _hh_eval_condition(condition_block):
+                _recurse("DO")
+            _next()
+
+        def _hh_when_otherwise():
+            condition_block = code["inputs"]["WHEN"]["block"]
+            if _hh_eval_condition(condition_block):
+                _recurse("DO")
+            else:
+                _recurse("OTHERWISE")
+            _next()
+
+        # ── Human actions ─────────────────────────────────────────────────────
+
+        def _hh_human_action():
+            task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
+            print(f"\n[HW] HUMAN ACTION: {task_desc}")
+            confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
+            if confirm_event:
+                _hh_eval_condition(confirm_event)
+            _next()
+
+        def _hh_notify():
+            task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
+            print(f"[HW] NOTIFY: {task_desc}")
+            _next()
+
+        # ── Robot step actions ────────────────────────────────────────────────
+
+        def _hh_pick():
+            object_data = _safe_block_data("OBJECT", "PICK")
+            if object_data is None:
+                _next()
+                return
+            obj = objectsOfUser.filter(id=object_data["id"]).first()
+            obj_name = obj.name if obj else object_data.get("name", "unknown")
+            print(f"[HW] PICK: {obj_name}")
+            find, _ = search_object(ctx.client, ctx.hRobot, obj, ctx.robot, 0)
+            if not find:
+                raise RuntimeError(f"Object not found: {obj_name}")
+            curr_pos = robot_getvar(ctx.client, ctx.hRobot, CURRENT_POSITION)
+            curr_pos[2] = CALIBRATION_HEIGHT
+            ctx.client.robot_move(ctx.hRobot, 2, list_to_string_position(curr_pos), HALF_SPEED)
+            _next()
+
+        def _hh_place():
+            location_data = _safe_block_data("LOCATION", "PLACE")
+            if location_data is None:
+                _next()
+                return
+            location = locationsOfUser.filter(id=location_data["id"]).first()
+            loc_name = location.name if location else location_data.get("name", "unknown")
+            print(f"[HW] PLACE: {loc_name}")
+            if location and location.position:
+                pos = loads(location.position) if isinstance(location.position, str) else location.position
+                ctx.client.robot_move(
+                    ctx.hRobot, 1,
+                    "@0 P(" + str(pos["X"]) + ", " + str(pos["Y"]) + ", " + str(pos["Z"])
+                    + ", " + str(pos["RX"]) + ", " + str(pos["RY"]) + ", " + str(pos["RZ"])
+                    + ", " + str(pos["FIG"]) + ")",
+                    MAX_SPEED,
+                )
+                open_hand(ctx.client, ctx.hRobot, ctx.caoRobot, ctx.ctrl)
+            else:
+                print(f"[HW] PLACE: no position data for '{loc_name}'")
+            _next()
+
+        def _hh_processing():
+            action_data = _safe_block_data("ACTION", "PROCESSING")
+            if action_data is None:
+                _next()
+                return
+            action = actionsOfUser.filter(id=action_data["id"]).first()
+            action_name = action.name if action else action_data.get("name", "unknown")
+            print(f"[HW] PROCESSING: {action_name}")
+            if action and action.points:
+                try:
+                    action_points = loads(action.points)["points"]
+                    for point in action_points:
+                        ctx.client.robot_move(ctx.hRobot, 1, "@0 P(" + point + ")", MAX_SPEED)
+                except Exception as exc:
+                    print(f"[HW] PROCESSING: action points error: {exc}")
+            _next()
+
+        def _hh_move_to():
+            location_data = _safe_block_data("LOCATION", "MOVE_TO")
+            if location_data is None:
+                _next()
+                return
+            location = locationsOfUser.filter(id=location_data.get("id")).first()
+            loc_name = location_data.get("name", "Unknown")
+            motion_type = code.get("fields", {}).get("MOTION_TYPE", "LINEAR")
+            bcap_mode = 1 if motion_type == "JOINT" else 2
+            print(f"[HW] MOVE_TO ({motion_type}) → {loc_name}")
+            if location and location.position:
+                pos = loads(location.position) if isinstance(location.position, str) else location.position
+                ctx.client.robot_move(
+                    ctx.hRobot, bcap_mode,
+                    "@0 P(" + str(pos["X"]) + ", " + str(pos["Y"]) + ", " + str(pos["Z"])
+                    + ", " + str(pos["RX"]) + ", " + str(pos["RY"]) + ", " + str(pos["RZ"])
+                    + ", " + str(pos["FIG"]) + ")",
+                    MAX_SPEED,
+                )
+            else:
+                print(f"[HW] MOVE_TO: no position data for '{loc_name}'")
+            _next()
+
+        def _hh_gripper():
+            state = code.get("fields", {}).get("GRIPPER_STATE", "CLOSE")
+            if state == "OPEN":
+                print("[HW] Gripper: OPEN")
+                open_hand(ctx.client, ctx.hRobot, ctx.caoRobot, ctx.ctrl)
+            else:
+                print("[HW] Gripper: CLOSE")
+                switch_bcap_to_orin(ctx.client, ctx.hRobot, ctx.caoRobot)
+                ctx.ctrl.Execute(RobotAction.HAND_MOVE_H.value, [HW_DEFAULT_GRIP_FORCE, 1])
+                switch_orin_to_bcap(ctx.client, ctx.hRobot, ctx.caoRobot)
+            _next()
+
+        def _hh_open_gripper():
+            print("[HW] Gripper: OPEN")
+            open_hand(ctx.client, ctx.hRobot, ctx.caoRobot, ctx.ctrl)
+            _next()
+
+        def _hh_close_gripper():
+            print("[HW] Gripper: CLOSE")
+            switch_bcap_to_orin(ctx.client, ctx.hRobot, ctx.caoRobot)
+            ctx.ctrl.Execute(RobotAction.HAND_MOVE_H.value, [HW_DEFAULT_GRIP_FORCE, 1])
+            switch_orin_to_bcap(ctx.client, ctx.hRobot, ctx.caoRobot)
+            _next()
+
+        def _hh_wait():
+            seconds = int(code.get("fields", {}).get("SECONDS", 1))
+            print(f"[HW] Wait {seconds}s")
+            time.sleep(seconds)
+            _next()
+
+        def _hh_macro():
+            try:
+                macro_data = loads(code["data"])
+            except (KeyError, TypeError, ValueError) as exc:
+                print(f"[HW] MACRO: malformed block data, skipping: {exc}")
+                _next()
+                return
+            macro_id = macro_data["id"]
+            macro_name = macro_data.get("name", str(macro_id))
+            print(f"[HW MACRO] Starting: {macro_name}")
+            macro_task = Task.objects.filter(id=macro_id).first()
+            if macro_task:
+                macro_code = _resolve_runtime_workspace(macro_task)
+                if macro_code:
+                    hardware_recursive_blockly_parser(
+                        macro_code, ctx,
+                        objectsOfUser, actionsOfUser, locationsOfUser,
+                    )
+            print(f"[HW MACRO] Complete: {macro_name}")
+            _next()
+
+        HW_HANDLERS = {
+            LogicItems.REPEAT.value: _hh_repeat,
+            LogicItems.REPEAT_UNTIL.value: _hh_repeat_until,
+            LogicItems.WHEN.value: _hh_when,
+            LogicItems.WHEN_OTHERWISE.value: _hh_when_otherwise,
+            StepsItems.HUMAN_ACTION.value: _hh_human_action,
+            StepsItems.NOTIFY_ACTION.value: _hh_notify,
+            StepsItems.PICK.value: _hh_pick,
+            StepsItems.PLACE.value: _hh_place,
+            StepsItems.PROCESSING.value: _hh_processing,
+            StepsItems.MOVE_TO.value: _hh_move_to,
+            StepsItems.GRIPPER.value: _hh_gripper,
+            StepsItems.OPEN_GRIPPER.value: _hh_open_gripper,
+            StepsItems.CLOSE_GRIPPER.value: _hh_close_gripper,
+            StepsItems.WAIT.value: _hh_wait,
+            MacroItems.MACRO_TASK.value: _hh_macro,
+        }
+
+        handler = HW_HANDLERS.get(block_type)
+        if handler is not None:
+            handler()
+        else:
+            print(f"[HW] Unknown block type: {block_type}")
+
+    except Exception as exc:
+        print(f"[HW ERROR] hardware_recursive_blockly_parser: {exc}")
+        raise
+
 
 def run_task(request: HttpRequest) -> HttpResponse:
     try:
@@ -150,71 +456,105 @@ def run_task(request: HttpRequest) -> HttpResponse:
                     locationsOfUser = Location.objects.filter(
                         Q(owner=request.user.id) | Q(shared=True)
                     )
-                    # ── Gate published-only 
-                    if task.status not in ("published", "published_with_draft"):
-                        return error_response("Task not published")
+                    # ── Gate fully-published-only: a task with a pending draft
+                    # (published_with_draft) must NOT drive the robot, since the
+                    # runtime workspace is the last published version and would
+                    # not match the draft the operator is currently editing.
+                    if task.status != "published":
+                        return error_response(
+                            "Only a fully published task can drive the robot. "
+                            "Publish or discard the current draft first."
+                        )
 
                     code = _resolve_runtime_workspace(task)
                     if code is None:
                         return error_response("No published workspace available")
-                    
-                    condition_not_met = False
-                    object_not_found = False
 
-                    # First level logic
-                    if code["type"] == LogicItems.REPEAT.value:
-                        object_not_found = repeat_loop_workflow(
-                            code,
-                            objectsOfUser,
-                            actionsOfUser,
-                            locationsOfUser,
-                            robot,
-                            caoRobot,
-                            ctrl,
+                    if USE_HW_RECURSIVE_PARSER:
+                        (client, hCtrl, hRobot) = connect(robot.ip, robot.port, DEFAULT_TIMEOUT)
+                        ctx = HWContext(
+                            client=client,
+                            hCtrl=hCtrl,
+                            hRobot=hRobot,
+                            ctrl=ctrl,
+                            caoRobot=caoRobot,
+                            robot=robot,
+                            stop_event=threading.Event(),
                         )
+                        move_to_calibration_position(client, hRobot)
+                        open_hand(client, hRobot, caoRobot, ctrl)
+                        try:
+                            if isinstance(code, list):
+                                for block in code:
+                                    hardware_recursive_blockly_parser(
+                                        block, ctx,
+                                        objectsOfUser, actionsOfUser, locationsOfUser,
+                                    )
+                            else:
+                                hardware_recursive_blockly_parser(
+                                    code, ctx,
+                                    objectsOfUser, actionsOfUser, locationsOfUser,
+                                )
+                        finally:
+                            disconnect(client, hCtrl, hRobot)
+                    else:
+                        condition_not_met = False
+                        object_not_found = False
 
-                    elif code["type"] == LogicItems.LOOP.value:
-                        object_not_found = repeat_loop_workflow(
-                            code,
-                            objectsOfUser,
-                            actionsOfUser,
-                            locationsOfUser,
-                            robot,
-                            caoRobot,
-                            ctrl,
-                            loop=True,
-                        )
+                        # First level logic
+                        if code["type"] == LogicItems.REPEAT.value:
+                            object_not_found = repeat_loop_workflow(
+                                code,
+                                objectsOfUser,
+                                actionsOfUser,
+                                locationsOfUser,
+                                robot,
+                                caoRobot,
+                                ctrl,
+                            )
 
-                    elif code["type"] == LogicItems.WHEN.value:
-                        object_not_found, condition_not_met = when_otherwise_workflow(
-                            code,
-                            objectsOfUser,
-                            actionsOfUser,
-                            locationsOfUser,
-                            robot,
-                            caoRobot,
-                            ctrl,
-                            sensorhuman,
-                        )
+                        elif code["type"] == LogicItems.LOOP.value:
+                            object_not_found = repeat_loop_workflow(
+                                code,
+                                objectsOfUser,
+                                actionsOfUser,
+                                locationsOfUser,
+                                robot,
+                                caoRobot,
+                                ctrl,
+                                loop=True,
+                            )
 
-                    elif code["type"] == LogicItems.WHEN_OTHERWISE.value:
-                        object_not_found, condition_not_met = when_otherwise_workflow(
-                            code,
-                            objectsOfUser,
-                            actionsOfUser,
-                            locationsOfUser,
-                            robot,
-                            caoRobot,
-                            ctrl,
-                            sensorhuman,
-                            otherwise=True,
-                        )
+                        elif code["type"] == LogicItems.WHEN.value:
+                            object_not_found, condition_not_met = when_otherwise_workflow(
+                                code,
+                                objectsOfUser,
+                                actionsOfUser,
+                                locationsOfUser,
+                                robot,
+                                caoRobot,
+                                ctrl,
+                                sensorhuman,
+                            )
 
-                    if condition_not_met:
-                        return error_response("Condition not met")
+                        elif code["type"] == LogicItems.WHEN_OTHERWISE.value:
+                            object_not_found, condition_not_met = when_otherwise_workflow(
+                                code,
+                                objectsOfUser,
+                                actionsOfUser,
+                                locationsOfUser,
+                                robot,
+                                caoRobot,
+                                ctrl,
+                                sensorhuman,
+                                otherwise=True,
+                            )
 
-                    if object_not_found:
-                        return error_response("Object not found")
+                        if condition_not_met:
+                            return error_response("Condition not met")
+
+                        if object_not_found:
+                            return error_response("Object not found")
 
                 else:
                     return error_response("Robot not connected")
@@ -795,17 +1135,9 @@ def analyze_task(request: HttpRequest) -> HttpResponse:
                 if task is None:
                     return error_response("Task not found")
 
-                robot = UserRobot.objects.get(id=my_robot_id).robot
+                # validate the robot exists (raises DoesNotExist → caught below)
+                UserRobot.objects.get(id=my_robot_id)
 
-                objectsOfUser = Object.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
-                actionsOfUser = Action.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
-                locationsOfUser = Location.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
                 if task.status not in ("published", "published_with_draft"):
                     return error_response("Task not published")
 
