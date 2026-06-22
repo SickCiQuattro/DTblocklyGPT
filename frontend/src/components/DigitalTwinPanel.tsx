@@ -41,7 +41,6 @@ import { useDispatch, useSelector } from 'react-redux'
 
 import { MyRobotType } from 'pages/myrobots/types'
 import { TaskStatus } from 'pages/tasks/types'
-
 import { useAppSelector } from 'store/reducers'
 import { toggleSim } from 'store/reducers/task'
 import { endpoints } from 'services/endpoints'
@@ -54,6 +53,29 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
+import { Theme as ThemeOption } from 'themes/theme'
+
+// Digital Twin is an intentionally-dark monitoring panel (design spec §3.6/§3.8).
+// Brand/semantic colors come from the design-system tokens; the slate chrome and
+// accent-lights (which have no direct runtime token) are a deliberate local
+// palette, kept dark on purpose.
+const tokens = ThemeOption()
+const C_PRIMARY = tokens.primary.main
+const C_PRIMARY_DARK = tokens.primary.dark
+const C_SUCCESS = tokens.success.main
+const C_WARNING = tokens.warning.main
+const C_WARNING_LIGHT = tokens.warning.light
+const C_ERROR = tokens.error.main
+const C_ERROR_LIGHT = tokens.error.light
+const ACCENT_INDIGO_LIGHT = '#818CF8'
+const ACCENT_INDIGO_FAINT = '#A5B4FC'
+const ACCENT_GREEN_LIGHT = '#86EFAC'
+const PANEL_BG = '#0c0c1c'
+const PANEL_TEXT = '#E2E8F0'
+const PANEL_TEXT_DIM = '#94A3B8'
+const PANEL_MUTED = '#64748B'
+const PANEL_FAINT = '#475569'
+const PANEL_BORDER = '#334155'
 
 const MJPEG_URL = '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 
@@ -237,7 +259,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        color: '#E2E8F0',
+        color: PANEL_TEXT,
       }}
     >
       {/* ── Header ── */}
@@ -253,7 +275,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         }}
       >
         <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1.5}>
-          <Camera size={16} color="#6366F1" />
+          <Camera size={16} color={C_PRIMARY} />
           <Typography
             sx={{
               fontWeight: 600,
@@ -268,9 +290,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           >
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               {connected ? (
-                <Wifi size={13} color="#22C55E" />
+                <Wifi size={13} color={C_SUCCESS} />
               ) : (
-                <WifiOff size={13} color="#64748B" />
+                <WifiOff size={13} color={PANEL_MUTED} />
               )}
             </Box>
           </Tooltip>
@@ -310,8 +332,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               borderRadius: '8px',
             }}
           >
-            <Bell size={15} color="#818CF8" />
-            <Typography sx={{ fontSize: '0.78rem', color: '#A5B4FC' }}>
+            <Bell size={15} color={ACCENT_INDIGO_LIGHT} />
+            <Typography
+              sx={{ fontSize: '0.78rem', color: ACCENT_INDIGO_FAINT }}
+            >
               {notifyBanner}
             </Typography>
           </Box>
@@ -330,8 +354,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               borderRadius: '8px',
             }}
           >
-            <AlertTriangle size={15} color="#F59E0B" />
-            <Typography sx={{ fontSize: '0.78rem', color: '#FCD34D' }}>
+            <AlertTriangle size={15} color={C_WARNING} />
+            <Typography sx={{ fontSize: '0.78rem', color: C_WARNING_LIGHT }}>
               Timeout:{' '}
               {humanStep?.condition === 'gesture'
                 ? `gesture "${humanStep?.value}" not detected`
@@ -377,8 +401,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 gap: 1.5,
               }}
             >
-              <Camera size={28} color="#334155" />
-              <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+              <Camera size={28} color={PANEL_BORDER} />
+              <Typography sx={{ fontSize: '0.78rem', color: PANEL_FAINT }}>
                 Start simulation to stream Gazebo feed
               </Typography>
             </Box>
@@ -417,14 +441,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   justifyContent: 'center',
                 }}
               >
-                <Hand size={22} color="#818CF8" />
+                <Hand size={22} color={ACCENT_INDIGO_LIGHT} />
               </Box>
               <Typography
                 sx={{
                   fontSize: '0.875rem',
                   fontWeight: 600,
                   textAlign: 'center',
-                  color: '#E2E8F0',
+                  color: PANEL_TEXT,
                   lineHeight: 1.4,
                 }}
               >
@@ -435,8 +459,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 sx={{ alignItems: 'center' }}
                 spacing={0.8}
               >
-                <CircularProgress size={10} sx={{ color: '#6366F1' }} />
-                <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                <CircularProgress size={10} sx={{ color: C_PRIMARY }} />
+                <Typography sx={{ fontSize: '0.72rem', color: PANEL_TEXT_DIM }}>
                   Waiting for operator...
                 </Typography>
               </Stack>
@@ -461,9 +485,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 backdropFilter: 'blur(8px)',
               }}
             >
-              <CheckCircle2 size={13} color="#22C55E" />
+              <CheckCircle2 size={13} color={C_SUCCESS} />
               <Typography
-                sx={{ fontSize: '0.72rem', color: '#86EFAC', fontWeight: 500 }}
+                sx={{
+                  fontSize: '0.72rem',
+                  color: ACCENT_GREEN_LIGHT,
+                  fontWeight: 500,
+                }}
               >
                 Step completed
               </Typography>
@@ -498,7 +526,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 <Typography
                   sx={{
                     fontSize: '0.62rem',
-                    color: '#64748B',
+                    color: PANEL_MUTED,
                     letterSpacing: '0.07em',
                     textTransform: 'uppercase',
                     mb: 0.3,
@@ -511,7 +539,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     fontSize: '1.05rem',
                     fontWeight: 700,
                     fontFamily: "'Geist Mono', monospace",
-                    color: gestureMatch ? '#86EFAC' : '#A5B4FC',
+                    color: gestureMatch
+                      ? ACCENT_GREEN_LIGHT
+                      : ACCENT_INDIGO_FAINT,
                     letterSpacing: '0.02em',
                   }}
                 >
@@ -522,7 +552,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 <Typography
                   sx={{
                     fontSize: '0.62rem',
-                    color: '#64748B',
+                    color: PANEL_MUTED,
                     letterSpacing: '0.07em',
                     textTransform: 'uppercase',
                     mb: 0.3,
@@ -536,10 +566,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     fontWeight: 700,
                     fontFamily: "'Geist Mono', monospace",
                     color: gestureMatch
-                      ? '#86EFAC'
+                      ? ACCENT_GREEN_LIGHT
                       : gestureActive
-                        ? '#818CF8'
-                        : '#475569',
+                        ? ACCENT_INDIGO_LIGHT
+                        : PANEL_FAINT,
                   }}
                 >
                   {activeGesture || 'NONE'}
@@ -559,10 +589,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     '& .MuiLinearProgress-bar': {
                       backgroundColor:
                         countdown < 10
-                          ? '#EF4444'
+                          ? C_ERROR
                           : countdown < 20
-                            ? '#F59E0B'
-                            : '#6366F1',
+                            ? C_WARNING
+                            : C_PRIMARY,
                       borderRadius: 2,
                     },
                   }}
@@ -570,7 +600,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 <Typography
                   sx={{
                     fontSize: '0.68rem',
-                    color: countdown < 10 ? '#F87171' : '#64748B',
+                    color: countdown < 10 ? C_ERROR_LIGHT : PANEL_MUTED,
                     textAlign: 'right',
                   }}
                 >
@@ -623,8 +653,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   gap: 1,
                 }}
               >
-                <CircularProgress size={20} sx={{ color: '#6366F1' }} />
-                <Typography sx={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                <CircularProgress size={20} sx={{ color: C_PRIMARY }} />
+                <Typography sx={{ fontSize: '0.72rem', color: PANEL_TEXT_DIM }}>
                   Starting camera...
                 </Typography>
               </Box>
@@ -643,11 +673,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   padding: '16px',
                 }}
               >
-                <VideoOff size={22} color="#F87171" />
+                <VideoOff size={22} color={C_ERROR_LIGHT} />
                 <Typography
                   sx={{
                     fontSize: '0.72rem',
-                    color: '#F87171',
+                    color: C_ERROR_LIGHT,
                     textAlign: 'center',
                   }}
                 >
@@ -760,14 +790,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               border: '1px solid rgba(255,255,255,0.05)',
             }}
           >
-            <Camera size={12} color="#64748B" />
+            <Camera size={12} color={PANEL_MUTED} />
             <select
               value={webcam.selectedDeviceId}
               onChange={(e) => webcam.selectDevice(e.target.value)}
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#94A3B8',
+                color: PANEL_TEXT_DIM,
                 fontSize: '0.72rem',
                 flex: 1,
                 outline: 'none',
@@ -778,7 +808,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 <option
                   key={d.deviceId}
                   value={d.deviceId}
-                  style={{ background: '#0c0c1c', color: '#E2E8F0' }}
+                  style={{ background: PANEL_BG, color: PANEL_TEXT }}
                 >
                   {d.label}
                 </option>
@@ -807,7 +837,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Typography
               sx={{
                 fontSize: '0.66rem',
-                color: '#64748B',
+                color: PANEL_MUTED,
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 marginBottom: '5px',
@@ -816,12 +846,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               Gesture
             </Typography>
             <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
-              <Hand size={13} color={gestureActive ? '#818CF8' : '#475569'} />
+              <Hand
+                size={13}
+                color={gestureActive ? ACCENT_INDIGO_LIGHT : PANEL_FAINT}
+              />
               <Typography
                 sx={{
                   fontSize: '0.78rem',
                   fontWeight: 600,
-                  color: gestureActive ? '#A5B4FC' : '#475569',
+                  color: gestureActive ? ACCENT_INDIGO_FAINT : PANEL_FAINT,
                   fontFamily: "'Geist Mono', monospace",
                 }}
               >
@@ -848,7 +881,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Typography
               sx={{
                 fontSize: '0.66rem',
-                color: '#64748B',
+                color: PANEL_MUTED,
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 marginBottom: '5px',
@@ -859,13 +892,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
               <Eye
                 size={13}
-                color={activeDetections.length > 0 ? '#22C55E' : '#475569'}
+                color={activeDetections.length > 0 ? C_SUCCESS : PANEL_FAINT}
               />
               <Typography
                 sx={{
                   fontSize: '0.78rem',
                   fontWeight: 600,
-                  color: activeDetections.length > 0 ? '#86EFAC' : '#475569',
+                  color:
+                    activeDetections.length > 0
+                      ? ACCENT_GREEN_LIGHT
+                      : PANEL_FAINT,
                   fontFamily: "'Geist Mono', monospace",
                 }}
               >
@@ -894,7 +930,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 textTransform: 'none',
                 fontSize: '0.78rem',
                 fontWeight: 500,
-                color: '#94A3B8',
+                color: PANEL_TEXT_DIM,
                 borderColor: 'rgba(255,255,255,0.1)',
                 py: 0.6,
               },
@@ -935,14 +971,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             }}
           >
             {executionTarget === 'real' ? (
-              <AlertTriangle size={15} color="#F59E0B" />
+              <AlertTriangle size={15} color={C_WARNING} />
             ) : (
-              <MonitorPlay size={15} color="#818CF8" />
+              <MonitorPlay size={15} color={ACCENT_INDIGO_LIGHT} />
             )}
             <Typography
               sx={{
                 fontSize: '0.72rem',
-                color: executionTarget === 'real' ? '#FCD34D' : '#A5B4FC',
+                color:
+                  executionTarget === 'real'
+                    ? C_WARNING_LIGHT
+                    : ACCENT_INDIGO_FAINT,
               }}
             >
               {executionTarget === 'real'
@@ -954,7 +993,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           {/* Robot picker (real mode only) */}
           {executionTarget === 'real' && (
             <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-              <InputLabel id="dt-robot-label" sx={{ color: '#94A3B8' }}>
+              <InputLabel id="dt-robot-label" sx={{ color: PANEL_TEXT_DIM }}>
                 Robot
               </InputLabel>
               <Select
@@ -964,7 +1003,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 disabled={simulation.isRunning}
                 onChange={(e) => setSelectedRobot(e.target.value)}
                 sx={{
-                  color: '#E2E8F0',
+                  color: PANEL_TEXT,
                   fontSize: '0.82rem',
                   '.MuiOutlinedInput-notchedOutline': {
                     borderColor: 'rgba(255,255,255,0.15)',
@@ -972,7 +1011,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   '&:hover .MuiOutlinedInput-notchedOutline': {
                     borderColor: 'rgba(255,255,255,0.3)',
                   },
-                  '.MuiSvgIcon-root': { color: '#94A3B8' },
+                  '.MuiSvgIcon-root': { color: PANEL_TEXT_DIM },
                 }}
               >
                 {(dataMyRobots ?? []).map((r) => (
@@ -998,7 +1037,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             sx={{
               fontFamily: "'Geist Mono', monospace",
               fontSize: '0.68rem',
-              color: '#475569',
+              color: PANEL_FAINT,
               marginBottom: '3px',
               letterSpacing: '0.05em',
             }}
@@ -1007,13 +1046,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Typography>
           <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
             {simulation.isRunning && (
-              <CircularProgress size={11} sx={{ color: '#6366F1' }} />
+              <CircularProgress size={11} sx={{ color: C_PRIMARY }} />
             )}
             <Typography
               sx={{
                 fontSize: '0.8rem',
                 fontWeight: 500,
-                color: simulation.isRunning ? '#818CF8' : '#64748B',
+                color: simulation.isRunning ? ACCENT_INDIGO_LIGHT : PANEL_MUTED,
               }}
             >
               {simulation.message}
@@ -1034,10 +1073,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           }}
         >
           <Box>
-            <Typography sx={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+            <Typography sx={{ fontSize: '0.78rem', color: PANEL_TEXT_DIM }}>
               Use live camera
             </Typography>
-            <Typography sx={{ fontSize: '0.65rem', color: '#64748B', mt: 0.2 }}>
+            <Typography
+              sx={{ fontSize: '0.65rem', color: PANEL_MUTED, mt: 0.2 }}
+            >
               {liveEvents && webcam.active
                 ? 'Webcam on — detecting gestures & objects'
                 : 'Detect real gestures & objects from webcam'}
@@ -1056,9 +1097,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               onChange={(e) => setLiveEvents(e.target.checked)}
               disabled={simulation.isRunning}
               sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: '#6366F1' },
+                '& .MuiSwitch-switchBase.Mui-checked': { color: C_PRIMARY },
                 '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: '#6366F1',
+                  backgroundColor: C_PRIMARY,
                 },
               }}
             />
@@ -1072,8 +1113,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             onClick={simulation.isRunning ? stopSimulation : handleRun}
             disabled={
               !simulation.isRunning &&
-              (!canRun ||
-                (executionTarget === 'real' && !selectedRobot))
+              (!canRun || (executionTarget === 'real' && !selectedRobot))
             }
             variant="contained"
             color={simulation.isRunning ? 'error' : 'primary'}
@@ -1091,8 +1131,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               ...(simulation.isRunning
                 ? {}
                 : {
-                    background: '#6366F1',
-                    '&:hover': { background: '#4F46E5', boxShadow: 'none' },
+                    background: C_PRIMARY,
+                    '&:hover': {
+                      background: C_PRIMARY_DARK,
+                      boxShadow: 'none',
+                    },
                   }),
               '&.Mui-disabled': {
                 background: 'rgba(99,102,241,0.18)',
@@ -1110,7 +1153,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Typography
               sx={{
                 fontSize: '0.66rem',
-                color: '#94A3B8',
+                color: PANEL_TEXT_DIM,
                 mt: 0.8,
                 textAlign: 'center',
               }}
@@ -1122,7 +1165,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Typography
               sx={{
                 fontSize: '0.66rem',
-                color: '#FCD34D',
+                color: C_WARNING_LIGHT,
                 mt: 0.8,
                 textAlign: 'center',
               }}

@@ -1,13 +1,15 @@
 import React from 'react'
-import { Spin } from 'antd'
+import { CircularProgress } from '@mui/material'
 
 export const LoadingSpinner = () => (
-  <Spin
-    size="large"
-    style={{
+  <CircularProgress
+    size={40}
+    sx={{
       position: 'fixed',
       top: '50%',
       left: '50%',
+      marginTop: '-20px',
+      marginLeft: '-20px',
     }}
   />
 )

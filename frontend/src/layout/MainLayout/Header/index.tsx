@@ -6,7 +6,6 @@ import {
   useMediaQuery,
   Typography,
   InputBase,
-  Chip,
   Button,
   CircularProgress,
 } from '@mui/material'
@@ -34,6 +33,7 @@ import {
 } from 'store/reducers/task'
 import { Profile } from 'layout/MainLayout/Header/Profile'
 import { LogoSection } from 'components/Logo'
+import { TaskStatusChip } from 'components/TaskStatusChip'
 import { drawerWidth } from 'utils/constants'
 
 interface HeaderProps {
@@ -76,52 +76,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const iconBackColor = 'grey.100'
   const iconBackColorOpen = 'grey.200'
 
-  const getStatusConfig = (status?: string) => {
-    const s = status?.toLowerCase() ?? 'draft'
-    if (s === 'published' || s === 'ready' || s === 'tested') {
-      return {
-        label: 'Published',
-        color: '#10B981',
-        bg: 'rgba(16, 185, 129, 0.08)',
-        border: 'rgba(16, 185, 129, 0.2)',
-      }
-    }
-    if (s === 'published_with_draft') {
-      return {
-        label: 'Draft in Progress',
-        color: '#3B82F6',
-        bg: 'rgba(59, 130, 246, 0.08)',
-        border: 'rgba(59, 130, 246, 0.2)',
-      }
-    }
-    return {
-      label: 'Draft',
-      color: '#D97706',
-      bg: 'rgba(217, 119, 6, 0.08)',
-      border: 'rgba(217, 119, 6, 0.2)',
-    }
-  }
-
-  const statusCfg = getStatusConfig(activeTaskStatus)
-  const statusChip = (
-    <Chip
-      label={statusCfg.label}
-      size="small"
-      sx={{
-        bgcolor: statusCfg.bg,
-        color: statusCfg.color,
-        borderColor: statusCfg.border,
-        borderWidth: 1,
-        borderStyle: 'solid',
-        fontSize: '0.65rem',
-        fontWeight: 600,
-        letterSpacing: '0.05em',
-        height: '20px',
-        borderRadius: '4px',
-        textTransform: 'uppercase',
-      }}
-    />
-  )
+  const statusChip = <TaskStatusChip status={activeTaskStatus} />
 
   const mainHeader = isIDERoute ? (
     <Toolbar sx={{ justifyContent: 'space-between' }}>

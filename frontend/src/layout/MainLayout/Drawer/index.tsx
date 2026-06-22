@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { useTheme } from '@mui/material/styles'
-import { Box, Drawer, useMediaQuery, IconButton, Tooltip } from '@mui/material'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Box, Drawer, useMediaQuery } from '@mui/material'
 
 import { drawerWidth } from 'utils/constants'
 import { Profile } from 'layout/MainLayout/Header/Profile'
@@ -80,7 +79,7 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: open ? 'flex-start' : 'center',
                 width: '100%',
               }}
             >

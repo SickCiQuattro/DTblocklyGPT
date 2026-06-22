@@ -12,8 +12,6 @@
     "pretty": "prettier --write \"frontend/src/**/*.{ts,tsx}\""
   },
   "dependencies": {
-    "@ant-design/colors": "^8.0.1",
-    "@ant-design/icons": "^6.1.1",
     "@blockly/theme-modern": "^7.0.4",
     "@blockly/workspace-backpack": "^7.0.10",
     "@blockly/zoom-to-fit": "^7.0.8",
@@ -23,7 +21,6 @@
     "@mui/material": "^9.0.0",
     "@reduxjs/toolkit": "^2.11.2",
     "@yudiel/react-qr-scanner": "^2.5.1",
-    "antd": "^6.3.5",
     "axios": "^1.15.0",
     "blockly": "^12.5.1",
     "dayjs": "^1.11.20",

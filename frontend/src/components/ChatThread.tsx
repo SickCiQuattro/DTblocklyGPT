@@ -7,6 +7,7 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material'
+import { useTheme, alpha } from '@mui/material/styles'
 import { X, Pencil, Play, Square, Save, ArrowLeftRight } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import useSWR from 'swr'
@@ -89,6 +90,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   onApplyProposedTask,
   onClose,
 }) => {
+  const theme = useTheme()
+  const indigo = theme.palette.primary.main
   const dispatch = useDispatch()
   const proposal = useAppSelector((state) => state.proposal)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
@@ -404,7 +407,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         .typing-dot {
           width: 6px;
           height: 6px;
-          background-color: #10b981;
+          background-color: ${theme.palette.success.main};
           border-radius: 50%;
           display: inline-block;
           animation: typing-dot-bounce 1.4s infinite ease-in-out both;
@@ -464,9 +467,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               onClick={() => dispatch(toggleChatPosition())}
               size="small"
               sx={{
-                color: '#6366F1',
+                color: indigo,
                 '&:hover': {
-                  background: 'rgba(99, 102, 241, 0.08)',
+                  background: alpha(indigo, 0.08),
                 },
               }}
             >
@@ -478,7 +481,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             size="small"
             className="close-btn-premium"
           >
-            <X size={18} style={{ color: '#6366F1' }} />
+            <X size={18} style={{ color: indigo }} />
           </IconButton>
         </div>
       </div>
@@ -592,7 +595,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               animation: badge-entrance 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
             }
             .badge-action-btn {
-              background: #6366F1;
+              background: ${indigo};
               color: white;
               border: none;
               padding: 6px 12px;
@@ -603,7 +606,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               transition: all 0.2s;
             }
             .badge-action-btn:hover {
-              background: #4f46e5;
+              background: ${theme.palette.primary.dark};
               transform: scale(1.02);
             }
             .badge-action-btn:active {
@@ -615,10 +618,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               style={{
                 width: '6px',
                 height: '6px',
-                backgroundColor: '#6366F1',
+                backgroundColor: indigo,
                 borderRadius: '50%',
                 display: 'inline-block',
-                boxShadow: '0 0 8px #6366F1',
+                boxShadow: `0 0 8px ${indigo}`,
               }}
             />
             <span
@@ -648,7 +651,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 borderRadius: '4px',
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.color = theme.palette.error.main)
+              }
               onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
             >
               <X size={14} />

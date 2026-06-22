@@ -17,9 +17,11 @@ import { Tabs } from './Tabs'
 import { InputBase } from './InputBase'
 import { Typography } from './Typography'
 import { Accordion } from './Accordion'
+import { CssBaseline } from './CssBaseline'
 
 export const componentsOverrides = (theme: Theme) => {
   return {
+    ...CssBaseline(),
     ...Button(theme),
     ...Badge(theme),
     ...CardContent(),
@@ -36,6 +38,6 @@ export const componentsOverrides = (theme: Theme) => {
     ...TableCell(theme),
     ...Tabs(),
     ...Typography(),
-    ...Accordion(),
+    ...Accordion(theme),
   }
 }

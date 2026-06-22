@@ -7,14 +7,22 @@ import {
   AlertTitle,
   Stack,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { PlayCircle, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 
 import { AbstractStep, AbstractCondition } from 'pages/tasks/types'
 import { clearProposedTask } from 'store/reducers/proposal'
 import { abstractToBlockly } from 'utils/blocklyParser'
+import { Theme as ThemeOption } from 'themes/theme'
 
 import { StepTree } from './StepTree'
+
+// Tree-node icons are built in module-scope helpers (no hook access), so the
+// step/condition colors are sourced once from the design-system tokens.
+const tokenPalette = ThemeOption()
+const STEP_ICON_COLOR = tokenPalette.primary.dark
+const COND_ICON_COLOR = tokenPalette.warning.main
 
 // Helper function to get the display name for an ID from the catalogs
 const getNameFromId = (
@@ -46,41 +54,41 @@ const buildTreeNodes = (
     switch (type) {
       case 'pick':
         title = `Pick: ${getNameFromId((step as any).objectId, dataObjects)}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'place':
         title = `Place: ${getNameFromId((step as any).locationId, dataLocations)}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'processing':
         // MAPPING REFERENCE:
         // - step type: 'processing' ➔ User-facing title prefix: 'Run' (renamed from 'Perform')
         title = `Run: ${getNameFromId((step as any).actionId, dataActions)}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'move_to':
         title = `Move To: ${getNameFromId((step as any).locationId, dataLocations)} (${(step as any).motionType})`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'gripper':
         title = `Gripper: ${(step as any).state}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'wait':
         title = `Wait: ${(step as any).seconds}s`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'human_action':
         title = `Human Action: ${(step as any).description || 'No description'}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'notify_action':
         title = `Notify: ${(step as any).description || 'No description'}`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         break
       case 'repeat':
         title = `Repeat ${(step as any).times} times`
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         if ((step as any).steps && (step as any).steps.length > 0) {
           children = buildTreeNodes(
             (step as any).steps,
@@ -93,7 +101,7 @@ const buildTreeNodes = (
         break
       case 'repeat_until': {
         title = 'Repeat Until'
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         if ((step as any).condition) {
           const conditionNode = renderConditionNode(
             (step as any).condition,
@@ -123,7 +131,7 @@ const buildTreeNodes = (
       }
       case 'when':
         title = 'When'
-        icon = <PlayCircle size={16} style={{ color: '#4f46e5' }} />
+        icon = <PlayCircle size={16} style={{ color: STEP_ICON_COLOR }} />
         // Build condition node
         if ((step as any).condition) {
           const conditionNode = renderConditionNode(
@@ -166,7 +174,7 @@ const buildTreeNodes = (
         break
       default:
         title = `Unknown step: ${type}`
-        icon = <AlertCircle size={16} style={{ color: '#f59e0b' }} />
+        icon = <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />
     }
 
     return {
@@ -192,43 +200,43 @@ const renderConditionNode = (
     case 'sensor_signal':
       return {
         title: `Sensor: ${condition.sensor}`,
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-sensor`,
       }
     case 'find_object':
       return {
         title: `Find Object: ${getNameFromId(condition.objectId, dataObjects)}`,
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-find-object`,
       }
     case 'human_feedback':
       return {
         title: 'Human Feedback',
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-human-feedback`,
       }
     case 'touch_detect':
       return {
         title: 'Touch Detect',
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-touch`,
       }
     case 'gesture':
       return {
         title: `Gesture: ${condition.gestureType}`,
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-gesture`,
       }
     case 'timer':
       return {
         title: `Timer: ${condition.seconds}s`,
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-timer`,
       }
     case 'and':
       return {
         title: 'AND',
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-and`,
         children: [
           renderConditionNode(
@@ -250,7 +258,7 @@ const renderConditionNode = (
     case 'or':
       return {
         title: 'OR',
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-or`,
         children: [
           renderConditionNode(
@@ -272,7 +280,7 @@ const renderConditionNode = (
     case 'not':
       return {
         title: 'NOT',
-        icon: <AlertCircle size={16} style={{ color: '#f59e0b' }} />,
+        icon: <AlertCircle size={16} style={{ color: COND_ICON_COLOR }} />,
         key: `${path}-not`,
         children: [
           renderConditionNode(
@@ -312,6 +320,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
   onCancel,
   onBack,
 }) => {
+  const theme = useTheme()
   const dispatch = useDispatch()
 
   const handleApply = () => {
@@ -405,7 +414,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
         .task-btn-apply-premium:hover:not(:disabled) {
           transform: translateY(-1px) scale(1.03);
           box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25) !important;
-          background: #4338ca !important;
+          background: ${theme.palette.primary.darker} !important;
         }
         .task-btn-apply-premium:active:not(:disabled) {
           transform: scale(0.95);
@@ -429,7 +438,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#4f46e5',
+                color: theme.palette.primary.dark,
                 fontWeight: 600,
                 fontSize: '13px',
                 display: 'flex',
@@ -464,7 +473,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             <Typography
               style={{
                 fontWeight: 600,
-                color: '#1e1b4b',
+                color: theme.palette.primary.darker,
                 display: 'block',
                 fontSize: '14px',
                 lineHeight: '1.5',
@@ -493,7 +502,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
                     style={{
                       display: 'block',
                       fontSize: '13px',
-                      color: '#b45309',
+                      color: theme.palette.warning.darker,
                     }}
                   >
                     • {warning}
@@ -509,7 +518,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
           style={{
             fontWeight: 600,
             marginBottom: '6px',
-            color: '#1e1b4b',
+            color: theme.palette.primary.darker,
             display: 'block',
             fontSize: '14px',
             flexShrink: 0,
@@ -581,9 +590,9 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
               style={{
                 minWidth: 80,
                 borderRadius: '8px',
-                background: '#4f46e5',
+                background: theme.palette.primary.dark,
                 border: 'none',
-                color: '#ffffff',
+                color: theme.palette.common.white,
                 fontSize: '13px',
                 fontWeight: 600,
                 textTransform: 'none',

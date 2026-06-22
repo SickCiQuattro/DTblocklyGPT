@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import { useTheme } from '@mui/material/styles'
 import { List, ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
-import {
-  /* KeyOutlined, */ LogoutOutlined /* SettingOutlined */,
-} from '@ant-design/icons'
+import { Key, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-// import { useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
 
 import {
   LocalStorageKey,
   removeFromLocalStorage,
 } from 'utils/localStorageUtils'
-// import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 
 interface ProfileTabProps {
@@ -21,19 +17,15 @@ interface ProfileTabProps {
 
 export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
   const theme = useTheme()
-  // const dispatch = useDispatch()
   const navigate = useNavigate()
 
   const [selectedIndex, setSelectedIndex] = useState(-1)
 
-  /*
-  const handleListItemClick = (index: number, id: string) => {
-    dispatch(activeItem(id))
-    setSelectedIndex(index)
-    navigate(`/${id}`)
-    setOpen(false)
+  const handleChangePassword = () => {
+    setSelectedIndex(0)
+    setOpen?.(false)
+    void navigate('/changepassword')
   }
-    */
 
   const handleLogout = () => {
     setSelectedIndex(1)
@@ -54,34 +46,19 @@ export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
         },
       }}
     >
-      {/*       <ListItemButton
-        selected={selectedIndex === 1}
-        onClick={() => handleListItemClick(1, 'impostazioni')}
-      >
-        <ListItemIcon>
-          <SettingOutlined />
-        </ListItemIcon>
-        <ListItemText primary="Impostazioni" />
-      </ListItemButton> */}
-
-      {/*       <ListItemButton
-        selected={selectedIndex === 0}
-        onClick={() => handleListItemClick(0, 'cambiopassword')}
-      >
-        <ListItemIcon>
-          <KeyOutlined />
-        </ListItemIcon>
-        <ListItemText primary="Cambio password" />
-      </ListItemButton> */}
-
       <ListItemButton
-        selected={selectedIndex === 2}
-        onClick={() => {
-          handleLogout()
-        }}
+        selected={selectedIndex === 0}
+        onClick={handleChangePassword}
       >
         <ListItemIcon>
-          <LogoutOutlined />
+          <Key size={16} />
+        </ListItemIcon>
+        <ListItemText primary="Change password" />
+      </ListItemButton>
+
+      <ListItemButton selected={selectedIndex === 1} onClick={handleLogout}>
+        <ListItemIcon>
+          <LogOut size={16} />
         </ListItemIcon>
         <ListItemText primary="Logout" />
       </ListItemButton>

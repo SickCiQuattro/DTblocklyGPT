@@ -1,4 +1,6 @@
-export const Accordion = () => ({
+import { Theme, alpha } from '@mui/material'
+
+export const Accordion = (theme: Theme) => ({
   MuiAccordion: {
     defaultProps: {
       disableGutters: true,
@@ -7,12 +9,11 @@ export const Accordion = () => ({
     },
     styleOverrides: {
       root: {
-        border: '1px solid #e0e0e0',
-        borderColor: 'rgba(99, 102, 241, 0.12)',
+        border: '1px solid',
+        borderColor: alpha(theme.palette.primary.main, 0.12),
         borderRadius: '8px !important',
         overflow: 'hidden',
-        background: 'rgba(255, 255, 255, 0.4)',
-        backdropFilter: 'blur(8px)',
+        background: theme.palette.background.paper,
         '&:not(:last-child)': {
           borderBottom: 0,
           borderBottomLeftRadius: '0px !important',
@@ -33,10 +34,10 @@ export const Accordion = () => ({
       root: {
         minHeight: 36,
         padding: '0 16px',
-        backgroundColor: 'rgba(99, 102, 241, 0.03)',
+        backgroundColor: alpha(theme.palette.primary.main, 0.03),
         '&.Mui-expanded': {
           minHeight: 36,
-          backgroundColor: 'rgba(99, 102, 241, 0.06)',
+          backgroundColor: alpha(theme.palette.primary.main, 0.06),
         },
       },
       content: {
@@ -46,7 +47,7 @@ export const Accordion = () => ({
         },
       },
       expandIconWrapper: {
-        color: '#6366f1',
+        color: theme.palette.primary.main,
       },
     },
   },
@@ -54,8 +55,8 @@ export const Accordion = () => ({
     styleOverrides: {
       root: {
         padding: '12px 16px 14px 16px',
-        backgroundColor: '#ffffff',
-        borderTop: '1px solid rgba(99, 102, 241, 0.08)',
+        backgroundColor: theme.palette.background.paper,
+        borderTop: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
       },
     },
   },

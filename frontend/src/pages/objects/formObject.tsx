@@ -23,7 +23,7 @@ import { Formik } from 'formik'
 import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
-import { AimOutlined, PlusOutlined } from '@ant-design/icons'
+import { Crosshair, Plus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -300,7 +300,7 @@ export const FormObject = ({
                             }
                             edge="end"
                           >
-                            <PlusOutlined />
+                            <Plus size={16} />
                           </IconButton>
                         </InputAdornment>
                       ),
@@ -381,7 +381,7 @@ export const FormObject = ({
                   size="medium"
                   variant="outlined"
                   title="Define the height of the object"
-                  startIcon={<AimOutlined style={{ fontSize: '2em' }} />}
+                  startIcon={<Crosshair size={20} />}
                 >
                   Get height
                 </Button>
@@ -539,7 +539,7 @@ export const FormObject = ({
                   size="medium"
                   variant="outlined"
                   title="Acquire photo of the object to recognize the shape"
-                  startIcon={<AimOutlined style={{ fontSize: '2em' }} />}
+                  startIcon={<Crosshair size={20} />}
                 >
                   Get photo
                 </Button>

@@ -20,7 +20,7 @@ import { Formik } from 'formik'
 import type { FormikHelpers } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
-import { AimOutlined, PlusOutlined } from '@ant-design/icons'
+import { Crosshair, Plus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -255,7 +255,7 @@ export const FormLocation = ({
                             }
                             edge="end"
                           >
-                            <PlusOutlined />
+                            <Plus size={16} />
                           </IconButton>
                         </InputAdornment>
                       ),
@@ -339,7 +339,7 @@ export const FormLocation = ({
                   size="medium"
                   variant="outlined"
                   title="Acquire the position of the location"
-                  startIcon={<AimOutlined style={{ fontSize: '2em' }} />}
+                  startIcon={<Crosshair size={20} />}
                 >
                   Get position
                 </Button>

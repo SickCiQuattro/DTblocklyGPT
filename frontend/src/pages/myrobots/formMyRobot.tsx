@@ -18,7 +18,7 @@ import {
   object as YupObject,
   number as YupNumber,
 } from 'yup'
-import { QrcodeOutlined, StopOutlined } from '@ant-design/icons'
+import { Ban, QrCode } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 
 import { fetchApi, MethodHTTP } from 'services/api'
@@ -165,11 +165,7 @@ export const FormMyRobot = ({
                   size="medium"
                   title="Acquire robot ID from webcam"
                   startIcon={
-                    scanning ? (
-                      <StopOutlined style={{ fontSize: '2em' }} />
-                    ) : (
-                      <QrcodeOutlined style={{ fontSize: '2em' }} />
-                    )
+                    scanning ? <Ban size={20} /> : <QrCode size={20} />
                   }
                   onClick={() => setScanning(!scanning)}
                 >

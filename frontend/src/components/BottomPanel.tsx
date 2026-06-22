@@ -2,6 +2,16 @@ import React, { useState } from 'react'
 import { Box, Typography, IconButton } from '@mui/material'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
+import { Theme as ThemeOption } from 'themes/theme'
+
+// Intentionally-dark developer terminal (design spec §3.8). The slate chrome is
+// a deliberate local palette; brand/terminal accents come from theme tokens.
+const tokens = ThemeOption()
+const PANEL_BG = '#141423'
+const PANEL_TEXT = '#A9B2C3'
+const PANEL_ACCENT = tokens.primary.main
+const TERMINAL_GREEN = tokens.success.light
+
 interface BottomPanelProps {
   data: any[]
   open: boolean
@@ -17,9 +27,9 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
         minHeight: open ? (isExpanded ? '55vh' : '24vh') : 0,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
-        background: '#141423',
+        background: PANEL_BG,
         borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-        color: '#A9B2C3',
+        color: PANEL_TEXT,
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -41,7 +51,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             fontWeight: 600,
             letterSpacing: '0.05em',
             textTransform: 'uppercase',
-            color: '#6366F1',
+            color: PANEL_ACCENT,
           }}
         >
           Task Logic (JSON)
@@ -50,7 +60,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
           size="small"
           onClick={() => setIsExpanded(!isExpanded)}
           sx={{
-            color: '#A9B2C3',
+            color: PANEL_TEXT,
             padding: '2px',
             '&:hover': {
               color: '#FFF',
@@ -91,7 +101,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             fontFamily: "'Geist Mono', 'SFMono-Regular', Consolas, monospace",
             fontSize: '0.8rem',
             lineHeight: 1.5,
-            color: '#34D399', // sleek green terminal color
+            color: TERMINAL_GREEN,
           }}
         >
           {JSON.stringify(data, null, 2)}

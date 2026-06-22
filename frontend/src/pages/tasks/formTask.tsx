@@ -1,8 +1,10 @@
 import React, { useCallback, useState } from 'react'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   Checkbox,
-  Chip,
   Divider,
   FormControlLabel,
   FormHelperText,
@@ -11,39 +13,20 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material'
-import { CheckCircle, FileEdit, Trash2 } from 'lucide-react'
+import { ChevronDown, Wrench } from 'lucide-react'
 import { Formik } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { BuildOutlined } from '@ant-design/icons'
 import { useDispatch } from 'react-redux'
-import { Collapse } from 'antd'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { activeItem, openDrawer } from 'store/reducers/menu'
+import { TaskStatusChip } from 'components/TaskStatusChip'
 
 import { TaskDetailType, TaskStatus, TaskTypeField } from './types'
-
-// ─── Lifecycle guard helpers ──────────────────────────────────────────────────
-
-const isDraft = (status: TaskStatus): boolean => status === 'draft'
-
-const hasUnpublishedDraft = (status: TaskStatus): boolean =>
-  status === 'published_with_draft'
-
-// ─── Status chip metadata ──────────────────────────────────────────────────────
-
-type ChipColor = 'warning' | 'success' | 'info'
-
-function statusChip(status: TaskStatus): { label: string; color: ChipColor } {
-  if (isDraft(status)) return { label: 'Draft', color: 'warning' }
-  if (hasUnpublishedDraft(status))
-    return { label: 'Draft in progress', color: 'info' }
-  return { label: 'Published', color: 'success' }
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,55 +172,6 @@ export const FormTask = ({
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const currentStatus: TaskStatus = data?.status ?? 'draft'
-  const { label: chipLabel, color: chipColor } = statusChip(currentStatus)
-
-  const getStatusConfig = (status?: string) => {
-    const s = status?.toLowerCase() ?? 'draft'
-    if (s === 'published' || s === 'ready' || s === 'tested') {
-      return {
-        label: 'Published',
-        color: '#10B981',
-        bg: 'rgba(16, 185, 129, 0.08)',
-        border: 'rgba(16, 185, 129, 0.2)',
-      }
-    }
-    if (s === 'published_with_draft') {
-      return {
-        label: 'Draft in Progress',
-        color: '#3B82F6',
-        bg: 'rgba(59, 130, 246, 0.08)',
-        border: 'rgba(59, 130, 246, 0.2)',
-      }
-    }
-    return {
-      label: 'Draft',
-      color: '#D97706',
-      bg: 'rgba(217, 119, 6, 0.08)',
-      border: 'rgba(217, 119, 6, 0.2)',
-    }
-  }
-
-  const statusCfg = getStatusConfig(currentStatus)
-
-  const statusChipNode = (
-    <Chip
-      size="small"
-      label={statusCfg.label}
-      sx={{
-        bgcolor: statusCfg.bg,
-        color: statusCfg.color,
-        borderColor: statusCfg.border,
-        borderWidth: 1,
-        borderStyle: 'solid',
-        fontSize: '0.72rem',
-        fontWeight: 600,
-        height: '22px',
-        borderRadius: '4px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-      }}
-    />
-  )
 
   return (
     <Formik<FormValues>
@@ -290,7 +224,7 @@ export const FormTask = ({
                     aria-label="detail"
                     size="medium"
                     title="Go to graphic interface"
-                    startIcon={<BuildOutlined style={{ fontSize: '2em' }} />}
+                    startIcon={<Wrench size={20} />}
                   >
                     Graphic
                   </Button>
@@ -360,22 +294,18 @@ export const FormTask = ({
             {!insertMode && (
               <Grid size={12}>
                 <Stack spacing={1}>
-                  <Collapse
-                    key="task-collapse-debug"
-                    items={[
-                      {
-                        label: 'Task JSON',
-                        key: 'task-json',
-                        children: (
-                          <pre>
-                            {values.code
-                              ? JSON.stringify(values.code, null, 2)
-                              : ''}
-                          </pre>
-                        ),
-                      },
-                    ]}
-                  />
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                      Task JSON
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <pre>
+                        {values.code
+                          ? JSON.stringify(values.code, null, 2)
+                          : ''}
+                      </pre>
+                    </AccordionDetails>
+                  </Accordion>
                 </Stack>
               </Grid>
             )}
@@ -408,7 +338,7 @@ export const FormTask = ({
                     sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                   >
                     {/* Status badge */}
-                    {statusChipNode}
+                    <TaskStatusChip status={currentStatus} />
                   </Stack>
                 </Grid>
               </>

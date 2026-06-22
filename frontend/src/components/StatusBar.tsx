@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Typography, Button } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useDispatch } from 'react-redux'
 import { Code } from 'lucide-react'
 
@@ -7,6 +8,7 @@ import { useAppSelector } from 'store/reducers'
 import { toggleCode } from 'store/reducers/task'
 
 export const StatusBar: React.FC = () => {
+  const theme = useTheme()
   const dispatch = useDispatch()
   const lastSaved = useAppSelector((state) => state.task.lastSaved)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
@@ -23,7 +25,7 @@ export const StatusBar: React.FC = () => {
         justifyContent: 'space-between',
         padding: '0 20px',
         fontFamily: "'Geist Mono', monospace",
-        color: '#6B7280',
+        color: theme.palette.text.secondary,
         zIndex: 10,
         boxSizing: 'border-box',
       }}
@@ -35,9 +37,9 @@ export const StatusBar: React.FC = () => {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            backgroundColor: '#22C55E',
+            backgroundColor: theme.palette.success.main,
             display: 'inline-block',
-            boxShadow: '0 0 8px #22C55E',
+            boxShadow: `0 0 8px ${theme.palette.success.main}`,
           }}
         />
         <Typography

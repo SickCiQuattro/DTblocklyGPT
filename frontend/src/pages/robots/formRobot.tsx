@@ -18,7 +18,7 @@ import {
   object as YupObject,
   number as YupNumber,
 } from 'yup'
-import { ApiOutlined } from '@ant-design/icons'
+import { Cable } from 'lucide-react'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
@@ -259,7 +259,7 @@ export const FormRobot = ({
                   aria-label="detail"
                   size="medium"
                   title="Check connection to the robot IP and port"
-                  startIcon={<ApiOutlined style={{ fontSize: '2em' }} />}
+                  startIcon={<Cable size={20} />}
                 >
                   Check connection
                 </Button>

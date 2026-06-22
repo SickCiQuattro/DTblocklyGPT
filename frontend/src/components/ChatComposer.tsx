@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, TextField, IconButton, Stack } from '@mui/material'
+import { useTheme, alpha } from '@mui/material/styles'
 import { Send, Mic, Square, Volume2, VolumeX } from 'lucide-react'
 import SpeechRecognition from 'react-speech-recognition'
 import dayjs from 'dayjs'
@@ -45,6 +46,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   speaking,
   onStopSpeaking,
 }) => {
+  const theme = useTheme()
+  const indigo = theme.palette.primary.dark
+  const danger = theme.palette.error.main
   const startRecording = () => {
     SpeechRecognition.startListening({
       // Match the speaker's own language (browser/OS locale) — no UI toggle.
@@ -92,8 +96,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           font-family: inherit !important;
         }
         .premium-textarea:focus, .premium-textarea:hover {
-          border-color: rgba(79, 70, 229, 0.4) !important;
-          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
+          border-color: ${alpha(indigo, 0.4)} !important;
+          box-shadow: 0 0 0 3px ${alpha(indigo, 0.1)} !important;
           background: #ffffff !important;
         }
         .premium-btn {
@@ -107,22 +111,22 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         }
         @keyframes recording-pulsate {
           0% {
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            box-shadow: 0 0 0 0 ${alpha(danger, 0.4)};
             transform: scale(1.0);
           }
           50% {
-            box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+            box-shadow: 0 0 0 8px ${alpha(danger, 0)};
             transform: scale(1.08);
           }
           100% {
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            box-shadow: 0 0 0 0 ${alpha(danger, 0)};
             transform: scale(1.0);
           }
         }
         .recording-active {
           animation: recording-pulsate 1.5s infinite cubic-bezier(0.4, 0, 0.2, 1) !important;
-          background: rgba(239, 68, 68, 0.15) !important;
-          border: 1px solid rgba(239, 68, 68, 0.3) !important;
+          background: ${alpha(danger, 0.15)} !important;
+          border: 1px solid ${alpha(danger, 0.3)} !important;
         }
         @media (prefers-reduced-motion: reduce) {
           .recording-active {
@@ -134,8 +138,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         }
         .premium-send-btn:hover:not(:disabled) {
           transform: scale(1.08);
-          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
-          background: #4338ca !important;
+          box-shadow: 0 4px 12px ${alpha(indigo, 0.35)} !important;
+          background: ${theme.palette.primary.darker} !important;
         }
         .premium-send-btn:active:not(:disabled) {
           transform: scale(0.92);
@@ -171,7 +175,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               onClick={onStopSpeaking}
               className="premium-btn"
               style={{
-                background: 'rgba(239, 68, 68, 0.1)',
+                background: alpha(danger, 0.1),
                 width: '38px',
                 height: '38px',
                 display: 'flex',
@@ -180,7 +184,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }}
               title="Stop reading"
             >
-              <Square size={15} style={{ color: '#ef4444' }} />
+              <Square size={15} style={{ color: danger }} />
             </IconButton>
           )}
           <IconButton
@@ -188,7 +192,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             className="premium-btn"
             style={{
               background: speaker
-                ? 'rgba(16, 185, 129, 0.1)'
+                ? alpha(theme.palette.success.main, 0.1)
                 : 'rgba(0, 0, 0, 0.04)',
               width: '38px',
               height: '38px',
@@ -199,7 +203,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             title={speaker ? 'Mute Speaker' : 'Unmute Speaker'}
           >
             {speaker ? (
-              <Volume2 size={16} style={{ color: '#10b981' }} />
+              <Volume2
+                size={16}
+                style={{ color: theme.palette.success.main }}
+              />
             ) : (
               <VolumeX size={16} style={{ color: 'rgba(0, 0, 0, 0.4)' }} />
             )}
@@ -214,7 +221,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }
               className="premium-btn"
               style={{
-                background: 'rgba(79, 70, 229, 0.1)',
+                background: alpha(indigo, 0.1),
                 width: '38px',
                 height: '38px',
                 display: 'flex',
@@ -223,7 +230,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }}
               title="Speak"
             >
-              <Mic size={16} style={{ color: '#4f46e5' }} />
+              <Mic size={16} style={{ color: indigo }} />
             </IconButton>
           )}
           {!message && isRecording && (
@@ -236,7 +243,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }
               className="premium-btn recording-active"
               style={{
-                background: 'rgba(239, 68, 68, 0.1)',
+                background: alpha(danger, 0.1),
                 width: '38px',
                 height: '38px',
                 display: 'flex',
@@ -245,7 +252,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               }}
               title="Stop Recording"
             >
-              <Square size={14} style={{ color: '#ef4444' }} fill="#ef4444" />
+              <Square size={14} style={{ color: danger }} fill={danger} />
             </IconButton>
           )}
           <IconButton
@@ -253,8 +260,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             onClick={onMessageSend}
             className="premium-send-btn"
             style={{
-              background: message.trim() ? '#4f46e5' : 'rgba(0, 0, 0, 0.04)',
-              color: message.trim() ? '#ffffff' : 'rgba(0, 0, 0, 0.26)',
+              background: message.trim() ? indigo : 'rgba(0, 0, 0, 0.04)',
+              color: message.trim()
+                ? theme.palette.common.white
+                : 'rgba(0, 0, 0, 0.26)',
               width: '38px',
               height: '38px',
               display: 'flex',

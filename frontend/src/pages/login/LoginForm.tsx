@@ -15,7 +15,7 @@ import {
 import { string as YupString, object as YupObject } from 'yup'
 import { Formik } from 'formik'
 import type { FormikHelpers } from 'formik'
-import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
+import { Eye, EyeOff } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
@@ -167,9 +167,9 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
                           size="large"
                         >
                           {showPassword ? (
-                            <EyeOutlined />
+                            <Eye size={16} />
                           ) : (
-                            <EyeInvisibleOutlined />
+                            <EyeOff size={16} />
                           )}
                         </IconButton>
                       </InputAdornment>

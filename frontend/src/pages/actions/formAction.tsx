@@ -31,7 +31,6 @@ import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { MyRobotType } from 'pages/myrobots/types'
 import { JointPositionType } from 'pages/locations/types'
-import { iconMap } from 'utils/iconMap'
 
 import { ActionDetailType, listPatterns } from './types'
 

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { useTheme } from '@mui/material/styles'
+import { useTheme, alpha } from '@mui/material/styles'
 import {
   ListItemButton,
   ListItemIcon,
@@ -15,6 +15,12 @@ import { activeItem, openDrawer } from 'store/reducers/menu'
 import { useAppSelector } from 'store/reducers'
 import { defaultPath } from 'utils/constants'
 import { MenuItem } from 'menu-items/types'
+
+// Shared rail metric — every row (nav items + FAQ) is the same height, and the
+// icon lives in a fixed-width column whose left edge is the same in both states,
+// so the glyph centers on the 56px rail when collapsed and stays put when open.
+export const NAV_ROW_HEIGHT = 44
+const ICON_COLUMN = 28
 
 const getListItemProps = (
   external: boolean | undefined,
@@ -41,6 +47,7 @@ interface NavItemProps {
 
 export const NavItem = ({ item, level }: NavItemProps) => {
   const theme = useTheme()
+  const primary = theme.palette.primary.main
   const dispatch = useDispatch()
   const { drawerOpen, openItem } = useAppSelector((state) => state.menu)
   const matchDownLG = useMediaQuery(theme.breakpoints.down('lg'))
@@ -86,49 +93,55 @@ export const NavItem = ({ item, level }: NavItemProps) => {
         selected={isSelected}
         sx={{
           zIndex: 1201,
+          minHeight: NAV_ROW_HEIGHT,
           borderRadius: '8px',
           mx: 1,
           my: 0.25,
-          px: 1,
-          py: 1,
+          // Fixed left padding (6px) places the 28px icon column at 14px from the
+          // rail edge → glyph centered on the 56px rail. Identical in both states.
+          pl: '6px',
+          pr: 1,
+          py: 0,
           display: 'flex',
           justifyContent: 'flex-start',
           alignItems: 'center',
           position: 'relative',
-          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           '&:hover': {
-            bgcolor: 'rgba(99, 102, 241, 0.04)',
+            bgcolor: alpha(primary, 0.04),
           },
           '&.Mui-selected': {
-            bgcolor: 'rgba(99, 102, 241, 0.08)',
+            bgcolor: alpha(primary, 0.08),
             color: iconSelectedColor,
             '&:hover': {
-              bgcolor: 'rgba(99, 102, 241, 0.08)',
+              bgcolor: alpha(primary, 0.08),
             },
-            // Sleek left-accent indicator bar (Design System)
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              left: 0,
-              top: '8px',
-              bottom: '8px',
-              width: '3px',
-              borderRadius: '0 4px 4px 0',
-              bgcolor: theme.palette.primary.main,
-            },
+            // Left-accent bar only in expanded mode; collapsed uses the pill alone.
+            ...(drawerOpen && {
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                left: 0,
+                top: '8px',
+                bottom: '8px',
+                width: '3px',
+                borderRadius: '0 4px 4px 0',
+                bgcolor: primary,
+              },
+            }),
           },
         }}
       >
         {itemIcon && (
           <ListItemIcon
             sx={{
-              minWidth: '24px',
-              mr: drawerOpen ? '12px' : '0px',
+              minWidth: ICON_COLUMN,
+              width: ICON_COLUMN,
+              flexShrink: 0,
               color: isSelected ? iconSelectedColor : textColor,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              transition: 'margin-right 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
             {itemIcon}
@@ -137,6 +150,7 @@ export const NavItem = ({ item, level }: NavItemProps) => {
         <ListItemText
           sx={{
             margin: 0,
+            ml: drawerOpen ? '8px' : 0,
             opacity: drawerOpen ? 1 : 0,
             maxWidth: drawerOpen ? '150px' : '0px',
             minWidth: 0,

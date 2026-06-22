@@ -22,6 +22,7 @@ import {
 import { Eye, Plus, CheckCircle2, XCircle } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
+import { tokenColor } from 'utils/tokenColors'
 import { ConfirmPopover } from 'components/ConfirmPopover'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
@@ -199,7 +200,10 @@ const ListUsers = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       {row.is_active ? (
-                        <CheckCircle2 size={16} color="#10B981" />
+                        <CheckCircle2
+                          size={16}
+                          color={tokenColor.successMain}
+                        />
                       ) : (
                         <XCircle size={16} color="#94A3B8" />
                       )}

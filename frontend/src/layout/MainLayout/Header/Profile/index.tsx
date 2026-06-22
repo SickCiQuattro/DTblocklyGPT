@@ -109,7 +109,7 @@ export const Profile = ({ drawerOpen = true }: ProfileProps) => {
           spacing={0}
           sx={{
             alignItems: 'center',
-            justifyContent: 'flex-start',
+            justifyContent: drawerOpen ? 'flex-start' : 'center',
             width: '100%',
           }}
         >

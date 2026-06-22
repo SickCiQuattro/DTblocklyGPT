@@ -106,7 +106,7 @@ const ChangePassword = () => {
               }
               toast.success(MessageText.success)
               setStatus({ success: true })
-              void dispatch(activeItem('homepage'))
+              void dispatch(activeItem('tasks'))
               void navigate(defaultPath)
             })
             .finally(() => {

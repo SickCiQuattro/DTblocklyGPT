@@ -7,7 +7,7 @@ import {
   ThemeProvider,
   Direction,
 } from '@mui/material'
-import { itIT } from '@mui/material/locale'
+import { enUS } from '@mui/material/locale'
 
 import { Palette } from './palette'
 import { Typography } from './typography'
@@ -40,7 +40,7 @@ const ThemeCustomization = ({ children }: ThemeCustomizationProps) => {
     [themePalette, themeTypography, themeCustomShadows],
   )
 
-  const themes = createTheme(themeOptions, itIT)
+  const themes = createTheme(themeOptions, enUS)
   themes.components = componentsOverrides(themes)
 
   return (

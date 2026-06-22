@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
 import {
-  Box,
   Button,
   Chip,
   CircularProgress,
@@ -41,6 +40,7 @@ import {
 
 import { MainCard } from 'components/MainCard'
 import { ConfirmPopover } from 'components/ConfirmPopover'
+import { TaskStatusChip } from 'components/TaskStatusChip'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
@@ -52,65 +52,16 @@ import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
+import { Theme as ThemeOption } from 'themes/theme'
 
 import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
 import { SimulateTaskModal } from './simulateTaskModal'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const StatusBadge = ({ status }: { status?: string }) => {
-  const getStatusConfig = (status?: string) => {
-    const s = status?.toLowerCase() ?? 'draft'
-    if (s === 'published' || s === 'ready' || s === 'tested') {
-      return {
-        label: 'Published',
-        color: '#10B981',
-        bg: 'rgba(16, 185, 129, 0.08)',
-        border: 'rgba(16, 185, 129, 0.2)',
-      }
-    }
-    if (s === 'published_with_draft') {
-      return {
-        label: 'Draft in Progress',
-        color: '#3B82F6',
-        bg: 'rgba(59, 130, 246, 0.08)',
-        border: 'rgba(59, 130, 246, 0.2)',
-      }
-    }
-    return {
-      label: 'Draft',
-      color: '#D97706',
-      bg: 'rgba(217, 119, 6, 0.08)',
-      border: 'rgba(217, 119, 6, 0.2)',
-    }
-  }
-
-  const cfg = getStatusConfig(status)
-  return (
-    <Box
-      component="span"
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        px: 1,
-        py: 0.25,
-        borderRadius: '6px',
-        fontSize: '0.72rem',
-        fontWeight: 600,
-        letterSpacing: '0.04em',
-        color: cfg.color,
-        bgcolor: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        textTransform: 'uppercase',
-        fontFamily: "'Geist', 'Inter', sans-serif",
-      }}
-    >
-      {cfg.label}
-    </Box>
-  )
-}
+// Menu/status icon colors sourced once from the design-system tokens (these
+// render inside several sub-components without direct theme access).
+const tokenPalette = ThemeOption()
 
 // ─── Column header ────────────────────────────────────────────────────────────
 
@@ -250,7 +201,7 @@ const TaskRowActions = ({
           }}
         >
           <ListItemIcon>
-            <Cpu size={15} style={{ color: '#D97706' }} />
+            <Cpu size={15} style={{ color: tokenPalette.warning.dark }} />
           </ListItemIcon>
           <ListItemText
             primary={
@@ -267,7 +218,7 @@ const TaskRowActions = ({
           }}
         >
           <ListItemIcon>
-            <BrainCircuit size={15} style={{ color: '#0284C7' }} />
+            <BrainCircuit size={15} style={{ color: tokenPalette.info.dark }} />
           </ListItemIcon>
           <ListItemText
             primary={
@@ -415,13 +366,6 @@ const ListTasks = () => {
           startIcon={<Plus size={16} />}
           onClick={handleAdd}
           id="btn-add-task"
-          sx={{
-            borderRadius: '8px',
-            fontFamily: "'Geist', 'Inter', sans-serif",
-            fontWeight: 500,
-            fontSize: '0.875rem',
-            textTransform: 'none',
-          }}
         >
           New Task
         </Button>
@@ -470,7 +414,8 @@ const ListTasks = () => {
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography variant="body2" color="text.secondary">
-                      No tasks yet. Create your first task.
+                      No tasks yet. Click New Task to build your first robot
+                      program visually.
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -520,7 +465,7 @@ const ListTasks = () => {
 
                     {/* Status */}
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <StatusBadge status={(row as any).status} />
+                      <TaskStatusChip status={(row as any).status} />
                     </TableCell>
 
                     {/* Owner */}
@@ -533,7 +478,10 @@ const ListTasks = () => {
                     {/* Shared */}
                     <TableCell>
                       {row.shared ? (
-                        <CheckCircle2 size={16} color="#10B981" />
+                        <CheckCircle2
+                          size={16}
+                          color={tokenPalette.success.main}
+                        />
                       ) : (
                         <XCircle size={16} color="#9CA3AF" />
                       )}
