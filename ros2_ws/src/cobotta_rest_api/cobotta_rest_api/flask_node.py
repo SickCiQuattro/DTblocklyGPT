@@ -1,4 +1,3 @@
-from .blueprints import flask_api
 from . import db
 import os
 import signal
@@ -25,6 +24,8 @@ def sendRequestPosition():
 
 db.init_app(app)
 
+# Import blueprints last: flask_api needs app/flask_pub/sendRequestPosition above.
+from .blueprints import flask_api  # noqa: E402
 app.register_blueprint(flask_api.bp)
 
 

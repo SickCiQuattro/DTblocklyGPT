@@ -2,7 +2,6 @@ import sqlite3
 
 import click
 from flask import g
-from .flask_node import app
 
 
 def get_db():
@@ -24,6 +23,7 @@ def close_db(e=None):
 
 
 def init_db():
+    from .flask_node import app   # lazy: avoids db↔flask_node load-time cycle
     db = get_db()
 
     with app.open_resource('schema.sql') as f:

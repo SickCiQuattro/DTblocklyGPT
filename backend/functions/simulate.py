@@ -1158,10 +1158,9 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             return
 
         # hand_close already comes from plan_pick_for_object (graspable_width).
-
-        # Chiudi pinza e attendi stabilizzazione
-        smooth_move(pick_joints, hand_close, duration_s=0.7)
-        _interruptible_sleep(0.3)
+        # Snap + weld with the gripper still OPEN so the object is NOT in contact with
+        # the fingers at the attach frame (Gazebo: reattach unsupported during contact).
+        # Fingers close AFTER the weld below (object already rigid → contact harmless).
 
         # Snap object to exact TCP grasp pose before weld (hard gate: abort if set_pose fails).
         # snap_z = TABLE_TOP_Z_ABS - sdf_min_z puts model origin at resting height, which
@@ -1183,6 +1182,10 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             _interruptible_sleep(0.2)
         else:
             print("[GRASP] Attach skipped (do_attach=False: spawn failed or disabled)")
+
+        # Close fingers for the visual grip — object already welded, contact now harmless.
+        smooth_move(pick_joints, hand_close, duration_s=0.7)
+        _interruptible_sleep(0.3)
 
         # 4. Lift Cartesian Z-down to carry height (preserves tool orientation)
         z_carry = z_approach + CARRY_MARGIN
@@ -1916,11 +1919,15 @@ def simulation_recursive_blockly_parser(
                 detach_object_from_gripper()
                 # Deterministic hold: assert the object upright at its known rest pose
                 # (kills the home-drop + tip of tall/thin objects). No polling settle.
+                # GATE (mirror the pre-attach snap): a failed hold breaks determinism,
+                # so abort this pick rather than grasping an unheld/unstable object.
                 if set_object_world_pose(OBJECT_SPAWN_X, OBJECT_SPAWN_Y, z_rest, yaw=0.0):
-                    print(f"[GRASP] hold: set upright at rest "
+                    print(f"[GRASP] hold confirmed: upright at rest "
                           f"({OBJECT_SPAWN_X},{OBJECT_SPAWN_Y},z={z_rest:.4f})")
                 else:
-                    print("[GRASP] hold: set_pose failed (object may be unstable)")
+                    print("[GRASP] ABORT: post-spawn hold failed — skipping pick")
+                    _next()
+                    return
                 _interruptible_sleep(0.3)
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
             simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok,
