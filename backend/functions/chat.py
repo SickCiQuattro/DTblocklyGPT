@@ -21,7 +21,12 @@ import os
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
-LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
+# Per-provider keys: keep all set at once and switch providers with LLM_PROVIDER.
+# LLM_API_KEY (if set) is an optional override that wins for any provider.
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
@@ -87,18 +92,31 @@ class LLMProvider:
 
 
 def get_llm_provider() -> LLMProvider:
-    if not LLM_API_KEY:
-        raise ValueError("API LLM Key not found in environment variables.")
-
+    # Resolve the endpoint AND the key per provider, so all keys can stay set at
+    # once and you switch providers just by changing LLM_PROVIDER (for A/B tests).
     if LLM_PROVIDER == "gemini":
+        api_key = LLM_API_KEY or GEMINI_API_KEY
         base_url = LLM_BASE_URL or "https://generativelanguage.googleapis.com/v1beta/openai/"
     elif LLM_PROVIDER == "openai":
+        api_key = LLM_API_KEY or OPENAI_API_KEY
         base_url = LLM_BASE_URL  # None → official OpenAI endpoint
+    elif LLM_PROVIDER == "ollama":
+        # Ollama exposes an OpenAI-compatible API and needs no real key.
+        api_key = LLM_API_KEY or "ollama"
+        base_url = LLM_BASE_URL or OLLAMA_BASE_URL
     else:
-        raise ValueError(f"Provider LLM '{LLM_PROVIDER}' not supported.")
+        raise ValueError(
+            f"Provider LLM '{LLM_PROVIDER}' not supported (use gemini, openai or ollama)."
+        )
+
+    if not api_key:
+        raise ValueError(
+            f"No API key for provider '{LLM_PROVIDER}'. Set the matching env var "
+            "(GEMINI_API_KEY / OPENAI_API_KEY) or LLM_API_KEY."
+        )
 
     return LLMProvider(
-        api_key=LLM_API_KEY,
+        api_key=api_key,
         base_url=base_url,
         model=LLM_MODEL,
         timeout=LLM_TIMEOUT,
@@ -323,59 +341,28 @@ Where AbstractStep is one of:
     }}
 
 Conditions (AbstractCondition) can be one of:
-- {{"type": "sensor_signal", "sensor": "camera" | "ir"}}
-- {{"type": "find_object", "objectId": number, "objectName": string}}
-- {{"type": "human_feedback"}}
-- {{"type": "touch_detect"}}
-- {{"type": "gesture", "gestureType": "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK" | "THREE_FINGERS" | "PINCH" | "POINTING"}}
-- {{"type": "timer", "seconds": number}}
+- {{"type": "find_object", "objectId": number, "objectName": string}}  // true while the camera sees the object
+- {{"type": "gesture", "gestureType": "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK" | "THREE_FINGERS" | "PINCH" | "POINTING"}}  // true when the camera sees that hand gesture
+- {{"type": "timer", "seconds": number}}  // true once the given number of seconds has passed
+- {{"type": "and", "left": AbstractCondition, "right": AbstractCondition}}  // true only if BOTH inner conditions are true
+- {{"type": "or", "left": AbstractCondition, "right": AbstractCondition}}   // true if AT LEAST ONE inner condition is true
+- {{"type": "not", "condition": AbstractCondition}}                          // true when the inner condition is false
+
+These are the ONLY valid conditions. Use them for a "when" condition, a "repeat_until" condition, or a "human_action" confirmEvent. You may nest "and"/"or"/"not" to combine conditions (e.g. the camera sees the box AND 5 seconds have passed). NEVER invent other condition types (no "sensor_signal", no "touch_detect").
+A "human_action" confirmEvent may additionally be null or {{"type": "human_feedback"}} — both mean "wait for the operator to press confirm" (no sensor).
 
 # BLOCKLY TOOLBOX & CATEGORIES #
-In the visual Blockly interface, blocks are organized into the following collapsible categories in the toolbox sidebar:
+These are the blocks available in the visual editor, grouped by the sidebar category the user sees. When you talk to the user, ALWAYS refer to a block by the exact user-facing name shown below (the part in quotes), and when they ask where a block is, tell them which category to open.
 
-1. "Task Flow" (Orange/Coral):
-   - "Repeat times" (repeat_block): Repeats a nested sequence of steps a set number of times.
-   - "Repeat forever" (loop_block): Infinite loop (not supported by backend, only used in frontend).
-   - "Repeat until" (repeat_until_block): Repeats nested steps until a condition is met.
-   - "When → Do" (when_block): Runs steps only if a condition is met.
-   - "When → Do / Otherwise" (when_otherwise_block): Runs one set of steps if a condition is met, otherwise runs another set of steps.
+{{blocks}}
 
-2. "Robot Actions" (Indigo/Blue):
-   - "Pick up" (pick_block): Grabs an object. Accepts "Objects" block as input.
-   - "Perform" (processing_block): Executes a skill or procedure. Accepts "Procedures" block as input.
-   - "Place at" (place_block): Places a held object at a location. Accepts "Destinations" block as input.
-   - "Move to" (move_to_block): Moves the robot to a destination. Accepts "Destinations" block as input.
-   - "Open / Close Gripper" (gripper_block): Controls the robot gripper (OPEN/CLOSE).
-   - "Wait" (wait_block): Pauses execution for a specified duration in seconds.
-
-3. "Human Step" (Green/Teal):
-   - "Pause and show message" (human_action_block): Pauses the robot and waits for operator input or condition.
-   - "Show message" (notify_action_block): Shows a message to the operator without stopping the robot.
-
-4. "My Workspace" (Grey/Neutral):
-   - "Objects" (object_block): Pill blocks representing objects from the database (e.g. widget, red cube).
-   - "Destinations" (location_block): Pill blocks representing locations from the database (e.g. bin A, pick station).
-   - "Procedures" (action_block): Pill blocks representing actions from the database (e.g. inspect, assemble).
-
-5. "Conditions" (Yellow/Amber):
-   - "Object detected" (find_object_block): Detects if a specific object is present.
-   - "Contact detected" (touch_detect_block): Detects physical contact.
-   - "Gesture detected" (gesture_block): Detects human gestures (THUMBS_UP, THUMBS_DOWN, OPEN_HAND, FIST, PEACE, OK, THREE_FINGERS, PINCH, POINTING).
-   - "Time passed" (timer_block): Triggered after a set amount of seconds.
-   - "External signal received" (sensor_signal_block): Listens to a sensor signal (camera, ir).
-   - "AND" (logic_and_block): Combines two conditions (both must be true).
-   - "OR" (logic_or_block): Combines two conditions (at least one must be true).
-   - "NOT" (logic_not_block): Inverts a condition.
-
-6. "My Tasks" (Purple):
-   - "My Task" (macro_task_block): Reuse another saved task as a single macro block.
-
-If the user asks where to find a block or how they are organized, guide them to these categories!
+The "Twin Library" and "Saved Tasks" categories hold pills generated from the user's own data — the objects, locations and routines listed in the # DATABASE # section below, plus their previously saved tasks.
+If the user asks where to find a block or how blocks are organized, guide them to these categories by name.
 
 # CONNECTION RULES #
-All step blocks (pick, place, processing, move_to, gripper, human_action, repeat, when, when_otherwise)
-can be freely chained in sequence. Condition blocks can only appear inside a "when" step or as
-the "confirmEvent" of a "human_action" step.
+All step blocks can be freely chained in sequence. A condition can ONLY appear as the "condition" of a
+"when" step, the "condition" of a "repeat_until" step, or the "confirmEvent" of a "human_action" step —
+never on its own as a step in the task array.
 
 # CONTEXT #
 - The user is not an expert in robotics or programming.
@@ -384,6 +371,26 @@ the "confirmEvent" of a "human_action" step.
 - Always use the exact "objectId"/"objectName", "locationId"/"locationName", and "actionId"/"actionName" from the database.
 - If the request is ambiguous, incomplete, or references unknown items, respond **only** with a clear natural language question in "answer" asking for clarification and do not modify the task returning the task structure as it is.
 - The default language is English. You MUST reply in the language used by the user in their most recent message. If the user writes in English, reply in English. If the user writes in Italian, reply in Italian. Do not default or switch to Italian if the user's latest query is in English, even if previous parts of the chat log contain Italian.
+- The user is a beginner. Keep "answer" friendly, concrete and jargon-free. Explain WHY a step is needed, not just what it is. Prefer short sentences.
+- Set "lang" to the BCP-47 code of the language you wrote "answer" in (e.g. "en-US" for English, "it" for Italian). It is used to pick the text-to-speech voice.
+
+# HOW YOU HELP — set the "intent" field on every reply #
+Decide what the user wants and set "intent" to exactly one of "explain", "analyze", "modify", "evaluate":
+
+- "explain": the user asks what a block does, where to find it, or how something works.
+  → Explain it in plain words using the block's user-facing name and its category. Do NOT change the task. "task" = the current snapshot unchanged. taskModified = false.
+
+- "analyze": the user asks what is currently in their workspace ("what's in my task?", "cosa c'è nel workspace?").
+  → Describe the blocks in the # CURRENT TASK SNAPSHOT # in order, in plain words. Do NOT change anything. "task" = the snapshot unchanged. taskModified = false.
+
+- "modify": the user asks to build, add, remove, or change steps.
+  → Return the full updated task in "task" and set taskModified = true. Briefly say what you changed in "answer".
+
+- "evaluate": the user asks you to check, review, judge, or improve their task ("is this good?", "valuta il mio task", "what can I improve?").
+  → Give an honest, encouraging assessment in "answer": what works, what is risky or missing (e.g. picking without placing, a "When" with no condition, an object that may be too heavy), and how to fix it. Do NOT change the task unless they explicitly ask. taskModified = false. The app also runs its own automatic checks and shows them next to your assessment.
+
+# SUGGESTIONS — the "messageParts" field (optional) #
+Besides "answer", you MAY add short actionable tips as messageParts: a list of {{"type": "suggestion", "content": "..."}} items. Each suggestion is ONE concrete next step in plain language (e.g. "Add a 'Place at' step so the robot puts the object down"). Use them especially for "evaluate" and "explain". Keep each under ~12 words. If you have nothing useful to add, omit messageParts.
 
 # IMPORTANT INSTRUCTIONS #
 - When responding to the user in natural language (the "answer" field), you MUST refer to blocks EXACTLY by their user-facing names in quotes as defined in the "# BLOCKLY TOOLBOX & CATEGORIES #" list (e.g. "Pick up" instead of "Pick" or "pick_block", "Pause and show message" instead of "human_action" or "Wait for Operator", "Show message" instead of "notify_action", "Repeat times" instead of "repeat_block", "Perform" instead of "processing_block", "Place at" instead of "place_block", etc.). Never use their technical type names (e.g. pick, place, processing, repeat, when, human_action, etc.) or generic code-like names in your conversational answers.
@@ -439,16 +446,18 @@ Response:
 User says: "Wait for the operator to put a part on the table before starting."
 Response:
 {{
-  "answer": "I added a human action step that pauses the robot and waits for the operator.",
+  "answer": "I added a 'Pause and show message' step: the robot waits for the operator to confirm before starting.",
   "task": [
       {{"type": "human_action", "description": "Please place the part on the table and confirm.", "confirmEvent": {{"type": "human_feedback"}}}}
-    ]
+    ],
+  "taskModified": true,
+  "intent": "modify"
 }}
 
 User says: "Repeat 2 times: pick red_pill and then wait 3 seconds."
 Response:
 {{
-  "answer": "I added a repeat loop to repeat 2 times, containing a pick step for 'red_pill' and a wait step of 3 seconds.",
+  "answer": "I added a 'Repeat times' loop that runs twice: each time it picks up 'red_pill' and then waits 3 seconds.",
   "task": [
     {{
       "type": "repeat",
@@ -459,34 +468,36 @@ Response:
       ]
     }}
   ],
-  "taskModified": true
+  "taskModified": true,
+  "intent": "modify"
 }}
 
-User says: "Repeat until a contact is detected: pick flask and place in box."
+User says: "Keep picking the flask and placing it in the box until the box is no longer in view."
 Response:
 {{
-  "answer": "I structured a repeat until loop that runs until contact is detected, containing a pick step for 'flask' and a place step for 'box'.",
+  "answer": "I added a 'Repeat until' loop: the robot keeps picking 'flask' and placing it at 'box', and stops once the camera no longer sees the box.",
   "task": [
     {{
       "type": "repeat_until",
-      "condition": {{"type": "touch_detect"}},
+      "condition": {{"type": "not", "condition": {{"type": "find_object", "objectId": 3, "objectName": "box"}}}},
       "do": [
         {{"type": "pick", "objectId": 4, "objectName": "flask"}},
         {{"type": "place", "locationId": 3, "locationName": "box"}}
       ]
     }}
   ],
-  "taskModified": true
+  "taskModified": true,
+  "intent": "modify"
 }}
 
-User says: "If camera detects widget, pick it up, otherwise wait 5 seconds."
+User says: "If the camera sees the widget, pick it up, otherwise wait 5 seconds."
 Response:
 {{
-  "answer": "I added a conditional block: if the camera detects the widget, the robot will pick it up, otherwise it will wait for 5 seconds.",
+  "answer": "I added a 'When → Do / Otherwise' block: if the camera sees 'widget' the robot picks it up, otherwise it waits 5 seconds.",
   "task": [
     {{
       "type": "when",
-      "condition": {{"type": "sensor_signal", "sensor": "camera"}},
+      "condition": {{"type": "find_object", "objectId": 3, "objectName": "widget"}},
       "do": [
         {{"type": "pick", "objectId": 3, "objectName": "widget"}}
       ],
@@ -495,7 +506,46 @@ Response:
       ]
     }}
   ],
-  "taskModified": true
+  "taskModified": true,
+  "intent": "modify"
+}}
+
+User says: "Only pick the widget when the camera sees it AND you see a thumbs up."
+Response:
+{{
+  "answer": "I added a 'When → Do' block that combines two conditions with AND: the robot picks 'widget' only when the camera sees it and detects a thumbs-up gesture.",
+  "task": [
+    {{
+      "type": "when",
+      "condition": {{"type": "and", "left": {{"type": "find_object", "objectId": 3, "objectName": "widget"}}, "right": {{"type": "gesture", "gestureType": "THUMBS_UP"}}}},
+      "do": [
+        {{"type": "pick", "objectId": 3, "objectName": "widget"}}
+      ]
+    }}
+  ],
+  "taskModified": true,
+  "intent": "modify"
+}}
+
+User says: "What does the Pick up block do?"
+Response:
+{{
+  "answer": "'Pick up' tells the robot to grab an object. You drop an item from the 'Twin Library' into it to choose what to pick. You'll find it in the 'Robot Actions' category.",
+  "task": [],
+  "taskModified": false,
+  "intent": "explain"
+}}
+
+User says: "Is my task any good?" (snapshot: a single 'Pick up' step for 'widget', no place)
+Response:
+{{
+  "answer": "Good start! The robot picks up 'widget', but it never puts it down — it will keep holding it. Add a 'Place at' step to tell it where to set the object.",
+  "task": [{{"type": "pick", "objectId": 3, "objectName": "widget"}}],
+  "taskModified": false,
+  "intent": "evaluate",
+  "messageParts": [
+    {{"type": "suggestion", "content": "Add a 'Place at' step after the pick"}}
+  ]
 }}
 """
 
@@ -520,9 +570,30 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                     "type": "boolean",
                     "description": "Set to true ONLY if you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. Set to false if the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.",
                 },
+                "intent": {
+                    "type": "string",
+                    "enum": ["explain", "analyze", "modify", "evaluate"],
+                    "description": "What the user wants this turn. 'explain' = describe a block/how it works; 'analyze' = describe the current workspace; 'modify' = add/remove/change steps; 'evaluate' = review/judge the task. See the # HOW YOU HELP # section.",
+                },
+                "lang": {
+                    "type": "string",
+                    "description": "BCP-47 code of the language you wrote 'answer' in (e.g. 'en-US', 'it'). Used to pick the text-to-speech voice.",
+                },
+                "messageParts": {
+                    "type": "array",
+                    "description": "Optional short actionable suggestions shown to the user as chips. Each item is one concrete next step in plain language. Omit if you have nothing useful to add.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string", "enum": ["suggestion"]},
+                            "content": {"type": "string"},
+                        },
+                        "required": ["type", "content"],
+                    },
+                },
             },
             "additionalProperties": False,
-            "required": ["answer", "task", "taskModified"],
+            "required": ["answer", "task", "taskModified", "intent", "lang"],
         },
     },
 }
@@ -600,6 +671,31 @@ def repair_flattened_steps(steps, warnings=None):
     return repaired
 
 
+def format_blocks_catalog(data_blocks) -> str:
+    """Render the block catalog (sent by the frontend from the toolbox registry)
+    into the readable list templated into {{blocks}} of the system prompt.
+
+    Keeping the catalog frontend-driven avoids drift: block names and
+    descriptions always match what the user actually sees in the toolbox.
+    """
+    if not data_blocks:
+        return "(block catalog unavailable)"
+    lines = []
+    for idx, category in enumerate(data_blocks, start=1):
+        name = category.get("category") or category.get("name") or "?"
+        lines.append(f'{idx}. "{name}":')
+        for block in category.get("blocks", []):
+            label = block.get("label", "?")
+            if block.get("dynamic"):
+                lines.append(f'   - "{label}": pills generated from your saved items.')
+                continue
+            desc = block.get("description") or ""
+            inputs = block.get("inputs")
+            extra = f" (accepts: {inputs})" if inputs and inputs.lower() != "none" else ""
+            lines.append(f'   - "{label}": {desc}{extra}')
+    return "\n".join(lines)
+
+
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
@@ -611,6 +707,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data_locations = data.get("dataLocations")
                 data_objects = data.get("dataObjects")
                 data_actions = data.get("dataActions")
+                data_blocks = data.get("dataBlocks")
 
                 if message is None:
                     return error_response("Message is required")
@@ -621,6 +718,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     "{{objects}}": json.dumps(data_objects, ensure_ascii=False),
                     "{{locations}}": json.dumps(data_locations, ensure_ascii=False),
                     "{{actions}}": json.dumps(data_actions, ensure_ascii=False),
+                    "{{blocks}}": format_blocks_catalog(data_blocks),
                 }
                 prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
                 for placeholder, value in replacements.items():
@@ -884,6 +982,11 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     if answer:
                         message_parts.append({"type": "text", "content": answer})
 
+                    # LLM-provided actionable suggestions (shown as chips).
+                    for part in (response_json.get("messageParts") or []):
+                        if isinstance(part, dict) and part.get("type") == "suggestion" and part.get("content"):
+                            message_parts.append({"type": "suggestion", "content": str(part["content"])})
+
                     frontend_warnings = [w["message"] for w in validation_warnings]
                     for warning_msg in frontend_warnings:
                         message_parts.append({"type": "warning", "content": warning_msg})
@@ -900,16 +1003,19 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         "requiresConfirmation": requires_confirmation,
                         "validationWarnings": frontend_warnings,
                         "isValid": is_valid,
-                        "chatLog": chat_log,
+                        # Drop the system message (full prompt + DB dump) — the
+                        # server rebuilds it every turn, no need to round-trip it.
+                        "chatLog": [m for m in chat_log if m["role"] != "system"],
+                        "intent": response_json.get("intent"),
                         "response": {
                             "answer": answer,
                             "task": validated_task if requires_confirmation else None,
                             "taskModified": task_modified,
+                            "intent": response_json.get("intent"),
+                            "lang": response_json.get("lang"),
                             "finished": False,
                             "validationWarnings": frontend_warnings,
                         },
-                        "fineTunedModel": "",
-                        "fineTuningJobId": "",
                     }
 
                 except Exception as inner_e:
@@ -927,8 +1033,6 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                             "finished": False,
                             "validationWarnings": [str(inner_e)],
                         },
-                        "fineTunedModel": "",
-                        "fineTuningJobId": "",
                     }
 
                 return success_response(data_result)

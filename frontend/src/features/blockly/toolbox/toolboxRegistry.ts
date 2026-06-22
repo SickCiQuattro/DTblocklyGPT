@@ -133,11 +133,17 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         outputs: 'None',
       },
       {
-        type: 'gripper_block',
-        label: 'Open / Close Gripper', // Gripper
+        type: 'open_gripper_block',
+        label: 'Open Gripper',
         colour: blocksColours.robotActions,
-        description: blockDescriptionsByType.gripper_block,
-        inputs: 'Action (Open/Close)',
+        description: blockDescriptionsByType.open_gripper_block,
+        outputs: 'None',
+      },
+      {
+        type: 'close_gripper_block',
+        label: 'Close Gripper',
+        colour: blocksColours.robotActions,
+        description: blockDescriptionsByType.close_gripper_block,
         outputs: 'None',
       },
       {

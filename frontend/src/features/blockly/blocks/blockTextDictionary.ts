@@ -17,6 +17,8 @@ export const blockDescriptionsByType = {
   place_block: 'Tells the robot to place the object at the chosen destination.',
   move_to_block: 'Moves the robot to a specific location or safe area.',
   gripper_block: "Opens or closes the robot's gripper.",
+  open_gripper_block: "Opens the robot's gripper.",
+  close_gripper_block: "Closes the robot's gripper.",
   human_action_block:
     'Stops the robot and shows a message on screen. The robot waits for the chosen condition before resuming.',
   repeat_block: 'Repeats these steps a specific number of times.',

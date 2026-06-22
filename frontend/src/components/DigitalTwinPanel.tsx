@@ -40,6 +40,7 @@ import useSWR from 'swr'
 import { useDispatch, useSelector } from 'react-redux'
 
 import { MyRobotType } from 'pages/myrobots/types'
+import { TaskStatus } from 'pages/tasks/types'
 
 import { useAppSelector } from 'store/reducers'
 import { toggleSim } from 'store/reducers/task'
@@ -58,10 +59,12 @@ const MJPEG_URL = '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 
 interface DigitalTwinPanelProps {
   taskId: string
+  taskStatus?: TaskStatus
 }
 
 export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   taskId,
+  taskStatus,
 }) => {
   const dispatch = useDispatch()
   const simulation = useSelector((state: any) => state.simulation)
@@ -143,7 +146,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }, [humanStep])
 
   const runSimulation = async () => {
-    if (!taskId) return
+    if (!taskId || !canRun) return
     dispatch(startSimAction())
     try {
       await fetchApi({
@@ -161,7 +164,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }
 
   const runOnRobot = async () => {
-    if (!taskId || !selectedRobot) return
+    if (!taskId || !selectedRobot || !canRun) return
     dispatch(startSimAction())
     try {
       await fetchApi({
@@ -196,6 +199,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
   const stopSimulation = () => dispatch(stopSimAction())
   const handleClose = () => dispatch(toggleSim())
+
+  // Only a fully published task can drive sim or robot. A task that is still a
+  // draft — or published_with_draft (edits pending) — must not run, because the
+  // runtime workspace would be the last published version and would not match
+  // the draft on screen. Webcam/gesture testing stays available regardless.
+  const canRun = taskStatus === 'published'
 
   const isHumanStepActive =
     humanStep?.status === 'started' && simulation.isRunning
@@ -1063,8 +1072,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             onClick={simulation.isRunning ? stopSimulation : handleRun}
             disabled={
               !simulation.isRunning &&
-              executionTarget === 'real' &&
-              !selectedRobot
+              (!canRun ||
+                (executionTarget === 'real' && !selectedRobot))
             }
             variant="contained"
             color={simulation.isRunning ? 'error' : 'primary'}
@@ -1107,6 +1116,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               }}
             >
               Use the teach-pendant e-stop to stop the arm immediately.
+            </Typography>
+          )}
+          {!simulation.isRunning && !canRun && (
+            <Typography
+              sx={{
+                fontSize: '0.66rem',
+                color: '#FCD34D',
+                mt: 0.8,
+                textAlign: 'center',
+              }}
+            >
+              {taskStatus === 'published_with_draft'
+                ? 'Pending draft — publish or discard it to run. Webcam still works for testing gestures.'
+                : 'Draft task — publish it to run. Webcam still works for testing gestures.'}
             </Typography>
           )}
         </Box>

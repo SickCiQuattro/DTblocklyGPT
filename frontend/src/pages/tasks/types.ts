@@ -121,6 +121,8 @@ export type AbstractStep =
   | AbstractMoveToStep
   | AbstractMoveRelativeStep
   | AbstractGripperStep
+  | AbstractOpenGripperStep
+  | AbstractCloseGripperStep
   | AbstractRepeatStep
   | AbstractWhenStep
   | AbstractHumanActionStep
@@ -186,6 +188,14 @@ export type AbstractMoveRelativeStep = {
 export type AbstractGripperStep = {
   type: 'gripper'
   state: 'OPEN' | 'CLOSE'
+}
+
+export type AbstractOpenGripperStep = {
+  type: 'open_gripper'
+}
+
+export type AbstractCloseGripperStep = {
+  type: 'close_gripper'
 }
 
 export type AbstractHumanActionStep = {

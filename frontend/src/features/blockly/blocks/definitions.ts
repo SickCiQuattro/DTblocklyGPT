@@ -270,6 +270,24 @@ Blockly.defineBlocksWithJsonArray([
     tooltip: blockDescriptionsByType.gripper_block,
   },
   {
+    type: 'open_gripper_block',
+    message0: '%1 Open Gripper',
+    args0: [iconConfig(BOT_ICON_URI, 'ROBOT:')],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.robotActions,
+    tooltip: blockDescriptionsByType.open_gripper_block,
+  },
+  {
+    type: 'close_gripper_block',
+    message0: '%1 Close Gripper',
+    args0: [iconConfig(BOT_ICON_URI, 'ROBOT:')],
+    previousStatement: ['robot_sequence', 'logic_sequence'],
+    nextStatement: ['robot_sequence', 'logic_sequence'],
+    colour: blocksColours.robotActions,
+    tooltip: blockDescriptionsByType.close_gripper_block,
+  },
+  {
     type: 'wait_block',
     message0: '%1 Wait %2 seconds',
     args0: [

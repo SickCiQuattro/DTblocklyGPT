@@ -1,19 +1,22 @@
 import React from 'react'
 import { Avatar } from '@mui/material'
-import { Bot } from 'lucide-react'
+import { Bot, Lightbulb, AlertTriangle } from 'lucide-react'
 import dayjs from 'dayjs'
 
 import { formatTimeFrontend } from 'utils/date'
+import { MessagePart } from 'utils/chat'
 
 interface AssistantBubbleProps {
   text: string
   timestamp: string | null
   avatarUrl?: string
+  parts?: MessagePart[]
 }
 
 export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
   text,
   timestamp,
+  parts,
 }) => {
   const time = timestamp
     ? formatTimeFrontend(timestamp)
@@ -87,6 +90,51 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
         >
           {text}
         </div>
+
+        {parts && parts.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {parts.map((part, idx) =>
+              part.type === 'suggestion' ? (
+                <div
+                  key={`s-${idx}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: '#4338CA',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.20)',
+                    borderRadius: '10px',
+                    padding: '6px 10px',
+                  }}
+                >
+                  <Lightbulb size={14} style={{ flexShrink: 0 }} />
+                  <span>{part.content}</span>
+                </div>
+              ) : part.type === 'warning' ? (
+                <div
+                  key={`w-${idx}`}
+                  role="alert"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: '#92400E',
+                    background: 'rgba(245, 158, 11, 0.10)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    borderRadius: '10px',
+                    padding: '6px 10px',
+                  }}
+                >
+                  <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                  <span>{part.content}</span>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

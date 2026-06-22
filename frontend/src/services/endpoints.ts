@@ -57,9 +57,7 @@ export const endpoints = {
     macroList: `${GRAPHIC_API}/macroList/`,
   },
   chat: {
-    newMessage: `${CHAT_API}/newMessage/`,
     newMessageMultimodal: `${CHAT_API}/newMessageMultimodal/`,
-    saveChatTask: `${CHAT_API}/saveChatTask/`,
   },
   task: {
     run: `${TASK_API}/run/`,

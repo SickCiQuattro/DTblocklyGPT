@@ -12,6 +12,13 @@ export enum MessageTypeEnum {
   PHOTO = 'photo',
 }
 
+export type ChatIntent = 'explain' | 'analyze' | 'modify' | 'evaluate'
+
+export type MessagePart =
+  | { type: 'text'; content: string }
+  | { type: 'suggestion'; content: string }
+  | { type: 'warning'; content: string }
+
 export interface MessageType {
   id: number
   text: string
@@ -19,6 +26,10 @@ export interface MessageType {
   timestamp: string | null
   type: MessageTypeEnum
   uri?: string
+  /** Typed extras shown below the text bubble (suggestions, warnings). */
+  parts?: MessagePart[]
+  /** What the assistant did this turn — drives the evaluation card. */
+  intent?: ChatIntent
 }
 
 export const INITIAL_MESSAGE_1: MessageType = {
@@ -41,6 +52,9 @@ interface ResponseChatGPT {
   answer: string
   task: AbstractStep[] | null
   taskModified?: boolean
+  intent?: ChatIntent
+  /** BCP-47 language of the answer, used to pick the TTS voice. */
+  lang?: string
   finished?: boolean
   validationWarnings?: string[]
 }
@@ -48,8 +62,8 @@ interface ResponseChatGPT {
 export interface ChatResponse {
   chatLog: ChatLogType[]
   response: ResponseChatGPT
-  fineTunedModel?: string
-  fineTuningJobId?: string
+  messageParts?: MessagePart[]
+  intent?: ChatIntent
 }
 
 export interface TaskChatStructure {

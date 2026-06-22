@@ -25,6 +25,8 @@ interface ChatComposerProps {
   onMessageSend: () => void
   speaker: boolean
   setSpeaker: (speaker: boolean) => void
+  speaking: boolean
+  onStopSpeaking: () => void
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -40,10 +42,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onMessageSend,
   speaker,
   setSpeaker,
+  speaking,
+  onStopSpeaking,
 }) => {
   const startRecording = () => {
     SpeechRecognition.startListening({
-      language: 'en-GB',
+      // Match the speaker's own language (browser/OS locale) — no UI toggle.
+      language: navigator.language || 'en-US',
       continuous: true,
     })
     setIsRecording(true)
@@ -119,6 +124,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           background: rgba(239, 68, 68, 0.15) !important;
           border: 1px solid rgba(239, 68, 68, 0.3) !important;
         }
+        @media (prefers-reduced-motion: reduce) {
+          .recording-active {
+            animation: none !important;
+          }
+        }
         .premium-send-btn {
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
@@ -134,8 +144,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
         <TextField
-          placeholder={isRecording ? 'Listening...' : 'Type a message...'}
-          value={message}
+          placeholder={isRecording ? 'Listening…' : 'Type a message...'}
+          value={isRecording ? transcript : message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={isRecording}
           onKeyDown={handleKeyDown}
@@ -156,6 +166,23 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           spacing={0.75}
           sx={{ alignItems: 'center', marginBottom: '2px' }}
         >
+          {speaking && (
+            <IconButton
+              onClick={onStopSpeaking}
+              className="premium-btn"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                width: '38px',
+                height: '38px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Stop reading"
+            >
+              <Square size={15} style={{ color: '#ef4444' }} />
+            </IconButton>
+          )}
           <IconButton
             onClick={() => setSpeaker(!speaker)}
             className="premium-btn"

@@ -35,6 +35,8 @@ export interface CustomBlock {
     | 'processing_block'
     | 'move_to_block'
     | 'gripper_block'
+    | 'open_gripper_block'
+    | 'close_gripper_block'
     | 'repeat_block'
     | 'repeat_until_block'
     | 'when_block'
@@ -200,6 +202,10 @@ export const abstractToBlockly = (
           type: 'gripper_block',
           fields: { GRIPPER_STATE: step.state ?? 'CLOSE' },
         }
+      case 'open_gripper':
+        return { type: 'open_gripper_block' }
+      case 'close_gripper':
+        return { type: 'close_gripper_block' }
       case 'wait':
         return {
           type: 'wait_block',
@@ -457,6 +463,10 @@ export const blocklyToAbstract = (
           type: 'gripper',
           state: block.fields?.GRIPPER_STATE ?? 'CLOSE',
         }
+      case 'open_gripper_block':
+        return { type: 'open_gripper' }
+      case 'close_gripper_block':
+        return { type: 'close_gripper' }
       case 'wait_block':
         return {
           type: 'wait',

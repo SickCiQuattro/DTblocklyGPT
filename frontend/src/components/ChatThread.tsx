@@ -30,11 +30,14 @@ import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
+import { buildBlockCatalog } from 'features/blockly/toolbox'
+import { AbstractStep } from 'pages/tasks/types'
 
 import { UserBubble } from './UserBubble'
 import { AssistantBubble } from './AssistantBubble'
 import { ChatComposer } from './ChatComposer'
 import { TaskPreviewCard } from './TaskPreviewCard'
+import { EvaluationCard } from './EvaluationCard'
 
 export type BlockGeneratedPayload = {
   blockType: string
@@ -103,6 +106,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const [chatLog, setChatLog] = useState<any[]>([])
   const [message, setMessage] = useState('')
   const [speaker, setSpeaker] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
 
   const {
@@ -192,26 +196,27 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           dataObjects,
           dataLocations,
           dataActions,
+          dataBlocks: buildBlockCatalog(),
           taskStructure: taskStructure,
         },
       })
 
       if (res) {
-        if (speaker) {
+        if (speaker && res.response.answer) {
+          window.speechSynthesis.cancel() // drop any queued/ongoing speech
           const utterance = new SpeechSynthesisUtterance(res.response.answer)
-          utterance.lang = 'en-GB'
+          // Speak in the language the AI replied in (it/en/…), not a fixed one.
+          utterance.lang = res.response.lang || navigator.language || 'en-US'
+          utterance.onend = () => setSpeaking(false)
+          utterance.onerror = () => setSpeaking(false)
+          setSpeaking(true)
           window.speechSynthesis.speak(utterance)
         }
 
-        let answerText = res.response.answer || CHATGPT_ERROR
-        if (
-          res.response.validationWarnings &&
-          res.response.validationWarnings.length > 0
-        ) {
-          answerText +=
-            '\n\n⚠️ Errori di validazione:\n' +
-            res.response.validationWarnings.join('\n')
-        }
+        const answerText = res.response.answer || CHATGPT_ERROR
+        const intent = res.intent ?? res.response.intent
+        // Suggestions + warnings render as typed chips below the text.
+        const parts = (res.messageParts ?? []).filter((p) => p.type !== 'text')
 
         const newRobotMessage: MessageType = {
           text: answerText,
@@ -220,6 +225,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           user: UserChatEnum.ROBOT,
           timestamp: dayjs().toISOString(),
           type: MessageTypeEnum.TEXT,
+          parts,
+          intent,
         }
 
         setListMessages([...messagesWithUserRequest, newRobotMessage])
@@ -273,12 +280,25 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       )
     } else {
       return (
-        <AssistantBubble
-          key={msg.id}
-          text={msg.text}
-          timestamp={msg.timestamp}
-          avatarUrl="/pages/robot.png"
-        />
+        <React.Fragment key={msg.id}>
+          <AssistantBubble
+            text={msg.text}
+            timestamp={msg.timestamp}
+            avatarUrl="/pages/robot.png"
+            parts={msg.parts}
+          />
+          {msg.intent === 'evaluate' && (
+            <EvaluationCard
+              task={{
+                taskName: '',
+                steps: taskStructure as AbstractStep[],
+                objects: dataObjects,
+                locations: dataLocations,
+                actions: dataActions,
+              }}
+            />
+          )}
+        </React.Fragment>
       )
     }
   }
@@ -650,6 +670,11 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         onMessageSend={onMessageSend}
         speaker={speaker}
         setSpeaker={setSpeaker}
+        speaking={speaking}
+        onStopSpeaking={() => {
+          window.speechSynthesis.cancel()
+          setSpeaking(false)
+        }}
       />
     </Box>
   )
