@@ -11,12 +11,15 @@
  *  - `PREVIEW_WORKSPACE_CONFIG`     — minimal workspace for tooltip block previews.
  */
 import * as Blockly from 'blockly/core'
-import ModernTheme from '@blockly/theme-modern'
 import './customRender'
 
+// ponytail: was base: @blockly/theme-modern. ModernTheme = Classic + block/
+// category styles we never reference (every block sets an explicit `colour:`,
+// the toolbox is custom React). Classic base renders identically and drops the
+// last blockly@^12-pinned plugin dependency.
 const DTheme = Blockly.Theme.defineTheme('DTheme', {
   name: 'DTheme',
-  base: ModernTheme,
+  base: Blockly.Themes.Classic,
   componentStyles: {
     workspaceBackgroundColour: '#F5F5F5',
     scrollbarColour: '#D9D9D9',

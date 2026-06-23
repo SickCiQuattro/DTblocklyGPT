@@ -12,7 +12,6 @@
     "pretty": "prettier --write \"frontend/src/**/*.{ts,tsx}\""
   },
   "dependencies": {
-    "@blockly/theme-modern": "^7.0.4",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@fontsource/geist": "^5.2.9",

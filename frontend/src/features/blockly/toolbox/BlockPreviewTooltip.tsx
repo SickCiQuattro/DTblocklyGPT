@@ -121,10 +121,18 @@ const getPreviewCategoryBadgeMeta = (
     case 'place_block':
     case 'move_to_block':
     case 'gripper_block':
+    case 'open_gripper_block':
+    case 'close_gripper_block':
+    case 'wait_block':
       return { label: 'Robot Actions', Icon: Bot }
     case 'find_object_block':
     case 'gesture_block':
     case 'timer_block':
+    // AND/OR/NOT live in the Conditions category — badge them identically so the
+    // preview card matches the toolbox (they combine conditions, for our users).
+    case 'logic_and_block':
+    case 'logic_or_block':
+    case 'logic_not_block':
       return { label: 'Conditions', Icon: ScanEye }
     case 'macro_task_block':
       return { label: 'Saved Tasks', Icon: Workflow }

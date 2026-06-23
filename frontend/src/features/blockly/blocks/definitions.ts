@@ -29,7 +29,7 @@ import {
   SCAN_EYE_ICON_URI,
   TAG_ICON_URI,
   BOX_ICON_URI,
-  WRENCH_ICON_URI,
+  ZAP_ICON_URI,
   WORKFLOW_ICON_URI,
   USER_ICON_URI,
   iconConfig,
@@ -83,7 +83,7 @@ Blockly.defineBlocksWithJsonArray([
     args0: [
       // MAPPING REFERENCE:
       // - Block type: 'action_block' ➔ Displays user-facing prefix 'ROUTINE:' (replaces PROCEDURE)
-      iconConfig(WRENCH_ICON_URI, 'ROUTINE:'),
+      iconConfig(ZAP_ICON_URI, 'ROUTINE:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'action_block',

@@ -28,11 +28,22 @@ const MOD =
     ? 'Cmd'
     : 'Ctrl'
 
+// Blockly v13 built-in keyboard-navigation defaults. Single-letter shortcuts
+// (M, W, T, D, X) only fire while the workspace has focus and you are not typing
+// in a field. MOD resolves to Cmd on macOS, Ctrl elsewhere (Blockly's CTRL_CMD).
 const SHORTCUTS: { keys: string; action: string }[] = [
-  { keys: 'Tab / Shift+Tab', action: 'Move focus into / out of the workspace' },
-  { keys: 'Arrow keys', action: 'Move between blocks, connections and fields' },
-  { keys: 'Enter / Space', action: 'Select, edit a field, or confirm' },
-  { keys: 'Esc', action: 'Cancel, exit move mode, or close a menu' },
+  { keys: 'Tab', action: 'Move focus into the blocks workspace' },
+  { keys: 'Arrow keys', action: 'Move between blocks, fields and connections' },
+  { keys: 'Enter / Space', action: 'Edit a field, press a button, or confirm' },
+  { keys: 'M', action: 'Pick up the selected block to move it' },
+  {
+    keys: 'Arrows, then Enter',
+    action: 'While moving: position the block, then drop it (Esc cancels)',
+  },
+  { keys: 'W / T', action: 'Jump focus to the Workspace / Toolbox' },
+  { keys: `${MOD}+Enter`, action: 'Open the block’s menu (also Shift+F10)' },
+  { keys: 'D', action: 'Duplicate the selected block' },
+  { keys: 'X', action: 'Disconnect the selected block' },
   { keys: 'Delete / Backspace', action: 'Delete the selected block' },
   { keys: `${MOD}+C / ${MOD}+X / ${MOD}+V`, action: 'Copy / cut / paste' },
   { keys: `${MOD}+Z / ${MOD}+Shift+Z`, action: 'Undo / redo' },
@@ -52,6 +63,10 @@ export const KeyboardHelpDialog = ({
       </IconButton>
     </DialogTitle>
     <DialogContent>
+      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1.5 }}>
+        Press Tab (or W) to focus the workspace first. Letter shortcuts work when
+        a block is selected and you are not typing in a field.
+      </Typography>
       <Stack spacing={1}>
         {SHORTCUTS.map(({ keys, action }) => (
           <Stack

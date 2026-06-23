@@ -109,7 +109,7 @@ export const startSyntheticBlockDrag = (
       const MAX_CHECKS = 10
 
       const waitForStableStack = () => {
-        const stack = (workspace as any).undoStack_ as Blockly.Events.Abstract[]
+        const stack = workspace.getUndoStack()
         if (!stack) return
 
         const currentLength = stack.length

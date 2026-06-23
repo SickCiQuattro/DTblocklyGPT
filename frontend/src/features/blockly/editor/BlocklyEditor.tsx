@@ -373,20 +373,6 @@ function syncOrphanState(workspace: Blockly.WorkspaceSvg): void {
   }
 }
 
-// ─── REDO STACK COMPAT ────────────────────────────────────────────────────────
-
-/**
- * Retrieve the redo stack from a workspace, working around API differences
- * between Blockly versions (public getRedoStack vs private redoStack_).
- */
-const getRedoStack = (
-  workspace: Blockly.WorkspaceSvg,
-): Blockly.Events.Abstract[] =>
-  workspace.getRedoStack?.() ??
-  ((workspace as any).redoStack_ as Blockly.Events.Abstract[] | undefined) ??
-  ((workspace as any).redoStack as Blockly.Events.Abstract[] | undefined) ??
-  []
-
 // ─── PROPS ────────────────────────────────────────────────────────────────────
 
 /** Props for the shared Blockly editor container. */
@@ -538,7 +524,7 @@ export const BlocklyEditor = ({
       }
       setHistoryState({
         canUndo: workspace.getUndoStack().length > 0,
-        canRedo: getRedoStack(workspace).length > 0,
+        canRedo: workspace.getRedoStack().length > 0,
       })
     },
     [],
@@ -995,9 +981,11 @@ export const BlocklyEditor = ({
           lastDragEndTimeRef.current > 0 &&
           Date.now() - lastDragEndTimeRef.current < 300
         ) {
-          const undoStack = (workspace as any).undoStack_ as any[] | undefined
-          if (undoStack && undoStack.length > 0) {
-            const top = undoStack[undoStack.length - 1]
+          const undoStack = workspace.getUndoStack()
+          if (undoStack.length > 0) {
+            const top = undoStack[undoStack.length - 1] as Blockly.Events.Abstract & {
+              group: string
+            }
             if (!top.group) top.group = lastDragGroupRef.current
           }
         }
@@ -1181,19 +1169,19 @@ export const BlocklyEditor = ({
   const handleRedo = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
-    const redoStack = getRedoStack(workspace)
+    const redoStack = workspace.getRedoStack()
     if (redoStack.length === 0) return
 
     const redoGroup = (group: string | undefined) => {
       workspace.undo(true)
       if (group) {
-        let remaining = getRedoStack(workspace)
+        let remaining = workspace.getRedoStack()
         while (
           remaining.length > 0 &&
           remaining[remaining.length - 1].group === group
         ) {
           workspace.undo(true)
-          remaining = getRedoStack(workspace)
+          remaining = workspace.getRedoStack()
         }
       }
     }
@@ -1201,13 +1189,13 @@ export const BlocklyEditor = ({
     const topGroup = redoStack[redoStack.length - 1].group
     redoGroup(topGroup)
 
-    let afterStack = getRedoStack(workspace)
+    let afterStack = workspace.getRedoStack()
     while (
       afterStack.length > 0 &&
       afterStack[afterStack.length - 1].group === 'ghost-restore'
     ) {
       redoGroup('ghost-restore')
-      afterStack = getRedoStack(workspace)
+      afterStack = workspace.getRedoStack()
     }
 
     syncHistoryState(workspace)
