@@ -50,7 +50,12 @@ class PollingSocketNode(Node):
             data = json.loads(msg.data)
         except json.JSONDecodeError:
             data = msg.data
-        socketio.emit('human_step', data)
+        # Route block-execution events to their own channel so the human-step
+        # overlay (which keys off `status`) is not triggered by block highlights.
+        if isinstance(data, dict) and data.get("kind") == "block":
+            socketio.emit('block_step', data)
+        else:
+            socketio.emit('human_step', data)
 
 
 app = Flask(__name__)

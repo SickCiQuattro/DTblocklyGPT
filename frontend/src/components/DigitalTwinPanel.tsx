@@ -53,6 +53,11 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
+import * as Blockly from 'blockly/core'
+import {
+  highlightExecutingBlock,
+  clearExecutingHighlights,
+} from 'features/blockly/utils/blockHighlight'
 import { Theme as ThemeOption } from 'themes/theme'
 
 // Digital Twin is an intentionally-dark monitoring panel (design spec §3.6/§3.8).
@@ -82,11 +87,14 @@ const MJPEG_URL = '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 interface DigitalTwinPanelProps {
   taskId: string
   taskStatus?: TaskStatus
+  /** Live editor workspace, used to highlight the block currently executing. */
+  workspace?: Blockly.WorkspaceSvg | null
 }
 
 export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   taskId,
   taskStatus,
+  workspace,
 }) => {
   const dispatch = useDispatch()
   const simulation = useSelector((state: any) => state.simulation)
@@ -109,9 +117,32 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     gesture: rosGesture,
     objectDetection,
     humanStep,
+    blockStep,
     connected,
   } = useRosEvents()
   const webcam = useWebcamVision()
+
+  // ── Live block-execution highlight ──────────────────────────────────────────
+  // Per-step reaction: highlight the running block (+ its object/location),
+  // clearing the previous one. No-ops if the simulated workspace differs from
+  // the one on screen (getBlockById returns null).
+  useEffect(() => {
+    if (!workspace || !blockStep) return
+    if (blockStep.phase === 'start') {
+      clearExecutingHighlights(workspace)
+      highlightExecutingBlock(workspace, blockStep.blockId)
+    } else {
+      clearExecutingHighlights(workspace)
+    }
+  }, [blockStep, workspace])
+
+  // Safety-net cleanup when the run stops (the last block's `end` also clears).
+  // Kept separate so `isRunning` isn't a dependency of the per-step effect.
+  useEffect(() => {
+    if (!simulation.isRunning && workspace) {
+      clearExecutingHighlights(workspace)
+    }
+  }, [simulation.isRunning, workspace])
 
   // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
   const activeGesture =

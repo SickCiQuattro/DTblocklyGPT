@@ -50,7 +50,6 @@ export interface CustomBlock {
     | 'logic_and_block'
     | 'logic_or_block'
     | 'logic_not_block'
-    | 'wait_for_human_block' // kept for backwards compatibility
     | 'when_start'
     | 'macro_task_block'
   inputs?: {

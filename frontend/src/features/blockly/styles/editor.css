@@ -187,7 +187,7 @@
   stroke: rgba(1, 189, 86, 0.35) !important;
 }
 .custom-dashed-shadow-workspace text.blocklyText {
-  fill: rgba(1, 189, 86, 0.45) !important;
+  fill: rgba(1, 189, 86, 0.65) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -197,7 +197,7 @@
   stroke: rgba(225, 89, 48, 0.35) !important;
 }
 .custom-dashed-shadow-trigger text.blocklyText {
-  fill: rgba(225, 89, 48, 0.45) !important;
+  fill: rgba(225, 89, 48, 0.65) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -207,7 +207,7 @@
   stroke: rgba(128, 138, 157, 0.35) !important;
 }
 .custom-dashed-shadow-sequence text.blocklyText {
-  fill: rgba(128, 138, 157, 0.45) !important;
+  fill: rgba(128, 138, 157, 0.65) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -223,7 +223,7 @@
   stroke: rgba(15, 118, 110, 0.45) !important;
 }
 .custom-dashed-shadow-start text.blocklyText {
-  fill: rgba(15, 118, 110, 0.55) !important;
+  fill: rgba(15, 118, 110, 0.65) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -283,4 +283,30 @@
 .blockly-orphan > .blocklyLabelField text,
 .blockly-orphan > .blocklyImageField image {
   opacity: 0.8;
+}
+
+/* ==========================================================================
+   LIVE EXECUTION HIGHLIGHT
+   Applied to the block currently being run by the robot (block_step events)
+   and its connected object/location. Independent of the yellow selection.
+   ========================================================================== */
+.block--executing > .blocklyPath,
+.block--executing-entity > .blocklyPath {
+  stroke: #ec4899 !important;
+  stroke-width: 2.5px !important;
+  animation: blockExecuting 1.4s ease-in-out infinite;
+}
+
+@keyframes blockExecuting {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(236, 72, 153, 0)); }
+  50%      { filter: drop-shadow(0 0 7px rgba(236, 72, 153, 0.7)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block--executing > .blocklyPath,
+  .block--executing-entity > .blocklyPath {
+    animation: none;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.55));
+  }
 }

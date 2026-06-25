@@ -104,6 +104,13 @@ export const startSyntheticBlockDrag = (
 
       workspace.removeChangeListener(dragEndListener)
 
+      // Why this exists (do NOT "simplify" to setGroup-before-create):
+      // Blockly's Gesture wraps the drag in its OWN event group, so the
+      // BlockCreate we fired with `dragGroupId` won't match the gesture's move
+      // events. Once the stack settles we rewrite every event touching this
+      // block to `dragGroupId` so undo collapses create+move into ONE step, and
+      // prune redundant intermediate moves. getUndoStack() returns the live
+      // array in v13, so the splice below mutates the real undo stack.
       let lastStackLength = -1
       let checkCount = 0
       const MAX_CHECKS = 10

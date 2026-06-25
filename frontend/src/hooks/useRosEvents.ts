@@ -15,6 +15,13 @@ export interface HumanStepStatus {
   timestamp?: number
 }
 
+export interface BlockStepStatus {
+  blockId: string
+  blockType: string
+  phase: 'start' | 'end'
+  timestamp?: number
+}
+
 const SOCKET_URL = 'http://localhost:5001'
 
 export function useRosEvents() {
@@ -24,6 +31,7 @@ export function useRosEvents() {
     detections: [],
   })
   const [humanStep, setHumanStep] = useState<HumanStepStatus | null>(null)
+  const [blockStep, setBlockStep] = useState<BlockStepStatus | null>(null)
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
@@ -34,7 +42,10 @@ export function useRosEvents() {
     })
 
     socket.on('connect', () => setConnected(true))
-    socket.on('disconnect', () => setConnected(false))
+    socket.on('disconnect', () => {
+      setConnected(false)
+      setBlockStep(null)
+    })
 
     socket.on('gesture_detected', (data: string) => {
       setGesture(data)
@@ -55,10 +66,14 @@ export function useRosEvents() {
       setHumanStep(data)
     })
 
+    socket.on('block_step', (data: BlockStepStatus) => {
+      setBlockStep(data)
+    })
+
     return () => {
       socket.disconnect()
     }
   }, [])
 
-  return { gesture, objectDetection, humanStep, connected }
+  return { gesture, objectDetection, humanStep, blockStep, connected }
 }

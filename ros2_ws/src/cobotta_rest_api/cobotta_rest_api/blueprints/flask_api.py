@@ -338,6 +338,22 @@ def notifyAction():
     return jsonify({"status": "ok"})
 
 
+@bp.route("/block-step", methods=["POST"])
+def blockStep():
+    # Live highlighting of the executing Blockly block. Reuses the step-status
+    # topic; `kind: "block"` makes polling_socket route it to the block_step
+    # socket channel instead of the human-step overlay.
+    data = request.get_json(silent=True) or {}
+    flask_pub.publish_step_status({
+        "kind": "block",
+        "blockId": data.get("blockId", ""),
+        "blockType": data.get("blockType", ""),
+        "phase": data.get("phase", ""),
+        "timestamp": time.time(),
+    })
+    return jsonify({"status": "ok"})
+
+
 # ── Vision wait endpoints ─────────────────────────────────────────────────────
 
 @bp.route("/move-target", methods=["POST"])

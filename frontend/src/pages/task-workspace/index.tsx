@@ -525,7 +525,11 @@ export const UnifiedWorkspace = () => {
       </Box>
 
       {/* Digital Twin Panel slide-in (Step 8) */}
-      <DigitalTwinPanel taskId={id || ''} taskStatus={taskData?.status} />
+      <DigitalTwinPanel
+        taskId={id || ''}
+        taskStatus={taskData?.status}
+        workspace={workspace}
+      />
 
       {/* JSON Viewer Bottom Panel (Step 6) */}
       <BottomPanel data={taskStructure} open={codeOpen} />

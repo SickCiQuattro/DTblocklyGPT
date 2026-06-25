@@ -1697,6 +1697,30 @@ def _resolve_condition(condition_block: dict, simulate_event: bool) -> bool:
 # MAIN RECURSIVE PARSER
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Leaf action blocks whose execution is mirrored to the frontend as a live
+# "block_step" highlight (start before the handler, end after it). Containers
+# (repeat/when) are intentionally excluded — only the running action glows.
+HIGHLIGHTABLE_BLOCKS = {
+    StepsItems.PICK.value, StepsItems.PLACE.value, StepsItems.PROCESSING.value,
+    StepsItems.MOVE_TO.value, StepsItems.GRIPPER.value, StepsItems.OPEN_GRIPPER.value,
+    StepsItems.CLOSE_GRIPPER.value, StepsItems.WAIT.value,
+    StepsItems.HUMAN_ACTION.value, StepsItems.NOTIFY_ACTION.value,
+}
+
+
+def _notify_block_step(block_id, block_type, phase):
+    """Fire-and-forget block-execution highlight event (non-fatal)."""
+    try:
+        _bridge.notify("/api/block-step", {
+            "kind": "block",
+            "blockId": block_id,
+            "blockType": block_type,
+            "phase": phase,
+        })
+    except Exception:
+        pass
+
+
 def simulation_recursive_blockly_parser(
     code: dict,
     objectsOfUser: List[Object],
@@ -2096,7 +2120,13 @@ def simulation_recursive_blockly_parser(
 
         handler = BLOCK_HANDLERS.get(block_type)
         if handler is not None:
+            block_id = code.get("id")
+            emit_highlight = bool(block_id) and block_type in HIGHLIGHTABLE_BLOCKS
+            if emit_highlight:
+                _notify_block_step(block_id, block_type, "start")
             handler()
+            if emit_highlight:
+                _notify_block_step(block_id, block_type, "end")
         else:
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 

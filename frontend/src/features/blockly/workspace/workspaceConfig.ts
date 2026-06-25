@@ -24,7 +24,16 @@ const DTheme = Blockly.Theme.defineTheme('DTheme', {
     workspaceBackgroundColour: '#F5F5F5',
     scrollbarColour: '#D9D9D9',
     scrollbarOpacity: 0.8,
+
+selectedGlowColour: '#6366F1',
+    selectedGlowOpacity: 0.4,
+    insertionMarkerColour: '#6366F1',
+    insertionMarkerOpacity: 0.25,
+    cursorColour: '#6366F1',
+    markerColour: '#6366F1',
   },
+  // Match the app font instead of Blockly's default sans-serif.
+  fontStyle: { family: 'Geist, Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
 })
 
 /** Shared config for the editable Blockly workspace. */
@@ -38,7 +47,7 @@ export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 20,
     length: 2,
-    colour: '#D4D4D4',
+    colour: '#C4C4C4',
     snap: true,
   },
   sounds: false,
@@ -110,7 +119,7 @@ export const MODAL_VIEWER_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 18,
     length: 2,
-    colour: '#D4D4D4',
+    colour: '#C4C4C4',
     snap: false,
   },
   sounds: false,

@@ -179,7 +179,14 @@ const resolveMacroBlockState = (
   const source =
     typeof rawSource === 'string' ? parseJson<unknown>(rawSource) : rawSource
 
-  if (!source) return null
+  if (!source) {
+    // Empty/malformed code → nothing to expand. Surface it instead of silently
+    // expanding to an empty block (e.g. a macro referenced before it was published).
+    console.warn(
+      `[blockly] Cannot expand macro ${macroDetail.id ?? '?'}: no published content`,
+    )
+    return null
+  }
 
   // If the payload is abstract steps, convert them to Blockly format first.
   if (isAbstractStepArray(source)) {

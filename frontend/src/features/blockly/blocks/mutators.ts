@@ -32,6 +32,7 @@ const parseBlockData = (
     const parsed = JSON.parse(rawData) as unknown
     return typeof parsed === 'object' && parsed !== null ? parsed : null
   } catch {
+    console.warn('[blockly] Ignoring malformed block.data JSON:', rawData)
     return null
   }
 }
