@@ -64,9 +64,19 @@ export const MAP_PIN_ICON_URI = createLucideIconURI(
   '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
 )
 
-/** Zap (lightning) icon — used on action/routine blocks (matches the Routines badge). */
-export const ZAP_ICON_URI = createLucideIconURI(
-  '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+/** ListChecks icon — used on action/routine blocks (a saved list of steps). */
+export const LISTCHECKS_ICON_URI = createLucideIconURI(
+  '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+)
+
+/** Split icon — used on conditional (when / when-otherwise) blocks: a forking path. */
+export const SPLIT_ICON_URI = createLucideIconURI(
+  '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
+)
+
+/** Clock icon — used on the timer condition block ("X seconds have passed"). */
+export const CLOCK_ICON_URI = createLucideIconURI(
+  '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
 )
 
 /** Workflow icon — used on macro-task blocks. */

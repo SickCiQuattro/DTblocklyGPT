@@ -28,7 +28,11 @@ export const applyBlockViewMode = (
         for (const field of input.fieldRow) {
           if (field instanceof Blockly.FieldImage) {
             const isShadowPlaceholder = SHADOW_PLACEHOLDER_TYPES.has(block.type)
-            const visible = isShadowPlaceholder ? true : showBlockIcons
+            // Collapsed blocks show only the summary label — keep the icon
+            // hidden so it doesn't render on top of the collapsed text.
+            const visible = isShadowPlaceholder
+              ? true
+              : showBlockIcons && !block.isCollapsed()
             if (field.isVisible() !== visible) {
               field.setVisible(visible)
               changed = true

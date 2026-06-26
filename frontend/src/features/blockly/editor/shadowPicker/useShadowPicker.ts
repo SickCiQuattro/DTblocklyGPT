@@ -26,6 +26,8 @@ import { ObjectListType } from 'pages/objects/types'
 import { TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 
+import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
+
 import { toKeywordsCsvOrNull } from '../../utils/keywords'
 import { SHADOW_ICON_URIS } from '../../blocks/icons'
 
@@ -33,17 +35,34 @@ import {
   buildSequencePickerItems,
   buildShadowPickerItems,
   filterShadowItems,
-  getBlockInputState,
   resolveRealBlockTypeFromShadow,
   TRIGGER_PICKER_ITEMS,
 } from './catalog'
 import {
-  DIRECT_BLOCK_TYPES,
-  type SelectableShadowBlockType,
   type ShadowPickerItem,
   type ShadowPickerPosition,
   type ShadowPopoverType,
 } from './types'
+
+/**
+ * Build the `inputs` serialisation map that pre-fills a freshly-created block's
+ * own empty slots with ghost ("+") placeholders, so nested slots render
+ * immediately on selection. Mirrors the toolbox-drag / Ctrl+K path
+ * (`GHOST_INPUT_MAP`); `__next__` (next-statement ghost) is not an input slot.
+ */
+const buildGhostInputState = (blockType: string): Record<string, unknown> => {
+  const ghost = GHOST_INPUT_MAP[blockType]
+  if (!ghost) return {}
+  const inputs = Object.fromEntries(
+    Object.entries(ghost)
+      .filter(([key]) => key !== '__next__')
+      .map(([name, def]) => [
+        name,
+        { shadow: { type: def.type, fields: { name: def.label } } },
+      ]),
+  )
+  return Object.keys(inputs).length > 0 ? { inputs } : {}
+}
 
 // ─── SHADOW ICON HELPERS ──────────────────────────────────────────────────────
 
@@ -314,19 +333,16 @@ export const useShadowPicker = ({
               }
             : {
                 type: selectedBlockType,
-                ...(DIRECT_BLOCK_TYPES.has(selectedBlockType)
-                  ? getBlockInputState(selectedBlockType)
-                  : {}),
+                ...buildGhostInputState(selectedBlockType),
               }
 
         const newBlock = Blockly.serialization.blocks.append(
           baseState,
           workspace,
+          { recordUndo: true },
         ) as Blockly.BlockSvg
         newBlock.initSvg()
         newBlock.render()
-
-        Blockly.Events.fire(new Blockly.Events.BlockCreate(newBlock))
 
         if (isSequence) {
           if (newBlock.previousConnection)

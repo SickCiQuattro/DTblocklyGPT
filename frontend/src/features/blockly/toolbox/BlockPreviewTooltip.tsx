@@ -35,11 +35,13 @@ import {
   Pointer,
   Bot,
   Repeat2,
+  Split,
+  Clock,
+  ListChecks,
   SquareArrowRightEnter,
   SquareArrowRightExit,
   Box,
   User,
-  Zap,
   Workflow,
 } from 'lucide-react'
 
@@ -112,7 +114,7 @@ const getPreviewCategoryBadgeMeta = (
     case 'location_block':
       return { label: 'Locations', Icon: MapPin }
     case 'action_block':
-      return { label: 'Routines', Icon: Zap }
+      return { label: 'Routines', Icon: ListChecks }
     case 'human_action_block':
     case 'notify_action_block':
       return { label: 'Operator', Icon: User }
@@ -125,20 +127,24 @@ const getPreviewCategoryBadgeMeta = (
     case 'close_gripper_block':
     case 'wait_block':
       return { label: 'Robot Actions', Icon: Bot }
+    case 'timer_block':
+      // Time-based condition: a clock, not the detection eye.
+      return { label: 'Conditions', Icon: Clock }
+    // find/gesture detection + logic AND/OR/NOT all live in the Conditions
+    // category — badge them identically so the preview matches the toolbox.
     case 'find_object_block':
     case 'gesture_block':
-    case 'timer_block':
-    // AND/OR/NOT live in the Conditions category — badge them identically so the
-    // preview card matches the toolbox (they combine conditions, for our users).
     case 'logic_and_block':
     case 'logic_or_block':
     case 'logic_not_block':
       return { label: 'Conditions', Icon: ScanEye }
     case 'macro_task_block':
       return { label: 'Saved Tasks', Icon: Workflow }
-    case 'repeat_block':
     case 'when_block':
     case 'when_otherwise_block':
+      // Conditionals branch on a condition — a fork, not a loop.
+      return { label: 'Task Flow', Icon: Split }
+    case 'repeat_block':
     case 'repeat_until_block':
       return { label: 'Task Flow', Icon: Repeat2 }
     default:
@@ -158,7 +164,11 @@ const getPreviewCategoryBadgeMeta = (
     }
   if (hint.includes('condition') || hint.includes('events'))
     return { label: fallbackCategoryName ?? 'Conditions', Icon: Eye }
-  if (hint.includes('workspace') || hint.includes('objects') || hint.includes('library'))
+  if (
+    hint.includes('workspace') ||
+    hint.includes('objects') ||
+    hint.includes('library')
+  )
     return { label: fallbackCategoryName ?? 'Library', Icon: Box }
   if (hint.includes('tasks') || hint.includes('macro'))
     return { label: fallbackCategoryName ?? 'Saved Tasks', Icon: Pointer }

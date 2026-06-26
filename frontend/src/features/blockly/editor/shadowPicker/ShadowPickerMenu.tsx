@@ -24,6 +24,8 @@ import {
 } from '@mui/material'
 import { Search } from 'lucide-react'
 
+import { MENU_PAPER_SX } from '../menuStyles'
+
 import {
   type ShadowPickerItem,
   type ShadowPickerPosition,
@@ -85,13 +87,10 @@ export const ShadowPickerMenu = ({
       paper: {
         elevation: 0,
         sx: {
+          ...MENU_PAPER_SX,
           mt: 1,
           minWidth: 280,
           maxWidth: 380,
-          borderRadius: '12px',
-          border: '1px solid rgba(226, 232, 240, 1)',
-          boxShadow:
-            '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',

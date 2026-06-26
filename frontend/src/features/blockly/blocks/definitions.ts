@@ -29,7 +29,9 @@ import {
   SCAN_EYE_ICON_URI,
   TAG_ICON_URI,
   BOX_ICON_URI,
-  ZAP_ICON_URI,
+  LISTCHECKS_ICON_URI,
+  SPLIT_ICON_URI,
+  CLOCK_ICON_URI,
   WORKFLOW_ICON_URI,
   USER_ICON_URI,
   iconConfig,
@@ -39,6 +41,7 @@ import {
   startPlusFieldConfig,
 } from './icons'
 import './mutators'
+import './collapseSummary'
 
 // Re-export palette and icons for consumers that import from this file directly.
 // Prefer importing from './palette' or './icons' in new code.
@@ -83,7 +86,7 @@ Blockly.defineBlocksWithJsonArray([
     args0: [
       // MAPPING REFERENCE:
       // - Block type: 'action_block' ➔ Displays user-facing prefix 'ROUTINE:' (replaces PROCEDURE)
-      iconConfig(ZAP_ICON_URI, 'ROUTINE:'),
+      iconConfig(LISTCHECKS_ICON_URI, 'ROUTINE:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'action_block',
@@ -101,7 +104,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'find_object_block',
     message0: '%1 Object detected %2',
     args0: [
-      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
+      iconConfig(SCAN_EYE_ICON_URI, 'Detect'),
       { type: 'input_value', name: 'OBJECT', check: 'object_block' },
     ],
     output: 'Boolean',
@@ -112,7 +115,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'gesture_block',
     message0: '%1 Gesture detected %2',
     args0: [
-      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
+      iconConfig(SCAN_EYE_ICON_URI, 'Detect'),
       {
         type: 'field_dropdown',
         name: 'GESTURE_TYPE',
@@ -137,7 +140,7 @@ Blockly.defineBlocksWithJsonArray([
     type: 'timer_block',
     message0: '%1 %2 seconds have passed',
     args0: [
-      iconConfig(SCAN_EYE_ICON_URI, 'SENSOR:'),
+      iconConfig(CLOCK_ICON_URI, 'Timer'),
       { type: 'field_number', name: 'SECONDS', value: 5, min: 1 },
     ],
     output: 'Boolean',
@@ -356,9 +359,10 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_block',
+    extensions: ['collapsed_summary'],
     message0: '%1 Repeat %2 times',
     args0: [
-      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
+      iconConfig(REPEAT2_ICON_URI, 'Repeat'),
       { type: 'field_number', name: 'times', value: 2, min: 1, max: 99 },
     ],
     message1: 'Do %1',
@@ -376,9 +380,10 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'repeat_until_block',
+    extensions: ['collapsed_summary'],
     message0: '%1 Repeat until %2',
     args0: [
-      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
+      iconConfig(REPEAT2_ICON_URI, 'Repeat'),
       {
         type: 'input_value',
         name: 'CONDITION',
@@ -400,9 +405,10 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_block',
+    extensions: ['collapsed_summary'],
     message0: '%1 When %2',
     args0: [
-      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
+      iconConfig(SPLIT_ICON_URI, 'When'),
       {
         type: 'input_value',
         name: 'WHEN',
@@ -424,9 +430,10 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'when_otherwise_block',
+    extensions: ['collapsed_summary'],
     message0: '%1 When %2',
     args0: [
-      iconConfig(REPEAT2_ICON_URI, 'TASK:'),
+      iconConfig(SPLIT_ICON_URI, 'When'),
       {
         type: 'input_value',
         name: 'WHEN',

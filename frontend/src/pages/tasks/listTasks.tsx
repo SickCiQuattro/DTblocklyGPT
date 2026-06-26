@@ -8,6 +8,7 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  Link,
   Paper,
   Stack,
   Table,
@@ -27,7 +28,6 @@ import {
 import {
   Eye,
   Play,
-  Pencil,
   Cpu,
   ShieldCheck,
   BrainCircuit,
@@ -35,6 +35,7 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
+  ListChecks,
   MoreVertical,
 } from 'lucide-react'
 
@@ -90,7 +91,6 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
 const TaskRowActions = ({
   row,
   canManage,
-  handleOpenWorkspace,
   handleOpenDetails,
   setRunTaskModalVisible,
   setRunningTask,
@@ -102,7 +102,6 @@ const TaskRowActions = ({
 }: {
   row: TaskType
   canManage: (owner: any) => boolean
-  handleOpenWorkspace: (id: number) => void
   handleOpenDetails: (id: number) => void
   setRunTaskModalVisible: (v: boolean) => void
   setRunningTask: (t: TaskType) => void
@@ -124,21 +123,6 @@ const TaskRowActions = ({
 
   return (
     <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-      <Tooltip title="Open workspace">
-        <span>
-          <IconButton
-            size="small"
-            color="primary"
-            disabled={!canManage(row.owner)}
-            onClick={() => handleOpenWorkspace(row.id)}
-            id={`btn-open-task-${row.id}`}
-            aria-label="open workspace"
-          >
-            <Pencil size={15} />
-          </IconButton>
-        </span>
-      </Tooltip>
-
       <Tooltip title="Run task">
         <IconButton
           size="small"
@@ -412,11 +396,23 @@ const ListTasks = () => {
                 </TableRow>
               ) : paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No tasks yet. Click New Task to build your first robot
-                      program visually.
-                    </Typography>
+                  <TableCell colSpan={6} sx={{ py: 7, border: 0 }}>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <ListChecks size={32} color="#9CA3AF" />
+                      <Typography variant="body2" color="text.secondary">
+                        No tasks yet. Create your first robot program visually.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                        id="btn-add-task-empty"
+                      >
+                        New Task
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -426,6 +422,8 @@ const ListTasks = () => {
                     hover
                     sx={{
                       cursor: 'pointer',
+                      '&:nth-of-type(even)': { backgroundColor: '#FAFAFA' },
+                      '&:hover': { backgroundColor: '#EEF2FF' },
                       '&:last-child td': { border: 0 },
                       '& td': { borderColor: 'divider' },
                     }}
@@ -435,16 +433,32 @@ const ListTasks = () => {
                   >
                     {/* Name */}
                     <TableCell>
-                      <Typography
-                        variant="body2"
+                      <Link
+                        component="button"
+                        type="button"
+                        underline="hover"
+                        disabled={!canManage(row.owner)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleOpenWorkspace(row.id)
+                        }}
+                        aria-label={`Open ${row.name} workspace`}
                         sx={{
+                          p: 0,
+                          textAlign: 'left',
                           fontWeight: 600,
+                          fontSize: '0.875rem',
                           fontFamily: "'Geist', 'Inter', sans-serif",
                           color: 'text.primary',
+                          cursor: canManage(row.owner) ? 'pointer' : 'default',
+                          '&:disabled': {
+                            color: 'text.primary',
+                            cursor: 'default',
+                          },
                         }}
                       >
                         {row.name}
-                      </Typography>
+                      </Link>
                       {row.description && (
                         <Typography
                           variant="caption"
@@ -499,7 +513,6 @@ const ListTasks = () => {
                       <TaskRowActions
                         row={row}
                         canManage={canManage}
-                        handleOpenWorkspace={handleOpenWorkspace}
                         handleOpenDetails={handleOpenDetails}
                         setRunTaskModalVisible={setRunTaskModalVisible}
                         setRunningTask={setRunningTask}

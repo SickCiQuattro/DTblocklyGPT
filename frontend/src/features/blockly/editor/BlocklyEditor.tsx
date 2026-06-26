@@ -41,6 +41,13 @@ import {
   Undo2,
   Settings,
   Keyboard,
+  FoldVertical,
+  UnfoldVertical,
+  Download,
+  Upload,
+  PanelLeftOpen,
+  MoreHorizontal,
+  Search,
 } from 'lucide-react'
 
 import {
@@ -63,6 +70,9 @@ import {
   type ViewSettings,
 } from '../utils/useViewSettings'
 import { applyBlockViewMode } from '../utils/viewModePresentation'
+import { setBodiesCollapsed } from '../utils/blockLayout'
+import { exportWorkspaceJson, importWorkspaceJson } from '../utils/workspaceIO'
+import { toast } from 'react-toastify'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
 // Side-effect import: registers all Blockly block types (when_start, repeat_block, etc.)
@@ -85,10 +95,14 @@ import {
   getMacroIdFromBlockData,
 } from './macroExplosion'
 import {
+  BlockSearchDialog,
   ConfirmDeleteDialog,
   InlineTaskDialog,
   KeyboardHelpDialog,
 } from './dialogs'
+import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
+import type { ShadowPickerItem } from './shadowPicker/types'
+import { MENU_PAPER_SX } from './menuStyles'
 import {
   ShadowPickerMenu,
   useShadowPicker,
@@ -373,6 +387,51 @@ function syncOrphanState(workspace: Blockly.WorkspaceSvg): void {
   }
 }
 
+// ─── SETTINGS POPOVER HELPERS ───────────────────────────────────────────────
+
+/** Compact label (+ optional caption) + Switch row used in the settings popover. */
+const SettingSwitch = ({
+  label,
+  caption,
+  checked,
+  onChange,
+}: {
+  label: string
+  caption?: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}) => (
+  <Stack
+    direction="row"
+    sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+  >
+    <Box>
+      <Typography variant="body2" sx={{ fontSize: 13, color: 'text.primary' }}>
+        {label}
+      </Typography>
+      {caption && (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', display: 'block', maxWidth: 200 }}
+        >
+          {caption}
+        </Typography>
+      )}
+    </Box>
+    <Switch
+      checked={checked}
+      onChange={(_e, value) => onChange(value)}
+      size="small"
+    />
+  </Stack>
+)
+
+/** OS-aware label for the block-search accelerator. */
+const ADD_BLOCK_SHORTCUT =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+    ? '⌘K'
+    : 'Ctrl+K'
+
 // ─── PROPS ────────────────────────────────────────────────────────────────────
 
 /** Props for the shared Blockly editor container. */
@@ -457,6 +516,14 @@ export const BlocklyEditor = ({
   useEffect(() => {
     showStartBlockRef.current = showStartBlock
   }, [showStartBlock])
+  const gridVisibleRef = useRef(viewSettings?.gridVisible ?? true)
+  useEffect(() => {
+    gridVisibleRef.current = viewSettings?.gridVisible ?? true
+  }, [viewSettings?.gridVisible])
+  const snapToGridRef = useRef(viewSettings?.snapToGrid ?? true)
+  useEffect(() => {
+    snapToGridRef.current = viewSettings?.snapToGrid ?? true
+  }, [viewSettings?.snapToGrid])
   const lastDragEndTimeRef = useRef<number>(0)
   const lastDragGroupRef = useRef<string>('')
   const taskLoadedRef = useRef(false)
@@ -473,6 +540,69 @@ export const BlocklyEditor = ({
   }
   const isSettingsOpen = Boolean(settingsAnchorEl)
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false)
+  const [blockSearchOpen, setBlockSearchOpen] = useState(false)
+  const [moreMenuAnchorEl, setMoreMenuAnchorEl] =
+    useState<HTMLButtonElement | null>(null)
+  const isMoreMenuOpen = Boolean(moreMenuAnchorEl)
+  const closeMoreMenu = () => setMoreMenuAnchorEl(null)
+
+  const handleCollapseAll = useCallback((collapsed: boolean) => {
+    const workspace = workspaceRef.current
+    if (workspace) setBodiesCollapsed(workspace, collapsed)
+  }, [])
+
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Toolbox show/hide changes the canvas width — resize Blockly after reflow.
+  useEffect(() => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+    const id = requestAnimationFrame(() => Blockly.svgResize(workspace))
+    return () => cancelAnimationFrame(id)
+  }, [viewSettings?.toolboxCollapsed])
+
+  const handleExportTask = useCallback(() => {
+    const workspace = workspaceRef.current
+    if (workspace) exportWorkspaceJson(workspace, 'task')
+  }, [])
+
+  const handleImportFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = '' // allow re-importing the same file
+      const workspace = workspaceRef.current
+      if (!file || !workspace) return
+
+      if (
+        workspace.getAllBlocks(false).some((b) => !b.isShadow()) &&
+        !window.confirm(
+          'Importing replaces the blocks currently in this task. Continue?',
+        )
+      ) {
+        return
+      }
+
+      try {
+        importWorkspaceJson(workspace, await file.text())
+        toast.success('Task imported')
+      } catch {
+        toast.error('Could not import: not a valid task file')
+      }
+    },
+    [],
+  )
+
+  // Ctrl/Cmd+K → block search palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        setBlockSearchOpen(true)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   // a11y: when the user opts into keyboard mode, force Blockly's keyboard-nav
   // visuals always-on. When off, Blockly auto-activates them on key use (v13).
@@ -546,6 +676,13 @@ export const BlocklyEditor = ({
   const syncWorkspacePresentation = useCallback(
     (workspace: Blockly.WorkspaceSvg) => {
       applyBlockViewMode(workspace, blockViewModeRef.current)
+      const grid = workspace.getGrid()
+      if (grid) {
+        grid.setLength(gridVisibleRef.current ? 2 : 0)
+        grid.setSnapToGrid(snapToGridRef.current)
+        grid.update(workspace.scale)
+        Blockly.svgResize(workspace) // refresh the grid pattern
+      }
       if (showStartBlockRef.current) {
         syncOrphanState(workspace)
       } else {
@@ -553,6 +690,54 @@ export const BlocklyEditor = ({
       }
     },
     [],
+  )
+
+  // Ctrl/Cmd+K block-search insertion: create the block (with default shadow
+  // placeholders, like the toolbox drag) and connect it to the chain end.
+  const handleInsertBlock = useCallback(
+    (item: ShadowPickerItem) => {
+      const workspace = workspaceRef.current
+      const blockType = item.blockType
+      if (!workspace || !blockType) return
+
+      const ghost = GHOST_INPUT_MAP[blockType]
+      const inputs = ghost
+        ? Object.fromEntries(
+            Object.entries(ghost)
+              .filter(([key]) => key !== '__next__')
+              .map(([name, def]) => [
+                name,
+                { shadow: { type: def.type, fields: { name: def.label } } },
+              ]),
+          )
+        : undefined
+
+      Blockly.Events.setGroup(true)
+      try {
+        const state: State = { type: blockType, ...(inputs ? { inputs } : {}) }
+        const newBlock = Blockly.serialization.blocks.append(state, workspace, {
+          recordUndo: true,
+        }) as Blockly.BlockSvg
+
+        // Connect after the last real block in the start chain (replaces any
+        // trailing "add a step" shadow); free placement if there is no start.
+        let tail: Blockly.Block | null = findStartBlock(workspace)
+        for (;;) {
+          const next = tail?.nextConnection?.targetBlock()
+          if (next && !next.isShadow()) tail = next
+          else break
+        }
+        if (tail?.nextConnection && newBlock.previousConnection) {
+          tail.nextConnection.connect(newBlock.previousConnection)
+        }
+      } finally {
+        Blockly.Events.setGroup(false)
+      }
+
+      syncWorkspacePresentation(workspace)
+      syncHistoryState(workspace)
+    },
+    [syncWorkspacePresentation, syncHistoryState],
   )
 
   const executeDeleteAll = useCallback(
@@ -815,6 +1000,17 @@ export const BlocklyEditor = ({
     syncWorkspacePresentation(workspace)
   }, [blockViewMode, syncWorkspacePresentation])
 
+  // Advanced view toggles (grid / snap) → re-apply presentation.
+  useEffect(() => {
+    const workspace = workspaceRef.current
+    if (!workspace || !taskLoadedRef.current) return
+    syncWorkspacePresentation(workspace)
+  }, [
+    viewSettings?.gridVisible,
+    viewSettings?.snapToGrid,
+    syncWorkspacePresentation,
+  ])
+
   useEffect(() => {
     const workspace = workspaceRef.current
     if (!workspace || !taskLoadedRef.current) return
@@ -983,7 +1179,9 @@ export const BlocklyEditor = ({
         ) {
           const undoStack = workspace.getUndoStack()
           if (undoStack.length > 0) {
-            const top = undoStack[undoStack.length - 1] as Blockly.Events.Abstract & {
+            const top = undoStack[
+              undoStack.length - 1
+            ] as Blockly.Events.Abstract & {
               group: string
             }
             if (!top.group) top.group = lastDragGroupRef.current
@@ -1118,88 +1316,40 @@ export const BlocklyEditor = ({
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
 
-  const handleUndo = useCallback(() => {
-    const workspace = workspaceRef.current
-    if (!workspace) return
-    let stack = workspace.getUndoStack()
-    if (stack.length === 0) return
+  // Undo or redo one user action. A single action can span several Blockly
+  // events that share a `group` id (e.g. create + connect), so we step the
+  // whole top group. Symmetric by construction — undo and redo run the same
+  // routine with `redo` flipped. Ghost placeholders never reach the history
+  // stacks (injected under Events.disable, restored via a recordUndo=false
+  // synthetic change), so there is no ghost-restore special-casing to do.
+  const stepHistory = useCallback(
+    (redo: boolean) => {
+      const workspace = workspaceRef.current
+      if (!workspace) return
+      const readStack = () =>
+        redo ? workspace.getRedoStack() : workspace.getUndoStack()
 
-    const undoGroup = (group: string | undefined) => {
-      workspace.undo(false)
+      let stack = readStack()
+      if (stack.length === 0) return
+
+      const group = stack[stack.length - 1].group
+      workspace.undo(redo)
+
       if (group) {
-        let remaining = workspace.getUndoStack()
-        while (
-          remaining.length > 0 &&
-          remaining[remaining.length - 1].group === group
-        ) {
-          workspace.undo(false)
-          remaining = workspace.getUndoStack()
+        stack = readStack()
+        while (stack.length > 0 && stack[stack.length - 1].group === group) {
+          workspace.undo(redo)
+          stack = readStack()
         }
       }
-    }
 
-    // 1. First, if the very top of the stack is 'ghost-restore', undo all of them silently.
-    while (
-      stack.length > 0 &&
-      stack[stack.length - 1].group === 'ghost-restore'
-    ) {
-      undoGroup('ghost-restore')
-      stack = workspace.getUndoStack()
-    }
+      syncHistoryState(workspace)
+    },
+    [syncHistoryState],
+  )
 
-    // 2. Now, the top of the stack is a real action. Undo it!
-    if (stack.length > 0) {
-      const topGroup = stack[stack.length - 1].group
-      undoGroup(topGroup)
-    }
-
-    // 3. Just in case there are any older ghost-restores right under it, clear those too.
-    let afterStack = workspace.getUndoStack()
-    while (
-      afterStack.length > 0 &&
-      afterStack[afterStack.length - 1].group === 'ghost-restore'
-    ) {
-      undoGroup('ghost-restore')
-      afterStack = workspace.getUndoStack()
-    }
-
-    syncHistoryState(workspace)
-  }, [syncHistoryState])
-
-  const handleRedo = useCallback(() => {
-    const workspace = workspaceRef.current
-    if (!workspace) return
-    const redoStack = workspace.getRedoStack()
-    if (redoStack.length === 0) return
-
-    const redoGroup = (group: string | undefined) => {
-      workspace.undo(true)
-      if (group) {
-        let remaining = workspace.getRedoStack()
-        while (
-          remaining.length > 0 &&
-          remaining[remaining.length - 1].group === group
-        ) {
-          workspace.undo(true)
-          remaining = workspace.getRedoStack()
-        }
-      }
-    }
-
-    const topGroup = redoStack[redoStack.length - 1].group
-    redoGroup(topGroup)
-
-    let afterStack = workspace.getRedoStack()
-    while (
-      afterStack.length > 0 &&
-      afterStack[afterStack.length - 1].group === 'ghost-restore'
-    ) {
-      redoGroup('ghost-restore')
-      afterStack = workspace.getRedoStack()
-    }
-
-    syncHistoryState(workspace)
-  }, [syncHistoryState])
+  const handleUndo = useCallback(() => stepHistory(false), [stepHistory])
+  const handleRedo = useCallback(() => stepHistory(true), [stepHistory])
 
   // ── Zoom controls ──────────────────────────────────────────────────────────
   const handleZoomIn = useCallback(
@@ -1323,18 +1473,25 @@ export const BlocklyEditor = ({
       <a href="#blocklyDiv" className="skip-to-workspace">
         Skip to blocks workspace
       </a>
-      <CustomToolbox
-        dataObjects={dataObjects}
-        dataLocations={dataLocations}
-        dataActions={dataActions}
-        dataMacros={availableMacros}
-        isDeleting={isDeleting}
-        deleteZoneState={toolboxDeleteZoneState}
-        blockViewMode={blockViewMode}
-        onRootRefChange={handleToolboxRootRefChange}
-        onBlockPointerDown={handleBlockPointerDown}
-        macroDetailsById={macroDetailsById}
-      />
+      {!viewSettings?.toolboxCollapsed && (
+        <CustomToolbox
+          dataObjects={dataObjects}
+          dataLocations={dataLocations}
+          dataActions={dataActions}
+          dataMacros={availableMacros}
+          isDeleting={isDeleting}
+          deleteZoneState={toolboxDeleteZoneState}
+          blockViewMode={blockViewMode}
+          onRootRefChange={handleToolboxRootRefChange}
+          onCollapse={
+            onViewSettingsChange
+              ? () => onViewSettingsChange({ toolboxCollapsed: true })
+              : undefined
+          }
+          onBlockPointerDown={handleBlockPointerDown}
+          macroDetailsById={macroDetailsById}
+        />
+      )}
       <div
         className="custom-dragdrop-workspace-wrapper"
         onContextMenu={(e) => e.preventDefault()}
@@ -1351,6 +1508,23 @@ export const BlocklyEditor = ({
 
         {/* Workspace controls overlay: undo/redo + zoom */}
         <div className="workspace-controls-overlay">
+          {/* "Show toolbox" lives here only while hidden; the "hide" button
+              lives inside the toolbox header. */}
+          {onViewSettingsChange && viewSettings?.toolboxCollapsed && (
+            <div className="workspace-controls-group workspace-controls-group--top-left">
+              <IconButton
+                className="workspace-control-button"
+                size="small"
+                onClick={() =>
+                  onViewSettingsChange({ toolboxCollapsed: false })
+                }
+                aria-label="Show blocks sidebar"
+                title="Show blocks sidebar"
+              >
+                <PanelLeftOpen size={18} />
+              </IconButton>
+            </div>
+          )}
           <div className="workspace-controls-group workspace-controls-group--top-right">
             <IconButton
               className="workspace-control-button"
@@ -1369,6 +1543,15 @@ export const BlocklyEditor = ({
               aria-label="Redo"
             >
               <Redo2 size={18} />
+            </IconButton>
+            <span className="workspace-controls-divider" aria-hidden="true" />
+            <IconButton
+              className="workspace-control-button"
+              size="small"
+              onClick={(e) => setMoreMenuAnchorEl(e.currentTarget)}
+              aria-label="More actions"
+            >
+              <MoreHorizontal size={18} />
             </IconButton>
             {onViewSettingsChange && viewSettings && (
               <IconButton
@@ -1437,13 +1620,10 @@ export const BlocklyEditor = ({
             paper: {
               elevation: 0,
               sx: {
+                ...MENU_PAPER_SX,
                 mt: 0.5,
                 p: 0.5,
                 minWidth: 220,
-                borderRadius: 2,
-                border: '1px solid rgba(148, 163, 184, 0.18)',
-                boxShadow:
-                  '0 10px 30px rgba(15, 23, 42, 0.08), 0 3px 8px rgba(15, 23, 42, 0.06)',
               },
             },
             list: { dense: true, sx: { p: 0 } },
@@ -1532,6 +1712,112 @@ export const BlocklyEditor = ({
           onClose={() => setKeyboardHelpOpen(false)}
         />
 
+        <BlockSearchDialog
+          open={blockSearchOpen}
+          onClose={() => setBlockSearchOpen(false)}
+          onInsert={handleInsertBlock}
+          macros={availableMacros}
+        />
+
+        {/* Hidden file input for Import — triggered from the ⋯ More menu. */}
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={handleImportFile}
+        />
+
+        {/* ⋯ More: one-shot actions, kept separate from settings/preferences. */}
+        <Menu
+          anchorEl={moreMenuAnchorEl}
+          open={isMoreMenuOpen}
+          onClose={closeMoreMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{
+            paper: {
+              elevation: 0,
+              sx: { ...MENU_PAPER_SX, mt: 0.5, minWidth: 220 },
+            },
+          }}
+        >
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              setBlockSearchOpen(true)
+            }}
+          >
+            <ListItemIcon>
+              <Search size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Add block" />
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', ml: 3 }}
+            >
+              {ADD_BLOCK_SHORTCUT}
+            </Typography>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              handleCollapseAll(true)
+            }}
+          >
+            <ListItemIcon>
+              <FoldVertical size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Collapse all" />
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              handleCollapseAll(false)
+            }}
+          >
+            <ListItemIcon>
+              <UnfoldVertical size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Expand all" />
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              handleExportTask()
+            }}
+          >
+            <ListItemIcon>
+              <Download size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Export task" />
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              importFileInputRef.current?.click()
+            }}
+          >
+            <ListItemIcon>
+              <Upload size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Import task" />
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              closeMoreMenu()
+              setKeyboardHelpOpen(true)
+            }}
+          >
+            <ListItemIcon>
+              <Keyboard size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Keyboard shortcuts" />
+          </MenuItem>
+        </Menu>
+
         {/* Workspace settings popover */}
         {onViewSettingsChange && viewSettings && (
           <Popover
@@ -1548,14 +1834,12 @@ export const BlocklyEditor = ({
             }}
             slotProps={{
               paper: {
+                elevation: 0,
                 sx: {
+                  ...MENU_PAPER_SX,
                   p: 2.5,
                   mt: 1,
                   width: 320,
-                  borderRadius: 3,
-                  boxShadow:
-                    '0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02)',
-                  border: '1px solid rgba(148, 163, 184, 0.12)',
                 },
               },
             }}
@@ -1572,9 +1856,16 @@ export const BlocklyEditor = ({
                   variant="caption"
                   sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
                 >
-                  Adjust the visual editor and safety controls.
+                  Editor preferences.
                 </Typography>
               </Box>
+
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 700, fontSize: 13, color: 'text.primary' }}
+              >
+                Display
+              </Typography>
 
               <Box>
                 <Typography
@@ -1586,7 +1877,7 @@ export const BlocklyEditor = ({
                     color: 'text.primary',
                   }}
                 >
-                  Block Visualization
+                  Block detail
                 </Typography>
                 <ToggleButtonGroup
                   exclusive
@@ -1612,6 +1903,40 @@ export const BlocklyEditor = ({
                 </ToggleButtonGroup>
               </Box>
 
+              <SettingSwitch
+                label="Show grid"
+                checked={viewSettings.gridVisible}
+                onChange={(value) =>
+                  onViewSettingsChange({ gridVisible: value })
+                }
+              />
+
+              <SettingSwitch
+                label="Snap to grid"
+                checked={viewSettings.snapToGrid}
+                onChange={(value) =>
+                  onViewSettingsChange({ snapToGrid: value })
+                }
+              />
+
+              <SettingSwitch
+                label="Show start block"
+                caption="Hiding the start block disables orphan highlighting."
+                checked={viewSettings.showStartBlock}
+                onChange={(value) =>
+                  onViewSettingsChange({ showStartBlock: value })
+                }
+              />
+
+              <Divider />
+
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 700, fontSize: 13, color: 'text.primary' }}
+              >
+                Behavior & Accessibility
+              </Typography>
+
               <Box>
                 <Typography
                   variant="subtitle2"
@@ -1622,7 +1947,7 @@ export const BlocklyEditor = ({
                     color: 'text.primary',
                   }}
                 >
-                  Delete Confirmations
+                  Delete confirmations
                 </Typography>
                 <ToggleButtonGroup
                   exclusive
@@ -1645,90 +1970,14 @@ export const BlocklyEditor = ({
                 </ToggleButtonGroup>
               </Box>
 
-              <Box>
-                <Stack
-                  direction="row"
-                  sx={{ alignItems: 'center', justifyContent: 'space-between' }}
-                >
-                  <Box>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{
-                        fontWeight: 650,
-                        fontSize: 13,
-                        color: 'text.primary',
-                      }}
-                    >
-                      Show Start Block
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: 'text.secondary',
-                        display: 'block',
-                        maxWidth: 200,
-                      }}
-                    >
-                      Hiding start block disables orphan highlighting.
-                    </Typography>
-                  </Box>
-                  <Switch
-                    checked={viewSettings.showStartBlock}
-                    onChange={(_e, checked) =>
-                      onViewSettingsChange({ showStartBlock: checked })
-                    }
-                    size="small"
-                  />
-                </Stack>
-              </Box>
-
-              <Box>
-                <Stack
-                  direction="row"
-                  sx={{ alignItems: 'center', justifyContent: 'space-between' }}
-                >
-                  <Box>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ fontWeight: 650, fontSize: 13, color: 'text.primary' }}
-                    >
-                      Keyboard mode
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: 'text.secondary',
-                        display: 'block',
-                        maxWidth: 200,
-                      }}
-                    >
-                      Always show the keyboard cursor (for keyboard / screen-reader
-                      use).
-                    </Typography>
-                  </Box>
-                  <Switch
-                    checked={viewSettings.keyboardMode}
-                    onChange={(_e, checked) =>
-                      onViewSettingsChange({ keyboardMode: checked })
-                    }
-                    size="small"
-                  />
-                </Stack>
-              </Box>
-
-              <Button
-                variant="text"
-                size="small"
-                startIcon={<Keyboard size={16} />}
-                onClick={() => {
-                  handleCloseSettings()
-                  setKeyboardHelpOpen(true)
-                }}
-                fullWidth
-                sx={{ borderRadius: 2, fontSize: 12, justifyContent: 'flex-start' }}
-              >
-                Keyboard shortcuts
-              </Button>
+              <SettingSwitch
+                label="Keyboard mode"
+                caption="Always show the keyboard cursor (for keyboard / screen-reader use)."
+                checked={viewSettings.keyboardMode}
+                onChange={(value) =>
+                  onViewSettingsChange({ keyboardMode: value })
+                }
+              />
 
               {onResetViewSettings && (
                 <Button

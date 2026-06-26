@@ -1,4 +1,4 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Divider, Typography } from '@mui/material'
 
 // Single source for the group-header height. The open-mode label and the
 // collapsed-mode spacer BOTH use it, so a group's first item lands at the same Y
@@ -12,8 +12,22 @@ interface NavGroupHeaderProps {
 
 export const NavGroupHeader = ({ title, drawerOpen }: NavGroupHeaderProps) => {
   if (!drawerOpen || !title) {
-    // Reserve the exact same height when collapsed (or unlabeled groups).
-    return <Box aria-hidden sx={{ height: NAV_GROUP_HEADER_HEIGHT }} />
+    // Reserve the exact same height when collapsed (or unlabeled groups), and
+    // draw a short hairline so adjacent groups read as separate regions at the
+    // icon-only width (Gestalt: common region).
+    return (
+      <Box
+        aria-hidden
+        sx={{
+          height: NAV_GROUP_HEADER_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Divider sx={{ width: 24, borderColor: 'rgba(0, 0, 0, 0.08)' }} />
+      </Box>
+    )
   }
 
   return (

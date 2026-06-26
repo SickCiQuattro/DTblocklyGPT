@@ -4,10 +4,10 @@ import { MenuItem } from 'menu-items/types'
 
 // MAPPING REFERENCE:
 // - Internal variable/import name: define
-// - External user-facing group label: STUDIO
+// - External user-facing group label: BUILD
 export const define: MenuItem = {
   id: 'studio',
-  title: 'STUDIO',
+  title: 'BUILD',
   type: 'group',
   children: [
     {

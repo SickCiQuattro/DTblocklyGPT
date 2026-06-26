@@ -104,7 +104,40 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
 export const buildSequencePickerItems = (
   macros: TaskType[],
 ): ShadowPickerItem[] => {
+  // Order mirrors the toolbox: Task Flow → Robot Actions → Operator.
   const staticItems: ShadowPickerItem[] = [
+    {
+      id: -9,
+      name: 'Repeat times',
+      description: 'Repeat a sequence a fixed number of times',
+      keywords: ['repeat', 'loop', 'times', 'count'],
+      blockType: 'repeat_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -11,
+      name: 'Repeat until',
+      description: 'Repeat until a condition is met',
+      keywords: ['repeat', 'until', 'condition', 'while'],
+      blockType: 'repeat_until_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -12,
+      name: 'When',
+      description: 'Execute steps only when a condition is true',
+      keywords: ['when', 'if', 'condition'],
+      blockType: 'when_block',
+      group: 'Task Flow',
+    },
+    {
+      id: -13,
+      name: 'When / Otherwise',
+      description: 'Execute different steps based on a condition',
+      keywords: ['when', 'otherwise', 'if', 'else'],
+      blockType: 'when_otherwise_block',
+      group: 'Task Flow',
+    },
     {
       id: -1,
       name: 'Pick up',
@@ -171,38 +204,6 @@ export const buildSequencePickerItems = (
       keywords: ['notify', 'message', 'info', 'continue'],
       blockType: 'notify_action_block',
       group: 'Operator',
-    },
-    {
-      id: -9,
-      name: 'Repeat times',
-      description: 'Repeat a sequence a fixed number of times',
-      keywords: ['repeat', 'loop', 'times', 'count'],
-      blockType: 'repeat_block',
-      group: 'Task Flow',
-    },
-    {
-      id: -11,
-      name: 'Repeat until',
-      description: 'Repeat until a condition is met',
-      keywords: ['repeat', 'until', 'condition', 'while'],
-      blockType: 'repeat_until_block',
-      group: 'Task Flow',
-    },
-    {
-      id: -12,
-      name: 'When',
-      description: 'Execute steps only when a condition is true',
-      keywords: ['when', 'if', 'condition'],
-      blockType: 'when_block',
-      group: 'Task Flow',
-    },
-    {
-      id: -13,
-      name: 'When / Otherwise',
-      description: 'Execute different steps based on a condition',
-      keywords: ['when', 'otherwise', 'if', 'else'],
-      blockType: 'when_otherwise_block',
-      group: 'Task Flow',
     },
   ]
 

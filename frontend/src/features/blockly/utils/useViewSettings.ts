@@ -9,6 +9,13 @@ export interface ViewSettings {
   showStartBlock: boolean
   /** Force Blockly's keyboard-navigation visuals always-on (a11y preference). */
   keyboardMode: boolean
+  // ── Advanced (power-user) ──
+  /** Show the alignment grid lines. */
+  gridVisible: boolean
+  /** Snap blocks to the grid while dragging. */
+  snapToGrid: boolean
+  /** Hide the blocks sidebar (toolbox) — add blocks with Cmd/Ctrl+K instead. */
+  toolboxCollapsed: boolean
 }
 
 export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
@@ -16,6 +23,9 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   deleteConfirmMode: 'multiple',
   showStartBlock: true,
   keyboardMode: false,
+  gridVisible: true,
+  snapToGrid: true,
+  toolboxCollapsed: false,
 }
 
 const STORAGE_KEY = 'dtblockly.viewSettings'

@@ -3,13 +3,14 @@ import { Bot, Settings2, Users } from 'lucide-react'
 import { MenuItem } from 'menu-items/types'
 
 // MAPPING REFERENCE:
-// - Internal variable/import name: management ➔ External group label: OPERATIONS
+// - Internal variable/import name: managementManager ➔ External group label: MANAGE
+// - Internal variable/import name: managementOperator ➔ External group label: DEVICES
 // - Internal child ID: myrobots ➔ External item label: My Robot
 // - Internal child ID: users ➔ External item label: User Accounts
 // - Internal child ID: robots ➔ External item label: Robots Fleet
 export const managementManager: MenuItem = {
   id: 'operations',
-  title: 'OPERATIONS',
+  title: 'MANAGE',
   type: 'group',
   children: [
     {
@@ -38,7 +39,7 @@ export const managementManager: MenuItem = {
 
 export const managementOperator: MenuItem = {
   id: 'operations',
-  title: 'OPERATIONS',
+  title: 'DEVICES',
   type: 'group',
   children: [
     {

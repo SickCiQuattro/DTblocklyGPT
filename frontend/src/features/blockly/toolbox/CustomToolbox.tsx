@@ -3,6 +3,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  IconButton,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -11,9 +13,11 @@ import {
   Bot,
   User,
   Repeat2,
+  Waypoints,
   ScanEye,
   Workflow,
   Trash2,
+  PanelLeftClose,
 } from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
@@ -44,6 +48,8 @@ interface CustomToolboxProps {
   blockViewMode?: BlockViewMode
   macroDetailsById: Record<number, TaskDetailType>
   onRootRefChange?: (element: HTMLElement | null) => void
+  /** Hide the toolbox (the "show" button then lives on the workspace overlay). */
+  onCollapse?: () => void
   onBlockPointerDown: (
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
@@ -151,7 +157,8 @@ const getCategoryIcon = (key: string, colour: string) => {
 
   switch (key) {
     case 'logic-control':
-      return <Repeat2 color={colour} size={size} />
+      // Neutral "flow of steps" — the category holds both loops and conditionals.
+      return <Waypoints color={colour} size={size} />
     case 'robot-actions':
       return <Bot color={colour} size={size} />
     case 'human-actions':
@@ -370,6 +377,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   deleteZoneState = 'idle',
   blockViewMode = 'complete',
   onRootRefChange,
+  onCollapse,
   onBlockPointerDown,
   macroDetailsById,
 }) => {
@@ -441,6 +449,26 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
             {isDeleting ? 'Drop block to remove' : 'Drag blocks into workspace'}
           </span>
         </div>
+
+        {onCollapse && !isDeleting && (
+          <Tooltip title="Hide blocks sidebar">
+            <IconButton
+              size="small"
+              onClick={onCollapse}
+              aria-label="Hide blocks sidebar"
+              sx={{
+                flexShrink: 0,
+                width: 30,
+                height: 30,
+                borderRadius: '8px',
+                color: '#475569',
+                '&:hover': { backgroundColor: '#EEF2FF', color: '#6366F1' },
+              }}
+            >
+              <PanelLeftClose size={18} />
+            </IconButton>
+          </Tooltip>
+        )}
       </header>
 
       <div className="custom-toolbox__scroll">

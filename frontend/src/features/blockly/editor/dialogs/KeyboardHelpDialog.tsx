@@ -47,6 +47,7 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Delete / Backspace', action: 'Delete the selected block' },
   { keys: `${MOD}+C / ${MOD}+X / ${MOD}+V`, action: 'Copy / cut / paste' },
   { keys: `${MOD}+Z / ${MOD}+Shift+Z`, action: 'Undo / redo' },
+  { keys: `${MOD}+K`, action: 'Search and add a block' },
 ]
 
 export const KeyboardHelpDialog = ({
