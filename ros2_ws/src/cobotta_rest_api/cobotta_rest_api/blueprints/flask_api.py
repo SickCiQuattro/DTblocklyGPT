@@ -110,11 +110,12 @@ def moveCobotta():
         for k in range(7)
     ]
 
-    # joint_abs query param accepted for backwards compatibility but ignored —
-    # all positions are absolute; the legacy abs/delta frame_id flag is retired.
-    joint_state = createJointState(joint_delta)
-    flask_pub.publisher.publish(joint_state)
-    flask_pub.get_logger().info('Publishing: "%s"' % joint_state.position)
+    # Route the single absolute pose through the trajectory controllers, ~1 s.
+    wp = {f"j{i}": joint_delta[i - 1] for i in range(1, 7)}
+    wp["hand"] = joint_delta[6]
+    wp["dt"] = 1.0
+    flask_pub.execute_path([wp])
+    flask_pub.get_logger().info('move-joints → %s' % joint_delta)
     return jsonify({"status": "ok"})
 
 
