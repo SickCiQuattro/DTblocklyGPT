@@ -3,6 +3,8 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
+
+import { slate } from 'themes/theme'
 import {
   Box,
   Button,
@@ -205,7 +207,7 @@ const ListUsers = () => {
                           color={tokenColor.successMain}
                         />
                       ) : (
-                        <XCircle size={16} color="#94A3B8" />
+                        <XCircle size={16} color={slate[400]} />
                       )}
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>

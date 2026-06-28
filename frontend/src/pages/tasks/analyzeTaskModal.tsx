@@ -286,7 +286,7 @@ export const AnalyzeTaskModal = ({
                         borderColor: 'divider',
                         borderRadius: '8px',
                         p: 2,
-                        bgcolor: '#FAFAFA',
+                        bgcolor: 'grey.50',
                       }}
                     >
                       {analyzeResults.map((issue, idx) => (

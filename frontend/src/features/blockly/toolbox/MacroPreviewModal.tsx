@@ -9,7 +9,14 @@
  * that has a serialised `macroCode` payload.
  */
 
-import { Dialog, DialogTitle, IconButton, Typography } from '@mui/material'
+import {
+  alpha,
+  Dialog,
+  DialogTitle,
+  IconButton,
+  Typography,
+  useTheme,
+} from '@mui/material'
 import 'blockly/blocks'
 import { X } from 'lucide-react'
 
@@ -141,6 +148,7 @@ export const MacroPreviewModal = ({
   macroCode,
   blockViewMode = 'complete',
 }: MacroPreviewModalProps) => {
+  const theme = useTheme()
   const macroState = toMacroRootState(macroCode)
   const resolvedMacroDescription =
     typeof macroDescription === 'string' && macroDescription.trim().length > 0
@@ -159,7 +167,7 @@ export const MacroPreviewModal = ({
           sx: {
             overflow: 'hidden',
             borderRadius: 2,
-            border: '1px solid #E2E8F0',
+            border: `1px solid ${theme.palette.slate[200]}`,
             boxShadow:
               '0 20px 50px rgba(15, 23, 42, 0.2), 0 6px 16px rgba(15, 23, 42, 0.12)',
           },
@@ -171,9 +179,11 @@ export const MacroPreviewModal = ({
         sx={{
           px: 2,
           py: 1.5,
-          borderBottom: '1px solid #E2E8F0',
-          background:
-            'linear-gradient(180deg, #FFFFFF 0%, rgba(248, 250, 252, 0.92) 100%)',
+          borderBottom: `1px solid ${theme.palette.slate[200]}`,
+          background: `linear-gradient(180deg, ${theme.palette.background.paper} 0%, ${alpha(
+            theme.palette.slate[50],
+            0.92,
+          )} 100%)`,
         }}
       >
         <div
@@ -200,7 +210,7 @@ export const MacroPreviewModal = ({
                 fontSize: '1.08rem',
                 fontWeight: 800,
                 lineHeight: 1.2,
-                color: '#0F172A',
+                color: theme.palette.slate[900],
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -215,7 +225,7 @@ export const MacroPreviewModal = ({
                 fontSize: '0.78rem',
                 fontWeight: 500,
                 lineHeight: 1.4,
-                color: '#475569',
+                color: theme.palette.slate[600],
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
                 WebkitLineClamp: 2,
@@ -239,7 +249,7 @@ export const MacroPreviewModal = ({
         style={{
           width: '100%',
           height: '450px',
-          backgroundColor: '#F8FAFC',
+          backgroundColor: theme.palette.slate[50],
           padding: 0,
           overflow: 'hidden',
         }}

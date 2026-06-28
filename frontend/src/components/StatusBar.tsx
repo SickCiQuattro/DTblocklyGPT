@@ -18,7 +18,7 @@ export const StatusBar: React.FC = () => {
       sx={{
         height: '40px',
         minHeight: '40px',
-        bgcolor: '#F0F0F2',
+        bgcolor: 'grey.200',
         borderTop: '1px solid rgba(0, 0, 0, 0.08)',
         display: 'flex',
         alignItems: 'center',

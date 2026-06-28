@@ -15,6 +15,20 @@ declare module '@mui/material/styles' {
     lighter?: string
     darker?: string
   }
+  // Custom neutral key used by the design-system grey ramp (not in MUI's Color).
+  interface Color {
+    A50: string
+  }
+  // Custom palette members defined in themes/theme/index.ts:
+  // `accent` = terracotta destructive accent, `slate` = cool UI-chrome ramp.
+  interface Palette {
+    accent: PaletteColor
+    slate: Record<number, string>
+  }
+  interface PaletteOptions {
+    accent?: SimplePaletteColorOptions
+    slate?: Record<number, string>
+  }
 }
 
 // DTblocklyGPT Design System v1.0
@@ -98,7 +112,16 @@ export const Palette = (mode: PaletteMode) => {
           A200: paletteColor.grey[13],
           A400: paletteColor.grey[13],
           A700: paletteColor.grey[14],
-        } as any,
+        },
+        accent: {
+          lighter: paletteColor.accent.lighter,
+          light: paletteColor.accent.light,
+          main: paletteColor.accent.main,
+          dark: paletteColor.accent.dark,
+          darker: paletteColor.accent.darker,
+          contrastText: paletteColor.accent.contrastText,
+        },
+        slate: paletteColor.slate,
         text: {
           primary: '#1A1A2E', // Near-black with indigo tint
           secondary: '#5A6270', // Muted — WCAG AA (≈5.6:1 on #F5F5F7)

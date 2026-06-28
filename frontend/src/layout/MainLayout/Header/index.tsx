@@ -155,7 +155,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             fontWeight: 500,
             fontSize: '0.85rem',
             borderColor: chatOpen ? 'transparent' : 'rgba(99, 102, 241, 0.2)',
-            color: chatOpen ? '#FFFFFF' : 'primary.main',
+            color: chatOpen ? 'common.white' : 'primary.main',
             bgcolor: chatOpen ? 'primary.main' : 'transparent',
             boxShadow: 'none',
             '&:hover': {
@@ -213,7 +213,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             borderColor: workspaceReady
               ? 'transparent'
               : 'rgba(99, 102, 241, 0.2)',
-            color: workspaceReady ? '#FFFFFF' : 'primary.main',
+            color: workspaceReady ? 'common.white' : 'primary.main',
             bgcolor: workspaceReady ? 'success.main' : 'transparent',
             boxShadow: 'none',
             transition: 'all 0.2s ease-in-out',
@@ -225,7 +225,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
                 : 'rgba(99, 102, 241, 0.04)',
             },
             '&.Mui-disabled': {
-              color: workspaceReady ? '#FFFFFF' : 'primary.main',
+              color: workspaceReady ? 'common.white' : 'primary.main',
               bgcolor: workspaceReady ? 'success.main' : 'transparent',
               borderColor: workspaceReady
                 ? 'transparent'

@@ -98,7 +98,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         .premium-textarea:focus, .premium-textarea:hover {
           border-color: ${alpha(indigo, 0.4)} !important;
           box-shadow: 0 0 0 3px ${alpha(indigo, 0.1)} !important;
-          background: #ffffff !important;
+          background: ${theme.palette.background.paper} !important;
         }
         .premium-btn {
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;

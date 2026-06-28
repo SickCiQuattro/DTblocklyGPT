@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import { useTheme } from '@mui/material'
 import { CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react'
 
 import { analyzeAbstractTask, AnalyzerIssue } from 'utils/taskAnalyzer'
@@ -19,8 +20,11 @@ const formatStepPath = (path: (number | string)[]): string => {
 }
 
 const IssueRow: React.FC<{ issue: AnalyzerIssue }> = ({ issue }) => {
+  const theme = useTheme()
   const isError = issue.type === 'error'
-  const accent = isError ? '#B91C1C' : '#92400E'
+  const accent = isError
+    ? theme.palette.error.darker
+    : theme.palette.warning.darker
   return (
     <li
       style={{
@@ -29,7 +33,7 @@ const IssueRow: React.FC<{ issue: AnalyzerIssue }> = ({ issue }) => {
         alignItems: 'flex-start',
         listStyle: 'none',
         padding: '8px 0',
-        borderTop: '1px solid rgba(15, 23, 42, 0.06)',
+        borderTop: `1px solid ${theme.palette.divider}`,
       }}
     >
       {isError ? (
@@ -44,10 +48,16 @@ const IssueRow: React.FC<{ issue: AnalyzerIssue }> = ({ issue }) => {
         />
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.4 }}>
+        <span
+          style={{
+            fontSize: 13,
+            color: theme.palette.slate[900],
+            lineHeight: 1.4,
+          }}
+        >
           {issue.message}
         </span>
-        <span style={{ fontSize: 11, color: '#64748b' }}>
+        <span style={{ fontSize: 11, color: theme.palette.slate[500] }}>
           {formatStepPath(issue.stepPath)}
         </span>
       </div>
@@ -56,6 +66,7 @@ const IssueRow: React.FC<{ issue: AnalyzerIssue }> = ({ issue }) => {
 }
 
 export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
+  const theme = useTheme()
   const issues = useMemo(() => analyzeAbstractTask(task), [task])
   const errors = issues.filter((i) => i.type === 'error')
   const warnings = issues.filter((i) => i.type === 'warning')
@@ -67,10 +78,10 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
       ? `${warnings.length} ${warnings.length === 1 ? 'thing' : 'things'} to review`
       : 'Ready to run'
   const accent = errors.length
-    ? '#B91C1C'
+    ? theme.palette.error.darker
     : warnings.length
-      ? '#92400E'
-      : '#047857'
+      ? theme.palette.warning.darker
+      : theme.palette.success.darker
 
   return (
     <div
@@ -78,8 +89,8 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
         margin: '4px 0 8px 0',
         maxWidth: '85%',
         alignSelf: 'flex-start',
-        background: '#ffffff',
-        border: '1px solid rgba(15, 23, 42, 0.10)',
+        background: theme.palette.background.paper,
+        border: `1px solid ${theme.palette.divider}`,
         borderRadius: '14px',
         padding: '14px 16px',
         boxShadow: '0 2px 10px rgba(15, 23, 42, 0.05)',
@@ -99,7 +110,13 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
       </div>
 
       {ready ? (
-        <p style={{ margin: '8px 0 0', fontSize: 13, color: '#475569' }}>
+        <p
+          style={{
+            margin: '8px 0 0',
+            fontSize: 13,
+            color: theme.palette.slate[600],
+          }}
+        >
           No problems found — you can start the simulation.
         </p>
       ) : (
@@ -112,7 +129,7 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
-                  color: '#B91C1C',
+                  color: theme.palette.error.darker,
                 }}
               >
                 To fix
@@ -132,7 +149,7 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
-                  color: '#92400E',
+                  color: theme.palette.warning.darker,
                 }}
               >
                 To review

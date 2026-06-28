@@ -46,52 +46,60 @@ export const InlineTaskDialog = ({
     slotProps={{
       paper: {
         elevation: 0,
-        sx: {
+        sx: (theme) => ({
           borderRadius: '12px',
-          border: '1px solid #E2E8F0',
+          border: `1px solid ${theme.palette.slate[200]}`,
           boxShadow:
             '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
           p: 1.5,
           maxWidth: 400,
-        },
+        }),
       },
     }}
   >
     <DialogTitle
-      sx={{
+      sx={(theme) => ({
         fontWeight: 600,
         fontSize: '1.3rem',
-        color: '#0F172A',
+        color: theme.palette.slate[900],
         pb: 1,
-      }}
+      })}
     >
       Break into steps
     </DialogTitle>
     <DialogContent>
-      <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.5 }}>
+      <Typography
+        variant="body2"
+        sx={(theme) => ({ color: theme.palette.slate[600], lineHeight: 1.5 })}
+      >
         This will replace the{' '}
-        <strong style={{ color: '#0F172A' }}>{macroName}</strong> block with its
-        individual steps.
+        <Box
+          component="strong"
+          sx={(theme) => ({ color: theme.palette.slate[900] })}
+        >
+          {macroName}
+        </Box>{' '}
+        block with its individual steps.
       </Typography>
 
       {/* Amber caution notice — inlining can make undo difficult */}
       <Box
-        sx={{
+        sx={(theme) => ({
           mt: 1.5,
           p: 1,
-          backgroundColor: '#FFF7ED',
+          backgroundColor: theme.palette.accent.lighter,
           borderRadius: '6px',
-          border: '1px solid #FFEDD5',
-        }}
+          border: `1px solid ${theme.palette.accent.light}`,
+        })}
       >
         <Typography
           variant="body2"
-          sx={{
-            color: '#C2410C',
+          sx={(theme) => ({
+            color: theme.palette.accent.darker,
             lineHeight: 1.4,
             fontSize: '0.8rem',
             fontWeight: 500,
-          }}
+          })}
         >
           Note: You can undo this right away, but making changes to the expanded
           blocks will prevent you from easily reverting to the single block.
@@ -103,17 +111,17 @@ export const InlineTaskDialog = ({
         variant="text"
         disableElevation
         onClick={onCancel}
-        sx={{
+        sx={(theme) => ({
           textTransform: 'none',
-          color: '#64748B',
+          color: theme.palette.slate[500],
           fontWeight: 600,
           borderRadius: '8px',
           px: 2,
           '&:hover': {
-            backgroundColor: '#F1F5F9',
-            color: '#0F172A',
+            backgroundColor: theme.palette.slate[100],
+            color: theme.palette.slate[900],
           },
-        }}
+        })}
       >
         Cancel
       </Button>
@@ -123,17 +131,17 @@ export const InlineTaskDialog = ({
         disableFocusRipple
         autoFocus
         onClick={onConfirm}
-        sx={{
+        sx={(theme) => ({
           textTransform: 'none',
-          backgroundColor: '#E15930',
-          color: '#FFFFFF',
+          backgroundColor: theme.palette.accent.main,
+          color: theme.palette.accent.contrastText,
           fontWeight: 600,
           borderRadius: '8px',
           px: 2,
           '&:hover': {
-            backgroundColor: '#C84D28',
+            backgroundColor: theme.palette.accent.dark,
           },
-        }}
+        })}
       >
         Break into steps
       </Button>

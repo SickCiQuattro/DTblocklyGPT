@@ -574,7 +574,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
                 minWidth: 80,
                 borderRadius: '8px',
                 borderColor: 'rgba(0, 0, 0, 0.08)',
-                color: '#4b5563',
+                color: theme.palette.slate[600],
                 fontSize: '13px',
                 fontWeight: 500,
                 textTransform: 'none',

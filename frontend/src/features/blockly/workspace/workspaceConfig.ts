@@ -11,6 +11,9 @@
  *  - `PREVIEW_WORKSPACE_CONFIG`     — minimal workspace for tooltip block previews.
  */
 import * as Blockly from 'blockly/core'
+
+import { brand, canvasNeutral } from 'themes/theme'
+
 import './customRender'
 
 // ponytail: was base: @blockly/theme-modern. ModernTheme = Classic + block/
@@ -21,19 +24,21 @@ const DTheme = Blockly.Theme.defineTheme('DTheme', {
   name: 'DTheme',
   base: Blockly.Themes.Classic,
   componentStyles: {
-    workspaceBackgroundColour: '#F5F5F5',
-    scrollbarColour: '#D9D9D9',
+    workspaceBackgroundColour: canvasNeutral.bg,
+    scrollbarColour: canvasNeutral.scrollbar,
     scrollbarOpacity: 0.8,
 
-selectedGlowColour: '#6366F1',
+    selectedGlowColour: brand.primary,
     selectedGlowOpacity: 0.4,
-    insertionMarkerColour: '#6366F1',
+    insertionMarkerColour: brand.primary,
     insertionMarkerOpacity: 0.25,
-    cursorColour: '#6366F1',
-    markerColour: '#6366F1',
+    cursorColour: brand.primary,
+    markerColour: brand.primary,
   },
   // Match the app font instead of Blockly's default sans-serif.
-  fontStyle: { family: 'Geist, Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
+  fontStyle: {
+    family: 'Geist, Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+  },
 })
 
 /** Shared config for the editable Blockly workspace. */
@@ -47,7 +52,7 @@ export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 20,
     length: 2,
-    colour: '#C4C4C4',
+    colour: canvasNeutral.grid,
     snap: true,
   },
   sounds: false,
@@ -119,7 +124,7 @@ export const MODAL_VIEWER_CONFIG: Blockly.BlocklyOptions = {
   grid: {
     spacing: 18,
     length: 2,
-    colour: '#C4C4C4',
+    colour: canvasNeutral.grid,
     snap: false,
   },
   sounds: false,

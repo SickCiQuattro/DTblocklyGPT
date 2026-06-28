@@ -79,7 +79,7 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
       py: 1.5,
       whiteSpace: 'nowrap',
       fontFamily: "'Geist', 'Inter', sans-serif",
-      backgroundColor: '#FAFAFA',
+      backgroundColor: 'grey.50',
     }}
   >
     {children}
@@ -398,7 +398,7 @@ const ListTasks = () => {
                 <TableRow>
                   <TableCell colSpan={6} sx={{ py: 7, border: 0 }}>
                     <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
-                      <ListChecks size={32} color="#9CA3AF" />
+                      <ListChecks size={32} color={tokenPalette.slate[400]} />
                       <Typography variant="body2" color="text.secondary">
                         No tasks yet. Create your first robot program visually.
                       </Typography>
@@ -422,8 +422,8 @@ const ListTasks = () => {
                     hover
                     sx={{
                       cursor: 'pointer',
-                      '&:nth-of-type(even)': { backgroundColor: '#FAFAFA' },
-                      '&:hover': { backgroundColor: '#EEF2FF' },
+                      '&:nth-of-type(even)': { backgroundColor: 'grey.50' },
+                      '&:hover': { backgroundColor: 'primary.lighter' },
                       '&:last-child td': { border: 0 },
                       '& td': { borderColor: 'divider' },
                     }}
@@ -497,7 +497,7 @@ const ListTasks = () => {
                           color={tokenPalette.success.main}
                         />
                       ) : (
-                        <XCircle size={16} color="#9CA3AF" />
+                        <XCircle size={16} color={tokenPalette.slate[400]} />
                       )}
                     </TableCell>
 

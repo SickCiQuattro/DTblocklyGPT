@@ -1,4 +1,4 @@
-import { BareFetcher, Key, Middleware, SWRConfiguration, SWRHook } from 'swr'
+import { SWRConfiguration } from 'swr'
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { toast } from 'react-toastify'
 import Cookies from 'js-cookie'
@@ -26,7 +26,9 @@ axios.defaults.withXSRFToken = true
 axios.defaults.xsrfHeaderName = 'X-CSRFToken'
 axios.defaults.xsrfCookieName = 'csrftoken'
 axios.defaults.headers.common['Content-Type'] = 'application/json'
-axios.defaults.headers.common['X-CSRFToken'] = Cookies.get('csrftoken') || ''
+// CSRF token is injected per-request by axios (withXSRFToken + xsrfCookieName
+// above). Don't pin it on defaults here — that snapshots the cookie at module
+// load and goes stale after login.
 
 interface FetchApiParamsInterface<TBody extends object = object> {
   url: string
@@ -71,9 +73,6 @@ export const fetchApi = async <
         const err = new Error(error.response.data?.message || 'No connection')
         err.name = error.response.status.toString()
         switch (error.response.status) {
-          case 0:
-            toast.error(MessageText.noConnection)
-            break
           case 202:
             // Breaking changes
             return error.response.data.payload as TResponse
@@ -108,28 +107,15 @@ export const fetchApi = async <
     })
 }
 
-const disableCache: Middleware = (useSWRNext: SWRHook) => {
-  return <Data = unknown, Error = unknown>(
-    key: Key,
-    fetcher: BareFetcher<Data> | null,
-    config: SWRConfiguration<Data, Error, BareFetcher<Data>>,
-  ) => {
-    const swr = useSWRNext(key, fetcher, config)
-    const { data, isValidating } = swr
-    return { ...swr, data: isValidating ? undefined : data }
-  }
-}
-
 export const swrParams: SWRConfiguration = {
   fetcher: fetchApi,
   revalidateIfStale: true,
   revalidateOnFocus: false,
   revalidateOnReconnect: true,
   revalidateOnMount: true,
-  refreshWhenHidden: true,
-  refreshWhenOffline: true,
+  refreshWhenHidden: false,
+  refreshWhenOffline: false,
   shouldRetryOnError: false,
   focusThrottleInterval: 0,
   errorRetryCount: 0,
-  use: [disableCache],
 }

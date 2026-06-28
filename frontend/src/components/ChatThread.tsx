@@ -344,7 +344,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           ? 'none'
           : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
-        background: '#FFFFFF',
+        background: theme.palette.background.paper,
         borderLeft:
           chatPosition === 'right'
             ? '1px solid rgba(99, 102, 241, 0.12)'
@@ -452,7 +452,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           style={{
             fontWeight: 600,
             fontSize: '0.95rem',
-            color: '#1A1A2E',
+            color: theme.palette.text.primary,
             letterSpacing: '-0.01em',
           }}
         >
@@ -524,7 +524,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               right: 0,
               bottom: 0,
               zIndex: 90,
-              background: '#ffffff',
+              background: theme.palette.background.paper,
               transform: showProposalOverlay
                 ? 'translateY(0)'
                 : 'translateY(100%)',
@@ -625,7 +625,11 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               }}
             />
             <span
-              style={{ fontSize: '13px', fontWeight: 600, color: '#1A1A2E' }}
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: theme.palette.text.primary,
+              }}
             >
               New blocks proposed
             </span>
@@ -642,7 +646,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#94a3b8',
+                color: theme.palette.slate[400],
                 cursor: 'pointer',
                 padding: '4px',
                 display: 'flex',
@@ -654,7 +658,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               onMouseEnter={(e) =>
                 (e.currentTarget.style.color = theme.palette.error.main)
               }
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.color = theme.palette.slate[400])
+              }
             >
               <X size={14} />
             </button>

@@ -495,7 +495,7 @@ Blockly.defineBlocksWithJsonArray([
     message0: '%1 Start of Task',
     args0: [iconConfig(FLAG_ICON_URI, 'START:', 18, 18)],
     nextStatement: null,
-    colour: '#0F766E',
+    colour: blocksColours.start,
     tooltip: blockDescriptionsByType.when_start,
   },
 ])
@@ -596,7 +596,7 @@ const createShadowSequenceBlock = () => ({
   ],
   previousStatement: ['robot_sequence', 'logic_sequence'],
   nextStatement: ['robot_sequence', 'logic_sequence'],
-  colour: '#7A7A8A',
+  colour: blocksColours.placeholder,
   extensions: ['shadow_placeholder_extension'],
   tooltip: 'Drop a block here to add a step.',
 })

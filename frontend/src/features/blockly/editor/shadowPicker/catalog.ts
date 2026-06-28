@@ -15,6 +15,7 @@ import { TaskType } from 'pages/tasks/types'
 
 import { normalizeKeywords } from '../../utils/keywords'
 import { blocksColours } from '../../blocks/palette'
+import { slate } from 'themes/theme'
 
 import {
   DIRECT_BLOCK_TYPES,
@@ -385,7 +386,7 @@ export const getDotColour = (group: string): string => {
     case 'Saved Tasks':
       return blocksColours.macroTasks
     default:
-      return '#94A3B8'
+      return slate[400]
   }
 }
 

@@ -27,4 +27,6 @@ export const blocksColours = {
   macroTasks: '#3B97F4',
   /** Start block — entry-point of every task program */
   start: '#0F766E',
+  /** Empty shadow/placeholder slot ("drop a block here") */
+  placeholder: '#7A7A8A',
 } as const

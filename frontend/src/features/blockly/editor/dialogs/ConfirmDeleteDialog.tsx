@@ -14,6 +14,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Theme,
   Typography,
 } from '@mui/material'
 
@@ -28,31 +29,31 @@ interface ConfirmDeleteDialogProps {
   onCancel: () => void
 }
 
-/** Shared MUI `sx` style object for the delete confirm button. */
-const deleteButtonSx = {
+/** Shared MUI `sx` style for the delete confirm button (terracotta accent). */
+const deleteButtonSx = (theme: Theme) => ({
   textTransform: 'none',
-  backgroundColor: '#E15930',
-  color: '#FFFFFF',
+  backgroundColor: theme.palette.accent.main,
+  color: theme.palette.accent.contrastText,
   fontWeight: 600,
   borderRadius: '8px',
   px: 2,
   '&:hover': {
-    backgroundColor: '#C84D28',
+    backgroundColor: theme.palette.accent.dark,
   },
-} as const
+})
 
-/** Shared MUI `sx` style object for the cancel button. */
-const cancelButtonSx = {
+/** Shared MUI `sx` style for the cancel button. */
+const cancelButtonSx = (theme: Theme) => ({
   textTransform: 'none',
-  color: '#64748B',
+  color: theme.palette.slate[500],
   fontWeight: 600,
   borderRadius: '8px',
   px: 2,
   '&:hover': {
-    backgroundColor: '#F1F5F9',
-    color: '#0F172A',
+    backgroundColor: theme.palette.slate[100],
+    color: theme.palette.slate[900],
   },
-} as const
+})
 
 /**
  * Confirmation dialog that guards irreversible delete operations.
@@ -77,29 +78,32 @@ export const ConfirmDeleteDialog = ({
     slotProps={{
       paper: {
         elevation: 0,
-        sx: {
+        sx: (theme: Theme) => ({
           borderRadius: '12px',
-          border: '1px solid #E2E8F0',
+          border: `1px solid ${theme.palette.slate[200]}`,
           boxShadow:
             '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
           p: 1.5,
           maxWidth: 400,
-        },
+        }),
       },
     }}
   >
     <DialogTitle
-      sx={{
+      sx={(theme) => ({
         fontWeight: 600,
         fontSize: '1.3rem',
-        color: '#0F172A',
+        color: theme.palette.slate[900],
         pb: 1,
-      }}
+      })}
     >
       Confirm
     </DialogTitle>
     <DialogContent>
-      <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.5 }}>
+      <Typography
+        variant="body2"
+        sx={(theme) => ({ color: theme.palette.slate[600], lineHeight: 1.5 })}
+      >
         {message}
       </Typography>
     </DialogContent>

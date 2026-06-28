@@ -6,6 +6,7 @@ import {
   IconButton,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material'
 import {
   Blocks,
@@ -185,26 +186,29 @@ const BlockPill: React.FC<{
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ item, categoryName, categoryColour, blockViewMode, onPointerDown }) => (
-  <BlockPreviewTooltip
-    item={item}
-    categoryName={categoryName}
-    categoryColour={categoryColour}
-    blockViewMode={blockViewMode}
-  >
-    <div
-      className="toolbox-pill"
-      style={{
-        backgroundColor: '#FFFFFF',
-        borderLeft: `3px solid ${item.colour}`,
-      }}
-      onPointerDown={(e) => onPointerDown(e, item)}
-      aria-label={item.label}
+}> = ({ item, categoryName, categoryColour, blockViewMode, onPointerDown }) => {
+  const theme = useTheme()
+  return (
+    <BlockPreviewTooltip
+      item={item}
+      categoryName={categoryName}
+      categoryColour={categoryColour}
+      blockViewMode={blockViewMode}
     >
-      <span className="toolbox-pill__label">{item.label}</span>
-    </div>
-  </BlockPreviewTooltip>
-)
+      <div
+        className="toolbox-pill"
+        style={{
+          backgroundColor: theme.palette.background.paper,
+          borderLeft: `3px solid ${item.colour}`,
+        }}
+        onPointerDown={(e) => onPointerDown(e, item)}
+        aria-label={item.label}
+      >
+        <span className="toolbox-pill__label">{item.label}</span>
+      </div>
+    </BlockPreviewTooltip>
+  )
+}
 
 type CategoryTabKey = 'objects' | 'positions' | 'actions'
 
@@ -253,6 +257,7 @@ const CategoryPanel: React.FC<{
   onChange,
   onBlockPointerDown,
 }) => {
+  const theme = useTheme()
   const isObjectsPositionsCategory = category.key === 'objects-positions'
   const [activeTab, setActiveTab] = useState<CategoryTabKey>('objects')
 
@@ -341,7 +346,11 @@ const CategoryPanel: React.FC<{
         {visiblePills.length === 0 ? (
           <Typography
             variant="caption"
-            sx={{ color: '#94A3B8', fontStyle: 'italic', padding: '4px 0' }}
+            sx={{
+              color: theme.palette.slate[400],
+              fontStyle: 'italic',
+              padding: '4px 0',
+            }}
           >
             No blocks available
           </Typography>
@@ -381,6 +390,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   onBlockPointerDown,
   macroDetailsById,
 }) => {
+  const theme = useTheme()
   const [expandedKey, setExpandedKey] = useState<string | null>('logic-control')
 
   const handleAccordionChange = (key: string) => {
@@ -405,7 +415,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
               }
             : */ {
             transition: 'all 0.2s ease-in-out',
-            borderBottom: '1px solid #E2E8F0',
+            borderBottom: `1px solid ${theme.palette.slate[200]}`,
           }
         }
       >
@@ -413,7 +423,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
           <div className="custom-toolbox__header-title-row">
             <span
               className="custom-toolbox__header-label"
-              style={isDeleting ? { color: '#C84D28' } : {}}
+              style={isDeleting ? { color: theme.palette.accent.dark } : {}}
             >
               {isDeleting ? 'DELETE ZONE' : 'TOOLBOX'}
             </span>
@@ -444,7 +454,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
 
           <span
             className="custom-toolbox__header-subtitle"
-            style={isDeleting ? { color: '#C84D28', fontWeight: 600 } : {}}
+            style={
+              isDeleting
+                ? { color: theme.palette.accent.dark, fontWeight: 600 }
+                : {}
+            }
           >
             {isDeleting ? 'Drop block to remove' : 'Drag blocks into workspace'}
           </span>
@@ -461,8 +475,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                 width: 30,
                 height: 30,
                 borderRadius: '8px',
-                color: '#475569',
-                '&:hover': { backgroundColor: '#EEF2FF', color: '#6366F1' },
+                color: theme.palette.slate[600],
+                '&:hover': {
+                  backgroundColor: theme.palette.primary.lighter,
+                  color: theme.palette.primary.main,
+                },
               }}
             >
               <PanelLeftClose size={18} />

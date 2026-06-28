@@ -1,6 +1,52 @@
 // DTblocklyGPT Design System v1.0 — MUI Theme Tokens
 // Primary: Indigo #6366F1 | Font: Geist → Inter → General Sans
 // Light-mode default. Dark mode: border token rgba(99,102,241,0.20).
+//
+// Single source of truth for raw color values. React code reads colors via
+// `theme.palette.*` (derived from here in themes/palette.ts). Non-React Blockly
+// config (.ts files that can't use the useTheme hook) imports the named consts
+// below directly. Block *category* colors live separately in
+// features/blockly/blocks/palette.ts (blocksColours).
+
+/** Brand indigo, for Blockly config that can't reach the MUI theme. */
+export const brand = {
+  primary: '#6366F1',
+  primaryLighter: '#EEF2FF',
+} as const
+
+/**
+ * Cool slate ramp — UI chrome (surfaces, borders, muted text) used across
+ * dialogs, toolbox, and previews. Distinct from the neutral `grey` ramp.
+ */
+export const slate = {
+  50: '#F8FAFC',
+  100: '#F1F5F9',
+  200: '#E2E8F0',
+  300: '#CBD5E1',
+  400: '#94A3B8',
+  500: '#64748B',
+  600: '#475569',
+  700: '#334155',
+  800: '#1E293B',
+  900: '#0F172A',
+} as const
+
+/** Terracotta accent — destructive / delete affordances (not the theme red). */
+export const accent = {
+  lighter: '#FFF7ED',
+  light: '#FFEDD5',
+  main: '#E15930',
+  dark: '#C84D28',
+  darker: '#C2410C',
+  contrastText: '#FFFFFF',
+} as const
+
+/** Neutral grays used by the Blockly canvas chrome (grid, scrollbar, bg). */
+export const canvasNeutral = {
+  bg: '#F5F5F5',
+  scrollbar: '#D9D9D9',
+  grid: '#C4C4C4',
+} as const
 
 export const Theme = () => {
   const greyPrimary = [
@@ -85,5 +131,7 @@ export const Theme = () => {
       contrastText: '#FFFFFF',
     },
     grey,
+    slate,
+    accent,
   }
 }
