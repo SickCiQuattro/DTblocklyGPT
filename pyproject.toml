@@ -49,3 +49,7 @@ poetry-plugin-up = "^0.6.0"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pyrefly]
+# Pin Pyrefly (Antigravity's Python LSP) to the Poetry virtualenv so imports resolve.
+python-interpreter = "/home/filippo/.cache/pypoetry/virtualenvs/dtblocklygpt-Ryf0IepQ-py3.12/bin/python"

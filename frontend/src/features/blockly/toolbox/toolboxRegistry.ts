@@ -109,11 +109,11 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       {
         type: 'processing_block',
         // MAPPING REFERENCE:
-        // - Block type: 'processing_block' ➔ User-facing pill label: 'Run routine'
-        label: 'Run routine',
+        // - Block type: 'processing_block' ➔ User-facing pill label: 'Execute skill'
+        label: 'Execute skill',
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
-        inputs: 'Routine to run',
+        inputs: 'Skill to run',
         outputs: 'None',
       },
       {
@@ -158,7 +158,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   },
   {
     key: 'human-actions',
-    name: 'Operator', // Human Actions -> Operator (the real person at the cell)
+    name: 'Human Actions', // category for steps performed by the human operator at the cell
     colour: blocksColours.humanActions,
     blocks: [
       {
@@ -205,8 +205,8 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       {
         type: 'action_block',
         // MAPPING REFERENCE:
-        // - Block type: 'action_block' ➔ User-facing label: 'Routines' (replaces Procedures/Actions)
-        label: 'Routines',
+        // - Block type: 'action_block' ➔ User-facing label: 'Skills' (replaces Routines/Procedures/Actions)
+        label: 'Skills',
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
@@ -234,37 +234,48 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         inputs: 'Type of gesture',
       },
       {
-        type: 'timer_block',
-        label: 'Time passed', // Timer
+        type: 'voice_command_block',
+        label: 'Voice command',
         colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.timer_block,
-        inputs: 'Seconds',
+        description: blockDescriptionsByType.voice_command_block,
         outputs: 'Yes or No',
+        inputs: 'Word to listen for',
       },
-      {
-        type: 'logic_and_block',
-        label: 'AND',
-        colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.logic_and_block,
-        inputs: 'First condition | Second condition',
-        outputs: 'Yes or No',
-      },
-      {
-        type: 'logic_or_block',
-        label: 'OR',
-        colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.logic_or_block,
-        inputs: 'First condition | Second condition',
-        outputs: 'Yes or No',
-      },
-      {
-        type: 'logic_not_block',
-        label: 'NOT',
-        colour: blocksColours.eventsConditions,
-        description: blockDescriptionsByType.logic_not_block,
-        inputs: 'Condition to reverse',
-        outputs: 'Yes or No',
-      },
+      // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
+      //    timer 'Time passed' + logic AND/OR/NOT. Block definitions, parser and
+      //    backend enums remain intact — only the toolbox pills are suppressed.
+      // {
+      //   type: 'timer_block',
+      //   label: 'Time passed', // Timer
+      //   colour: blocksColours.eventsConditions,
+      //   description: blockDescriptionsByType.timer_block,
+      //   inputs: 'Seconds',
+      //   outputs: 'Yes or No',
+      // },
+      // {
+      //   type: 'logic_and_block',
+      //   label: 'AND',
+      //   colour: blocksColours.eventsConditions,
+      //   description: blockDescriptionsByType.logic_and_block,
+      //   inputs: 'First condition | Second condition',
+      //   outputs: 'Yes or No',
+      // },
+      // {
+      //   type: 'logic_or_block',
+      //   label: 'OR',
+      //   colour: blocksColours.eventsConditions,
+      //   description: blockDescriptionsByType.logic_or_block,
+      //   inputs: 'First condition | Second condition',
+      //   outputs: 'Yes or No',
+      // },
+      // {
+      //   type: 'logic_not_block',
+      //   label: 'NOT',
+      //   colour: blocksColours.eventsConditions,
+      //   description: blockDescriptionsByType.logic_not_block,
+      //   inputs: 'Condition to reverse',
+      //   outputs: 'Yes or No',
+      // },
     ],
   },
   {

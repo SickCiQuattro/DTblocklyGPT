@@ -242,6 +242,7 @@ export type AbstractCondition =
         | 'POINTING'
         | 'STOP'
     }
+  | { type: 'voice'; voiceWord: 'YES' | 'NO' | 'DONE' | 'PROCEED' }
   | { type: 'timer'; seconds: number }
   | { type: 'and'; left: AbstractCondition; right: AbstractCondition }
   | { type: 'or'; left: AbstractCondition; right: AbstractCondition }

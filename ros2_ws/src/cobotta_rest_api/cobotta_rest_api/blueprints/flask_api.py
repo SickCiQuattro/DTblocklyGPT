@@ -110,11 +110,12 @@ def moveCobotta():
         for k in range(7)
     ]
 
-    # joint_abs query param accepted for backwards compatibility but ignored —
-    # all positions are absolute; the legacy abs/delta frame_id flag is retired.
-    joint_state = createJointState(joint_delta)
-    flask_pub.publisher.publish(joint_state)
-    flask_pub.get_logger().info('Publishing: "%s"' % joint_state.position)
+    # Route the single absolute pose through the trajectory controllers, ~1 s.
+    wp = {f"j{i}": joint_delta[i - 1] for i in range(1, 7)}
+    wp["hand"] = joint_delta[6]
+    wp["dt"] = 1.0
+    flask_pub.execute_path([wp])
+    flask_pub.get_logger().info('move-joints → %s' % joint_delta)
     return jsonify({"status": "ok"})
 
 
@@ -142,7 +143,6 @@ def createJointState(joint_positions):
     joint_state = JointState()
     joint_state.header.stamp = flask_pub.get_clock().now().to_msg()
     # Positions are absolute joint targets in degrees.
-    # The legacy abs/delta flag (frame_id="true"/"false") is retired — gazebo_command_node ignores it.
     joint_state.header.frame_id = ""
     joint_state.name = [f"joint_{i}" for i in range(1, 7)]
     joint_state.name.append("hand")
@@ -291,6 +291,21 @@ def getActualJointsPos():
         position_dict.get('joint_left', 0.0),
     ]
     return {"position": actual_joints_position}
+
+
+@bp.route("/actual-joints-real")
+def getActualJointsReal():
+    """Physical arm encoder state (j1..j6 deg) from cobotta_node, or available=False.
+
+    Used by simulate.py to seed IK from the real robot when DRIVE_HARDWARE is set.
+    """
+    pos = flask_pub.send_request_position_real()
+    if not pos:
+        return {"position": [], "available": False}
+    return {
+        "position": [pos.get(f"joint{i}", 0.0) for i in range(1, 7)],
+        "available": True,
+    }
 
 
 # ── Human step lifecycle ──────────────────────────────────────────────────────

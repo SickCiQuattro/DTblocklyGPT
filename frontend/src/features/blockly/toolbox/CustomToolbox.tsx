@@ -220,7 +220,7 @@ interface CategoryTabDefinition {
 
 // MAPPING REFERENCE:
 // - key: 'positions' ➔ User-facing label: 'Locations' (maps to location_block)
-// - key: 'actions' ➔ User-facing label: 'Routines' (maps to action_block)
+// - key: 'actions' ➔ User-facing label: 'Skills' (maps to action_block)
 const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   {
     key: 'objects',
@@ -234,7 +234,7 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   },
   {
     key: 'actions',
-    label: 'Routines',
+    label: 'Skills',
     blockTypes: ['action_block'],
   },
 ]

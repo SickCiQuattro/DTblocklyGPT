@@ -50,41 +50,53 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
     blockType: 'gesture_block',
   },
   {
-    id: 5,
-    name: 'Time passed',
-    description: 'Becomes true after a set number of seconds.',
+    id: 9,
+    name: 'Voice command',
+    description: 'Operator says a specific word (yes, no, done, proceed).',
     group: 'Conditions',
-    paramHint: 'seconds',
-    keywords: ['timer', 'seconds', 'delay', 'time'],
-    blockType: 'timer_block',
+    paramHint: 'word',
+    keywords: ['voice', 'say', 'word', 'speak', 'speech'],
+    blockType: 'voice_command_block',
   },
-  {
-    id: 6,
-    name: 'AND',
-    description: 'Both conditions must be true at the same time.',
-    group: 'Logic',
-    paramHint: 'A  +  B',
-    keywords: ['and', 'both', 'combine'],
-    blockType: 'logic_and_block',
-  },
-  {
-    id: 7,
-    name: 'OR',
-    description: 'At least one of the two conditions must be true.',
-    group: 'Logic',
-    paramHint: 'A  or  B',
-    keywords: ['or', 'either', 'combine'],
-    blockType: 'logic_or_block',
-  },
-  {
-    id: 8,
-    name: 'NOT',
-    description: 'Reverses the result — true becomes false.',
-    group: 'Logic',
-    paramHint: 'reverses',
-    keywords: ['not', 'negate', 'invert', 'opposite'],
-    blockType: 'logic_not_block',
-  },
+  // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
+  //    'Time passed' (timer_block) + logic AND/OR/NOT. Block definitions, parser
+  //    and backend enums remain intact — only the picker rows are suppressed.
+  // {
+  //   id: 5,
+  //   name: 'Time passed',
+  //   description: 'Becomes true after a set number of seconds.',
+  //   group: 'Conditions',
+  //   paramHint: 'seconds',
+  //   keywords: ['timer', 'seconds', 'delay', 'time'],
+  //   blockType: 'timer_block',
+  // },
+  // {
+  //   id: 6,
+  //   name: 'AND',
+  //   description: 'Both conditions must be true at the same time.',
+  //   group: 'Logic',
+  //   paramHint: 'A  +  B',
+  //   keywords: ['and', 'both', 'combine'],
+  //   blockType: 'logic_and_block',
+  // },
+  // {
+  //   id: 7,
+  //   name: 'OR',
+  //   description: 'At least one of the two conditions must be true.',
+  //   group: 'Logic',
+  //   paramHint: 'A  or  B',
+  //   keywords: ['or', 'either', 'combine'],
+  //   blockType: 'logic_or_block',
+  // },
+  // {
+  //   id: 8,
+  //   name: 'NOT',
+  //   description: 'Reverses the result — true becomes false.',
+  //   group: 'Logic',
+  //   paramHint: 'reverses',
+  //   keywords: ['not', 'negate', 'invert', 'opposite'],
+  //   blockType: 'logic_not_block',
+  // },
 ]
 
 // ─── SEQUENCE ITEMS ───────────────────────────────────────────────────────────
@@ -150,11 +162,11 @@ export const buildSequencePickerItems = (
     {
       id: -2,
       // MAPPING REFERENCE:
-      // - User-facing block name: 'Run routine'
+      // - User-facing block name: 'Execute skill'
       // - Internally creates a 'processing_block' (which maps to /actions DB records)
-      name: 'Run routine',
-      description: 'Run a pre-configured routine',
-      keywords: ['run', 'routine', 'execute', 'perform', 'skill'],
+      name: 'Execute skill',
+      description: 'Run a pre-configured skill',
+      keywords: ['run', 'skill', 'routine', 'execute', 'perform'],
       blockType: 'processing_block',
       group: 'Robot Actions',
     },
@@ -196,7 +208,7 @@ export const buildSequencePickerItems = (
       description: 'Pause and prompt a human operator to act',
       keywords: ['human', 'pause', 'operator', 'show'],
       blockType: 'human_action_block',
-      group: 'Operator',
+      group: 'Human Actions',
     },
     {
       id: -8,
@@ -204,7 +216,7 @@ export const buildSequencePickerItems = (
       description: 'Display a notification and continue',
       keywords: ['notify', 'message', 'info', 'continue'],
       blockType: 'notify_action_block',
-      group: 'Operator',
+      group: 'Human Actions',
     },
   ]
 
@@ -242,8 +254,8 @@ export const buildSequencePickerItems = (
 export const buildShadowPickerItems = (
   entities: ShadowEntitySource[],
   // MAPPING REFERENCE:
-  // - fallbackPrefix: 'Routine' (user-facing) maps internally to ActionListType (dataActions)
-  fallbackPrefix: 'Object' | 'Location' | 'Routine',
+  // - fallbackPrefix: 'Skill' (user-facing) maps internally to ActionListType (dataActions)
+  fallbackPrefix: 'Object' | 'Location' | 'Skill',
   group: string,
 ): ShadowPickerItem[] =>
   entities.map((entity) => ({
@@ -372,14 +384,14 @@ export const getDotColour = (group: string): string => {
   switch (group) {
     case 'Objects':
     case 'Locations':
-    case 'Routines':
+    case 'Skills':
       return blocksColours.objectsPositions
     case 'Conditions':
     case 'Logic':
       return blocksColours.eventsConditions
     case 'Robot Actions':
       return blocksColours.robotActions
-    case 'Operator':
+    case 'Human Actions':
       return blocksColours.humanActions
     case 'Task Flow':
       return blocksColours.logicControl

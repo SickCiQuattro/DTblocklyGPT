@@ -69,6 +69,11 @@ export const LISTCHECKS_ICON_URI = createLucideIconURI(
   '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
 )
 
+/** Zap (lightning) icon — used on Skill blocks (Execute skill / Skills entity). */
+export const ZAP_ICON_URI = createLucideIconURI(
+  '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+)
+
 /** Split icon — used on conditional (when / when-otherwise) blocks: a forking path. */
 export const SPLIT_ICON_URI = createLucideIconURI(
   '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
@@ -82,6 +87,11 @@ export const CLOCK_ICON_URI = createLucideIconURI(
 /** Workflow icon — used on macro-task blocks. */
 export const WORKFLOW_ICON_URI = createLucideIconURI(
   '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+)
+
+/** Mic icon — used on the voice-command condition block. */
+export const MIC_ICON_URI = createLucideIconURI(
+  '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
 )
 
 /** Scan/Eye icon — used on all condition/sensor blocks. */

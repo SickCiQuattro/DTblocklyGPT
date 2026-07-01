@@ -21,10 +21,18 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$WS_ROOT/.." && pwd)"
 
 BCAP_HOST="${BCAP_HOST:-192.168.0.1}"
 BCAP_PORT="${BCAP_PORT:-5007}"
 EXT_SPEED="${EXT_SPEED:-20}"
+
+# Vision (object detection). ENABLE_VISION=0 to skip. The COBOTTA Canon camera is a
+# WebView HTTP snapshot source; override CAMERA_* for a USB webcam / different creds.
+ENABLE_VISION="${ENABLE_VISION:-1}"
+CAMERA_SOURCE="${CAMERA_SOURCE:-http://192.168.0.90/-wvhttp-01-/image.cgi}"
+CAMERA_USER="${CAMERA_USER:-admin}"
+CAMERA_PASS="${CAMERA_PASS:-password}"
 
 # 1. Source environment
 source /opt/ros/jazzy/setup.bash
@@ -37,12 +45,13 @@ export GZ_SIM_RESOURCE_PATH="$SCRIPT_DIR:$GZ_SIM_RESOURCE_PATH"
 cleanup() {
     echo ""
     echo "|> Shutdown Physical Twin..."
-    kill $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID $HW_PID 2>/dev/null || true
+    kill $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID $HW_PID $VN_PID 2>/dev/null || true
     sleep 1
-    kill -9 $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID $HW_PID 2>/dev/null || true
+    kill -9 $CMD_PID $STATE_PID $FLASK_PID $SOCKET_PID $BRIDGE_PID $GZ_PID $WVS_PID $HW_PID $VN_PID 2>/dev/null || true
     fuser -k 5000/tcp 5001/tcp 8080/tcp 2>/dev/null || true
     pkill -9 -f "gz sim" || true
     pkill -9 -f "ruby" || true
+    pkill -9 -f "vision_node.py" || true
     echo "All processes terminated."
 }
 
@@ -55,6 +64,7 @@ pkill -9 -f "ruby" 2>/dev/null || true
 pkill -9 -f "cobotta_rest_api" 2>/dev/null || true
 pkill -9 -f "web_video_server" 2>/dev/null || true
 pkill -9 -f "parameter_bridge" 2>/dev/null || true
+pkill -9 -f "vision_node.py" 2>/dev/null || true
 fuser -k 5000/tcp 5001/tcp 8080/tcp 2>/dev/null || true
 sleep 1
 
@@ -94,11 +104,11 @@ done
 echo "Gazebo ready. /joint_states available."
 
 # 9. Start simulation ROS2 nodes
+# NOTE: gazebo_command_node / gazebo_state_node were removed (ros2_control replaces
+# them). This physical launcher still uses the legacy gz-sim-direct flow and needs
+# the Fase 3 rework (ros2_control + a b-CAP hardware_interface) before it drives the
+# real arm; see cobotta_ros2_control.launch.py for the simulation bring-up.
 echo "|> Start simulation ROS2 nodes..."
-ros2 run cobotta_rest_api gazebo_command_node &
-CMD_PID=$!
-ros2 run cobotta_rest_api gazebo_state_node &
-STATE_PID=$!
 ros2 run cobotta_rest_api flask_node &
 FLASK_PID=$!
 ros2 run cobotta_rest_api polling_socket_node &
@@ -129,8 +139,24 @@ ros2 run cobotta_rest_api cobotta_node \
     -p enable_hardware:=true \
     -p bcap_host:="${BCAP_HOST}" \
     -p bcap_port:="${BCAP_PORT}" \
+    -p bcap_provider:="${BCAP_PROVIDER:-CaoProv.DENSO.VRC}" \
     -p ext_speed:="${EXT_SPEED}" &
 HW_PID=$!
+
+# 12. Start vision_node (object detection) on the camera.
+# NOTE: launched via the Poetry python, NOT `ros2 run` — the ros2 entry-point shebang
+# uses the system python, which lacks ultralytics/YOLO (ModuleNotFoundError).
+if [ "$ENABLE_VISION" = "1" ]; then
+    echo "|> Start vision_node (object detection: ${CAMERA_SOURCE})..."
+    VN_PY="$WS_ROOT/src/cobotta_rest_api/cobotta_rest_api/vision_node.py"
+    ( cd "$PROJECT_ROOT" && poetry run python "$VN_PY" --ros-args \
+        -p camera_source:="${CAMERA_SOURCE}" \
+        -p camera_user:="${CAMERA_USER}" \
+        -p camera_pass:="${CAMERA_PASS}" ) &
+    VN_PID=$!
+else
+    echo "|> Vision disabled (ENABLE_VISION=0)."
+fi
 
 echo "|> Pausing world (idle until simulation starts)..."
 gz service -s /world/worldCobotta/control --reqtype gz.msgs.WorldControl \
@@ -144,12 +170,10 @@ echo "  Gazebo PID: $GZ_PID"
 echo "  Flask API:  http://localhost:${FLASK_PORT}"
 echo "  SocketIO:   http://localhost:${POLLING_NODE_PORT:-5001}"
 echo ""
+echo "  Vision:     ${CAMERA_SOURCE}  (ENABLE_VISION=${ENABLE_VISION})"
+echo ""
 echo "  Start Django with:"
 echo "    DRIVE_HARDWARE=1 poetry run python manage.py runserver"
-echo ""
-echo "  Start vision node (wrist cam) with:"
-echo "    poetry run ros2 run cobotta_rest_api vision_node \\"
-echo "        --ros-args -p camera_source:=<device-index>"
 echo "========================================================"
 echo ""
 echo "Press Ctrl+C to terminate everything."

@@ -1,0 +1,16 @@
+# ros_gz_bridge config for the ros2_control flow: only the sim clock and the camera.
+# Joint commands and /joint_states are handled by ros2_control, not bridged.
+
+# Sim clock — required so ROS nodes with use_sim_time:=true advance.
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+# Overhead camera stream.
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "/gz/camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS

@@ -5,7 +5,13 @@ import time
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String
-from .cobotta_utils import convert_rad_to_grad
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from builtin_interfaces.msg import Duration
+from .cobotta_utils import (
+    convert_rad_to_grad,
+    convert_grad_to_rad,
+    convert_hand_cobotta_gazebo,
+)
 from my_robot_interfaces.srv import MoveTarget
 
 
@@ -13,7 +19,12 @@ class BridgeNodeROS(Node):
     def __init__(self):
         super().__init__("bridge_node_ros")
 
-        self.publisher = self.create_publisher(JointState, "/move_joint", 10)
+        # arm_controller (JTC) takes the 6 arm joints in radians; gripper_controller
+        # takes the two prismatic finger joints in metres.
+        self.arm_traj_pub = self.create_publisher(
+            JointTrajectory, "/arm_controller/joint_trajectory", 10)
+        self.gripper_traj_pub = self.create_publisher(
+            JointTrajectory, "/gripper_controller/joint_trajectory", 10)
         self.step_status_pub = self.create_publisher(String, "/human/step_status", 10)
         self._gesture_pub = self.create_publisher(String, "/human/gesture", 10)
         self._move_target_client = self.create_client(MoveTarget, "/cobotta/move_target")
@@ -21,6 +32,10 @@ class BridgeNodeROS(Node):
         self.subscriber = self.create_subscription(
             JointState, "/joint_states", self.position_callback, 10
         )
+        # Real arm encoder feed (cobotta_node when DRIVE_HARDWARE) — lets the app seed
+        # IK from the physical robot instead of the Gazebo twin.
+        self.create_subscription(
+            JointState, "/cobotta/joint_states_real", self._real_position_callback, 10)
         self.create_subscription(String, "/human/gesture", self._gesture_callback, 10)
         self.create_subscription(String, "/vision/object_detected", self._object_callback, 10)
 
@@ -48,20 +63,14 @@ class BridgeNodeROS(Node):
             'joint_right': 0.0,
         }
 
-        # Guards current_position dict (written by ROS spin thread, read by Flask threads).
+        # Real arm joint state (empty until cobotta_node publishes encoder readings).
+        self.current_position_real: dict = {}
+
+        # Guards both position dicts (written by ROS spin thread, read by Flask threads).
         self._position_lock = threading.Lock()
 
-        # Guards path execution state (written by Flask threads, ticked by ROS spin thread).
-        self._path_lock = threading.Lock()
-        self.current_path = []
-        self.path_index = 0
-        self.executing = False
-        self._next_due = 0.0  # monotonic deadline for next waypoint publish
-
-        # Single persistent tick timer — runs only in the ROS spin thread, no cross-thread timer creation.
-        self._tick_timer = self.create_timer(0.02, self._path_tick)
-
-        self.get_logger().info("BridgeNodeROS initialized - listening to /joint_states")
+        self.get_logger().info(
+            "BridgeNodeROS initialized — /joint_states in, arm/gripper trajectory out")
 
     # ── position tracking ────────────────────────────────────────────────────
 
@@ -75,8 +84,8 @@ class BridgeNodeROS(Node):
         pos_dict = {}
         for name, pos in zip(msg.name, msg.position):
             # joint_left / joint_right are gripper linear joints — keep raw Gazebo value.
-            # Rotational joints come in radians from Gazebo; convert to degrees for consistency
-            # with the rest of the stack (Flask API, simulate.py, gazebo_command_node).
+            # Rotational joints come in radians; convert to degrees for consistency with
+            # the rest of the stack (Flask API, simulate.py).
             if name.startswith('joint_'):
                 pos_dict[name] = pos
             else:
@@ -91,73 +100,67 @@ class BridgeNodeROS(Node):
         with self._position_lock:
             return dict(self.current_position)
 
-    # ── publishing ───────────────────────────────────────────────────────────
+    def _real_position_callback(self, msg):
+        """Cache the physical arm's encoder state (rad → deg), same as the sim path."""
+        pos = {name: convert_rad_to_grad(p) for name, p in zip(msg.name, msg.position)}
+        with self._position_lock:
+            self.current_position_real.update(pos)
 
-    def publish_joint_state(self, joint_state):
-        self.publisher.publish(joint_state)
-        self.get_logger().debug('Publishing: "%s"' % joint_state.position)
+    def send_request_position_real(self):
+        """Real arm joint state, or {} if cobotta_node has published nothing yet."""
+        with self._position_lock:
+            return dict(self.current_position_real)
 
-    # ── path execution ───────────────────────────────────────────────────────
+    # ── command path (ros2_control trajectory controllers) ────────────────────
+
+    @staticmethod
+    def _duration(t):
+        sec = int(t)
+        return Duration(sec=sec, nanosec=int(round((t - sec) * 1e9)))
 
     def execute_path(self, waypoints):
-        """Queue waypoints for execution.
+        """Send waypoints {j1..j6 (deg), hand (0-30), dt (s)} as one JointTrajectory.
 
-        Django sends sequential path segments and relies on append-if-executing
-        semantics so consecutive smooth_move / send_waypoints calls chain up.
+        Publishing replaces the previous trajectory; safe because the app sleeps for
+        each move's duration before sending the next (smooth_move / send_waypoints).
         """
-        with self._path_lock:
-            if self.executing:
-                self.current_path.extend(waypoints)
-            else:
-                self.current_path = list(waypoints)
-                self.path_index = 0
-                self.executing = True
-                self._next_due = time.monotonic()
+        if not waypoints:
+            return
+        arm = JointTrajectory()
+        arm.joint_names = [f"joint{i}" for i in range(1, 7)]
+        grip = JointTrajectory()
+        grip.joint_names = ["joint_left", "joint_right"]
+
+        t = 0.0
+        for wp in waypoints:
+            t += float(wp.get("dt", 0.05))
+            stamp = self._duration(t)
+
+            ap = JointTrajectoryPoint()
+            ap.positions = [convert_grad_to_rad(float(wp.get(f"j{i}", 0.0)))
+                            for i in range(1, 7)]
+            ap.time_from_start = stamp
+            arm.points.append(ap)
+
+            gpos = convert_hand_cobotta_gazebo(float(wp.get("hand", 0.0)))
+            gp = JointTrajectoryPoint()
+            gp.positions = [gpos, gpos]   # both fingers symmetric
+            gp.time_from_start = stamp
+            grip.points.append(gp)
+
+        # header.stamp left 0 → controllers start now; time_from_start is relative.
+        self.arm_traj_pub.publish(arm)
+        self.gripper_traj_pub.publish(grip)
+        self.get_logger().debug(f"Sent trajectory: {len(arm.points)} pts over {t:.2f}s")
 
     def stop_path(self):
-        """Cancel any in-flight or queued path. Thread-safe. Returns True if path was active."""
-        with self._path_lock:
-            was_active = self.executing or self.path_index < len(self.current_path)
-            self.current_path = []
-            self.path_index = 0
-            self.executing = False
-        if was_active:
-            self.get_logger().info("Path stopped by request")
-        return was_active
-
-    def _path_tick(self):
-        """Persistent 20 ms timer — runs exclusively in the ROS spin thread."""
-        with self._path_lock:
-            if not self.executing:
-                return
-            if time.monotonic() < self._next_due:
-                return
-            if self.path_index >= len(self.current_path):
-                self.executing = False
-                self.get_logger().info("Path execution complete")
-                return
-            wp = self.current_path[self.path_index]
-            self.path_index += 1
-            dt = float(wp.get("dt", 0.05))
-            self._next_due = time.monotonic() + dt
-
-        # Build and publish outside the lock so position_callback is never blocked by publish latency.
-        joint_state = JointState()
-        joint_state.header.stamp = self.get_clock().now().to_msg()
-        # Positions are absolute joint targets in degrees.
-        # The legacy abs/delta flag (frame_id="true"/"false") is retired — gazebo_command_node ignores it.
-        joint_state.header.frame_id = ""
-        joint_state.name = [f"joint_{i}" for i in range(1, 7)] + ["hand"]
-        joint_state.position = [
-            float(wp.get("j1", 0.0)),
-            float(wp.get("j2", 0.0)),
-            float(wp.get("j3", 0.0)),
-            float(wp.get("j4", 0.0)),
-            float(wp.get("j5", 0.0)),
-            float(wp.get("j6", 0.0)),
-            float(wp.get("hand", 0.0)),
-        ]
-        self.publish_joint_state(joint_state)
+        """Cancel motion by sending an empty trajectory to each controller."""
+        self.arm_traj_pub.publish(
+            JointTrajectory(joint_names=[f"joint{i}" for i in range(1, 7)]))
+        self.gripper_traj_pub.publish(
+            JointTrajectory(joint_names=["joint_left", "joint_right"]))
+        self.get_logger().info("Stop requested — empty trajectory sent")
+        return True
 
     # ── vision topic callbacks (latest-value cache) ──────────────────────────
 

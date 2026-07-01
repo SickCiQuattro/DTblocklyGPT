@@ -4,7 +4,7 @@ import { MenuItem } from './types'
 
 // MAPPING REFERENCE:
 // - Internal variable/import name: libraries ➔ External group label: LIBRARY
-// - Internal child ID: actions (URL: /actions) ➔ External item label: Routines
+// - Internal child ID: actions (URL: /actions) ➔ External item label: Skills
 export const libraries: MenuItem = {
   id: 'twin-library',
   title: 'LIBRARY',
@@ -26,7 +26,7 @@ export const libraries: MenuItem = {
     },
     {
       id: 'actions',
-      title: 'Routines',
+      title: 'Skills',
       type: 'item',
       url: '/actions',
       icon: Zap,

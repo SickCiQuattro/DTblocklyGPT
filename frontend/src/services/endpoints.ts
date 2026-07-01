@@ -69,6 +69,7 @@ export const endpoints = {
   },
   vision: {
     frame: `${VISION_API}/frame/`,
+    voice: `${VISION_API}/voice/`,
   },
   // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
   get macro() {

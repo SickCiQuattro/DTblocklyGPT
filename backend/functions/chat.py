@@ -356,7 +356,7 @@ These are the blocks available in the visual editor, grouped by the sidebar cate
 
 {{blocks}}
 
-The "Twin Library" and "Saved Tasks" categories hold pills generated from the user's own data — the objects, locations and routines listed in the # DATABASE # section below, plus their previously saved tasks.
+The "Twin Library" and "Saved Tasks" categories hold pills generated from the user's own data — the objects, locations and skills listed in the # DATABASE # section below, plus their previously saved tasks.
 If the user asks where to find a block or how blocks are organized, guide them to these categories by name.
 
 # CONNECTION RULES #

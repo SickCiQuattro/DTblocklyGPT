@@ -52,7 +52,7 @@ export function highlightExecutingBlock(
 /** Remove every execution highlight from the workspace. */
 export function clearExecutingHighlights(ws: Blockly.WorkspaceSvg): void {
   for (const block of ws.getAllBlocks(false)) {
-    ;(block as Blockly.BlockSvg)
+    block
       .getSvgRoot?.()
       ?.classList.remove(EXECUTING_CLASS, EXECUTING_ENTITY_CLASS)
   }

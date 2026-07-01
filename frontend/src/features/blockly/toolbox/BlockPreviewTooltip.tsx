@@ -37,7 +37,8 @@ import {
   Repeat2,
   Split,
   Clock,
-  ListChecks,
+  Zap,
+  Mic,
   SquareArrowRightEnter,
   SquareArrowRightExit,
   Box,
@@ -102,7 +103,7 @@ let activeTooltipOwner: symbol | null = null
 // MAPPING REFERENCE:
 // - block type ➔ user-facing badge text
 // - location_block ➔ Locations (MapPin)
-// - action_block ➔ Routines (Zap)
+// - action_block ➔ Skills (Zap)
 // - macro_task_block ➔ Saved Tasks (Workflow)
 const getPreviewCategoryBadgeMeta = (
   itemType: string,
@@ -114,10 +115,10 @@ const getPreviewCategoryBadgeMeta = (
     case 'location_block':
       return { label: 'Locations', Icon: MapPin }
     case 'action_block':
-      return { label: 'Routines', Icon: ListChecks }
+      return { label: 'Skills', Icon: Zap }
     case 'human_action_block':
     case 'notify_action_block':
-      return { label: 'Operator', Icon: User }
+      return { label: 'Human Actions', Icon: User }
     case 'pick_block':
     case 'processing_block':
     case 'place_block':
@@ -127,6 +128,9 @@ const getPreviewCategoryBadgeMeta = (
     case 'close_gripper_block':
     case 'wait_block':
       return { label: 'Robot Actions', Icon: Bot }
+    case 'voice_command_block':
+      // Voice condition: a microphone, not the detection eye.
+      return { label: 'Conditions', Icon: Mic }
     case 'timer_block':
       // Time-based condition: a clock, not the detection eye.
       return { label: 'Conditions', Icon: Clock }
@@ -156,7 +160,7 @@ const getPreviewCategoryBadgeMeta = (
   if (hint.includes('block'))
     return { label: fallbackCategoryName ?? 'Task Flow', Icon: Repeat2 }
   if (hint.includes('human') || hint.includes('operator'))
-    return { label: fallbackCategoryName ?? 'Operator', Icon: User }
+    return { label: fallbackCategoryName ?? 'Human Actions', Icon: User }
   if (hint.includes('robot') || hint.includes('actions'))
     return {
       label: fallbackCategoryName ?? 'Robot Actions',
@@ -462,7 +466,7 @@ interface BlockPreviewTooltipProps {
 /**
  * Wraps a toolbox pill with a rich hover tooltip that renders a live block
  * preview and shows descriptive metadata. For macro task pills an additional
- * "View Routine Blocks" button opens `MacroPreviewModal`.
+ * "View Task Blocks" button opens `MacroPreviewModal`.
  */
 export const BlockPreviewTooltip = ({
   item,
@@ -696,7 +700,7 @@ export const BlockPreviewTooltip = ({
                   }
                 >
                   <Eye size={16} />
-                  View Routine Blocks
+                  View Task Blocks
                 </button>
               )}
             </div>
