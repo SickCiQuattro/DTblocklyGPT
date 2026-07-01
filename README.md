@@ -59,7 +59,7 @@ The system is composed of four independent processes that must all be running fo
 - **ROS2 Jazzy** — [official install guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
 - **Gazebo Harmonic** — [official install guide](https://gazebosim.org/docs/harmonic/install_ubuntu/)
 - **Poetry** — [official install guide](https://python-poetry.org/docs/#installation)
-- **Node.js 20+** with npm
+- **Node.js 20.19+** (or 22 LTS) with npm — Vite 8 requires Node `≥20.19` / `≥22.12`; older 20.x fails
 
 ### System apt packages
 
@@ -97,6 +97,8 @@ rosdep update
 ## Platform Setup
 
 Choose your environment. Everything after this section is identical for both paths.
+
+> **macOS / Windows-without-WSL2:** there is no native ROS2 Jazzy / Gazebo Harmonic build for macOS. Run **Ubuntu 24.04 in a VM** (UTM / Parallels / VMware) and follow **Path B**. On Apple Silicon use an **ARM64** Ubuntu image; Gazebo runs headless fine, but the 3D GUI is CPU-rendered and slow — keep it headless. Windows users who can't use WSL2 can likewise use a Linux VM + Path B.
 
 <details>
 <summary><strong> Path A — Windows + WSL2</strong></summary>
@@ -210,6 +212,8 @@ OPENAI_API_KEY = ""
 GEMINI_API_KEY = "your_key_here"
 ```
 
+> `LLM_MODEL` must be a model your `GEMINI_API_KEY` can actually access — an invalid name makes every chat call fail. Switch provider with `LLM_PROVIDER` (`gemini` / `openai` / `ollama`); the matching endpoint is selected automatically (no `LLM_BASE_URL` needed for Gemini/OpenAI). If `LLM_MODEL` is left unset, the code falls back to `gemini-2.5-flash`.
+
 **Frontend** — copy the template and fill in the localhost defaults:
 
 ```bash
@@ -289,13 +293,16 @@ Install Flask inside this environment (used by `flask_node`):
 pip install Flask flask-socketio flask-cors
 ```
 
-Build the workspace:
+> `rosdep install` above already pulls `python3-flask` / `flask-cors` / `flask-socketio` system-wide (declared in `cobotta_rest_api/package.xml`), and the `.venv` was created with `--system-site-packages`, so it sees them. This `pip install` simply pins current versions inside the venv — keep it if `flask_node` complains about a missing module.
+
+Build the **entire** workspace (no `--packages-select`):
 
 ```bash
 colcon build
 source install/setup.bash
 ```
 
+> This compiles **all** packages — `cobotta_rest_api`, `my_robot_interfaces` (custom messages), `async_web_server_cpp`, and `web_video_server`. **Do not skip this step:** `launch_sim.sh` only rebuilds `cobotta_rest_api`, so if this full build never ran, `web_video_server` / camera streaming will be missing at runtime.
 > Build errors in `async_web_server_cpp` or `web_video_server` usually mean the C++ system dependencies (step in [Prerequisites](#prerequisites)) were not installed.
 
 Return to project root:
@@ -330,11 +337,19 @@ npm start
 
 Starts the UI on `http://localhost:3000`.
 
-### Terminal 3 — Gazebo + ROS2 stack
+> **Prerequisite:** the full `colcon build` from [Common Setup step 7](#7-build-the-ros2-workspace) must have run at least once. `launch_sim.sh` rebuilds **only** `cobotta_rest_api` — it does not build `web_video_server`.
+
+### Terminal 3 (first run, or after editing `cobotta_rest_api`)
 
 ```bash
 cd ros2_ws/Cobotta
 bash launch_sim.sh
+```
+
+### Terminal 3 (subsequent runs — skip the cobotta rebuild)
+```bash
+cd ros2_ws/Cobotta
+SKIP_BUILD=1 bash launch_sim.sh
 ```
 
 This single script starts Gazebo (headless), the ROS-Gazebo bridge, and all ROS2 nodes (`gazebo_command_node`, `gazebo_state_node`, `flask_node`, `polling_socket_node`, `web_video_server`). It waits for `/joint_states` and the Flask API to be healthy before reporting success.
@@ -369,11 +384,59 @@ ros2 run cobotta_rest_api gazebo_state_node
 # Terminal D
 ros2 run cobotta_rest_api polling_socket_node
 
-# Terminal E — vision node uses Poetry env, NOT .venv
-poetry run ros2 run cobotta_rest_api vision_node
+# Terminal E — vision node uses the Poetry env, NOT .venv.
+# Launch the FILE with the Poetry python — `poetry run ros2 run …` fails with
+# ModuleNotFoundError: ultralytics (the ros2 entry-point shebang uses the system python).
+poetry run python ros2_ws/src/cobotta_rest_api/cobotta_rest_api/vision_node.py \
+    --ros-args -p camera_source:=0        # USB webcam index; or an http/rtsp URL
 ```
 
-> The `vision_node` must run under `poetry run` because `ultralytics`, `mediapipe`, and `hand-gesture-engine` are only installed in the Poetry environment. All other nodes use the `.venv`.
+> The `vision_node` must run under the Poetry python because `ultralytics`, `mediapipe`, and `hand-gesture-engine` are only installed in the Poetry environment. All other nodes use the `.venv`.
+
+---
+
+## Physical robot + webcam (real COBOTTA)
+
+Everything above runs in **simulation**. To drive the **real Denso COBOTTA** and use its
+**Canon camera** for object detection, use `launch_physical.sh` instead of
+`launch_sim.sh`. It runs the full Gazebo twin **and** `cobotta_node` (real arm) **and**
+`vision_node` on the Canon, in parallel.
+
+**Prerequisites (one-time):**
+- Network: client PC on the robot LAN `192.168.0.0/24` (robot `192.168.0.1`, camera
+  `192.168.0.90`, PC `192.168.0.100`) via a **PoE switch** (powers the camera). See
+  [docs/cobotta-connection.md](docs/cobotta-connection.md).
+- **Executable Token** set on the controller (`Any`, or `Ethernet` + PC IP) via a Teach
+  Pendant — required for motor-on. See
+  [docs/cobotta-physical-testing.md](docs/cobotta-physical-testing.md) §6b.
+
+**Startup (3 terminals):**
+```bash
+# T1 — full twin + real arm + vision on the Canon (auto-started)
+cd ros2_ws/Cobotta
+BCAP_HOST=192.168.0.1 EXT_SPEED=20 bash launch_physical.sh
+#   → wait for "B-CAP connected (ExtSpeed=20)"
+#   overrides: CAMERA_SOURCE=0 (USB cam) · ENABLE_VISION=0 (no detection) · BCAP_PROVIDER=…
+
+# T2 — Django with hardware profile (real arm follows the twin)
+DRIVE_HARDWARE=1 poetry run python manage.py runserver
+#   (omit DRIVE_HARDWARE to run sim-only while the robot stays connected but idle)
+
+# T3 — frontend
+npm start
+```
+
+**Quick checks:**
+```bash
+curl -s http://localhost:5000/api/actual-joints-real | python3 -m json.tool   # {"available":true,...}
+curl -s http://localhost:5000/api/vision/state | python3 -m json.tool         # YOLO detections
+```
+
+> **Safety:** keep the teach-pendant **e-stop** in hand. `/api/stop` halts only the Gazebo
+> stream — the real arm is stopped only by the e-stop. Start at `EXT_SPEED=20`.
+
+Full field guide: [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md) ·
+camera/detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md).
 
 ---
 

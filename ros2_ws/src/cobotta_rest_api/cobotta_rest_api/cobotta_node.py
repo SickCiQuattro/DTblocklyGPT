@@ -35,8 +35,9 @@ class HardwareControl(Node):
         self.declare_parameter("bcap_timeout", 120)
         self.declare_parameter("enable_hardware", False)
         self.declare_parameter("ext_speed", 20)
-        # ORiN/CAO provider: "CaoProv.DENSO.RC8" for the physical COBOTTA/RC8
-        # controller; "CaoProv.DENSO.VRC" is the virtual (WINCAPS) simulator only.
+        # ORiN/CAO provider. Use "CaoProv.DENSO.VRC" for the real COBOTTA over b-CAP
+        # TCP too — verified on hardware: the RC8's b-CAP server accepts VRC, while
+        # "CaoProv.DENSO.RC8" fails controller_connect with 0x80070057 (E_INVALIDARG).
         self.declare_parameter("bcap_provider", "CaoProv.DENSO.VRC")
         # COBOTTA servo-on preparation (ManualResetPreparation + MotionPreparation)
         # before Motor-on. Required on the physical COBOTTA; harmless to leave on.
