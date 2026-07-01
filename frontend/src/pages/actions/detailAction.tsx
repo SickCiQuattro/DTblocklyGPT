@@ -44,20 +44,20 @@ const DetailAction = () => {
   const data = dataAction && dataMyRobots
 
   const subtitle = insertMode
-    ? 'Here you can define the details of the Routine. Hover over fields to see their descriptions.'
-    : 'Here you can edit the details of the Routine. Hover over fields to see their descriptions.'
+    ? 'Here you can define the details of the Skill. Hover over fields to see their descriptions.'
+    : 'Here you can edit the details of the Skill. Hover over fields to see their descriptions.'
 
   return (
     <MainCard
-      title={insertMode ? 'Add Routine' : 'Routine Detail'}
+      title={insertMode ? 'Add Skill' : 'Skill Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
       backTitle={
-        returnGraphic ? 'Return to the task graphic' : 'Return to Routines'
+        returnGraphic ? 'Return to the task graphic' : 'Return to Skills'
       }
     >
       {isLoading && !insertMode && <CircularProgress />}
-      {data === null && <Typography>Routine with ID {id} not found</Typography>}
+      {data === null && <Typography>Skill with ID {id} not found</Typography>}
       {(data || insertMode) && (
         <FormAction
           dataAction={dataAction}

@@ -14,8 +14,8 @@ export const GHOST_INPUT_MAP: Record<
   },
   processing_block: {
     // MAPPING REFERENCE:
-    // - ACTION input ➔ ghost shadow block label 'Select Routine...' (replaces Select Procedure)
-    ACTION: { type: 'shadow_action_block', label: 'Select Routine...' },
+    // - ACTION input ➔ ghost shadow block label 'Select Skill...' (replaces Select Routine/Procedure)
+    ACTION: { type: 'shadow_action_block', label: 'Select Skill...' },
   },
   pick_block: {
     OBJECT: { type: 'shadow_object_block', label: 'Select Object...' },

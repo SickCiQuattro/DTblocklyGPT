@@ -107,15 +107,15 @@ const ListActions = () => {
 
   return (
     <MainCard
-      title="Routines List"
-      subtitle="Here you can view and manage defined Routines."
+      title="Skills List"
+      subtitle="Here you can view and manage defined Skills."
     >
       <Stack
         direction="row"
         sx={{ mb: 2.5, alignItems: 'center', justifyContent: 'space-between' }}
       >
         <Typography variant="body2" color="text.secondary">
-          {rows.length} routine{rows.length !== 1 ? 's' : ''}
+          {rows.length} skill{rows.length !== 1 ? 's' : ''}
         </Typography>
         <Button
           variant="contained"
@@ -131,7 +131,7 @@ const ListActions = () => {
             textTransform: 'none',
           }}
         >
-          Add Routine
+          Add Skill
         </Button>
       </Stack>
 
@@ -172,7 +172,7 @@ const ListActions = () => {
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography variant="body2" color="text.secondary">
-                      No routines found. Create your first routine.
+                      No skills found. Create your first skill.
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -185,7 +185,7 @@ const ListActions = () => {
                         color="primary"
                         aria-label="detail"
                         disabled={!canManageAction(row.owner)}
-                        title="View routine details"
+                        title="View skill details"
                         size="small"
                       >
                         <Eye size={18} />
@@ -219,14 +219,14 @@ const ListActions = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <ConfirmPopover
-                        title="Delete this routine?"
+                        title="Delete this skill?"
                         onConfirm={() => handleDelete(row.id)}
                       >
                         {(onOpen) => (
                           <IconButton
                             color="error"
                             disabled={!canManageAction(row.owner)}
-                            title="Delete this routine"
+                            title="Delete this skill"
                             onClick={onOpen}
                             size="small"
                           >

@@ -605,11 +605,13 @@ export const BlocklyEditor = ({
   }, [])
 
   // a11y: when the user opts into keyboard mode, force Blockly's keyboard-nav
-  // visuals always-on. When off, Blockly auto-activates them on key use (v13).
+  // visuals always-on; turning it off deactivates them again (previously the
+  // off-state was only applied on reload). When off, Blockly still auto-activates
+  // keyboard nav on key use (v13).
   useEffect(() => {
-    if (viewSettings?.keyboardMode) {
-      Blockly.keyboardNavigationController.setIsActive(true)
-    }
+    Blockly.keyboardNavigationController.setIsActive(
+      !!viewSettings?.keyboardMode,
+    )
   }, [viewSettings?.keyboardMode])
   const [toolboxDeleteZoneState, setToolboxDeleteZoneState] =
     useState<DeleteZoneState>('idle')

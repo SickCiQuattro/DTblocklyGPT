@@ -22,11 +22,7 @@
  * Determines the item list, title, and empty-state copy shown in the menu.
  */
 export type ShadowPopoverType =
-  | 'object'
-  | 'location'
-  | 'action'
-  | 'trigger'
-  | 'sequence'
+  'object' | 'location' | 'action' | 'trigger' | 'sequence'
 
 /**
  * Block types that can be produced by a picker selection.
@@ -39,6 +35,7 @@ export type SelectableShadowBlockType =
   | 'action_block'
   | 'find_object_block'
   | 'gesture_block'
+  | 'voice_command_block'
   | 'timer_block'
   | 'logic_and_block'
   | 'logic_or_block'
@@ -139,11 +136,11 @@ export const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
 /** Header text displayed at the top of the picker menu for each context type. */
 // MAPPING REFERENCE:
 // - location ➔ Select Location (maps to location_block)
-// - action ➔ Select Routine (maps to action_block)
+// - action ➔ Select Skill (maps to action_block)
 export const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'Select Object',
   location: 'Select Location',
-  action: 'Select Routine',
+  action: 'Select Skill',
   trigger: 'Select Condition',
   sequence: 'Add a step',
 }
@@ -152,7 +149,7 @@ export const SHADOW_PICKER_TITLE_BY_TYPE: Record<ShadowPopoverType, string> = {
 export const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
   object: 'No objects available.',
   location: 'No locations available.',
-  action: 'No routines available.',
+  action: 'No skills available.',
   trigger: 'No conditions available.',
   sequence: 'No steps available.',
 }
@@ -165,6 +162,7 @@ export const SHADOW_PICKER_EMPTY_BY_TYPE: Record<ShadowPopoverType, string> = {
 export const DIRECT_BLOCK_TYPES = new Set<SelectableShadowBlockType>([
   'find_object_block',
   'gesture_block',
+  'voice_command_block',
   'timer_block',
   'logic_and_block',
   'logic_or_block',

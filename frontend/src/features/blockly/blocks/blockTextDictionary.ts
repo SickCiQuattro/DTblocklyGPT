@@ -8,12 +8,14 @@ export const blockDescriptionsByType = {
     'Checks if the camera can currently see the chosen object.',
   gesture_block:
     'Checks if the camera sees a specific hand gesture (like a thumbs up).',
+  voice_command_block:
+    'Checks if the operator says a specific word (like "yes" or "done").',
   timer_block: 'Checks if the set amount of time has passed.',
   pick_block: 'Tells the robot to pick up the chosen object.',
   // MAPPING REFERENCE:
-  // - processing_block ➔ Represents the 'Run Routine' visual block
+  // - processing_block ➔ Represents the 'Execute Skill' visual block
   processing_block:
-    'Makes the robot run a custom routine (like shaking or dispensing).',
+    'Makes the robot run a custom skill (like shaking or dispensing).',
   place_block: 'Tells the robot to place the object at the chosen destination.',
   move_to_block: 'Moves the robot to a specific location or safe area.',
   gripper_block: "Opens or closes the robot's gripper.",

@@ -43,6 +43,7 @@ export interface CustomBlock {
     | 'when_otherwise_block'
     | 'find_object_block'
     | 'gesture_block'
+    | 'voice_command_block'
     | 'timer_block'
     | 'human_action_block'
     | 'notify_action_block'
@@ -87,6 +88,7 @@ export interface CustomBlock {
       | 'PINCH'
       | 'POINTING'
       | 'STOP'
+    VOICE_WORD?: 'YES' | 'NO' | 'DONE' | 'PROCEED'
     SECONDS?: number
     sensor?: string
   }
@@ -307,6 +309,11 @@ export const abstractToBlockly = (
           type: 'gesture_block',
           fields: { GESTURE_TYPE: condition.gestureType ?? 'THUMBS_UP' },
         }
+      case 'voice':
+        return {
+          type: 'voice_command_block',
+          fields: { VOICE_WORD: condition.voiceWord ?? 'YES' },
+        }
       case 'timer':
         return {
           type: 'timer_block',
@@ -403,6 +410,11 @@ export const blocklyToAbstract = (
         return {
           type: 'gesture',
           gestureType: block.fields?.GESTURE_TYPE ?? 'THUMBS_UP',
+        }
+      case 'voice_command_block':
+        return {
+          type: 'voice',
+          voiceWord: block.fields?.VOICE_WORD ?? 'YES',
         }
       case 'timer_block':
         return { type: 'timer', seconds: block.fields?.SECONDS ?? 5 }

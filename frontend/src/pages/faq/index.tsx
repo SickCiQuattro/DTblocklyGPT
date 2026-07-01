@@ -83,27 +83,27 @@ const Faq = () => {
         <li>
           <b>Processing</b>: in this step you can define the processing
           operation to be run on the grasped object. You can define the{' '}
-          <b>Routine</b> with its details:
+          <b>Skill</b> with its details:
           <ul>
             <li>
-              <i>Name</i>: the name of the routine
+              <i>Name</i>: the name of the skill
             </li>
             <li>
-              <i>Shared</i>: if the routine is shared with other users
+              <i>Shared</i>: if the skill is shared with other users
             </li>
             <li>
-              <i>Keywords</i>: keywords used as synonyms to refer to the routine
+              <i>Keywords</i>: keywords used as synonyms to refer to the skill
             </li>
             <li>
-              <i>Speed</i>: the speed of the routine
+              <i>Speed</i>: the speed of the skill
             </li>
             <li>
-              <i>Pattern</i>: use an already defined pattern of the routine
+              <i>Pattern</i>: use an already defined pattern of the skill
               (Linear, Circular, Cross)
             </li>
             <li>
               <i>Height</i>: the height acquired from the robot at which to run
-              the routine
+              the skill
             </li>
             <li>
               <i>Points</i>: it is also possible to define a custom pattern

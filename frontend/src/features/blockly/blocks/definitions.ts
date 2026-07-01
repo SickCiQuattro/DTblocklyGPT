@@ -27,9 +27,10 @@ import {
   FLAG_ICON_URI,
   MAP_PIN_ICON_URI,
   SCAN_EYE_ICON_URI,
+  MIC_ICON_URI,
   TAG_ICON_URI,
   BOX_ICON_URI,
-  LISTCHECKS_ICON_URI,
+  ZAP_ICON_URI,
   SPLIT_ICON_URI,
   CLOCK_ICON_URI,
   WORKFLOW_ICON_URI,
@@ -85,8 +86,8 @@ Blockly.defineBlocksWithJsonArray([
     message0: '%1 %2',
     args0: [
       // MAPPING REFERENCE:
-      // - Block type: 'action_block' ➔ Displays user-facing prefix 'ROUTINE:' (replaces PROCEDURE)
-      iconConfig(LISTCHECKS_ICON_URI, 'ROUTINE:'),
+      // - Block type: 'action_block' ➔ Displays user-facing prefix 'SKILL:' (replaces ROUTINE/PROCEDURE)
+      iconConfig(ZAP_ICON_URI, 'SKILL:'),
       { type: 'field_label_serializable', name: 'name', text: '' },
     ],
     output: 'action_block',
@@ -135,6 +136,26 @@ Blockly.defineBlocksWithJsonArray([
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.gesture_block,
+  },
+  {
+    type: 'voice_command_block',
+    message0: '%1 Voice command %2',
+    args0: [
+      iconConfig(MIC_ICON_URI, 'Voice'),
+      {
+        type: 'field_dropdown',
+        name: 'VOICE_WORD',
+        options: [
+          ['Yes', 'YES'],
+          ['No', 'NO'],
+          ['Done', 'DONE'],
+          ['Proceed', 'PROCEED'],
+        ],
+      },
+    ],
+    output: 'Boolean',
+    colour: blocksColours.eventsConditions,
+    tooltip: blockDescriptionsByType.voice_command_block,
   },
   {
     type: 'timer_block',
@@ -203,10 +224,10 @@ Blockly.defineBlocksWithJsonArray([
   {
     type: 'processing_block',
     // MAPPING REFERENCE:
-    // - Block type: 'processing_block' ➔ Displays user-facing sentence 'Run routine [Routine]'
-    message0: '%1 Run routine %2',
+    // - Block type: 'processing_block' ➔ Displays user-facing sentence 'Execute skill [Skill]'
+    message0: '%1 Execute skill %2',
     args0: [
-      iconConfig(BOT_ICON_URI, 'ROBOT:'),
+      iconConfig(ZAP_ICON_URI, 'SKILL:'),
       { type: 'input_value', name: 'ACTION', check: 'action_block' },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -638,8 +659,8 @@ Blockly.defineBlocksWithJsonArray([
   createShadowEntityBlock(
     'shadow_action_block',
     'action_block',
-    // MAPPING REFERENCE: shadow placeholder for action_block ➔ Select Routine
-    'Select Routine',
+    // MAPPING REFERENCE: shadow placeholder for action_block ➔ Select Skill
+    'Select Skill',
   ),
   createShadowTriggerBlock(),
   createShadowSequenceBlock(),

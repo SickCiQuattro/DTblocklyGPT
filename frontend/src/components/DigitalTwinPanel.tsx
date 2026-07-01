@@ -29,6 +29,7 @@ import {
   Camera,
   Hand,
   Eye,
+  Mic,
   AlertTriangle,
   CheckCircle2,
   Wifi,
@@ -53,6 +54,7 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
+import { useVoiceCommand } from 'hooks/useVoiceCommand'
 import * as Blockly from 'blockly/core'
 import {
   highlightExecutingBlock,
@@ -121,6 +123,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     connected,
   } = useRosEvents()
   const webcam = useWebcamVision()
+  const voice = useVoiceCommand()
 
   // ── Live block-execution highlight ──────────────────────────────────────────
   // Per-step reaction: highlight the running block (+ its object/location),
@@ -150,12 +153,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const activeDetections =
     liveEvents && webcam.active ? webcam.detections : objectDetection.detections
 
-  // Start/stop webcam with toggle
+  // Start/stop webcam + voice recognition with the live toggle
   useEffect(() => {
     if (liveEvents) {
       webcam.start()
+      voice.start()
     } else {
       webcam.stop()
+      voice.stop()
     }
   }, [liveEvents]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -946,6 +951,50 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             </Stack>
           </Box>
         </Box>
+
+        {/* ── Voice command (live) ── */}
+        {liveEvents && (
+          <Box
+            sx={{
+              padding: '10px 12px',
+              background: voice.word
+                ? 'rgba(99,102,241,0.1)'
+                : 'rgba(255,255,255,0.03)',
+              border: voice.word
+                ? '1px solid rgba(99,102,241,0.35)'
+                : '1px solid rgba(255,255,255,0.07)',
+              borderRadius: '8px',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.66rem',
+                color: '#64748B',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: '5px',
+              }}
+            >
+              Voice
+            </Typography>
+            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
+              <Mic size={13} color={voice.word ? '#818CF8' : '#475569'} />
+              <Typography
+                sx={{
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: voice.word ? '#A5B4FC' : '#475569',
+                  fontFamily: "'Geist Mono', monospace",
+                }}
+              >
+                {!voice.browserSupported
+                  ? 'not supported in this browser'
+                  : voice.word || (voice.active ? 'listening…' : 'idle')}
+              </Typography>
+            </Stack>
+          </Box>
+        )}
 
         {/* ── Execution target (Simulation vs Real Robot) ── */}
         <Box>

@@ -153,7 +153,7 @@ export const MacroPreviewModal = ({
   const resolvedMacroDescription =
     typeof macroDescription === 'string' && macroDescription.trim().length > 0
       ? macroDescription.trim()
-      : 'No description available for this routine.'
+      : 'No description available for this task.'
 
   return (
     <Dialog
@@ -216,7 +216,7 @@ export const MacroPreviewModal = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              Saved Routine: {macroName}
+              Saved Task: {macroName}
             </Typography>
             <Typography
               component="p"
