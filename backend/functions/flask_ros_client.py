@@ -46,6 +46,16 @@ class FlaskRosClient:
         resp.raise_for_status()
         return resp.json().get("position", [])
 
+    def get_actual_joints_real(self) -> list:
+        """Return the physical arm's j1..j6 (deg) from /api/actual-joints-real, or [].
+
+        Empty when cobotta_node is not publishing encoders (no hardware connected).
+        """
+        resp = self._session.get(self._url("/api/actual-joints-real"), timeout=_STATE_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("position", []) if data.get("available") else []
+
     def get_vision_state(self) -> dict:
         """Return the latest gesture/detection cache from /api/vision/state."""
         resp = self._session.get(self._url("/api/vision/state"), timeout=_VISION_TIMEOUT)

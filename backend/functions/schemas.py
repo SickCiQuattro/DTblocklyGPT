@@ -10,12 +10,13 @@ class MessagePart(TypedDict):
 
 
 class AbstractCondition(TypedDict):
-    type: Literal["sensor_signal", "find_object", "human_feedback", "touch_detect", "gesture", "timer"]
+    type: Literal["sensor_signal", "find_object", "human_feedback", "touch_detect", "gesture", "timer", "voice"]
     sensor: Optional[str]  # for sensor_signal
     objectId: Optional[int]  # for find_object
     objectName: Optional[str]  # for find_object
     gestureType: Optional[Literal["THUMBS_UP", "OPEN_HAND"]]  # for gesture
     seconds: Optional[int]  # for timer
+    voiceWord: Optional[Literal["YES", "NO", "DONE", "PROCEED"]]  # for voice
 
 
 class AbstractPickStep(TypedDict):

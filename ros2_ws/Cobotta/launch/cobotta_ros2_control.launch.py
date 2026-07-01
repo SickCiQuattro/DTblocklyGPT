@@ -65,17 +65,20 @@ def _setup(context, *args, **kwargs):
                    "config_file:=" + os.path.join(COB_DIR, "map_ros2_control.yaml")],
         output="screen")
 
-    # Flask REST bridge (:5000, holds BridgeNodeROS) + SocketIO (:5001).
+    # Flask REST bridge (:5000, holds BridgeNodeROS) + SocketIO (:5001) + camera
+    # stream (:8080).
     flask = Node(package="cobotta_rest_api", executable="flask_node", output="screen")
     polling = Node(package="cobotta_rest_api", executable="polling_socket_node",
                    output="screen")
+    web_video = Node(package="web_video_server", executable="web_video_server",
+                     output="screen")
 
     return [
         gz, rsp, bridge,
         _spawner("joint_state_broadcaster"),
         _spawner("arm_controller"),
         _spawner("gripper_controller"),
-        flask, polling,
+        flask, polling, web_video,
     ]
 
 

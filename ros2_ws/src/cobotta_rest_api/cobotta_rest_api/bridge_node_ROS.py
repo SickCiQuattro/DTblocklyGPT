@@ -32,6 +32,10 @@ class BridgeNodeROS(Node):
         self.subscriber = self.create_subscription(
             JointState, "/joint_states", self.position_callback, 10
         )
+        # Real arm encoder feed (cobotta_node when DRIVE_HARDWARE) — lets the app seed
+        # IK from the physical robot instead of the Gazebo twin.
+        self.create_subscription(
+            JointState, "/cobotta/joint_states_real", self._real_position_callback, 10)
         self.create_subscription(String, "/human/gesture", self._gesture_callback, 10)
         self.create_subscription(String, "/vision/object_detected", self._object_callback, 10)
 
@@ -59,7 +63,10 @@ class BridgeNodeROS(Node):
             'joint_right': 0.0,
         }
 
-        # Guards current_position dict (written by ROS spin thread, read by Flask threads).
+        # Real arm joint state (empty until cobotta_node publishes encoder readings).
+        self.current_position_real: dict = {}
+
+        # Guards both position dicts (written by ROS spin thread, read by Flask threads).
         self._position_lock = threading.Lock()
 
         self.get_logger().info(
@@ -77,8 +84,8 @@ class BridgeNodeROS(Node):
         pos_dict = {}
         for name, pos in zip(msg.name, msg.position):
             # joint_left / joint_right are gripper linear joints — keep raw Gazebo value.
-            # Rotational joints come in radians from Gazebo; convert to degrees for consistency
-            # with the rest of the stack (Flask API, simulate.py, gazebo_command_node).
+            # Rotational joints come in radians; convert to degrees for consistency with
+            # the rest of the stack (Flask API, simulate.py).
             if name.startswith('joint_'):
                 pos_dict[name] = pos
             else:
@@ -92,6 +99,17 @@ class BridgeNodeROS(Node):
     def send_request_position(self):
         with self._position_lock:
             return dict(self.current_position)
+
+    def _real_position_callback(self, msg):
+        """Cache the physical arm's encoder state (rad → deg), same as the sim path."""
+        pos = {name: convert_rad_to_grad(p) for name, p in zip(msg.name, msg.position)}
+        with self._position_lock:
+            self.current_position_real.update(pos)
+
+    def send_request_position_real(self):
+        """Real arm joint state, or {} if cobotta_node has published nothing yet."""
+        with self._position_lock:
+            return dict(self.current_position_real)
 
     # ── command path (ros2_control trajectory controllers) ────────────────────
 

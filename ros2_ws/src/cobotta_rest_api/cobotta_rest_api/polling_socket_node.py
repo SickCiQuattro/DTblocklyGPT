@@ -5,7 +5,6 @@ from threading import Thread
 
 import rclpy
 from rclpy.node import Node
-from my_robot_interfaces.msg import PosJoint
 from std_msgs.msg import String
 
 from flask import Flask
@@ -18,9 +17,6 @@ class PollingSocketNode(Node):
     def __init__(self):
         super().__init__("polling_socket_node")
 
-        self.subscriber = self.create_subscription(
-            PosJoint, "/actual_joint_position", self.actual_position_callback, 10
-        )
         self.gesture_sub = self.create_subscription(
             String, "/human/gesture", self.gesture_callback, 10
         )
@@ -30,10 +26,6 @@ class PollingSocketNode(Node):
         self.step_status_sub = self.create_subscription(
             String, "/human/step_status", self.step_status_callback, 10
         )
-
-    def actual_position_callback(self, msg):
-        actual_position = list(msg.position)
-        socketio.emit('robot_position', actual_position)
 
     def gesture_callback(self, msg):
         socketio.emit('gesture_detected', msg.data)

@@ -43,6 +43,7 @@ class EventsItems(Enum):
     FIND = "find_object_block"
     TIMER = "timer_block"
     GESTURE = "gesture_block"
+    VOICE = "voice_command_block"
 
 
 # ── Library Entities (drag-and-drop references) ────────────────────────────────

@@ -1,8 +1,10 @@
 import base64
+import json
 import logging
 import os
 import shutil
 import threading
+import time
 from pathlib import Path
 
 import cv2
@@ -115,3 +117,50 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
     threading.Thread(target=_report, daemon=True).start()
 
     return JsonResponse({"gesture": gesture})
+
+
+# ── Voice command (browser Web Speech API → Django cache) ────────────────────
+# The browser recognises speech locally and POSTs the matched command word
+# (YES / NO / DONE / PROCEED). We cache it in-process so the simulation loop in
+# simulate.py (same Django process) can poll it — no ROS bridge, no audio here.
+
+_voice_lock = threading.Lock()
+_latest_voice = "NONE"
+_latest_voice_time = 0.0
+
+# Commands the frontend may send. Matching/synonyms (incl. Italian) live in the
+# browser hook; the backend only validates and stores the normalised code.
+_VOICE_WORDS = {"YES", "NO", "DONE", "PROCEED"}
+
+
+def get_latest_voice(max_age_s: float = 3.0) -> str:
+    """Return the last recognised voice command if fresh, else ``"NONE"``."""
+    with _voice_lock:
+        if time.monotonic() - _latest_voice_time <= max_age_s:
+            return _latest_voice
+    return "NONE"
+
+
+@csrf_exempt
+def process_voice_command(request: HttpRequest) -> JsonResponse:
+    """Store the latest voice command recognised by the operator's browser."""
+    global _latest_voice, _latest_voice_time
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "unauthorized"}, status=401)
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    word = str(data.get("voice", "")).strip().upper()
+    if word not in _VOICE_WORDS:
+        return JsonResponse({"error": "unknown voice command", "voice": word}, status=400)
+
+    with _voice_lock:
+        _latest_voice = word
+        _latest_voice_time = time.monotonic()
+
+    return JsonResponse({"status": "ok", "voice": word})

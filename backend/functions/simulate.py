@@ -105,7 +105,22 @@ def set_current_state(joints, hand):
 
 
 def sync_current_state_from_ros():
-    """Sync joint state from the Flask bridge. Returns True on success, False if state is stale."""
+    """Sync joint state from the Flask bridge. Returns True on success, False if state is stale.
+
+    With DRIVE_HARDWARE, seed the joints from the physical arm's encoders
+    (/api/actual-joints-real) so IK plans from where the real robot actually is —
+    the closed loop. Falls back to the Gazebo twin if the real feed is empty.
+    """
+    if DRIVE_HARDWARE:
+        try:
+            real = _bridge.get_actual_joints_real()
+            if len(real) >= 6:
+                _, hand = get_current_state()  # no real hand readback — keep current
+                set_current_state(real[:6], hand)
+                return True
+            print("[SIMULATOR] real encoder feed empty — falling back to Gazebo state")
+        except Exception as e:
+            print(f"[SIMULATOR] Error reading real joint state: {e} — falling back to Gazebo")
     try:
         pos = _bridge.get_actual_joints()
         if len(pos) >= 7:
@@ -1511,6 +1526,9 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
         _interruptible_sleep(seconds)
         print("[CONDITION] Timer expired → condition fulfilled")
         return True
+    elif block_type == EventsItems.VOICE.value:
+        word = condition_block.get("fields", {}).get("VOICE_WORD", "YES")
+        label = f"Voice command ({word})"
     else:
         label = f"Condition ({block_type})"
 
@@ -1626,6 +1644,34 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         _interruptible_sleep(seconds)
         print("[CONDITION] Timer expired → condition fulfilled")
         return True
+
+    elif block_type == EventsItems.VOICE.value:
+        # Voice recognition happens in the operator's browser (Web Speech API);
+        # the matched word is cached in-process by vision_live.process_voice_command.
+        # No ROS bridge involved — poll the Django-side cache directly.
+        from backend.functions.vision_live import get_latest_voice
+
+        word = condition_block.get("fields", {}).get("VOICE_WORD", "YES")
+        print(f"[CONDITION] Waiting for voice command: {word} (timeout {timeout}s)...")
+        deadline = time.monotonic() + timeout
+        detected = False
+        while time.monotonic() < deadline:
+            if SIMULATION_STOP_EVENT.is_set():
+                break
+            if get_latest_voice() == word:
+                detected = True
+                break
+            _interruptible_sleep(0.5)
+        if not detected:
+            print(f"[WARNING] Voice command '{word}' not heard within {timeout}s — continuing")
+            try:
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "voice", "value": word})
+            except Exception:
+                pass
+        else:
+            print(f"[CONDITION] Voice command '{word}' heard!")
+        return detected
 
     # Fallback: sensor_signal, touch_detect, human_feedback → treat as fulfilled
     return _log_condition(condition_block, simulate_event=True)
@@ -1872,6 +1918,9 @@ def simulation_recursive_blockly_parser(
                 if ev_type == EventsItems.GESTURE.value:
                     step_start_payload["condition"] = "gesture"
                     step_start_payload["value"] = confirm_event.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
+                elif ev_type == EventsItems.VOICE.value:
+                    step_start_payload["condition"] = "voice"
+                    step_start_payload["value"] = confirm_event.get("fields", {}).get("VOICE_WORD", "YES")
                 elif ev_type == EventsItems.FIND.value:
                     try:
                         obj_data = loads(confirm_event["inputs"]["OBJECT"]["block"]["data"])
