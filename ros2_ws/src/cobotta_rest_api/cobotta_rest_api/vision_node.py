@@ -3,6 +3,7 @@ import json
 import cv2
 import numpy as np
 import requests
+from requests.auth import HTTPDigestAuth
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -15,91 +16,113 @@ class VisionNode(Node):
 
         self._object_pub = self.create_publisher(String, "/vision/object_detected", 10)
 
-        # camera_source: USB index ("0"), a cv2 URL/path ("rtsp://…", "/dev/video2"),
-        # or an HTTP snapshot URL ("http://…/GetOneShot") — e.g. the COBOTTA Canon cam.
+        # A camera source is a USB index ("0"), a cv2 URL/path ("rtsp://…",
+        # "/dev/video2"), or an HTTP snapshot URL ("http://…/image.cgi" — Canon WebView).
         self.declare_parameter("camera_source", "0")
-        # Optional HTTP auth for the snapshot URL (Canon WebView; empty = none).
         self.declare_parameter("camera_user", "")
         self.declare_parameter("camera_pass", "")
-        src = str(self.get_parameter("camera_source").value)
-        user = str(self.get_parameter("camera_user").value)
-        password = str(self.get_parameter("camera_pass").value)
+        # Optional fallback used automatically if the primary keeps failing (e.g. Canon
+        # down → USB webcam "0"). Empty = no fallback.
+        self.declare_parameter("camera_fallback", "")
+        self.declare_parameter("camera_fallback_user", "")
+        self.declare_parameter("camera_fallback_pass", "")
+        # Switch to fallback after this many consecutive grab failures; retry the
+        # primary every retry_primary_secs while running on the fallback.
+        self.declare_parameter("max_failures", 6)
+        self.declare_parameter("retry_primary_secs", 15.0)
 
-        self._http_url = None
-        self._http_auth = None
-        self._cap = None
+        def p(name):
+            return str(self.get_parameter(name).value)
 
-        if src.startswith("http://") or src.startswith("https://"):
-            # HTTP snapshot mode: poll a single-JPEG endpoint and decode each frame.
-            self._http_url = src
-            if user:
-                # Canon WebView typically uses Digest; falls back cleanly if Basic.
-                self._http_auth = requests.auth.HTTPDigestAuth(user, password)
-            self._cam_ok = True
-            self.get_logger().info(f"VisionNode: HTTP snapshot source '{src}'")
-        else:
-            self._cap = cv2.VideoCapture(int(src) if src.isdigit() else src)
-            self._cam_ok = self._cap.isOpened()
-            if not self._cam_ok:
-                self.get_logger().fatal(
-                    f"VisionNode: camera source '{src}' unavailable — "
-                    "object detection will be skipped."
-                )
+        self._caps = []   # cv2.VideoCapture handles to release on shutdown
+        self._sources = [self._build_source(
+            p("camera_source"), p("camera_user"), p("camera_pass"), "primary")]
+        if p("camera_fallback"):
+            self._sources.append(self._build_source(
+                p("camera_fallback"), p("camera_fallback_user"),
+                p("camera_fallback_pass"), "fallback"))
+
+        self._active = 0                 # index into self._sources
+        self._fail = 0                   # consecutive failures on the active source
+        self._max_failures = int(self.get_parameter("max_failures").value)
+        # YOLO runs on every 5th 10 Hz tick (~2 Hz) → convert seconds to ticks.
+        self._retry_ticks = max(1, int(float(self.get_parameter("retry_primary_secs").value) / 0.5))
+        self._since_primary_try = 0
 
         # Lazy-import heavy deps here so ROS2 init is not blocked
         from ultralytics import YOLO
         self._yolo = YOLO("yolov8n.pt")
 
         self._frame_counter = 0
-
-        # 10 Hz timer
-        self.create_timer(0.1, self._timer_callback)
+        self.create_timer(0.1, self._timer_callback)   # 10 Hz
 
     # ------------------------------------------------------------------
-    # Timer callback — runs at 10 Hz
+    # Source construction / grabbing
     # ------------------------------------------------------------------
-    def _timer_callback(self):
-        if not self._cam_ok:
-            self._publish_detections([])
-            return
-
-        self._frame_counter += 1
-
-        if self._http_url is not None:
-            # HTTP snapshot: fetch only on the YOLO tick (~2 Hz, gentle on the camera).
-            if self._frame_counter % 5 != 0:
-                return
-            frame = self._grab_http()
-            if frame is None:
-                self._publish_detections([])
-                return
+    def _build_source(self, src, user, password, label):
+        """Return a source descriptor for an HTTP-snapshot URL or a cv2 device."""
+        if src.startswith("http://") or src.startswith("https://"):
+            auth = HTTPDigestAuth(user, password) if user else None
+            self.get_logger().info(f"VisionNode: {label} = HTTP snapshot '{src}'")
+            return {"kind": "http", "url": src, "auth": auth, "label": label}
+        cap = cv2.VideoCapture(int(src) if src.isdigit() else src)
+        self._caps.append(cap)
+        if not cap.isOpened():
+            self.get_logger().warning(f"VisionNode: {label} device '{src}' not open (yet).")
         else:
-            ret, frame = self._cap.read()
-            if not ret:
-                self.get_logger().warning("VisionNode: failed to read frame from camera.")
-                self._publish_detections([])
-                return
-            # --- YOLO every 5 frames ---
-            if self._frame_counter % 5 != 0:
-                return
+            self.get_logger().info(f"VisionNode: {label} = device '{src}'")
+        return {"kind": "cv2", "cap": cap, "label": label}
 
-        self._publish_detections(self._run_yolo(frame))
-
-    # ------------------------------------------------------------------
-    # HTTP snapshot grab (e.g. Canon WebView /-wvhttp-01-/GetOneShot)
-    # ------------------------------------------------------------------
-    def _grab_http(self):
+    def _grab(self, source):
+        """Return one BGR frame from a source, or None on failure."""
         try:
-            resp = requests.get(self._http_url, auth=self._http_auth, timeout=2.0)
-            resp.raise_for_status()
-            arr = np.frombuffer(resp.content, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if frame is None:
-                self.get_logger().warning("VisionNode: HTTP snapshot decode failed.")
+            if source["kind"] == "http":
+                resp = requests.get(source["url"], auth=source["auth"], timeout=2.0)
+                resp.raise_for_status()
+                frame = cv2.imdecode(np.frombuffer(resp.content, np.uint8), cv2.IMREAD_COLOR)
+            else:
+                ok, frame = source["cap"].read()
+                frame = frame if ok else None
             return frame
         except Exception as exc:  # noqa: BLE001
-            self.get_logger().warning(f"VisionNode: HTTP snapshot fetch error: {exc}")
+            self.get_logger().warning(f"VisionNode: {source['label']} grab error: {exc}")
             return None
+
+    # ------------------------------------------------------------------
+    # Timer callback — runs at 10 Hz, infers every 5th frame (~2 Hz)
+    # ------------------------------------------------------------------
+    def _timer_callback(self):
+        self._frame_counter += 1
+        if self._frame_counter % 5 != 0:
+            return
+
+        # While on the fallback, periodically probe the primary and switch back.
+        if self._active != 0:
+            self._since_primary_try += 1
+            if self._since_primary_try >= self._retry_ticks:
+                self._since_primary_try = 0
+                frame = self._grab(self._sources[0])
+                if frame is not None:
+                    self.get_logger().info("VisionNode: primary recovered → switching back")
+                    self._active = 0
+                    self._fail = 0
+                    self._publish_detections(self._run_yolo(frame))
+                    return
+
+        frame = self._grab(self._sources[self._active])
+        if frame is None:
+            self._fail += 1
+            self._publish_detections([])
+            if self._fail >= self._max_failures and len(self._sources) > 1:
+                self._active = (self._active + 1) % len(self._sources)
+                self._fail = 0
+                self._since_primary_try = 0
+                self.get_logger().warning(
+                    f"VisionNode: source failed → switching to {self._sources[self._active]['label']}")
+            return
+
+        self._fail = 0
+        self._publish_detections(self._run_yolo(frame))
 
     # ------------------------------------------------------------------
     # YOLO inference
@@ -131,8 +154,9 @@ class VisionNode(Node):
     # Cleanup
     # ------------------------------------------------------------------
     def destroy_node(self):
-        if self._cap is not None and self._cap.isOpened():
-            self._cap.release()
+        for cap in self._caps:
+            if cap.isOpened():
+                cap.release()
         super().destroy_node()
 
 

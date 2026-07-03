@@ -5,6 +5,7 @@ import time
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
 from .cobotta_utils import (
@@ -28,6 +29,7 @@ class BridgeNodeROS(Node):
         self.step_status_pub = self.create_publisher(String, "/human/step_status", 10)
         self._gesture_pub = self.create_publisher(String, "/human/gesture", 10)
         self._move_target_client = self.create_client(MoveTarget, "/cobotta/move_target")
+        self._halt_client = self.create_client(Trigger, "/cobotta/halt")
 
         self.subscriber = self.create_subscription(
             JointState, "/joint_states", self.position_callback, 10
@@ -65,6 +67,8 @@ class BridgeNodeROS(Node):
 
         # Real arm joint state (empty until cobotta_node publishes encoder readings).
         self.current_position_real: dict = {}
+        self._last_joint_state_time = 0.0
+        self._last_real_time = 0.0
 
         # Guards both position dicts (written by ROS spin thread, read by Flask threads).
         self._position_lock = threading.Lock()
@@ -93,6 +97,7 @@ class BridgeNodeROS(Node):
 
         with self._position_lock:
             self.current_position.update(pos_dict)
+            self._last_joint_state_time = time.monotonic()
 
         self.get_logger().debug(f'Position updated: {self.current_position}')
 
@@ -105,6 +110,7 @@ class BridgeNodeROS(Node):
         pos = {name: convert_rad_to_grad(p) for name, p in zip(msg.name, msg.position)}
         with self._position_lock:
             self.current_position_real.update(pos)
+            self._last_real_time = time.monotonic()
 
     def send_request_position_real(self):
         """Real arm joint state, or {} if cobotta_node has published nothing yet."""
@@ -244,6 +250,48 @@ class BridgeNodeROS(Node):
             time.sleep(0.02)
         result = future.result()
         return {"ok": result.ok, "message": result.message}
+
+    def call_halt(self, timeout=5.0) -> dict | None:
+        """Call /cobotta/halt. None means no hardware node — sim-only stop is enough."""
+        if not self._halt_client.wait_for_service(timeout_sec=0.2):
+            return None
+        req = Trigger.Request()
+        future = self._halt_client.call_async(req)
+        deadline = time.monotonic() + timeout
+        while not future.done():
+            if time.monotonic() > deadline:
+                return {"ok": False, "message": "timeout"}
+            time.sleep(0.02)
+        result = future.result()
+        return {"ok": result.success, "message": result.message}
+
+    def get_health(self) -> dict:
+        """Cheap aggregate status — no motion, no B-CAP traffic."""
+        def age(t):
+            return round(time.monotonic() - t, 2) if t else None
+
+        with self._position_lock:
+            joint_state_age = age(self._last_joint_state_time)
+            real_age = age(self._last_real_time)
+        with self._object_lock:
+            detections = list(self._latest_detections)
+            detections_age = age(self._latest_object_time)
+        with self._gesture_lock:
+            gesture = self._latest_gesture
+            gesture_age = age(self._latest_gesture_time)
+
+        return {
+            "flask": True,
+            "ros_bridge": True,
+            "gazebo": {"joint_state_age_s": joint_state_age},
+            "hardware": {
+                "move_target_available": self._move_target_client.service_is_ready(),
+                "halt_available": self._halt_client.service_is_ready(),
+                "encoder_age_s": real_age,
+            },
+            "vision": {"detections_age_s": detections_age, "detections": detections},
+            "gesture": {"gesture": gesture, "age_s": gesture_age},
+        }
 
     def get_vision_state(self) -> dict:
         with self._gesture_lock:

@@ -1,3 +1,4 @@
+import json
 import signal
 import threading
 
@@ -6,6 +7,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import JointState
+from std_srvs.srv import Trigger
 
 from .orin.bcapclient import BCAPClient as bcapclient
 from .cobotta_utils import convert_grad_to_rad
@@ -62,8 +64,22 @@ class HardwareControl(Node):
         # connection): the move service, reconnects, and the encoder-read timer.
         self._bcap_lock = threading.Lock()
 
+        # Second, independent B-CAP session used only to send Halt while the main
+        # session may be blocked inside a robot_move PTP. Own socket, own lock —
+        # never touches self._bcap_lock so it can't be starved by a hung move.
+        self._halt_bcap = None
+        self._halt_ctrl = None
+        self._halt_robot = None
+        self._halt_lock = threading.Lock()
+        # Set before Halt is sent, cleared when a new move request comes in. Lets
+        # _move_target_cb tell "halted on purpose" apart from a real B-CAP error
+        # so it does not reconnect-and-retry the move that was just halted.
+        self._halt_requested = threading.Event()
+
+        self._enable_hardware = enable_hardware
         if enable_hardware:
             self._connect()
+            self._connect_halt()
         else:
             self.get_logger().info(
                 "cobotta_node: enable_hardware=false — hardware disabled, no B-CAP connection."
@@ -79,6 +95,17 @@ class HardwareControl(Node):
             "/cobotta/move_target",
             self._move_target_cb,
             callback_group=self._cb_group,
+        )
+
+        # Halt channel: separate callback group so it is scheduled even while
+        # _move_target_cb is blocked inside a PTP (both groups run concurrently
+        # under the MultiThreadedExecutor in main()).
+        self._halt_cb_group = MutuallyExclusiveCallbackGroup()
+        self.create_service(
+            Trigger,
+            "/cobotta/halt",
+            self._halt_cb,
+            callback_group=self._halt_cb_group,
         )
 
         # Closed loop: publish the real arm's encoder state so the app can seed IK
@@ -169,6 +196,93 @@ class HardwareControl(Node):
                 self.get_logger().info("cobotta_node: B-CAP disconnected cleanly")
             except Exception as exc:
                 self.get_logger().warning(f"cobotta_node: error during disconnect: {exc}")
+        with self._halt_lock:
+            self._disconnect_halt_locked()
+
+    # ── halt channel (second B-CAP session) ─────────────────────────────────────
+
+    def _connect_halt(self):
+        """Best-effort: a missing halt channel must never block startup or a move.
+
+        No TakeArm / Motor / ExtSpeed here — the main session owns the arm; Halt
+        does not require the executable token, only a live controller handle.
+        """
+        self.get_logger().info("cobotta_node: connecting halt channel ...")
+        with self._halt_lock:
+            self._connect_halt_locked()
+        if self._halt_bcap is not None:
+            self.get_logger().info("cobotta_node: halt channel connected")
+
+    def _disconnect_halt_locked(self):
+        """Best-effort teardown. Caller MUST hold self._halt_lock."""
+        if self._halt_bcap is None:
+            return
+        try:
+            if self._halt_ctrl is not None:
+                self._halt_bcap.controller_disconnect(self._halt_ctrl)
+            self._halt_bcap.service_stop()
+        except Exception as exc:
+            self.get_logger().warning(f"cobotta_node: error during halt disconnect: {exc}")
+        finally:
+            self._halt_bcap = None
+            self._halt_ctrl = None
+            self._halt_robot = None
+
+    def _connect_halt_locked(self):
+        """Raw halt-channel connect. Caller MUST hold self._halt_lock."""
+        try:
+            self._halt_bcap = bcapclient(self.host, self.port, self._connect_timeout)
+            self._halt_bcap.service_start("")
+            self._halt_bcap.settimeout(5.0)
+            self._halt_ctrl = self._halt_bcap.controller_connect(
+                "", self._provider, "localhost", ""
+            )
+            self._halt_robot = self._halt_bcap.controller_getrobot(self._halt_ctrl, "Arm0")
+        except Exception as exc:
+            self.get_logger().warning(f"cobotta_node: halt channel connect failed: {exc}")
+            self._halt_bcap = None
+            self._halt_ctrl = None
+            self._halt_robot = None
+
+    def _halt_cb(self, _request, response):
+        """Handle /cobotta/halt — sends Halt on the second session, motors stay on.
+
+        Not a safety stop: this is best-effort operational reliability. The
+        teach-pendant deadman / e-stop remains the only safety-rated stop.
+        """
+        if not self._hw_ok:
+            response.success = False
+            response.message = "hardware disabled"
+            return response
+
+        # Set BEFORE sending Halt: even if this call fails after the arm already
+        # started decelerating, _move_target_cb must not reconnect-and-retry the
+        # move that is being halted.
+        self._halt_requested.set()
+
+        last_exc = None
+        with self._halt_lock:
+            for attempt in range(2):  # first attempt + one reconnect retry
+                if self._halt_bcap is None:
+                    self._connect_halt_locked()
+                if self._halt_bcap is not None:
+                    try:
+                        self._halt_bcap.robot_halt(self._halt_robot)
+                        self.get_logger().info("cobotta_node: Halt sent on halt channel")
+                        response.success = True
+                        response.message = ""
+                        return response
+                    except Exception as exc:
+                        last_exc = exc
+                        self._disconnect_halt_locked()
+                if attempt == 0:
+                    self.get_logger().warning(
+                        f"cobotta_node: halt failed, reconnect + retry: {last_exc}")
+
+        self.get_logger().error(f"cobotta_node: halt failed after retry: {last_exc}")
+        response.success = False
+        response.message = "halt failed — use e-stop"
+        return response
 
     # ── motion service handler ────────────────────────────────────────────────
 
@@ -191,6 +305,8 @@ class HardwareControl(Node):
 
         last_exc = None
         with self._bcap_lock:
+            # A fresh move request supersedes any earlier halt.
+            self._halt_requested.clear()
             for attempt in range(2):  # first attempt + one retry
                 try:
                     if request.hand_only:
@@ -205,10 +321,15 @@ class HardwareControl(Node):
                             self.hCtrl, "HandMoveA", [request.hand, 100])
                         self.get_logger().info(f"cobotta_node: PTP → {pose_str} hand={request.hand}")
                     response.ok = True
-                    response.message = ""
+                    response.message = self._read_hand_pos_json()
                     return response
                 except Exception as exc:
                     last_exc = exc
+                    if self._halt_requested.is_set():
+                        # Halted on purpose — do not reconnect and replay the move.
+                        response.ok = False
+                        response.message = "halted by operator"
+                        return response
                     if attempt == 0:
                         self.get_logger().warning(
                             f"cobotta_node: move_target failed, reconnect + retry: {exc}")
@@ -225,6 +346,19 @@ class HardwareControl(Node):
         response.ok = False
         response.message = "robot arm error — see cobotta_node log"
         return response
+
+    def _read_hand_pos_json(self) -> str:
+        """Best-effort gripper-aperture readout, piggybacked on a successful move.
+
+        Non-fatal by design: an app-side grasp check should degrade to "no data",
+        never fail the move itself. Caller MUST hold self._bcap_lock.
+        """
+        try:
+            hand_pos = self.m_bcapclient.robot_execute(self.HRobot, "HandCurPos")
+            return json.dumps({"hand_mm": float(hand_pos)})
+        except Exception as exc:
+            self.get_logger().warning(f"cobotta_node: HandCurPos read failed: {exc}")
+            return ""
 
     # ── encoder feedback (closed loop) ─────────────────────────────────────────
 

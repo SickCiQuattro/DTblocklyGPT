@@ -136,7 +136,14 @@ def movePath():
 @bp.route("/stop", methods=["POST"])
 def stopPath():
     was_active = flask_pub.stop_path()
-    return jsonify({"status": "stopped", "was_executing": was_active})
+    # None when no hardware node is running — sim-only stop is enough in that case.
+    halt = flask_pub.call_halt()
+    return jsonify({"status": "stopped", "was_executing": was_active, "hardware_halt": halt})
+
+
+@bp.route("/health")
+def health():
+    return jsonify(flask_pub.get_health())
 
 
 def createJointState(joint_positions):
