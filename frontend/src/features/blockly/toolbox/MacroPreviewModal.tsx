@@ -163,15 +163,7 @@ export const MacroPreviewModal = ({
       maxWidth="sm"
       aria-labelledby="macro-preview-dialog-title"
       slotProps={{
-        paper: {
-          sx: {
-            overflow: 'hidden',
-            borderRadius: 2,
-            border: `1px solid ${theme.palette.slate[200]}`,
-            boxShadow:
-              '0 20px 50px rgba(15, 23, 42, 0.2), 0 6px 16px rgba(15, 23, 42, 0.12)',
-          },
-        },
+        paper: { sx: { overflow: 'hidden' } },
       }}
     >
       <DialogTitle
@@ -208,7 +200,7 @@ export const MacroPreviewModal = ({
               sx={{
                 m: 0,
                 fontSize: '1.08rem',
-                fontWeight: 800,
+                fontWeight: 600,
                 lineHeight: 1.2,
                 color: theme.palette.slate[900],
                 whiteSpace: 'nowrap',

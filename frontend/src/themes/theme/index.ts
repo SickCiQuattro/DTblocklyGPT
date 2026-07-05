@@ -43,9 +43,9 @@ export const accent = {
 
 /** Neutral grays used by the Blockly canvas chrome (grid, scrollbar, bg). */
 export const canvasNeutral = {
-  bg: '#F5F5F5',
+  bg: '#FAFAFB', // matches editor.css .blocklySvg — one canvas color, not two
   scrollbar: '#D9D9D9',
-  grid: '#C4C4C4',
+  grid: '#DEDEE3', // lighter grid dots, less visual noise on the canvas
 } as const
 
 export const Theme = () => {
@@ -106,13 +106,17 @@ export const Theme = () => {
       darker: '#B91C1C',
       contrastText: '#FFFFFF',
     },
+    // warning/success/info contrastText is ink, not white: white-on-main fails
+    // WCAG 1.4.3 (2.15 / 2.54 / 2.77:1). Ink on these three mains clears
+    // 6-8:1 (Supabase ink-on-brand pattern). error stays white — error.dark
+    // (not .main) is used wherever error carries text, see overrides/Button.ts.
     warning: {
       lighter: '#fef3c7',
       light: '#FCD34D',
       main: '#F59E0B',
       dark: '#D97706',
       darker: '#B45309',
-      contrastText: '#FFFFFF',
+      contrastText: '#1A1A2E',
     },
     info: {
       lighter: '#e0f2fe',
@@ -120,7 +124,7 @@ export const Theme = () => {
       main: '#0EA5E9',
       dark: '#0284C7',
       darker: '#0369A1',
-      contrastText: '#FFFFFF',
+      contrastText: '#1A1A2E',
     },
     success: {
       lighter: '#d1fae5',
@@ -128,7 +132,21 @@ export const Theme = () => {
       main: '#10B981',
       dark: '#059669',
       darker: '#047857',
-      contrastText: '#FFFFFF',
+      contrastText: '#1A1A2E',
+    },
+    // "Draft in progress" task status — previously a bare hex with no theme
+    // token (utils/taskStatus.ts). Cyan, not blue: the old #3B82F6 sat only
+    // ~22° from primary indigo #6366F1 on the hue wheel and read as "the same
+    // clickable blue family" at a glance; also `.main` (what the chip text
+    // actually uses) only hit ~3.7:1 on white, under the 4.5:1 AA text
+    // minimum. main #0E7490 on white = 5.35:1.
+    inProgress: {
+      lighter: '#CFFAFE',
+      light: '#22D3EE',
+      main: '#0E7490',
+      dark: '#155E75',
+      darker: '#164E63',
+      contrastText: '#1A1A2E',
     },
     grey,
     slate,

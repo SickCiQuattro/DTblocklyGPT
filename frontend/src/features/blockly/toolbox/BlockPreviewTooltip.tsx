@@ -51,6 +51,7 @@ import { BlockState as State } from 'utils/blocklyTypes'
 import { type BlockViewMode } from '../utils/useViewSettings'
 import { applyBlockViewMode } from '../utils/viewModePresentation'
 import { PREVIEW_WORKSPACE_CONFIG } from '../workspace/workspaceConfig'
+import { blocksColours } from '../blocks/palette'
 import '../styles/editor.css'
 
 import { ToolboxBlockItem } from './toolboxRegistry'
@@ -493,25 +494,29 @@ export const BlockPreviewTooltip = ({
   const inputText = item.inputs ?? 'None'
   const outputText = item.outputs ?? 'None'
 
-  /** Derive category-tinted accent colours for the pill and "View" button. */
+  /**
+   * Derive category-tinted accent colours for the pill and "View" button.
+   * Falls back to the shared placeholder slate (blocksColours.placeholder)
+   * when a block has no category colour, instead of a one-off hardcoded blue
+   * — same derivation pipeline either way, just a different input colour.
+   */
   const categoryAccentColors = useMemo(() => {
-    const fallback = {
-      pillBackgroundColor: '#EFF6FF',
-      pillBorderColor: '#BFDBFE',
-      pillTextColor: '#1D4ED8',
-      buttonBackgroundColor: '#EFF6FF',
-      buttonBorderColor: '#BFDBFE',
-      buttonHoverBackgroundColor: '#DBEAFE',
-      buttonTextColor: '#1E3A8A',
-    }
+    const rgb =
+      (categoryColour && parseHexColor(categoryColour)) ||
+      parseHexColor(blocksColours.placeholder)
 
-    if (!categoryColour) {
-      return fallback
-    }
-
-    const rgb = parseHexColor(categoryColour)
     if (!rgb) {
-      return fallback
+      // parseHexColor only fails on malformed input; blocksColours.placeholder
+      // is a valid literal, so this is unreachable in practice.
+      return {
+        pillBackgroundColor: 'transparent',
+        pillBorderColor: 'transparent',
+        pillTextColor: 'inherit',
+        buttonBackgroundColor: 'transparent',
+        buttonBorderColor: 'transparent',
+        buttonHoverBackgroundColor: 'transparent',
+        buttonTextColor: 'inherit',
+      }
     }
 
     const pillText = darkenRgb(rgb, 0.28)

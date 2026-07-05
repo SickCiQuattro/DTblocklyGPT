@@ -10,9 +10,11 @@ interface TaskStatusChipProps {
 // Shared status pill so a task's status looks the same everywhere it appears.
 export const TaskStatusChip: React.FC<TaskStatusChipProps> = ({ status }) => {
   const cfg = taskStatusVisual(status)
+  const Icon = cfg.icon
   return (
     <Chip
       size="small"
+      icon={<Icon size={12} color={cfg.color} />}
       label={cfg.label}
       sx={{
         bgcolor: cfg.bg,
@@ -26,6 +28,7 @@ export const TaskStatusChip: React.FC<TaskStatusChipProps> = ({ status }) => {
         borderRadius: '4px',
         textTransform: 'uppercase',
         letterSpacing: '0.04em',
+        '& .MuiChip-icon': { ml: '6px' },
       }}
     />
   )

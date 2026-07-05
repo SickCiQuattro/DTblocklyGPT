@@ -12,13 +12,18 @@ import ThemeCustomization from 'themes'
 import { Routes } from 'routes'
 
 import { store } from './store'
-import 'regenerator-runtime'
 
 // ─── Geist font — Vercel OSS, 2023 (design system primary font) ──────────────
+// Self-hosted via @fontsource, not the render-blocking Google Fonts @import
+// global.css used to also carry — that was loading Geist twice.
 import '@fontsource/geist/400.css'
 import '@fontsource/geist/500.css'
 import '@fontsource/geist/600.css'
 import '@fontsource/geist/700.css'
+import '@fontsource/geist-mono/400.css'
+import '@fontsource/geist-mono/500.css'
+import '@fontsource/geist-mono/600.css'
+import '@fontsource/geist-mono/700.css'
 
 locale('en-gb')
 

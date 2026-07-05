@@ -1,10 +1,9 @@
 import React, { ReactNode } from 'react'
-import { SxProps, Theme, alpha, styled } from '@mui/material/styles'
-import { Box } from '@mui/material'
+import { SxProps, Theme, alpha, styled, useTheme } from '@mui/material/styles'
+import { Box, useMediaQuery } from '@mui/material'
 import SimpleBar from 'simplebar-react'
-import { BrowserView, MobileView } from 'react-device-detect'
 
-const RootStyle = styled(BrowserView)({
+const RootStyle = styled(Box)({
   flexGrow: 1,
   height: '100%',
   overflow: 'auto',
@@ -39,21 +38,30 @@ interface SimpleBarScrollProps {
   sx?: SxProps<Theme>
 }
 
+// Custom SimpleBar scrollbars on desktop; native scrolling on touch-sized
+// viewports where the OS scrollbar UX is better (was react-device-detect
+// BrowserView/MobileView, replaced with the layout's useMediaQuery pattern).
 export const SimpleBarScroll = ({
   children,
   sx,
   ...other
-}: SimpleBarScrollProps) => (
-  <>
+}: SimpleBarScrollProps) => {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
+
+  if (isMobile) {
+    return (
+      <Box sx={{ overflowX: 'auto', ...sx }} {...other}>
+        {children}
+      </Box>
+    )
+  }
+
+  return (
     <RootStyle>
       <SimpleBarStyle clickOnTrack={false} sx={sx} {...other}>
         {children}
       </SimpleBarStyle>
     </RootStyle>
-    <MobileView>
-      <Box sx={{ overflowX: 'auto', ...sx }} {...other}>
-        {children}
-      </Box>
-    </MobileView>
-  </>
-)
+  )
+}

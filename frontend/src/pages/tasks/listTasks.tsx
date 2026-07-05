@@ -1,23 +1,19 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
+import { alpha } from '@mui/material/styles'
 import {
+  Box,
   Button,
-  Chip,
-  CircularProgress,
   IconButton,
-  Link,
+  OutlinedInput,
+  InputAdornment,
   Paper,
+  Skeleton,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
   TablePagination,
-  TableRow,
   Tooltip,
   Typography,
   Menu,
@@ -29,12 +25,12 @@ import {
   Eye,
   Play,
   Cpu,
-  ShieldCheck,
   BrainCircuit,
   Plus,
+  Search,
   Trash2,
-  CheckCircle2,
-  XCircle,
+  Share2,
+  Lock,
   ListChecks,
   MoreVertical,
 } from 'lucide-react'
@@ -42,11 +38,13 @@ import {
 import { MainCard } from 'components/MainCard'
 import { ConfirmPopover } from 'components/ConfirmPopover'
 import { TaskStatusChip } from 'components/TaskStatusChip'
+import { SegmentedControl } from 'components/SegmentedControl'
+import { KeycapHint, modKey } from 'components/KeycapHint'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
-import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
+import { defaultCurrentPage } from 'utils/constants'
 import { formatDateTimeFrontend } from 'utils/date'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
@@ -54,6 +52,7 @@ import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { Theme as ThemeOption } from 'themes/theme'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
@@ -64,27 +63,23 @@ import { AnalyzeTaskModal } from './analyzeTaskModal'
 // render inside several sub-components without direct theme access).
 const tokenPalette = ThemeOption()
 
-// ─── Column header ────────────────────────────────────────────────────────────
+const CARD_PAGE_SIZE_OPTIONS = [12, 24, 48]
+const DEFAULT_CARD_PAGE_SIZE = 12
 
-const ColHead = ({ children }: { children: React.ReactNode }) => (
-  <TableCell
-    sx={{
-      fontSize: '0.72rem',
-      fontWeight: 700,
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase',
-      color: 'text.secondary',
-      borderBottom: '1px solid',
-      borderColor: 'divider',
-      py: 1.5,
-      whiteSpace: 'nowrap',
-      fontFamily: "'Geist', 'Inter', sans-serif",
-      backgroundColor: 'grey.50',
-    }}
-  >
-    {children}
-  </TableCell>
-)
+type StatusFilter = 'all' | 'draft' | 'published'
+
+// A task is "published" for filtering purposes whenever it has a live
+// version — published_with_draft still has one, just with edits pending.
+const matchesStatusFilter = (
+  status: string | undefined,
+  filter: StatusFilter,
+) => {
+  if (filter === 'all') return true
+  const s = status?.toLowerCase()
+  if (filter === 'published')
+    return s === 'published' || s === 'published_with_draft'
+  return s === 'draft'
+}
 
 // ─── Task Row Actions Overflow Menu ──────────────────────────────────────────
 
@@ -101,7 +96,7 @@ const TaskRowActions = ({
   handleDelete,
 }: {
   row: TaskType
-  canManage: (owner: any) => boolean
+  canManage: boolean
   handleOpenDetails: (id: number) => void
   setRunTaskModalVisible: (v: boolean) => void
   setRunningTask: (t: TaskType) => void
@@ -115,6 +110,7 @@ const TaskRowActions = ({
   const open = Boolean(anchorEl)
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation()
     setAnchorEl(event.currentTarget)
   }
   const handleClose = () => {
@@ -122,11 +118,15 @@ const TaskRowActions = ({
   }
 
   return (
-    <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+    <Stack
+      direction="row"
+      spacing={0.5}
+      sx={{ alignItems: 'center' }}
+      onClick={(e) => e.stopPropagation()}
+    >
       <Tooltip title="Run task">
         <IconButton
-          size="small"
-          sx={{ color: 'success.main' }}
+          sx={{ width: 40, height: 40, color: 'success.main' }}
           onClick={() => {
             setRunTaskModalVisible(true)
             setRunningTask(row)
@@ -134,13 +134,19 @@ const TaskRowActions = ({
           id={`btn-run-task-${row.id}`}
           aria-label="run task"
         >
-          <Play size={15} />
+          <Play size={17} />
         </IconButton>
       </Tooltip>
 
-      <IconButton size="small" onClick={handleClick} aria-label="more actions">
-        <MoreVertical size={16} />
-      </IconButton>
+      <Tooltip title="More actions">
+        <IconButton
+          sx={{ width: 40, height: 40 }}
+          onClick={handleClick}
+          aria-label="more actions"
+        >
+          <MoreVertical size={18} />
+        </IconButton>
+      </Tooltip>
 
       <Menu
         anchorEl={anchorEl}
@@ -148,24 +154,14 @@ const TaskRowActions = ({
         onClose={handleClose}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        slotProps={{
-          paper: {
-            sx: {
-              borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-              border: '1px solid',
-              borderColor: 'divider',
-              minWidth: '150px',
-            },
-          },
-        }}
+        slotProps={{ paper: { sx: { minWidth: '150px' } } }}
       >
         <MenuItem
           onClick={() => {
             handleClose()
             handleOpenDetails(row.id)
           }}
-          disabled={!canManage(row.owner)}
+          disabled={!canManage}
         >
           <ListItemIcon>
             <Eye size={15} />
@@ -221,10 +217,10 @@ const TaskRowActions = ({
           {(onOpen) => (
             <MenuItem
               onClick={(e) => {
-                if (!canManage(row.owner)) return
+                if (!canManage) return
                 onOpen(e)
               }}
-              disabled={!canManage(row.owner)}
+              disabled={!canManage}
               sx={{ color: 'error.main' }}
             >
               <ListItemIcon>
@@ -245,16 +241,175 @@ const TaskRowActions = ({
   )
 }
 
+// ─── Task card ────────────────────────────────────────────────────────────────
+
+const TaskCard = ({
+  row,
+  canManage,
+  onOpen,
+  ...actionProps
+}: {
+  row: TaskType
+  canManage: boolean
+  onOpen: () => void
+} & Omit<React.ComponentProps<typeof TaskRowActions>, 'row' | 'canManage'>) => (
+  <Paper
+    variant="outlined"
+    tabIndex={canManage ? 0 : -1}
+    role="button"
+    aria-label={`Open ${row.name} workspace`}
+    onClick={() => canManage && onOpen()}
+    onKeyDown={(e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && canManage) {
+        e.preventDefault()
+        onOpen()
+      }
+    }}
+    sx={{
+      p: 2,
+      borderRadius: '12px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 1,
+      cursor: canManage ? 'pointer' : 'default',
+      boxShadow: (theme) => theme.customShadows.card,
+      '@media (prefers-reduced-motion: no-preference)': {
+        transition: 'transform 0.2s ease',
+        '&:hover': { transform: 'translateY(-2px)' },
+      },
+    }}
+  >
+    <Stack
+      direction="row"
+      sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}
+    >
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            color: 'text.primary',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {row.name}
+        </Typography>
+        {row.description && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {row.description}
+          </Typography>
+        )}
+      </Box>
+      <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            alignItems: 'center',
+            flexShrink: 0,
+            px: 1,
+            py: 0.25,
+            borderRadius: '999px',
+            border: '1px solid',
+            borderColor: row.shared
+              ? alpha(tokenPalette.success.main, 0.3)
+              : 'divider',
+            bgcolor: row.shared
+              ? alpha(tokenPalette.success.main, 0.08)
+              : 'transparent',
+          }}
+        >
+          {row.shared ? (
+            <Share2 size={13} color={tokenPalette.success.main} />
+          ) : (
+            <Lock size={13} color={tokenPalette.slate[500]} />
+          )}
+          <Typography
+            sx={{
+              fontSize: '0.68rem',
+              fontWeight: 600,
+              color: row.shared
+                ? tokenPalette.success.main
+                : tokenPalette.slate[500],
+            }}
+          >
+            {row.shared ? 'Shared' : 'Private'}
+          </Typography>
+        </Stack>
+      </Tooltip>
+    </Stack>
+
+    <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+      <TaskStatusChip status={(row as any).status} />
+      <Typography variant="caption" color="text.secondary">
+        Modified {formatDateTimeFrontend(row.last_modified)}
+      </Typography>
+    </Stack>
+
+    <Stack
+      direction="row"
+      sx={{
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        mt: 0.5,
+        pt: 1,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <TaskRowActions row={row} canManage={canManage} {...actionProps} />
+    </Stack>
+  </Paper>
+)
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ListTasks = () => {
+  useDocumentTitle('Tasks')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
-  const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_CARD_PAGE_SIZE)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // ⌘K/Ctrl+K jumps to the search field, mirroring the same shortcut inside
+  // the task workspace (BlocklyEditor.tsx) — ignored while typing in another
+  // field so it can't hijack normal text entry (e.g. a modal's own inputs).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')))
+        return
+      const active = document.activeElement
+      const isTypingElsewhere =
+        active instanceof HTMLElement &&
+        active !== searchInputRef.current &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.isContentEditable)
+      if (isTypingElsewhere) return
+      e.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
 
   const {
     data: dataTasks,
+    error: tasksError,
     mutate,
     isLoading: isLoadingTasks,
   } = useSWR<TaskType[], Error>(
@@ -323,12 +478,42 @@ const ListTasks = () => {
     navigate('/task/new')
   }
 
-  // Paginated rows
   const rows = dataTasks ?? []
-  const paginated = rows.slice(
+  const filteredRows = rows.filter((row) => {
+    const matchesSearch =
+      !search || row.name.toLowerCase().includes(search.toLowerCase())
+    return (
+      matchesSearch && matchesStatusFilter((row as any).status, statusFilter)
+    )
+  })
+  const paginated = filteredRows.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage,
   )
+  const isFiltering = search.trim() !== '' || statusFilter !== 'all'
+  const draftCount = rows.filter((r) =>
+    matchesStatusFilter((r as any).status, 'draft'),
+  ).length
+  const publishedCount = rows.filter((r) =>
+    matchesStatusFilter((r as any).status, 'published'),
+  ).length
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+    setPage(0)
+  }
+
+  const actionProps = {
+    handleOpenDetails,
+    setRunTaskModalVisible,
+    setRunningTask,
+    setSimulateTaskModalVisible,
+    setSimulatingTask,
+    setAnalyzeModalVisible,
+    setAnalyzingTask,
+    handleDelete,
+  }
 
   return (
     <MainCard
@@ -338,214 +523,161 @@ const ListTasks = () => {
       {/* ── Toolbar ── */}
       <Stack
         direction="row"
-        sx={{ mb: 2.5, alignItems: 'center', justifyContent: 'space-between' }}
-      >
-        <Typography variant="body2" color="text.secondary">
-          {rows.length} task{rows.length !== 1 ? 's' : ''}
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          size="medium"
-          startIcon={<Plus size={16} />}
-          onClick={handleAdd}
-          id="btn-add-task"
-        >
-          New Task
-        </Button>
-      </Stack>
-
-      {/* ── Table ── */}
-      <Paper
-        variant="outlined"
         sx={{
-          borderRadius: '10px',
-          overflow: 'hidden',
-          border: '1px solid',
-          borderColor: 'divider',
+          mb: 2.5,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          flexWrap: 'wrap',
         }}
       >
-        <TableContainer
-          sx={{
-            maxHeight: 'calc(100vh - 280px)',
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            pb: 2,
-          }}
-        >
-          <Table size="small" aria-label="tasks table" stickyHeader>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Name</ColHead>
-                <ColHead>Status</ColHead>
-                <ColHead>Owner</ColHead>
-                <ColHead>Shared</ColHead>
-                <ColHead>Last Modified</ColHead>
-                <ColHead>Actions</ColHead>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {isLoadingTasks ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <CircularProgress
-                      size={28}
-                      sx={{ color: 'primary.main' }}
-                    />
-                  </TableCell>
-                </TableRow>
-              ) : paginated.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} sx={{ py: 7, border: 0 }}>
-                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
-                      <ListChecks size={32} color={tokenPalette.slate[400]} />
-                      <Typography variant="body2" color="text.secondary">
-                        No tasks yet. Create your first robot program visually.
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        size="small"
-                        startIcon={<Plus size={16} />}
-                        onClick={handleAdd}
-                        id="btn-add-task-empty"
-                      >
-                        New Task
-                      </Button>
-                    </Stack>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginated.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    hover
-                    sx={{
-                      cursor: 'pointer',
-                      '&:nth-of-type(even)': { backgroundColor: 'grey.50' },
-                      '&:hover': { backgroundColor: 'primary.lighter' },
-                      '&:last-child td': { border: 0 },
-                      '& td': { borderColor: 'divider' },
-                    }}
-                    onClick={() =>
-                      canManage(row.owner) && handleOpenWorkspace(row.id)
-                    }
-                  >
-                    {/* Name */}
-                    <TableCell>
-                      <Link
-                        component="button"
-                        type="button"
-                        underline="hover"
-                        disabled={!canManage(row.owner)}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleOpenWorkspace(row.id)
-                        }}
-                        aria-label={`Open ${row.name} workspace`}
-                        sx={{
-                          p: 0,
-                          textAlign: 'left',
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          fontFamily: "'Geist', 'Inter', sans-serif",
-                          color: 'text.primary',
-                          cursor: canManage(row.owner) ? 'pointer' : 'default',
-                          '&:disabled': {
-                            color: 'text.primary',
-                            cursor: 'default',
-                          },
-                        }}
-                      >
-                        {row.name}
-                      </Link>
-                      {row.description && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{
-                            display: 'block',
-                            mt: 0.25,
-                            maxWidth: 280,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {row.description}
-                        </Typography>
-                      )}
-                    </TableCell>
+        <Typography variant="body2" color="text.secondary">
+          {filteredRows.length} task{filteredRows.length !== 1 ? 's' : ''}
+        </Typography>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
+          <OutlinedInput
+            inputRef={searchInputRef}
+            size="small"
+            placeholder="Search tasks…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(0)
+            }}
+            startAdornment={
+              <InputAdornment position="start">
+                <Search size={16} />
+              </InputAdornment>
+            }
+            endAdornment={
+              <InputAdornment position="end">
+                <KeycapHint>{modKey()}K</KeycapHint>
+              </InputAdornment>
+            }
+            sx={{ width: 260 }}
+          />
+          <SegmentedControl
+            exclusive
+            value={statusFilter}
+            onChange={(_e, v) => {
+              if (v) {
+                setStatusFilter(v)
+                setPage(0)
+              }
+            }}
+            options={[
+              { value: 'all', label: `All ${rows.length}` },
+              { value: 'draft', label: `Draft ${draftCount}` },
+              { value: 'published', label: `Published ${publishedCount}` },
+            ]}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            size="medium"
+            startIcon={<Plus size={16} />}
+            onClick={handleAdd}
+            id="btn-add-task"
+          >
+            New Task
+          </Button>
+        </Stack>
+      </Stack>
 
-                    {/* Status */}
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <TaskStatusChip status={(row as any).status} />
-                    </TableCell>
-
-                    {/* Owner */}
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {(row as any).owner__username ?? '—'}
-                      </Typography>
-                    </TableCell>
-
-                    {/* Shared */}
-                    <TableCell>
-                      {row.shared ? (
-                        <CheckCircle2
-                          size={16}
-                          color={tokenPalette.success.main}
-                        />
-                      ) : (
-                        <XCircle size={16} color={tokenPalette.slate[400]} />
-                      )}
-                    </TableCell>
-
-                    {/* Last Modified */}
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDateTimeFrontend(row.last_modified)}
-                      </Typography>
-                    </TableCell>
-
-                    {/* Actions */}
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <TaskRowActions
-                        row={row}
-                        canManage={canManage}
-                        handleOpenDetails={handleOpenDetails}
-                        setRunTaskModalVisible={setRunTaskModalVisible}
-                        setRunningTask={setRunningTask}
-                        setSimulateTaskModalVisible={
-                          setSimulateTaskModalVisible
-                        }
-                        setSimulatingTask={setSimulatingTask}
-                        setAnalyzeModalVisible={setAnalyzeModalVisible}
-                        setAnalyzingTask={setAnalyzingTask}
-                        handleDelete={handleDelete}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <TablePagination
-          rowsPerPageOptions={[10, 25, 40]}
-          component="div"
-          count={rows.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10))
-            setPage(0)
-          }}
-          sx={{ borderTop: '1px solid', borderColor: 'divider' }}
-        />
-      </Paper>
+      {/* ── Card grid ── */}
+      {isLoadingTasks ? (
+        <Box sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 2,
+            }}
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                height={128}
+                sx={{ borderRadius: '12px' }}
+              />
+            ))}
+          </Box>
+        </Box>
+      ) : tasksError ? (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 7 }}>
+          <Typography variant="body2" color="error.main">
+            Couldn&apos;t load tasks. Check your connection and try again.
+          </Typography>
+          <Button size="small" onClick={() => mutate()}>
+            Retry
+          </Button>
+        </Stack>
+      ) : rows.length === 0 ? (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 7 }}>
+          <ListChecks size={32} color={tokenPalette.slate[400]} />
+          <Typography variant="body2" color="text.secondary">
+            No tasks yet. Create your first robot program visually.
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<Plus size={16} />}
+            onClick={handleAdd}
+            id="btn-add-task-empty"
+          >
+            New Task
+          </Button>
+        </Stack>
+      ) : filteredRows.length === 0 ? (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 7 }}>
+          <Search size={32} color={tokenPalette.slate[400]} />
+          <Typography variant="body2" color="text.secondary">
+            No tasks match your search or filter.
+          </Typography>
+          {isFiltering && (
+            <Button size="small" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </Stack>
+      ) : (
+        <>
+          <Box sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 2,
+              }}
+            >
+              {paginated.map((row) => (
+                <TaskCard
+                  key={row.id}
+                  row={row}
+                  canManage={canManage(row.owner)}
+                  onOpen={() => handleOpenWorkspace(row.id)}
+                  {...actionProps}
+                />
+              ))}
+            </Box>
+          </Box>
+          <TablePagination
+            rowsPerPageOptions={CARD_PAGE_SIZE_OPTIONS}
+            component="div"
+            count={filteredRows.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={(_, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10))
+              setPage(0)
+            }}
+            sx={{ mt: 1 }}
+          />
+        </>
+      )}
 
       {/* ── Modals ── */}
       <RunTaskModal

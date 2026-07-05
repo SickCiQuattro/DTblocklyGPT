@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import SpeechRecognition, {
-  useSpeechRecognition,
-} from 'react-speech-recognition'
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
 import { endpoints } from 'services/endpoints'
+import SpeechRecognition, {
+  useSpeechRecognition,
+} from 'utils/speechRecognition'
 
 /**
  * useVoiceCommand
  *
  * Browser-side voice recognition for the "Voice command" condition block.
- * Uses the Web Speech API via react-speech-recognition (same dependency the
+ * Uses the Web Speech API via utils/speechRecognition (same module the
  * chat composer uses). The browser recognises speech locally; we match the
  * transcript against a small bilingual keyword map and POST the normalised
  * command (YES/NO/DONE/PROCEED) to the backend, which caches it for the

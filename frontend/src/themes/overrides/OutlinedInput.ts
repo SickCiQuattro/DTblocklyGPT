@@ -7,7 +7,9 @@ export const OutlinedInput = (theme: Theme) => ({
         padding: '10.5px 14px 10.5px 12px',
       },
       notchedOutline: {
-        borderColor: theme.palette.grey[300],
+        // grey[500] clears the WCAG 1.4.11 3:1 UI-boundary floor; grey[300]
+        // (~1.4:1) was effectively invisible against a white field.
+        borderColor: theme.palette.grey[500],
       },
       root: {
         '&:hover .MuiOutlinedInput-notchedOutline': {

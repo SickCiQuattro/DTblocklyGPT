@@ -32,6 +32,7 @@ import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
 import { TaskType, TaskDetailType, AbstractStep } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { ChatThread } from '../../components/ChatThread'
 import { DigitalTwinPanel } from '../../components/DigitalTwinPanel'
@@ -57,6 +58,7 @@ export const UnifiedWorkspace = () => {
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
   const activeTaskName = useAppSelector((state) => state.task.activeTaskName)
+  useDocumentTitle(activeTaskName || 'Task')
   const activeTaskStatus = useAppSelector(
     (state) => state.task.activeTaskStatus,
   )
@@ -232,7 +234,10 @@ export const UnifiedWorkspace = () => {
   }, [initialDataTask, editorDataTask])
 
   // Conformance tracking
-  const { isReady } = useConformance(workspace)
+  const { isReady } = useConformance(
+    workspace,
+    viewSettings.blockViewMode === 'complete',
+  )
 
   // Sync workspace readiness to Redux
   useEffect(() => {
@@ -393,6 +398,19 @@ export const UnifiedWorkspace = () => {
     }
   }, [saveTriggered, activeTaskName, isReady, saveTaskToBackend, dispatch])
 
+  // Ctrl/Cmd+S → same save trigger the header Save button dispatches.
+  // preventDefault blocks the browser's native "Save Page As" dialog.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        dispatch(triggerSave(true))
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [dispatch])
+
   // Discard draft trigger listener
   useEffect(() => {
     if (discardTriggered) {
@@ -404,10 +422,15 @@ export const UnifiedWorkspace = () => {
           method: MethodHTTP.POST,
           body: { id: Number(id) },
         })
-          .then(() => {
+          .then(async () => {
             toast.success('Draft discarded successfully')
+            // Wait for the refetch to land before clearing editorDataTask —
+            // the repopulate effect (below) only fills in initialDataTask
+            // when editorDataTask is null, so clearing it first (before
+            // taskData/initialDataTask actually reflect the published
+            // version) reloads the same stale draft right back in.
+            await mutateTask()
             setEditorDataTask(null) // Force workspace reload from the newly fetched published state
-            void mutateTask()
             void mutate({ url: endpoints.home.libraries.tasks })
           })
           .catch((err) => {
@@ -464,6 +487,10 @@ export const UnifiedWorkspace = () => {
           flex: 1,
           overflow: 'hidden',
           width: '100%',
+          gap: '12px',
+          p: '12px',
+          bgcolor: 'background.default',
+          boxSizing: 'border-box',
         }}
       >
         {/* Blockly visual workspace */}

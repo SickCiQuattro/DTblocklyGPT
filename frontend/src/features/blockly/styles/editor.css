@@ -30,9 +30,9 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 16px;
     border: 1px solid #E2E8F0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
     background-color: #FFFFFF;
 }
 
@@ -83,11 +83,11 @@
 .workspace-control-button {
     width: 32px;
     height: 32px;
-    border-radius: 9px !important;
+    border-radius: 10px !important;
     border: 1px solid #E2E8F0 !important;
     color: #334155 !important;
     background-color: #FFFFFF !important;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
@@ -134,8 +134,18 @@
 .blocklySvg {
     height: 100%;
     width: 100%;
-    /* Neutral warm background */
-    background-color: #FAFAFA !important;
+    /* Matches canvasNeutral.bg (themes/theme/index.ts) — one canvas color. */
+    background-color: #FAFAFB !important;
+}
+
+/* Blockly hardcodes a #c6c6c6 stroke on this rect (fill is themeable via
+   componentStyles.workspaceBackgroundColour, stroke isn't). It's a sharp
+   rectangle at the SVG's own bounds, so the card's rounded corners clip it
+   away near the corners but not along the straight edges — a stray gray line
+   that doesn't match the card's own 1px divider border. The card border is
+   the only edge this UI needs. */
+.blocklyMainBackground {
+    stroke: none !important;
 }
 
 /* ─── Workspace UI elements ───────────────────────────────────────────────── */
@@ -212,7 +222,7 @@
   stroke: rgba(1, 189, 86, 0.35) !important;
 }
 .custom-dashed-shadow-workspace text.blocklyText {
-  fill: rgba(1, 189, 86, 0.65) !important;
+  fill: rgba(1, 189, 86, 0.85) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -222,7 +232,7 @@
   stroke: rgba(225, 89, 48, 0.35) !important;
 }
 .custom-dashed-shadow-trigger text.blocklyText {
-  fill: rgba(225, 89, 48, 0.65) !important;
+  fill: rgba(225, 89, 48, 0.85) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -232,7 +242,7 @@
   stroke: rgba(128, 138, 157, 0.35) !important;
 }
 .custom-dashed-shadow-sequence text.blocklyText {
-  fill: rgba(128, 138, 157, 0.65) !important;
+  fill: rgba(128, 138, 157, 0.85) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -248,7 +258,7 @@
   stroke: rgba(15, 118, 110, 0.45) !important;
 }
 .custom-dashed-shadow-start text.blocklyText {
-  fill: rgba(15, 118, 110, 0.65) !important;
+  fill: rgba(15, 118, 110, 0.85) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }

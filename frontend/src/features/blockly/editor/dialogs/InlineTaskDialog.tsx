@@ -44,29 +44,10 @@ export const InlineTaskDialog = ({
     open={open}
     onClose={onCancel}
     slotProps={{
-      paper: {
-        elevation: 0,
-        sx: (theme) => ({
-          borderRadius: '12px',
-          border: `1px solid ${theme.palette.slate[200]}`,
-          boxShadow:
-            '0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)',
-          p: 1.5,
-          maxWidth: 400,
-        }),
-      },
+      paper: { elevation: 0, sx: { p: 1.5, maxWidth: 400 } },
     }}
   >
-    <DialogTitle
-      sx={(theme) => ({
-        fontWeight: 600,
-        fontSize: '1.3rem',
-        color: theme.palette.slate[900],
-        pb: 1,
-      })}
-    >
-      Break into steps
-    </DialogTitle>
+    <DialogTitle sx={{ pb: 1 }}>Break into steps</DialogTitle>
     <DialogContent>
       <Typography
         variant="body2"

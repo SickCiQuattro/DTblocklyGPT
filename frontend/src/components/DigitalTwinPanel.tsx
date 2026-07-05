@@ -9,8 +9,6 @@ import {
   Switch,
   Tooltip,
   LinearProgress,
-  ToggleButton,
-  ToggleButtonGroup,
   FormControl,
   InputLabel,
   Select,
@@ -32,13 +30,13 @@ import {
   Mic,
   AlertTriangle,
   CheckCircle2,
-  Wifi,
-  WifiOff,
   VideoOff,
   Bell,
 } from 'lucide-react'
 import useSWR from 'swr'
 import { useDispatch, useSelector } from 'react-redux'
+import * as Blockly from 'blockly/core'
+import { useTheme } from '@mui/material/styles'
 
 import { MyRobotType } from 'pages/myrobots/types'
 import { TaskStatus } from 'pages/tasks/types'
@@ -55,34 +53,13 @@ import {
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
 import { useVoiceCommand } from 'hooks/useVoiceCommand'
-import * as Blockly from 'blockly/core'
 import {
   highlightExecutingBlock,
   clearExecutingHighlights,
 } from 'features/blockly/utils/blockHighlight'
-import { Theme as ThemeOption } from 'themes/theme'
+import { SegmentedControl } from 'components/SegmentedControl'
 
-// Digital Twin is an intentionally-dark monitoring panel (design spec §3.6/§3.8).
-// Brand/semantic colors come from the design-system tokens; the slate chrome and
-// accent-lights (which have no direct runtime token) are a deliberate local
-// palette, kept dark on purpose.
-const tokens = ThemeOption()
-const C_PRIMARY = tokens.primary.main
-const C_PRIMARY_DARK = tokens.primary.dark
-const C_SUCCESS = tokens.success.main
-const C_WARNING = tokens.warning.main
-const C_WARNING_LIGHT = tokens.warning.light
-const C_ERROR = tokens.error.main
-const C_ERROR_LIGHT = tokens.error.light
-const ACCENT_INDIGO_LIGHT = '#818CF8'
-const ACCENT_INDIGO_FAINT = '#A5B4FC'
-const ACCENT_GREEN_LIGHT = '#86EFAC'
-const PANEL_BG = '#0c0c1c'
-const PANEL_TEXT = '#E2E8F0'
-const PANEL_TEXT_DIM = '#94A3B8'
-const PANEL_MUTED = '#64748B'
-const PANEL_FAINT = '#475569'
-const PANEL_BORDER = '#334155'
+import { panel } from './digitalTwin/panelTokens'
 
 const MJPEG_URL = '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 
@@ -93,16 +70,37 @@ interface DigitalTwinPanelProps {
   workspace?: Blockly.WorkspaceSvg | null
 }
 
+// Section-header pattern shared by LIVE VIEW / EVENTS / RUN, matching the
+// toolbox/chat header label style (uppercase, wide tracking, dim color).
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <Typography
+    sx={{
+      fontSize: '0.68rem',
+      fontWeight: 700,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      color: panel.muted,
+      mb: 1,
+    }}
+  >
+    {children}
+  </Typography>
+)
+
 export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   taskId,
   taskStatus,
   workspace,
 }) => {
+  const theme = useTheme()
   const dispatch = useDispatch()
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
 
   const [liveEvents, setLiveEvents] = useState(false)
+  const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
+    'simulation',
+  )
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -110,6 +108,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
   const [selectedRobot, setSelectedRobot] = useState<number | string>('')
   const [confirmRealRun, setConfirmRealRun] = useState(false)
+
+  const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
 
   const { data: dataMyRobots } = useSWR<MyRobotType[], Error>({
     url: endpoints.home.libraries.myRobots,
@@ -162,7 +163,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       webcam.stop()
       voice.stop()
     }
-  }, [liveEvents]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveEvents]) // eslint-disable-line @eslint-react/exhaustive-deps
 
   // Countdown ticker
   useEffect(() => {
@@ -258,6 +259,28 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const stopSimulation = () => dispatch(stopSimAction())
   const handleClose = () => dispatch(toggleSim())
 
+  // Focus the panel when it opens; return focus to whatever triggered it
+  // (the Header's "Digital Twin" toggle) when it closes.
+  useEffect(() => {
+    if (simOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement
+      panelRef.current?.focus()
+    } else {
+      previouslyFocusedRef.current?.focus()
+    }
+  }, [simOpen])
+
+  // Esc closes the panel, matching the close button.
+  useEffect(() => {
+    if (!simOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [simOpen])
+
   // Only a fully published task can drive sim or robot. A task that is still a
   // draft — or published_with_draft (edits pending) — must not run, because the
   // runtime workspace would be the last published version and would not match
@@ -277,25 +300,36 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const timeoutTotal = humanStep?.timeout ?? 60
   const countdownPct = countdown !== null ? (countdown / timeoutTotal) * 100 : 0
 
+  const eventsVisible = liveEvents || simulation.isRunning
+
   return (
     <Box
+      ref={panelRef}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="digital-twin-title"
+      aria-hidden={!simOpen}
+      tabIndex={-1}
       sx={{
         position: 'fixed',
-        right: 0,
-        top: 'var(--layout-appbar-height, 56px)',
-        bottom: 'var(--layout-statusbar-height, 40px)',
+        right: '12px',
+        top: 'calc(var(--layout-appbar-height, 56px) + 12px)',
+        bottom: 'calc(var(--layout-statusbar-height, 40px) + 12px)',
         width: '35vw',
         zIndex: 100,
-        background: 'rgba(12, 12, 28, 0.97)',
+        background: panel.surface,
         backdropFilter: 'blur(24px)',
-        borderLeft: '1px solid rgba(99, 102, 241, 0.2)',
-        boxShadow: '-16px 0 48px rgba(0, 0, 0, 0.4)',
+        borderRadius: '16px',
+        border: `1px solid ${panel.hairlineStrong}`,
+        boxShadow: theme.customShadows.cardDark,
         transform: simOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        color: PANEL_TEXT,
+        overflow: 'hidden',
+        color: panel.text,
+        outline: 'none',
       }}
     >
       {/* ── Header ── */}
@@ -305,14 +339,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '14px 18px',
-          background: 'rgba(255,255,255,0.02)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: panel.chrome,
+          borderBottom: `1px solid ${panel.hairline}`,
           flexShrink: 0,
         }}
       >
         <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1.5}>
-          <Camera size={16} color={C_PRIMARY} />
+          <Camera size={16} color={panel.primary} />
           <Typography
+            id="digital-twin-title"
             sx={{
               fontWeight: 600,
               fontSize: '0.9rem',
@@ -321,36 +356,58 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           >
             Digital Twin
           </Typography>
-          <Tooltip
-            title={connected ? 'SocketIO connected' : 'SocketIO disconnected'}
+          <Stack
+            direction="row"
+            spacing={0.6}
+            sx={{
+              alignItems: 'center',
+              ...(!connected && {
+                px: 1,
+                py: 0.25,
+                borderRadius: '999px',
+                bgcolor: panel.warningTint(0.12),
+                border: `1px solid ${panel.warningTint(0.4)}`,
+              }),
+            }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              {connected ? (
-                <Wifi size={13} color={C_SUCCESS} />
-              ) : (
-                <WifiOff size={13} color={PANEL_MUTED} />
-              )}
-            </Box>
-          </Tooltip>
+            <Box
+              sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                bgcolor: connected ? panel.success : panel.warning,
+              }}
+            />
+            <Typography
+              sx={{
+                fontSize: '0.68rem',
+                color: connected ? panel.textDim : panel.warningLight,
+              }}
+            >
+              {connected ? 'Connected' : 'Offline'}
+            </Typography>
+          </Stack>
         </Stack>
         <IconButton
           onClick={handleClose}
           size="small"
+          aria-label="Close digital twin panel"
           sx={{
-            color: 'rgba(255,255,255,0.4)',
-            '&:hover': { color: '#fff', background: 'rgba(255,255,255,0.07)' },
+            color: panel.iconMuted,
+            '&:hover': { color: panel.white, background: panel.hover },
           }}
         >
           <X size={16} />
         </IconButton>
       </Box>
 
+      {/* ── Scrollable body ── */}
       <Box
         sx={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          gap: '16px',
           padding: '14px 16px',
           overflowY: 'auto',
         }}
@@ -358,20 +415,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         {/* ── Notify banner (transient) ── */}
         {notifyBanner && (
           <Box
+            role="status"
+            aria-live="polite"
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
               padding: '10px 14px',
-              background: 'rgba(99,102,241,0.1)',
-              border: '1px solid rgba(99,102,241,0.3)',
+              background: panel.primaryTint(0.1),
+              border: `1px solid ${panel.primaryTint(0.3)}`,
               borderRadius: '8px',
             }}
           >
-            <Bell size={15} color={ACCENT_INDIGO_LIGHT} />
-            <Typography
-              sx={{ fontSize: '0.78rem', color: ACCENT_INDIGO_FAINT }}
-            >
+            <Bell size={15} color={panel.primaryLight} />
+            <Typography sx={{ fontSize: '0.78rem', color: panel.primaryFaint }}>
               {notifyBanner}
             </Typography>
           </Box>
@@ -380,18 +437,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         {/* ── Timeout warning ── */}
         {isTimeout && (
           <Box
+            role="status"
+            aria-live="polite"
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
               padding: '10px 14px',
-              background: 'rgba(245,158,11,0.12)',
-              border: '1px solid rgba(245,158,11,0.3)',
+              background: panel.warningTint(0.12),
+              border: `1px solid ${panel.warningTint(0.3)}`,
               borderRadius: '8px',
             }}
           >
-            <AlertTriangle size={15} color={C_WARNING} />
-            <Typography sx={{ fontSize: '0.78rem', color: C_WARNING_LIGHT }}>
+            <AlertTriangle size={15} color={panel.warning} />
+            <Typography sx={{ fontSize: '0.78rem', color: panel.warningLight }}>
               Timeout:{' '}
               {humanStep?.condition === 'gesture'
                 ? `gesture "${humanStep?.value}" not detected`
@@ -401,861 +460,927 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Box>
         )}
 
-        {/* ── Gazebo MJPEG stream ── */}
-        <Box
-          sx={{
-            position: 'relative',
-            width: '100%',
-            aspectRatio: '4/3',
-            background: '#000',
-            borderRadius: '10px',
-            overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.08)',
-            flexShrink: 0,
-          }}
-        >
-          {simulation.isRunning ? (
-            <img
-              src={MJPEG_URL}
-              alt="Gazebo camera feed"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
+        {/* ── LIVE VIEW ── */}
+        <Box>
+          <Stack
+            direction="row"
+            sx={{
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 1,
+            }}
+          >
+            <SectionLabel>Live view</SectionLabel>
+            <SegmentedControl
+              dark
+              value={liveView}
+              exclusive
+              onChange={(_, v) => v && setLiveView(v)}
+              options={[
+                { value: 'simulation', label: 'Simulation' },
+                { value: 'camera', label: 'Camera' },
+              ]}
             />
-          ) : (
-            <Box
-              sx={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1.5,
-              }}
-            >
-              <Camera size={28} color={PANEL_BORDER} />
-              <Typography sx={{ fontSize: '0.78rem', color: PANEL_FAINT }}>
-                Start simulation to stream Gazebo feed
-              </Typography>
-            </Box>
-          )}
+          </Stack>
 
-          {/* Human step overlay */}
-          {isHumanStepActive && (
-            <Box
-              sx={{
-                position: 'absolute',
-                inset: 0,
-                background: 'rgba(12,12,28,0.78)',
-                backdropFilter: 'blur(4px)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1.5,
-                padding: '20px',
-                animation: 'fadeIn 0.25s ease',
-                '@keyframes fadeIn': {
-                  from: { opacity: 0 },
-                  to: { opacity: 1 },
-                },
-              }}
-            >
+          {liveView === 'simulation' ? (
+            <>
               <Box
                 sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  background: 'rgba(99,102,241,0.15)',
-                  border: '2px solid rgba(99,102,241,0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  position: 'relative',
+                  width: '100%',
+                  aspectRatio: '4/3',
+                  background: panel.videoBg,
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  border: `1px solid ${panel.hairlineStrong}`,
+                  flexShrink: 0,
                 }}
               >
-                <Hand size={22} color={ACCENT_INDIGO_LIGHT} />
+                {simulation.isRunning ? (
+                  <img
+                    src={MJPEG_URL}
+                    alt="Robot camera feed"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 1.5,
+                    }}
+                  >
+                    <Camera size={28} color={panel.border} />
+                    <Typography
+                      sx={{ fontSize: '0.78rem', color: panel.faint }}
+                    >
+                      Start a simulation to see the robot here
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Human step overlay */}
+                {isHumanStepActive && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: panel.overlayScrim,
+                      backdropFilter: 'blur(4px)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 1.5,
+                      padding: '20px',
+                      '@media (prefers-reduced-motion: no-preference)': {
+                        animation: 'dt-fade-in 0.25s ease',
+                      },
+                      '@keyframes dt-fade-in': {
+                        from: { opacity: 0 },
+                        to: { opacity: 1 },
+                      },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: '50%',
+                        background: panel.primaryTint(0.15),
+                        border: `2px solid ${panel.primaryTint(0.5)}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Hand size={22} color={panel.primaryLight} />
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        textAlign: 'center',
+                        color: panel.text,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {humanStep?.description || 'Human action required'}
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      sx={{ alignItems: 'center' }}
+                      spacing={0.8}
+                    >
+                      <CircularProgress
+                        size={10}
+                        sx={{ color: panel.primary }}
+                      />
+                      <Typography
+                        sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                      >
+                        Waiting for operator...
+                      </Typography>
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* Step completed flash */}
+                {stepCompleted && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 12,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.8,
+                      padding: '6px 14px',
+                      background: panel.successTint(0.15),
+                      border: `1px solid ${panel.successTint(0.4)}`,
+                      borderRadius: '20px',
+                      backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    <CheckCircle2 size={13} color={panel.success} />
+                    <Typography
+                      sx={{
+                        fontSize: '0.72rem',
+                        color: panel.successLight,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Step completed
+                    </Typography>
+                  </Box>
+                )}
               </Box>
-              <Typography
-                sx={{
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  textAlign: 'center',
-                  color: PANEL_TEXT,
-                  lineHeight: 1.4,
-                }}
-              >
-                {humanStep?.description || 'Human action required'}
-              </Typography>
+
+              {/* Gesture match — only while a human step is waiting on one */}
+              {isHumanStepActive && expectedGesture && (
+                <Box
+                  sx={{
+                    mt: 1.5,
+                    padding: '14px 16px',
+                    background: gestureMatch
+                      ? panel.successTint(0.1)
+                      : panel.primaryTint(0.07),
+                    border: gestureMatch
+                      ? `1px solid ${panel.successTint(0.35)}`
+                      : `1px solid ${panel.primaryTint(0.2)}`,
+                    borderRadius: '10px',
+                    transition: 'all 0.25s ease',
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    sx={{
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      mb: 1,
+                    }}
+                  >
+                    <Box>
+                      <Typography
+                        sx={{
+                          fontSize: '0.62rem',
+                          color: panel.muted,
+                          letterSpacing: '0.07em',
+                          textTransform: 'uppercase',
+                          mb: 0.3,
+                        }}
+                      >
+                        Required
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: '1.05rem',
+                          fontWeight: 700,
+                          fontFamily: "'Geist Mono', monospace",
+                          color: gestureMatch
+                            ? panel.successLight
+                            : panel.primaryFaint,
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {expectedGesture}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.62rem',
+                          color: panel.muted,
+                          letterSpacing: '0.07em',
+                          textTransform: 'uppercase',
+                          mb: 0.3,
+                        }}
+                      >
+                        Detected
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: '1.05rem',
+                          fontWeight: 700,
+                          fontFamily: "'Geist Mono', monospace",
+                          color: gestureMatch
+                            ? panel.successLight
+                            : gestureActive
+                              ? panel.primaryLight
+                              : panel.faint,
+                        }}
+                      >
+                        {activeGesture || 'NONE'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  {countdown !== null && (
+                    <>
+                      <LinearProgress
+                        variant="determinate"
+                        value={countdownPct}
+                        aria-live="polite"
+                        aria-label={`${countdown} seconds remaining`}
+                        sx={{
+                          height: 3,
+                          borderRadius: 2,
+                          mb: 0.5,
+                          backgroundColor: panel.trackBg,
+                          '& .MuiLinearProgress-bar': {
+                            backgroundColor:
+                              countdown < 10
+                                ? panel.error
+                                : countdown < 20
+                                  ? panel.warning
+                                  : panel.primary,
+                            borderRadius: 2,
+                          },
+                        }}
+                      />
+                      <Typography
+                        sx={{
+                          fontSize: '0.68rem',
+                          color:
+                            countdown < 10 ? panel.errorLight : panel.muted,
+                          textAlign: 'right',
+                        }}
+                      >
+                        {countdown}s
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+              )}
+            </>
+          ) : (
+            <Box>
               <Stack
                 direction="row"
-                sx={{ alignItems: 'center' }}
-                spacing={0.8}
-              >
-                <CircularProgress size={10} sx={{ color: C_PRIMARY }} />
-                <Typography sx={{ fontSize: '0.72rem', color: PANEL_TEXT_DIM }}>
-                  Waiting for operator...
-                </Typography>
-              </Stack>
-            </Box>
-          )}
-
-          {/* Step completed flash */}
-          {stepCompleted && (
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 12,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.8,
-                padding: '6px 14px',
-                background: 'rgba(34,197,94,0.15)',
-                border: '1px solid rgba(34,197,94,0.4)',
-                borderRadius: '20px',
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <CheckCircle2 size={13} color={C_SUCCESS} />
-              <Typography
                 sx={{
-                  fontSize: '0.72rem',
-                  color: ACCENT_GREEN_LIGHT,
-                  fontWeight: 500,
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 1,
                 }}
               >
-                Step completed
-              </Typography>
+                <Box>
+                  <Typography
+                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                  >
+                    Use live camera
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                    {liveEvents && webcam.active
+                      ? 'Webcam on — detecting gestures & objects'
+                      : 'Detect real gestures & objects from webcam'}
+                  </Typography>
+                </Box>
+                <Tooltip
+                  title={
+                    liveEvents
+                      ? 'Webcam on — gestures & objects must really happen'
+                      : 'Events auto-completed'
+                  }
+                >
+                  <Switch
+                    size="small"
+                    checked={liveEvents}
+                    onChange={(e) => setLiveEvents(e.target.checked)}
+                    disabled={simulation.isRunning}
+                    sx={{
+                      '& .MuiSwitch-switchBase.Mui-checked': {
+                        color: panel.primary,
+                      },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track':
+                        {
+                          backgroundColor: panel.primary,
+                        },
+                    }}
+                  />
+                </Tooltip>
+              </Stack>
+
+              {!liveEvents ? (
+                <Box
+                  sx={{
+                    width: '100%',
+                    aspectRatio: '16/9',
+                    borderRadius: '10px',
+                    border: `1px solid ${panel.hairlineStrong}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1.5,
+                  }}
+                >
+                  <Camera size={28} color={panel.border} />
+                  <Typography sx={{ fontSize: '0.78rem', color: panel.faint }}>
+                    Turn on live camera to preview gestures &amp; objects
+                  </Typography>
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: '16/9',
+                    background: panel.videoBg,
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    border: webcam.error
+                      ? `1px solid ${panel.errorTint(0.4)}`
+                      : `1px solid ${panel.hairlineStrong}`,
+                    flexShrink: 0,
+                  }}
+                >
+                  <video
+                    ref={webcam.attachVideo}
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                      transform: 'scaleX(-1)',
+                    }}
+                  />
+
+                  {!webcam.active && !webcam.error && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'column',
+                        gap: 1,
+                      }}
+                    >
+                      <CircularProgress
+                        size={20}
+                        sx={{ color: panel.primary }}
+                      />
+                      <Typography
+                        sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                      >
+                        Starting camera...
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {webcam.error && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'column',
+                        gap: 1,
+                        padding: '16px',
+                      }}
+                    >
+                      <VideoOff size={22} color={panel.errorLight} />
+                      <Typography
+                        sx={{
+                          fontSize: '0.72rem',
+                          color: panel.errorLight,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {webcam.error}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Gesture + object chips */}
+                  {webcam.active && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 8,
+                        left: 8,
+                        right: 8,
+                        display: 'flex',
+                        gap: '6px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      {webcam.gesture !== 'NONE' && (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            padding: '3px 8px',
+                            background: panel.primaryTint(0.85),
+                            borderRadius: '12px',
+                            backdropFilter: 'blur(6px)',
+                          }}
+                        >
+                          <Hand size={11} color={panel.white} />
+                          <Typography
+                            sx={{
+                              fontSize: '0.65rem',
+                              fontWeight: 600,
+                              color: panel.white,
+                              fontFamily: "'Geist Mono', monospace",
+                            }}
+                          >
+                            {webcam.gesture}
+                          </Typography>
+                        </Box>
+                      )}
+                      {webcam.detections.slice(0, 3).map((d, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            padding: '3px 8px',
+                            background: panel.successTint(0.8),
+                            borderRadius: '12px',
+                            backdropFilter: 'blur(6px)',
+                          }}
+                        >
+                          <Eye size={11} color={panel.white} />
+                          <Typography
+                            sx={{
+                              fontSize: '0.65rem',
+                              fontWeight: 600,
+                              color: panel.white,
+                              fontFamily: "'Geist Mono', monospace",
+                            }}
+                          >
+                            {d.class}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 10,
+                      right: 8,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Typography
+                      noWrap
+                      sx={{
+                        fontSize: '0.6rem',
+                        color: panel.videoLabel,
+                        letterSpacing: '0.07em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {webcam.activeLabel || 'Webcam'}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              {/* Camera picker */}
+              {liveEvents && webcam.devices.length > 0 && (
+                <FormControl
+                  fullWidth
+                  size="small"
+                  sx={{
+                    mt: 1,
+                    '.MuiOutlinedInput-notchedOutline': {
+                      borderColor: panel.selectBorder,
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: panel.selectBorderHover,
+                    },
+                    '.MuiSvgIcon-root': { color: panel.textDim },
+                  }}
+                >
+                  <InputLabel
+                    id="dt-camera-label"
+                    sx={{ color: panel.textDim }}
+                  >
+                    Camera source
+                  </InputLabel>
+                  <Select
+                    labelId="dt-camera-label"
+                    label="Camera source"
+                    value={webcam.selectedDeviceId}
+                    onChange={(e) => webcam.selectDevice(e.target.value)}
+                    sx={{ color: panel.text, fontSize: '0.82rem' }}
+                  >
+                    {webcam.devices.map((d) => (
+                      <MenuItem key={d.deviceId} value={d.deviceId}>
+                        {d.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
             </Box>
           )}
         </Box>
 
-        {/* ── Gesture state large — only when human step active and expecting gesture ── */}
-        {isHumanStepActive && expectedGesture && (
-          <Box
-            sx={{
-              padding: '14px 16px',
-              background: gestureMatch
-                ? 'rgba(34,197,94,0.1)'
-                : 'rgba(99,102,241,0.07)',
-              border: gestureMatch
-                ? '1px solid rgba(34,197,94,0.35)'
-                : '1px solid rgba(99,102,241,0.2)',
-              borderRadius: '10px',
-              transition: 'all 0.25s ease',
-            }}
-          >
-            <Stack
-              direction="row"
-              sx={{
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                mb: 1,
-              }}
-            >
-              <Box>
-                <Typography
-                  sx={{
-                    fontSize: '0.62rem',
-                    color: PANEL_MUTED,
-                    letterSpacing: '0.07em',
-                    textTransform: 'uppercase',
-                    mb: 0.3,
-                  }}
+        {/* ── EVENTS — only while events can actually happen ── */}
+        {eventsVisible && (
+          <Box>
+            <SectionLabel>Events</SectionLabel>
+            <Stack spacing={1}>
+              <Stack
+                direction="row"
+                sx={{
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background: gestureActive
+                    ? panel.primaryTint(0.1)
+                    : panel.chromeStrong,
+                  border: gestureActive
+                    ? `1px solid ${panel.primaryTint(0.35)}`
+                    : `1px solid ${panel.hairline}`,
+                  borderRadius: '8px',
+                }}
+              >
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center' }}
+                  spacing={0.8}
                 >
-                  Required
-                </Typography>
+                  <Hand
+                    size={13}
+                    color={gestureActive ? panel.primaryLight : panel.faint}
+                  />
+                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                    Gesture
+                  </Typography>
+                </Stack>
                 <Typography
                   sx={{
-                    fontSize: '1.05rem',
-                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: gestureActive ? panel.primaryFaint : panel.faint,
                     fontFamily: "'Geist Mono', monospace",
-                    color: gestureMatch
-                      ? ACCENT_GREEN_LIGHT
-                      : ACCENT_INDIGO_FAINT,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  {expectedGesture}
-                </Typography>
-              </Box>
-              <Box sx={{ textAlign: 'right' }}>
-                <Typography
-                  sx={{
-                    fontSize: '0.62rem',
-                    color: PANEL_MUTED,
-                    letterSpacing: '0.07em',
-                    textTransform: 'uppercase',
-                    mb: 0.3,
-                  }}
-                >
-                  Detected
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: '1.05rem',
-                    fontWeight: 700,
-                    fontFamily: "'Geist Mono', monospace",
-                    color: gestureMatch
-                      ? ACCENT_GREEN_LIGHT
-                      : gestureActive
-                        ? ACCENT_INDIGO_LIGHT
-                        : PANEL_FAINT,
                   }}
                 >
                   {activeGesture || 'NONE'}
                 </Typography>
-              </Box>
-            </Stack>
-            {countdown !== null && (
-              <>
-                <LinearProgress
-                  variant="determinate"
-                  value={countdownPct}
-                  sx={{
-                    height: 3,
-                    borderRadius: 2,
-                    mb: 0.5,
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    '& .MuiLinearProgress-bar': {
-                      backgroundColor:
-                        countdown < 10
-                          ? C_ERROR
-                          : countdown < 20
-                            ? C_WARNING
-                            : C_PRIMARY,
-                      borderRadius: 2,
-                    },
-                  }}
-                />
-                <Typography
-                  sx={{
-                    fontSize: '0.68rem',
-                    color: countdown < 10 ? C_ERROR_LIGHT : PANEL_MUTED,
-                    textAlign: 'right',
-                  }}
-                >
-                  {countdown}s
-                </Typography>
-              </>
-            )}
-          </Box>
-        )}
+              </Stack>
 
-        {/* ── Webcam preview (when live events ON) ── */}
-        {liveEvents && (
-          <Box
-            sx={{
-              position: 'relative',
-              width: '100%',
-              aspectRatio: '16/9',
-              background: '#000',
-              borderRadius: '10px',
-              overflow: 'hidden',
-              border: webcam.error
-                ? '1px solid rgba(239,68,68,0.4)'
-                : '1px solid rgba(255,255,255,0.08)',
-              flexShrink: 0,
-            }}
-          >
-            <video
-              ref={webcam.attachVideo}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-                transform: 'scaleX(-1)',
-              }}
-            />
-
-            {!webcam.active && !webcam.error && (
-              <Box
+              <Stack
+                direction="row"
                 sx={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'column',
-                  gap: 1,
-                }}
-              >
-                <CircularProgress size={20} sx={{ color: C_PRIMARY }} />
-                <Typography sx={{ fontSize: '0.72rem', color: PANEL_TEXT_DIM }}>
-                  Starting camera...
-                </Typography>
-              </Box>
-            )}
-
-            {webcam.error && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'column',
-                  gap: 1,
-                  padding: '16px',
-                }}
-              >
-                <VideoOff size={22} color={C_ERROR_LIGHT} />
-                <Typography
-                  sx={{
-                    fontSize: '0.72rem',
-                    color: C_ERROR_LIGHT,
-                    textAlign: 'center',
-                  }}
-                >
-                  {webcam.error}
-                </Typography>
-              </Box>
-            )}
-
-            {/* Gesture + object chips */}
-            {webcam.active && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  bottom: 8,
-                  left: 8,
-                  right: 8,
-                  display: 'flex',
-                  gap: '6px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {webcam.gesture !== 'NONE' && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      padding: '3px 8px',
-                      background: 'rgba(99,102,241,0.85)',
-                      borderRadius: '12px',
-                      backdropFilter: 'blur(6px)',
-                    }}
-                  >
-                    <Hand size={11} color="#fff" />
-                    <Typography
-                      sx={{
-                        fontSize: '0.65rem',
-                        fontWeight: 600,
-                        color: '#fff',
-                        fontFamily: "'Geist Mono', monospace",
-                      }}
-                    >
-                      {webcam.gesture}
-                    </Typography>
-                  </Box>
-                )}
-                {webcam.detections.slice(0, 3).map((d, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      padding: '3px 8px',
-                      background: 'rgba(34,197,94,0.8)',
-                      borderRadius: '12px',
-                      backdropFilter: 'blur(6px)',
-                    }}
-                  >
-                    <Eye size={11} color="#fff" />
-                    <Typography
-                      sx={{
-                        fontSize: '0.65rem',
-                        fontWeight: 600,
-                        color: '#fff',
-                        fontFamily: "'Geist Mono', monospace",
-                      }}
-                    >
-                      {d.class}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            )}
-
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 8,
-                left: 10,
-                right: 8,
-                overflow: 'hidden',
-              }}
-            >
-              <Typography
-                noWrap
-                sx={{
-                  fontSize: '0.6rem',
-                  color: 'rgba(255,255,255,0.5)',
-                  letterSpacing: '0.07em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {webcam.activeLabel || 'Webcam'}
-              </Typography>
-            </Box>
-          </Box>
-        )}
-
-        {/* ── Camera picker ── */}
-        {liveEvents && webcam.devices.length > 0 && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              padding: '6px 10px',
-              background: 'rgba(255,255,255,0.02)',
-              borderRadius: '8px',
-              border: '1px solid rgba(255,255,255,0.05)',
-            }}
-          >
-            <Camera size={12} color={PANEL_MUTED} />
-            <select
-              value={webcam.selectedDeviceId}
-              onChange={(e) => webcam.selectDevice(e.target.value)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: PANEL_TEXT_DIM,
-                fontSize: '0.72rem',
-                flex: 1,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {webcam.devices.map((d) => (
-                <option
-                  key={d.deviceId}
-                  value={d.deviceId}
-                  style={{ background: PANEL_BG, color: PANEL_TEXT }}
-                >
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </Box>
-        )}
-
-        {/* ── Event status strip ── */}
-        <Box
-          sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}
-        >
-          <Box
-            sx={{
-              padding: '10px 12px',
-              background: gestureActive
-                ? 'rgba(99,102,241,0.1)'
-                : 'rgba(255,255,255,0.03)',
-              border: gestureActive
-                ? '1px solid rgba(99,102,241,0.35)'
-                : '1px solid rgba(255,255,255,0.07)',
-              borderRadius: '8px',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.66rem',
-                color: PANEL_MUTED,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: '5px',
-              }}
-            >
-              Gesture
-            </Typography>
-            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
-              <Hand
-                size={13}
-                color={gestureActive ? ACCENT_INDIGO_LIGHT : PANEL_FAINT}
-              />
-              <Typography
-                sx={{
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  color: gestureActive ? ACCENT_INDIGO_FAINT : PANEL_FAINT,
-                  fontFamily: "'Geist Mono', monospace",
-                }}
-              >
-                {activeGesture || 'NONE'}
-              </Typography>
-            </Stack>
-          </Box>
-
-          <Box
-            sx={{
-              padding: '10px 12px',
-              background:
-                activeDetections.length > 0
-                  ? 'rgba(34,197,94,0.08)'
-                  : 'rgba(255,255,255,0.03)',
-              border:
-                activeDetections.length > 0
-                  ? '1px solid rgba(34,197,94,0.3)'
-                  : '1px solid rgba(255,255,255,0.07)',
-              borderRadius: '8px',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.66rem',
-                color: PANEL_MUTED,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: '5px',
-              }}
-            >
-              Objects
-            </Typography>
-            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
-              <Eye
-                size={13}
-                color={activeDetections.length > 0 ? C_SUCCESS : PANEL_FAINT}
-              />
-              <Typography
-                sx={{
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  color:
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background:
                     activeDetections.length > 0
-                      ? ACCENT_GREEN_LIGHT
-                      : PANEL_FAINT,
-                  fontFamily: "'Geist Mono', monospace",
+                      ? panel.successTint(0.08)
+                      : panel.chromeStrong,
+                  border:
+                    activeDetections.length > 0
+                      ? `1px solid ${panel.successTint(0.3)}`
+                      : `1px solid ${panel.hairline}`,
+                  borderRadius: '8px',
                 }}
               >
-                {activeDetections.length > 0
-                  ? activeDetections
-                      .slice(0, 2)
-                      .map((d) => d.class)
-                      .join(', ')
-                  : 'none'}
-              </Typography>
-            </Stack>
-          </Box>
-        </Box>
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center' }}
+                  spacing={0.8}
+                >
+                  <Eye
+                    size={13}
+                    color={
+                      activeDetections.length > 0 ? panel.success : panel.faint
+                    }
+                  />
+                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                    Objects
+                  </Typography>
+                </Stack>
+                <Typography
+                  sx={{
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color:
+                      activeDetections.length > 0
+                        ? panel.successLight
+                        : panel.faint,
+                    fontFamily: "'Geist Mono', monospace",
+                  }}
+                >
+                  {activeDetections.length > 0
+                    ? activeDetections
+                        .slice(0, 2)
+                        .map((d) => d.class)
+                        .join(', ')
+                    : 'none'}
+                </Typography>
+              </Stack>
 
-        {/* ── Voice command (live) ── */}
-        {liveEvents && (
-          <Box
-            sx={{
-              padding: '10px 12px',
-              background: voice.word
-                ? 'rgba(99,102,241,0.1)'
-                : 'rgba(255,255,255,0.03)',
-              border: voice.word
-                ? '1px solid rgba(99,102,241,0.35)'
-                : '1px solid rgba(255,255,255,0.07)',
-              borderRadius: '8px',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.66rem',
-                color: '#64748B',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                marginBottom: '5px',
-              }}
-            >
-              Voice
-            </Typography>
-            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={0.8}>
-              <Mic size={13} color={voice.word ? '#818CF8' : '#475569'} />
-              <Typography
+              <Stack
+                direction="row"
                 sx={{
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  color: voice.word ? '#A5B4FC' : '#475569',
-                  fontFamily: "'Geist Mono', monospace",
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background: voice.word
+                    ? panel.primaryTint(0.1)
+                    : panel.chromeStrong,
+                  border: voice.word
+                    ? `1px solid ${panel.primaryTint(0.35)}`
+                    : `1px solid ${panel.hairline}`,
+                  borderRadius: '8px',
                 }}
               >
-                {!voice.browserSupported
-                  ? 'not supported in this browser'
-                  : voice.word || (voice.active ? 'listening…' : 'idle')}
-              </Typography>
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center' }}
+                  spacing={0.8}
+                >
+                  <Mic
+                    size={13}
+                    color={voice.word ? panel.primaryLight : panel.faint}
+                  />
+                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                    Voice
+                  </Typography>
+                </Stack>
+                <Typography
+                  sx={{
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: voice.word ? panel.primaryFaint : panel.faint,
+                    fontFamily: "'Geist Mono', monospace",
+                  }}
+                >
+                  {!voice.browserSupported
+                    ? 'not supported in this browser'
+                    : voice.word || (voice.active ? 'listening…' : 'idle')}
+                </Typography>
+              </Stack>
             </Stack>
           </Box>
         )}
 
-        {/* ── Execution target (Simulation vs Real Robot) ── */}
+        {/* ── RUN ── */}
         <Box>
-          <ToggleButtonGroup
-            value={executionTarget}
-            exclusive
-            fullWidth
-            size="small"
-            disabled={simulation.isRunning}
-            onChange={(_, v) => v && setExecutionTarget(v)}
-            sx={{
-              '& .MuiToggleButton-root': {
-                textTransform: 'none',
-                fontSize: '0.78rem',
-                fontWeight: 500,
-                color: PANEL_TEXT_DIM,
-                borderColor: 'rgba(255,255,255,0.1)',
-                py: 0.6,
-              },
-              '& .MuiToggleButton-root.Mui-selected': {
-                color: '#fff',
-                background: 'rgba(99,102,241,0.25)',
-                '&:hover': { background: 'rgba(99,102,241,0.32)' },
-              },
-            }}
-          >
-            <ToggleButton value="sim">
-              <MonitorPlay size={14} style={{ marginRight: 6 }} />
-              Simulation
-            </ToggleButton>
-            <ToggleButton value="real">
-              <Cpu size={14} style={{ marginRight: 6 }} />
-              Real Robot
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <SectionLabel>Run</SectionLabel>
 
-          {/* Safety banner */}
           <Box
             sx={{
-              mt: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 12px',
+              padding: '10px 14px',
+              background: panel.chrome,
               borderRadius: '8px',
-              background:
-                executionTarget === 'real'
-                  ? 'rgba(245,158,11,0.12)'
-                  : 'rgba(99,102,241,0.1)',
-              border:
-                executionTarget === 'real'
-                  ? '1px solid rgba(245,158,11,0.4)'
-                  : '1px solid rgba(99,102,241,0.3)',
+              border: `1px solid ${panel.hairlineStrong}`,
+              mb: 1.5,
             }}
           >
-            {executionTarget === 'real' ? (
-              <AlertTriangle size={15} color={C_WARNING} />
-            ) : (
-              <MonitorPlay size={15} color={ACCENT_INDIGO_LIGHT} />
-            )}
             <Typography
               sx={{
-                fontSize: '0.72rem',
-                color:
-                  executionTarget === 'real'
-                    ? C_WARNING_LIGHT
-                    : ACCENT_INDIGO_FAINT,
+                fontFamily: "'Geist Mono', monospace",
+                fontSize: '0.68rem',
+                color: panel.faint,
+                marginBottom: '3px',
+                letterSpacing: '0.05em',
               }}
             >
-              {executionTarget === 'real'
-                ? 'Live hardware — the real robot will move'
-                : 'Safe — runs in the simulation only'}
+              STATUS
             </Typography>
+            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
+              {simulation.isRunning && (
+                <CircularProgress size={11} sx={{ color: panel.primary }} />
+              )}
+              <Typography
+                sx={{
+                  fontSize: '0.8rem',
+                  fontWeight: 500,
+                  color: simulation.isRunning
+                    ? panel.primaryLight
+                    : panel.muted,
+                }}
+              >
+                {simulation.message}
+              </Typography>
+            </Stack>
           </Box>
 
-          {/* Robot picker (real mode only) */}
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
+              Run in:
+            </Typography>
+            <SegmentedControl
+              dark
+              value={executionTarget}
+              exclusive
+              disabled={simulation.isRunning}
+              onChange={(_, v) => v && setExecutionTarget(v)}
+              options={[
+                {
+                  value: 'sim',
+                  label: 'Simulation',
+                  icon: <MonitorPlay size={13} />,
+                },
+                {
+                  value: 'real',
+                  label: 'Real robot',
+                  icon: <Cpu size={13} />,
+                },
+              ]}
+            />
+          </Stack>
+
+          {/* Progressive disclosure: robot picker + safety banner only matter
+              once "Real robot" is actually selected. */}
           {executionTarget === 'real' && (
-            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-              <InputLabel id="dt-robot-label" sx={{ color: PANEL_TEXT_DIM }}>
-                Robot
-              </InputLabel>
-              <Select
-                labelId="dt-robot-label"
-                label="Robot"
-                value={selectedRobot || ''}
-                disabled={simulation.isRunning}
-                onChange={(e) => setSelectedRobot(e.target.value)}
+            <>
+              <Box
                 sx={{
-                  color: PANEL_TEXT,
-                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: panel.warningTint(0.12),
+                  border: `1px solid ${panel.warningTint(0.4)}`,
+                  mb: 1,
+                }}
+              >
+                <AlertTriangle size={15} color={panel.warning} />
+                <Typography
+                  sx={{ fontSize: '0.72rem', color: panel.warningLight }}
+                >
+                  Live hardware — the real robot will move
+                </Typography>
+              </Box>
+
+              <FormControl
+                fullWidth
+                size="small"
+                sx={{
+                  mb: 1,
                   '.MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'rgba(255,255,255,0.15)',
+                    borderColor: panel.selectBorder,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'rgba(255,255,255,0.3)',
+                    borderColor: panel.selectBorderHover,
                   },
-                  '.MuiSvgIcon-root': { color: PANEL_TEXT_DIM },
+                  '.MuiSvgIcon-root': { color: panel.textDim },
                 }}
               >
-                {(dataMyRobots ?? []).map((r) => (
-                  <MenuItem key={r.id} value={r.id}>
-                    {r.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                <InputLabel id="dt-robot-label" sx={{ color: panel.textDim }}>
+                  Robot
+                </InputLabel>
+                <Select
+                  labelId="dt-robot-label"
+                  label="Robot"
+                  value={selectedRobot || ''}
+                  disabled={simulation.isRunning}
+                  onChange={(e) => setSelectedRobot(e.target.value)}
+                  sx={{ color: panel.text, fontSize: '0.82rem' }}
+                >
+                  {(dataMyRobots ?? []).map((r) => (
+                    <MenuItem key={r.id} value={r.id}>
+                      {r.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
           )}
         </Box>
+      </Box>
 
-        {/* ── System status ── */}
-        <Box
+      {/* ── Sticky footer: primary action, always visible ── */}
+      <Box
+        sx={{
+          flexShrink: 0,
+          padding: '14px 16px',
+          borderTop: `1px solid ${panel.hairline}`,
+          background: panel.chrome,
+        }}
+      >
+        <Button
+          fullWidth
+          onClick={simulation.isRunning ? stopSimulation : handleRun}
+          disabled={
+            !simulation.isRunning &&
+            (!canRun || (executionTarget === 'real' && !selectedRobot))
+          }
+          variant="contained"
+          color={simulation.isRunning ? 'error' : 'primary'}
+          startIcon={
+            simulation.isRunning ? <Square size={15} /> : <Play size={15} />
+          }
           sx={{
-            padding: '10px 14px',
-            background: 'rgba(255,255,255,0.02)',
             borderRadius: '8px',
-            border: '1px solid rgba(255,255,255,0.05)',
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            py: 1,
+            boxShadow: 'none',
+            '&:hover': { boxShadow: 'none' },
+            ...(simulation.isRunning
+              ? {}
+              : {
+                  background: panel.primary,
+                  '&:hover': {
+                    background: panel.primaryDark,
+                    boxShadow: 'none',
+                  },
+                }),
+            '&.Mui-disabled': {
+              background: panel.primaryTint(0.18),
+              color: panel.iconMuted,
+            },
           }}
         >
+          {simulation.isRunning
+            ? 'Stop'
+            : executionTarget === 'real'
+              ? 'Run on Robot'
+              : 'Run simulation'}
+        </Button>
+        {executionTarget === 'real' && (
           <Typography
             sx={{
-              fontFamily: "'Geist Mono', monospace",
-              fontSize: '0.68rem',
-              color: PANEL_FAINT,
-              marginBottom: '3px',
-              letterSpacing: '0.05em',
+              fontSize: '0.66rem',
+              color: panel.textDim,
+              mt: 0.8,
+              textAlign: 'center',
             }}
           >
-            STATUS
+            Use the teach-pendant e-stop to stop the arm immediately.
           </Typography>
-          <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
-            {simulation.isRunning && (
-              <CircularProgress size={11} sx={{ color: C_PRIMARY }} />
-            )}
-            <Typography
-              sx={{
-                fontSize: '0.8rem',
-                fontWeight: 500,
-                color: simulation.isRunning ? ACCENT_INDIGO_LIGHT : PANEL_MUTED,
-              }}
-            >
-              {simulation.message}
-            </Typography>
-          </Stack>
-        </Box>
-
-        {/* ── Mode toggle ── */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 14px',
-            background: 'rgba(255,255,255,0.02)',
-            borderRadius: '8px',
-            border: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
-          <Box>
-            <Typography sx={{ fontSize: '0.78rem', color: PANEL_TEXT_DIM }}>
-              Use live camera
-            </Typography>
-            <Typography
-              sx={{ fontSize: '0.65rem', color: PANEL_MUTED, mt: 0.2 }}
-            >
-              {liveEvents && webcam.active
-                ? 'Webcam on — detecting gestures & objects'
-                : 'Detect real gestures & objects from webcam'}
-            </Typography>
-          </Box>
-          <Tooltip
-            title={
-              liveEvents
-                ? 'Webcam on — gestures & objects must really happen'
-                : 'Events auto-completed'
-            }
-          >
-            <Switch
-              size="small"
-              checked={liveEvents}
-              onChange={(e) => setLiveEvents(e.target.checked)}
-              disabled={simulation.isRunning}
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: C_PRIMARY },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: C_PRIMARY,
-                },
-              }}
-            />
-          </Tooltip>
-        </Box>
-
-        {/* ── Run / Stop (single action, swaps while running) ── */}
-        <Box>
-          <Button
-            fullWidth
-            onClick={simulation.isRunning ? stopSimulation : handleRun}
-            disabled={
-              !simulation.isRunning &&
-              (!canRun || (executionTarget === 'real' && !selectedRobot))
-            }
-            variant="contained"
-            color={simulation.isRunning ? 'error' : 'primary'}
-            startIcon={
-              simulation.isRunning ? <Square size={15} /> : <Play size={15} />
-            }
+        )}
+        {!simulation.isRunning && !canRun && (
+          <Typography
             sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              py: 1,
-              boxShadow: 'none',
-              '&:hover': { boxShadow: 'none' },
-              ...(simulation.isRunning
-                ? {}
-                : {
-                    background: C_PRIMARY,
-                    '&:hover': {
-                      background: C_PRIMARY_DARK,
-                      boxShadow: 'none',
-                    },
-                  }),
-              '&.Mui-disabled': {
-                background: 'rgba(99,102,241,0.18)',
-                color: 'rgba(255,255,255,0.4)',
-              },
+              fontSize: '0.66rem',
+              color: panel.warningLight,
+              mt: 0.8,
+              textAlign: 'center',
             }}
           >
-            {simulation.isRunning
-              ? 'Stop'
-              : executionTarget === 'real'
-                ? 'Run on Robot'
-                : 'Run'}
-          </Button>
-          {executionTarget === 'real' && (
+            {taskStatus === 'published_with_draft'
+              ? 'Pending draft — publish or discard it to run. Webcam still works for testing gestures.'
+              : 'Draft task — publish it to run. Webcam still works for testing gestures.'}
+          </Typography>
+        )}
+        {!simulation.isRunning &&
+          canRun &&
+          executionTarget === 'real' &&
+          !selectedRobot && (
             <Typography
               sx={{
                 fontSize: '0.66rem',
-                color: PANEL_TEXT_DIM,
+                color: panel.warningLight,
                 mt: 0.8,
                 textAlign: 'center',
               }}
             >
-              Use the teach-pendant e-stop to stop the arm immediately.
+              Select a robot above to run.
             </Typography>
           )}
-          {!simulation.isRunning && !canRun && (
-            <Typography
-              sx={{
-                fontSize: '0.66rem',
-                color: C_WARNING_LIGHT,
-                mt: 0.8,
-                textAlign: 'center',
-              }}
-            >
-              {taskStatus === 'published_with_draft'
-                ? 'Pending draft — publish or discard it to run. Webcam still works for testing gestures.'
-                : 'Draft task — publish it to run. Webcam still works for testing gestures.'}
-            </Typography>
-          )}
-        </Box>
       </Box>
 
       {/* ── Confirm real-robot run ── */}
@@ -1263,12 +1388,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         open={confirmRealRun}
         onClose={() => setConfirmRealRun(false)}
         slotProps={{
-          paper: { sx: { borderRadius: '12px', p: 1, maxWidth: 420 } },
+          paper: { sx: { p: 1, maxWidth: 420 } },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.05rem' }}>
-          Run on the real robot?
-        </DialogTitle>
+        <DialogTitle>Run on the real robot?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
             The physical robot will move and execute this task. Make sure the

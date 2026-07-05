@@ -69,29 +69,10 @@ export const RunTaskModal = ({
       open={open}
       onClose={handleCancelClick}
       slotProps={{
-        backdrop: {
-          sx: {
-            backdropFilter: 'blur(8px)',
-            backgroundColor: 'rgba(0, 0, 0, 0.4)',
-          },
-        },
-        paper: {
-          sx: {
-            borderRadius: '12px',
-            boxShadow:
-              '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            border: '1px solid',
-            borderColor: 'divider',
-            p: 1.5,
-            maxWidth: '480px',
-            width: '100%',
-          },
-        },
+        paper: { sx: { p: 1.5, maxWidth: '480px', width: '100%' } },
       }}
     >
-      <DialogTitle sx={{ fontWeight: 600, pb: 1, fontSize: '1.125rem' }}>
-        Run task: {task?.name}
-      </DialogTitle>
+      <DialogTitle sx={{ pb: 1 }}>Run task: {task?.name}</DialogTitle>
 
       <DialogContent sx={{ py: 1.5 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

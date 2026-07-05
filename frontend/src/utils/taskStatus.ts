@@ -1,4 +1,5 @@
 import { alpha } from '@mui/material/styles'
+import { Pencil, CheckCircle2, Clock, LucideIcon } from 'lucide-react'
 
 import { tokenColor } from './tokenColors'
 
@@ -13,26 +14,29 @@ export interface TaskStatusVisual {
   color: string
   bg: string
   border: string
+  icon: LucideIcon
 }
 
-// The in-progress blue has no semantic theme token; defined once here.
-const IN_PROGRESS_BLUE = '#3B82F6'
-
-const visual = (label: string, color: string): TaskStatusVisual => ({
+const visual = (
+  label: string,
+  color: string,
+  icon: LucideIcon,
+): TaskStatusVisual => ({
   label,
   color,
   bg: alpha(color, 0.08),
   border: alpha(color, 0.2),
+  icon,
 })
 
 // Maps any backend status string to its canonical visual treatment.
 export const taskStatusVisual = (rawStatus?: string): TaskStatusVisual => {
   const s = rawStatus?.toLowerCase() ?? 'draft'
   if (s === 'published' || s === 'ready' || s === 'tested') {
-    return visual('Published', tokenColor.successMain)
+    return visual('Published', tokenColor.successMain, CheckCircle2)
   }
   if (s === 'published_with_draft') {
-    return visual('Draft in Progress', IN_PROGRESS_BLUE)
+    return visual('Draft in Progress', tokenColor.inProgressMain, Clock)
   }
-  return visual('Draft', tokenColor.warningDark)
+  return visual('Draft', tokenColor.warningDark, Pencil)
 }

@@ -7,7 +7,6 @@
  * inventing our own, per the Blockly accessibility best-practices guide.
  */
 import {
-  Box,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -16,6 +15,8 @@ import {
   Typography,
 } from '@mui/material'
 import { X } from 'lucide-react'
+
+import { KeycapHint } from 'components/KeycapHint'
 
 interface KeyboardHelpDialogProps {
   open: boolean
@@ -98,21 +99,7 @@ export const KeyboardHelpDialog = ({
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {action}
             </Typography>
-            <Box
-              component="kbd"
-              sx={{
-                fontFamily: 'monospace',
-                fontSize: 12,
-                whiteSpace: 'nowrap',
-                px: 1,
-                py: 0.25,
-                borderRadius: 1,
-                bgcolor: 'action.hover',
-                color: 'text.primary',
-              }}
-            >
-              {keys}
-            </Box>
+            <KeycapHint sx={{ whiteSpace: 'nowrap' }}>{keys}</KeycapHint>
           </Stack>
         ))}
       </Stack>

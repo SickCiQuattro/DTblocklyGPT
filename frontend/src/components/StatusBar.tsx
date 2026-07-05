@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, Typography, Button } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import { useDispatch } from 'react-redux'
 import { Code } from 'lucide-react'
 
@@ -12,14 +12,16 @@ export const StatusBar: React.FC = () => {
   const dispatch = useDispatch()
   const lastSaved = useAppSelector((state) => state.task.lastSaved)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
+  const isSimulationRunning = useAppSelector(
+    (state) => state.simulation.isRunning,
+  )
 
   return (
     <Box
       sx={{
         height: '40px',
         minHeight: '40px',
-        bgcolor: 'grey.200',
-        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+        bgcolor: 'background.default',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -30,16 +32,17 @@ export const StatusBar: React.FC = () => {
         boxSizing: 'border-box',
       }}
     >
-      {/* Left side: Robot status */}
+      {/* Left side: Simulation status */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span
           style={{
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            backgroundColor: theme.palette.success.main,
+            backgroundColor: isSimulationRunning
+              ? theme.palette.success.main
+              : theme.palette.text.disabled,
             display: 'inline-block',
-            boxShadow: `0 0 8px ${theme.palette.success.main}`,
           }}
         />
         <Typography
@@ -49,7 +52,7 @@ export const StatusBar: React.FC = () => {
             fontWeight: 500,
           }}
         >
-          Robot: Online
+          {isSimulationRunning ? 'Simulation running' : 'Simulation idle'}
         </Typography>
       </Box>
 
@@ -81,7 +84,7 @@ export const StatusBar: React.FC = () => {
             minWidth: 0,
             padding: '2px 8px',
             '&:hover': {
-              bgcolor: 'rgba(99, 102, 241, 0.04)',
+              bgcolor: alpha(theme.palette.primary.main, 0.04),
             },
           }}
         >

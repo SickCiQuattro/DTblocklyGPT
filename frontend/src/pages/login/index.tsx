@@ -5,11 +5,13 @@ import { toast } from 'react-toastify'
 
 import { ResetPasswordForm } from 'pages/login/ResetPasswordForm'
 import { MessageText } from 'utils/messages'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { LoginForm } from './LoginForm'
 import { LoginWrapper } from './LoginWrapper'
 
 const Login = () => {
+  useDocumentTitle('Login')
   const [resetPassword, setResetPassword] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const expired = !!searchParams.get('expired')

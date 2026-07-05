@@ -10,4 +10,5 @@ export const tokenColor = {
   successMain: palette.success.main,
   warningDark: palette.warning.dark,
   infoDark: palette.info.dark,
+  inProgressMain: palette.inProgress.main,
 }

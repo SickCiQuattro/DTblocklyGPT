@@ -29,6 +29,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { RobotModel, RobotType } from './types'
 
@@ -52,11 +53,12 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
 )
 
 const ListRobots = () => {
+  useDocumentTitle('Robots Fleet')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { data, mutate, isLoading } = useSWR<RobotType[], Error>({
+  const { data, error, mutate, isLoading } = useSWR<RobotType[], Error>({
     url: endpoints.home.management.robots,
   })
   const [qrCodeText, setQrCodeText] = useState('')
@@ -171,6 +173,20 @@ const ListRobots = () => {
                       size={28}
                       sx={{ color: 'primary.main' }}
                     />
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                    <Stack spacing={1} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="error.main">
+                        Couldn&apos;t load the robot fleet. Check your
+                        connection and try again.
+                      </Typography>
+                      <Button size="small" onClick={() => mutate()}>
+                        Retry
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (

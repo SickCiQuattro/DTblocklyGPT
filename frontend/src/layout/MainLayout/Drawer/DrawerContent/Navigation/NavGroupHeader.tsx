@@ -25,7 +25,7 @@ export const NavGroupHeader = ({ title, drawerOpen }: NavGroupHeaderProps) => {
           justifyContent: 'center',
         }}
       >
-        <Divider sx={{ width: 24, borderColor: 'rgba(0, 0, 0, 0.08)' }} />
+        <Divider sx={{ width: 24, borderColor: 'divider' }} />
       </Box>
     )
   }

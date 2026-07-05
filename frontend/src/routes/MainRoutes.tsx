@@ -25,6 +25,7 @@ const DetailMyRobot = Loadable(
   lazy(() => import('pages/myrobots/detailMyRobot')),
 )
 const Faq = Loadable(lazy(() => import('pages/faq')))
+const PageNotFound = Loadable(lazy(() => import('pages/pageNotFound')))
 
 export const MainRoutes: RouteObject = {
   path: defaultPath,
@@ -147,6 +148,17 @@ export const MainRoutes: RouteObject = {
       element: (
         <ProtectedRoute>
           <DetailMyRobot />
+        </ProtectedRoute>
+      ),
+    },
+    {
+      // Authenticated catch-all — without this, an unknown path under a
+      // logged-in session fell through to AuthRoutes' wildcard and rendered
+      // the 404 page in the bare unauthenticated layout, without app chrome.
+      path: '*',
+      element: (
+        <ProtectedRoute>
+          <PageNotFound />
         </ProtectedRoute>
       ),
     },

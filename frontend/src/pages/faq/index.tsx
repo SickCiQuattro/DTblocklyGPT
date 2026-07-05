@@ -1,8 +1,10 @@
 import React from 'react'
 
 import { MainCard } from 'components/MainCard'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 const Faq = () => {
+  useDocumentTitle('Instructions & FAQ')
   return (
     <MainCard
       title="Instructions & FAQ"

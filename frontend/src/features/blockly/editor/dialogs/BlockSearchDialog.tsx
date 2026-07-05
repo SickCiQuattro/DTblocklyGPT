@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 
 import { TaskType } from 'pages/tasks/types'
+import { KeycapHint } from 'components/KeycapHint'
 
 import { MENU_PAPER_SX } from '../menuStyles'
 import {
@@ -73,6 +74,7 @@ export const BlockSearchDialog = ({
       onClose={onClose}
       maxWidth="xs"
       fullWidth
+      aria-label="Search blocks"
       slotProps={{ paper: { elevation: 0, sx: { ...MENU_PAPER_SX, mt: -10 } } }}
     >
       <DialogContent sx={{ p: 1.5 }}>
@@ -85,6 +87,11 @@ export const BlockSearchDialog = ({
           autoFocus
           onKeyDown={(e) => {
             if (e.key === 'Enter' && filtered[0]) handleSelect(filtered[0])
+          }}
+          slotProps={{
+            input: {
+              endAdornment: <KeycapHint>esc</KeycapHint>,
+            },
           }}
         />
         <List dense sx={{ maxHeight: 360, overflowY: 'auto', mt: 1 }}>
@@ -99,6 +106,7 @@ export const BlockSearchDialog = ({
           {Object.entries(grouped).map(([group, groupItems]) => (
             <Box component="li" key={group} sx={{ listStyle: 'none' }}>
               <ListSubheader
+                component="div"
                 disableSticky
                 sx={{
                   fontSize: 11,
@@ -126,13 +134,12 @@ export const BlockSearchDialog = ({
                       }}
                     />
                     <Box>
-                      <Typography variant="body2" sx={{ fontSize: 13 }}>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
                         {item.name}
                       </Typography>
                       {item.description && (
                         <Typography
-                          variant="caption"
-                          sx={{ color: 'text.secondary' }}
+                          sx={{ fontSize: '0.78rem', color: 'text.secondary' }}
                         >
                           {item.description}
                         </Typography>

@@ -28,6 +28,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { MyRobotType } from './types'
 
@@ -51,12 +52,13 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
 )
 
 const ListMyRobots = () => {
+  useDocumentTitle('My Robot')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const { data, mutate, isLoading } = useSWR<MyRobotType[], Error>({
+  const { data, error, mutate, isLoading } = useSWR<MyRobotType[], Error>({
     url: endpoints.home.libraries.myRobots,
   })
 
@@ -148,6 +150,20 @@ const ListMyRobots = () => {
                       size={28}
                       sx={{ color: 'primary.main' }}
                     />
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
+                    <Stack spacing={1} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="error.main">
+                        Couldn&apos;t load robots. Check your connection and try
+                        again.
+                      </Typography>
+                      <Button size="small" onClick={() => mutate()}>
+                        Retry
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (

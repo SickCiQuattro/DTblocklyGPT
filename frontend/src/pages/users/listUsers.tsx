@@ -3,8 +3,6 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
-
-import { slate } from 'themes/theme'
 import {
   Box,
   Button,
@@ -23,6 +21,7 @@ import {
 } from '@mui/material'
 import { Eye, Plus, CheckCircle2, XCircle } from 'lucide-react'
 
+import { slate } from 'themes/theme'
 import { MainCard } from 'components/MainCard'
 import { tokenColor } from 'utils/tokenColors'
 import { ConfirmPopover } from 'components/ConfirmPopover'
@@ -32,6 +31,7 @@ import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage, defaultPageSizeSelection } from 'utils/constants'
 import { formatDateTimeFrontend } from 'utils/date'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { UserListType } from './types'
 
@@ -55,12 +55,13 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
 )
 
 const ListUsers = () => {
+  useDocumentTitle('User Accounts')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const { data, mutate, isLoading } = useSWR<UserListType[], Error>({
+  const { data, error, mutate, isLoading } = useSWR<UserListType[], Error>({
     url: endpoints.home.management.users,
   })
 
@@ -165,6 +166,20 @@ const ListUsers = () => {
                       size={28}
                       sx={{ color: 'primary.main' }}
                     />
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                    <Stack spacing={1} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="error.main">
+                        Couldn&apos;t load user accounts. Check your connection
+                        and try again.
+                      </Typography>
+                      <Button size="small" onClick={() => mutate()}>
+                        Retry
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : paginated.length === 0 ? (

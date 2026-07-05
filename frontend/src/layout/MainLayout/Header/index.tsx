@@ -1,5 +1,5 @@
 import React from 'react'
-import { useTheme } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import {
   IconButton,
   Toolbar,
@@ -10,7 +10,7 @@ import {
   CircularProgress,
 } from '@mui/material'
 import AppBar from '@mui/material/AppBar'
-import { useLocation } from 'react-router-dom'
+import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import {
   PanelLeftClose,
@@ -19,7 +19,6 @@ import {
   Save,
   Pencil,
   MessageSquare,
-  Send,
   RotateCcw,
 } from 'lucide-react'
 
@@ -31,10 +30,15 @@ import {
   triggerDiscard,
   toggleChat,
 } from 'store/reducers/task'
-import { Profile } from 'layout/MainLayout/Header/Profile'
-import { LogoSection } from 'components/Logo'
 import { TaskStatusChip } from 'components/TaskStatusChip'
+import { SegmentedControl } from 'components/SegmentedControl'
+import { KeycapHint, modKey } from 'components/KeycapHint'
+import { ConfirmDeleteDialog } from 'features/blockly/editor/dialogs/ConfirmDeleteDialog'
 import { drawerWidth } from 'utils/constants'
+import {
+  RAIL_CLOSED_WIDTH,
+  railTransition,
+} from 'layout/MainLayout/Drawer/MiniDrawerStyled'
 
 interface HeaderProps {
   open: boolean
@@ -60,6 +64,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
 
   const [isEditing, setIsEditing] = React.useState(false)
   const [localName, setLocalName] = React.useState(activeTaskName)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = React.useState(false)
 
   React.useEffect(() => {
     setLocalName(activeTaskName)
@@ -78,9 +83,41 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
 
   const statusChip = <TaskStatusChip status={activeTaskStatus} />
 
+  // Digital Twin / Copilot are independent toggles, modeled as one
+  // non-exclusive SegmentedControl instead of two separate outlined buttons.
+  const segmentValues = [
+    ...(simOpen ? ['twin'] : []),
+    ...(chatOpen ? ['copilot'] : []),
+  ]
+  const handleSegmentChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    newValue: string[],
+  ) => {
+    if (newValue.includes('twin') !== simOpen) dispatch(toggleSim())
+    if (newValue.includes('copilot') !== chatOpen) dispatch(toggleChat())
+  }
+
   const mainHeader = isIDERoute ? (
     <Toolbar sx={{ justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Typography
+            component={RouterLink}
+            to="/tasks"
+            variant="body2"
+            sx={{
+              color: 'text.secondary',
+              fontWeight: 500,
+              textDecoration: 'none',
+              '&:hover': { color: 'primary.main' },
+            }}
+          >
+            Tasks
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+            ›
+          </Typography>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {isEditing ? (
             <InputBase
@@ -119,57 +156,25 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <Button
-          variant={simOpen ? 'contained' : 'outlined'}
-          color="primary"
-          size="small"
-          startIcon={<PanelRight size={14} />}
-          onClick={() => dispatch(toggleSim())}
-          title={
-            simOpen
-              ? 'Hide the Digital Twin panel'
-              : 'Show the Digital Twin panel'
-          }
-          sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            fontWeight: 500,
-            fontSize: '0.85rem',
-            boxShadow: 'none',
-            '&:hover': {
-              boxShadow: 'none',
+        <SegmentedControl
+          value={segmentValues}
+          onChange={handleSegmentChange}
+          options={[
+            {
+              value: 'twin',
+              label: 'Digital Twin',
+              icon: <PanelRight size={14} />,
             },
-          }}
-        >
-          Digital Twin
-        </Button>
-        <Button
-          variant={chatOpen ? 'contained' : 'outlined'}
-          color="secondary"
-          size="small"
-          startIcon={<MessageSquare size={14} />}
-          onClick={() => dispatch(toggleChat())}
-          sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            fontWeight: 500,
-            fontSize: '0.85rem',
-            borderColor: chatOpen ? 'transparent' : 'rgba(99, 102, 241, 0.2)',
-            color: chatOpen ? 'common.white' : 'primary.main',
-            bgcolor: chatOpen ? 'primary.main' : 'transparent',
-            boxShadow: 'none',
-            '&:hover': {
-              boxShadow: 'none',
-              borderColor: 'primary.main',
-              bgcolor: chatOpen ? 'primary.dark' : 'rgba(99, 102, 241, 0.04)',
+            {
+              value: 'copilot',
+              label: 'Copilot',
+              icon: <MessageSquare size={14} />,
             },
-          }}
-        >
-          Copilot
-        </Button>
+          ]}
+        />
         {activeTaskStatus === 'published_with_draft' && (
           <Button
-            variant="outlined"
+            variant="text"
             color="error"
             size="small"
             startIcon={
@@ -180,7 +185,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               )
             }
             disabled={isSaving}
-            onClick={() => dispatch(triggerDiscard(true))}
+            onClick={() => setDiscardConfirmOpen(true)}
             sx={{
               borderRadius: '8px',
               textTransform: 'none',
@@ -212,7 +217,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             fontSize: '0.85rem',
             borderColor: workspaceReady
               ? 'transparent'
-              : 'rgba(99, 102, 241, 0.2)',
+              : alpha(theme.palette.primary.main, 0.2),
             color: workspaceReady ? 'common.white' : 'primary.main',
             bgcolor: workspaceReady ? 'success.main' : 'transparent',
             boxShadow: 'none',
@@ -222,14 +227,14 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               borderColor: workspaceReady ? 'success.dark' : 'primary.main',
               bgcolor: workspaceReady
                 ? 'success.dark'
-                : 'rgba(99, 102, 241, 0.04)',
+                : alpha(theme.palette.primary.main, 0.04),
             },
             '&.Mui-disabled': {
               color: workspaceReady ? 'common.white' : 'primary.main',
               bgcolor: workspaceReady ? 'success.main' : 'transparent',
               borderColor: workspaceReady
                 ? 'transparent'
-                : 'rgba(99, 102, 241, 0.2)',
+                : alpha(theme.palette.primary.main, 0.2),
               opacity: 0.7,
               cursor: 'not-allowed',
             },
@@ -237,6 +242,17 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
         >
           {workspaceReady ? 'Save' : 'Save draft'}
         </Button>
+        <KeycapHint>{modKey()}S</KeycapHint>
+        <ConfirmDeleteDialog
+          open={discardConfirmOpen}
+          message="Discard this draft? Your unpublished changes will be lost and the task will revert to its last published version."
+          confirmLabel="Discard"
+          onConfirm={() => {
+            setDiscardConfirmOpen(false)
+            dispatch(triggerDiscard(true))
+          }}
+          onCancel={() => setDiscardConfirmOpen(false)}
+        />
       </div>
     </Toolbar>
   ) : (
@@ -266,21 +282,15 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       color="inherit"
       elevation={0}
       sx={{
-        borderBottom: `1px solid ${theme.palette.divider}`,
+        bgcolor: 'background.default',
         zIndex: theme.zIndex.drawer + 1,
-        marginLeft: '56px',
-        width: 'calc(100% - 56px)',
-        transition: theme.transitions.create(['width', 'margin'], {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.leavingScreen,
-        }),
+        marginLeft: `${RAIL_CLOSED_WIDTH}px`,
+        width: `calc(100% - ${RAIL_CLOSED_WIDTH}px)`,
+        transition: railTransition(theme, ['width', 'margin']),
         ...(open && {
           marginLeft: `${drawerWidth}px`,
           width: `calc(100% - ${drawerWidth}px)`,
-          transition: theme.transitions.create(['width', 'margin'], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.enteringScreen,
-          }),
+          transition: railTransition(theme, ['width', 'margin']),
         }),
       }}
     >
@@ -291,7 +301,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       position="fixed"
       color="inherit"
       elevation={0}
-      sx={{ borderBottom: `1px solid ${theme.palette.divider}` }}
+      sx={{ bgcolor: 'background.default' }}
     >
       {mainHeader}
     </AppBar>

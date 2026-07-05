@@ -7,7 +7,12 @@ import { Profile } from 'layout/MainLayout/Header/Profile'
 
 import { DrawerHeader } from './DrawerHeader'
 import { DrawerContent } from './DrawerContent'
-import { closedMixin, openedMixin } from './MiniDrawerStyled'
+import {
+  closedMixin,
+  closedPaperMixin,
+  openedMixin,
+  openedPaperMixin,
+} from './MiniDrawerStyled'
 
 interface MainDrawerProps {
   open: boolean
@@ -43,11 +48,11 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
             cursor: !open ? 'pointer' : 'default',
             ...(open && {
               ...openedMixin(theme),
-              '& .MuiDrawer-paper': openedMixin(theme),
+              '& .MuiDrawer-paper': openedPaperMixin(theme),
             }),
             ...(!open && {
               ...closedMixin(theme),
-              '& .MuiDrawer-paper': closedMixin(theme),
+              '& .MuiDrawer-paper': closedPaperMixin(theme),
             }),
           }}
         >

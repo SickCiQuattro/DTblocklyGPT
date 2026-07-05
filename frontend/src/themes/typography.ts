@@ -71,7 +71,7 @@ export const Typography = (fontFamily: string) => ({
   },
   overline: {
     fontSize: '0.72rem',
-    fontWeight: 700,
+    fontWeight: 600, // Geist never-700 rule (see typography.ts header comment)
     lineHeight: 1.4,
     letterSpacing: '0.08em',
     textTransform: 'uppercase' as any,

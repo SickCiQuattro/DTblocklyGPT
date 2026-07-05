@@ -7,7 +7,7 @@ import {
   AlertTitle,
   Stack,
 } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import { PlayCircle, AlertCircle, ArrowLeft } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 
@@ -362,7 +362,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
     <div
       className="task-card-premium"
       style={{
-        background: 'rgba(255, 255, 255, 0.98)',
+        background: theme.palette.background.paper,
         borderRadius: '10px',
         height: '100%',
         display: 'flex',
@@ -381,39 +381,43 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             transform: translateY(0);
           }
         }
-        .task-card-premium {
-          animation: task-card-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        @media (prefers-reduced-motion: no-preference) {
+          .task-card-premium {
+            animation: task-card-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+          }
         }
         .task-card-tree::-webkit-scrollbar {
           width: 4px !important;
         }
         .task-card-tree::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.02) !important;
+          background: ${alpha(theme.palette.common.black, 0.02)} !important;
           border-radius: 10px !important;
         }
         .task-card-tree::-webkit-scrollbar-thumb {
-          background: rgba(79, 70, 229, 0.25) !important;
+          background: ${alpha(theme.palette.primary.dark, 0.25)} !important;
           border-radius: 10px !important;
         }
         .task-card-tree::-webkit-scrollbar-thumb:hover {
-          background: rgba(79, 70, 229, 0.45) !important;
+          background: ${alpha(theme.palette.primary.dark, 0.45)} !important;
         }
-        .task-btn-premium {
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        @media (prefers-reduced-motion: no-preference) {
+          .task-btn-premium {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          }
+          .task-btn-apply-premium {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          }
         }
         .task-btn-premium:hover:not(:disabled) {
           transform: translateY(-1px) scale(1.03);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05) !important;
+          box-shadow: 0 4px 8px ${alpha(theme.palette.common.black, 0.05)} !important;
         }
         .task-btn-premium:active:not(:disabled) {
           transform: scale(0.95);
         }
-        .task-btn-apply-premium {
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
         .task-btn-apply-premium:hover:not(:disabled) {
           transform: translateY(-1px) scale(1.03);
-          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25) !important;
+          box-shadow: 0 4px 10px ${alpha(theme.palette.primary.dark, 0.25)} !important;
           background: ${theme.palette.primary.darker} !important;
         }
         .task-btn-apply-premium:active:not(:disabled) {
@@ -535,8 +539,8 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             marginBottom: '8px',
             background: 'transparent',
             padding: '4px 8px',
-            borderRadius: '8px',
-            border: '1px solid rgba(0, 0, 0, 0.02)',
+            borderRadius: '12px',
+            border: `1px solid ${theme.palette.divider}`,
           }}
         >
           <StepTree
@@ -555,7 +559,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             marginTop: 'auto',
             textAlign: 'right',
             paddingTop: '12px',
-            borderTop: '1px solid rgba(79, 70, 229, 0.1)',
+            borderTop: `1px solid ${alpha(theme.palette.primary.dark, 0.1)}`,
             zIndex: 10,
             flexShrink: 0,
           }}
@@ -573,7 +577,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
               style={{
                 minWidth: 80,
                 borderRadius: '8px',
-                borderColor: 'rgba(0, 0, 0, 0.08)',
+                borderColor: theme.palette.divider,
                 color: theme.palette.slate[600],
                 fontSize: '13px',
                 fontWeight: 500,
@@ -584,15 +588,13 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             </Button>
             <Button
               variant="contained"
+              color="primary"
               size="medium"
               onClick={handleApply}
               className="task-btn-apply-premium"
               style={{
                 minWidth: 80,
                 borderRadius: '8px',
-                background: theme.palette.primary.dark,
-                border: 'none',
-                color: theme.palette.common.white,
                 fontSize: '13px',
                 fontWeight: 600,
                 textTransform: 'none',

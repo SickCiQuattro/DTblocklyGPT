@@ -26,6 +26,8 @@ import {
 } from '@mui/material'
 import { Search } from 'lucide-react'
 
+import { KeycapHint } from 'components/KeycapHint'
+
 import { MENU_PAPER_SX } from '../menuStyles'
 
 import {
@@ -141,8 +143,8 @@ export const ShadowPickerMenu = ({
             py: 0.5,
             transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
             '&:focus-within': {
-              borderColor: theme.palette.info.main,
-              boxShadow: `0 0 0 2px ${alpha(theme.palette.info.main, 0.15)}`,
+              borderColor: theme.palette.primary.main,
+              boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.15)}`,
             },
           }}
         >
@@ -160,6 +162,10 @@ export const ShadowPickerMenu = ({
               // Prevent the MUI MenuList typeahead from hijacking keyboard input
               // while the user is typing in the search box.
               event.stopPropagation()
+              if (event.key === 'Enter' && filteredItems.length > 0) {
+                event.preventDefault()
+                onSelect(filteredItems[0])
+              }
             }}
             sx={{
               flex: 1,
@@ -172,6 +178,7 @@ export const ShadowPickerMenu = ({
               },
             }}
           />
+          {filteredItems.length > 0 && <KeycapHint>↵</KeycapHint>}
         </Box>
       </Box>
 
@@ -312,7 +319,7 @@ export const ShadowPickerMenu = ({
                       <Typography
                         sx={{
                           mt: 0.2,
-                          fontSize: '1rem',
+                          fontSize: '0.78rem',
                           color: theme.palette.slate[500],
                           lineHeight: 1.4,
                         }}
@@ -325,7 +332,7 @@ export const ShadowPickerMenu = ({
                       <Typography
                         sx={{
                           mt: 0.2,
-                          fontSize: '1rem',
+                          fontSize: '0.78rem',
                           color: theme.palette.slate[500],
                         }}
                       >

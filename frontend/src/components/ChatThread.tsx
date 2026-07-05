@@ -12,8 +12,8 @@ import { X, Pencil, Play, Square, Save, ArrowLeftRight } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import useSWR from 'swr'
 import dayjs from 'dayjs'
-import { useSpeechRecognition } from 'react-speech-recognition'
 
+import { useSpeechRecognition } from 'utils/speechRecognition'
 import { useAppSelector } from 'store/reducers'
 import { clearProposedTask, setProposedTask } from 'store/reducers/proposal'
 import { toggleChatPosition } from 'store/reducers/task'
@@ -264,7 +264,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         }
       }
     } catch (error) {
+      // fetchApi already toasts every failure path (services/api.ts) — a
+      // second toast here just stacks a redundant message behind it.
       console.error('Error sending message:', error)
+      setMessage(message)
     } finally {
       setIsProcessing(false)
     }
@@ -345,22 +348,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
         background: theme.palette.background.paper,
-        borderLeft:
-          chatPosition === 'right'
-            ? '1px solid rgba(99, 102, 241, 0.12)'
-            : 'none',
-        borderRight:
-          chatPosition === 'left'
-            ? '1px solid rgba(99, 102, 241, 0.12)'
-            : 'none',
-        boxShadow:
-          chatPosition === 'right'
-            ? '-10px 0 30px -10px rgba(0, 0, 0, 0.03)'
-            : '10px 0 30px -10px rgba(0, 0, 0, 0.03)',
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: '16px',
+        boxShadow: chatOpen ? theme.customShadows.card : 'none',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        margin: '0',
         boxSizing: 'border-box',
       }}
     >
@@ -369,7 +362,11 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           transition: background 0.15s ease !important;
         }
         .resize-handle:hover, .resize-handle:active {
-          background: rgba(99, 102, 241, 0.3) !important;
+          background: ${alpha(theme.palette.primary.main, 0.3)} !important;
+        }
+        .chat-messages-container {
+          scrollbar-width: thin;
+          scrollbar-color: ${theme.palette.slate[300]} transparent;
         }
         .chat-messages-container::-webkit-scrollbar {
           width: 5px !important;
@@ -378,21 +375,14 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           background: transparent !important;
         }
         .chat-messages-container::-webkit-scrollbar-thumb {
-          background: rgba(99, 102, 241, 0.18) !important;
+          background: ${theme.palette.slate[300]} !important;
           border-radius: 10px !important;
         }
         .chat-messages-container::-webkit-scrollbar-thumb:hover {
-          background: rgba(99, 102, 241, 0.35) !important;
-        }
-        .close-btn-premium {
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          background: ${theme.palette.slate[400]} !important;
         }
         .close-btn-premium:hover {
-          transform: rotate(90deg) scale(1.08) !important;
-          background: rgba(99, 102, 241, 0.08) !important;
-        }
-        .close-btn-premium:active {
-          transform: rotate(90deg) scale(0.92) !important;
+          background: ${alpha(theme.palette.primary.main, 0.08)} !important;
         }
         @keyframes typing-dot-bounce {
           0%, 100% {
@@ -443,20 +433,33 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '16px 20px',
-          borderBottom: '1px solid rgba(99, 102, 241, 0.08)',
-          background: 'rgba(238, 242, 246, 0.3)',
+          minHeight: '56px',
+          padding: '6px 12px',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          background: theme.palette.grey[50],
         }}
       >
-        <div
-          style={{
-            fontWeight: 600,
-            fontSize: '0.95rem',
-            color: theme.palette.text.primary,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          AI Copilot
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div
+            style={{
+              color: theme.palette.slate[600],
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              letterSpacing: '0.12em',
+            }}
+          >
+            AI COPILOT
+          </div>
+          <div
+            style={{
+              color: theme.palette.slate[400],
+              fontSize: '0.63rem',
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+            }}
+          >
+            Ask for help with your task
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Tooltip
@@ -480,6 +483,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             onClick={onClose}
             size="small"
             className="close-btn-premium"
+            aria-label="Close chat"
           >
             <X size={18} style={{ color: indigo }} />
           </IconButton>

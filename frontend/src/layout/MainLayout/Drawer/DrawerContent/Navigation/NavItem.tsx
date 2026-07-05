@@ -61,14 +61,22 @@ export const NavItem = ({ item, level }: NavItemProps) => {
   }
 
   const Icon = item.icon
-  const itemIcon = Icon ? <Icon style={{ fontSize: '1.15rem' }} /> : false
+  const itemIcon = Icon ? <Icon size={18} /> : false
 
   const currentIndex = document.location.pathname
     .toString()
     .split('/')
     .findIndex((id) => id === item.id)
 
-  const isSelected = currentIndex > -1 || openItem === item.id
+  // The task workspace lives at /task/:id (singular), which never matches the
+  // "tasks" nav item by path segment — without this, opening a task leaves
+  // the rail showing nothing active, even though the task workspace is
+  // conceptually still "under" Tasks.
+  const isTasksItemInWorkspace =
+    item.id === 'tasks' && document.location.pathname.startsWith('/task/')
+
+  const isSelected =
+    currentIndex > -1 || openItem === item.id || isTasksItemInWorkspace
 
   // active menu item on page load
   useEffect(() => {

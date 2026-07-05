@@ -1,4 +1,4 @@
-import React, { ReactNode, RefObject } from 'react'
+import React, { ReactNode } from 'react'
 import { SxProps, Theme, useTheme } from '@mui/material/styles'
 import {
   Button,
@@ -53,8 +53,7 @@ export const MainCard = ({
   onClick,
 }: MainCardProps) => {
   const theme = useTheme()
-  const customShadow = (theme as Theme & { customShadows?: { z1?: string } })
-    .customShadows?.z1
+  const customShadow = theme.customShadows?.card
   const lightBorderColor = (
     theme.palette.grey as typeof theme.palette.grey & { A800?: string }
   ).A800
@@ -97,7 +96,7 @@ export const MainCard = ({
       sx={{
         ...sx,
         border: border ? '1px solid' : 'none',
-        borderRadius: 2,
+        borderRadius: 1, // × shape.borderRadius (8) = 8px
         borderColor:
           theme.palette.mode === 'dark'
             ? theme.palette.divider

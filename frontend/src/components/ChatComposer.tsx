@@ -1,8 +1,10 @@
 import React from 'react'
-import { Box, TextField, IconButton, Stack } from '@mui/material'
+import { TextField, IconButton, Stack, Typography } from '@mui/material'
 import { useTheme, alpha } from '@mui/material/styles'
 import { Send, Mic, Square, Volume2, VolumeX } from 'lucide-react'
-import SpeechRecognition from 'react-speech-recognition'
+
+import { KeycapHint } from 'components/KeycapHint'
+import SpeechRecognition from 'utils/speechRecognition'
 import dayjs from 'dayjs'
 import { useDispatch } from 'react-redux'
 
@@ -76,9 +78,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     <div
       style={{
         padding: '16px 20px',
-        background: 'rgba(255, 255, 255, 0.55)',
-        backdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+        background: theme.palette.background.paper,
+        borderTop: `1px solid ${theme.palette.divider}`,
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
@@ -87,8 +88,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       <style>{`
         .premium-textarea {
           resize: none !important;
-          border: 1px solid rgba(0, 0, 0, 0.08) !important;
-          background: rgba(255, 255, 255, 0.8) !important;
+          border: 1px solid ${theme.palette.divider} !important;
+          background: ${theme.palette.background.paper} !important;
           border-radius: 12px !important;
           padding: 8px 12px !important;
           font-size: 14px !important;
@@ -276,6 +277,18 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           </IconButton>
         </Stack>
       </div>
+
+      <Typography
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+        }}
+      >
+        <KeycapHint>↵</KeycapHint> to send
+      </Typography>
     </div>
   )
 }

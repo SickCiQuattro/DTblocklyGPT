@@ -25,13 +25,12 @@ import {
   Menu,
   MenuItem,
   Popover,
-  ToggleButton,
-  ToggleButtonGroup,
   Switch,
   Box,
   Stack,
   Typography,
   Button,
+  Tooltip,
 } from '@mui/material'
 import {
   Maximize,
@@ -49,6 +48,7 @@ import {
   MoreHorizontal,
   Search,
 } from 'lucide-react'
+import { toast } from 'react-toastify'
 
 import {
   AbstractStep,
@@ -72,7 +72,6 @@ import {
 import { applyBlockViewMode } from '../utils/viewModePresentation'
 import { setBodiesCollapsed } from '../utils/blockLayout'
 import { exportWorkspaceJson, importWorkspaceJson } from '../utils/workspaceIO'
-import { toast } from 'react-toastify'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
 import '../category/CustomCategory'
 // Side-effect import: registers all Blockly block types (when_start, repeat_block, etc.)
@@ -100,7 +99,11 @@ import {
   InlineTaskDialog,
   KeyboardHelpDialog,
 } from './dialogs'
+
 import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
+import { KeycapHint, modKey } from 'components/KeycapHint'
+import { SegmentedControl } from 'components/SegmentedControl'
+
 import type { ShadowPickerItem } from './shadowPicker/types'
 import { MENU_PAPER_SX } from './menuStyles'
 import {
@@ -566,30 +569,41 @@ export const BlocklyEditor = ({
     if (workspace) exportWorkspaceJson(workspace, 'task')
   }, [])
 
+  const runImport = useCallback(async (file: File) => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+    try {
+      importWorkspaceJson(workspace, await file.text())
+      toast.success('Task imported')
+    } catch {
+      toast.error('Could not import: not a valid task file')
+    }
+  }, [])
+
   const handleImportFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
       event.target.value = '' // allow re-importing the same file
       const workspace = workspaceRef.current
       if (!file || !workspace) return
 
-      if (
-        workspace.getAllBlocks(false).some((b) => !b.isShadow()) &&
-        !window.confirm(
-          'Importing replaces the blocks currently in this task. Continue?',
-        )
-      ) {
+      if (workspace.getAllBlocks(false).some((b) => !b.isShadow())) {
+        setConfirmDialog({
+          message:
+            'Importing replaces the blocks currently in this task. Continue?',
+          confirmLabel: 'Import',
+          onConfirm: () => {
+            setConfirmDialog(null)
+            void runImport(file)
+          },
+          onCancel: () => setConfirmDialog(null),
+        })
         return
       }
 
-      try {
-        importWorkspaceJson(workspace, await file.text())
-        toast.success('Task imported')
-      } catch {
-        toast.error('Could not import: not a valid task file')
-      }
+      void runImport(file)
     },
-    [],
+    [runImport],
   )
 
   // Ctrl/Cmd+K → block search palette.
@@ -628,6 +642,7 @@ export const BlocklyEditor = ({
     message: string
     onConfirm: () => void
     onCancel: () => void
+    confirmLabel?: string
   } | null>(null)
 
   // ── Exclude current task from macro list ───────────────────────────────────
@@ -1274,7 +1289,18 @@ export const BlocklyEditor = ({
             setConfirmDialog(null)
             Blockly.Events.setGroup(true)
             try {
-              selected.dispose(true)
+              // Dispose descendants explicitly before the parent, in reverse
+              // (leaf-first) order. Blockly's own dispose(healStack) cascade
+              // silently leaves a value-input child behind as a floating
+              // orphan when the parent occupies a connection that has a
+              // default shadow configured (e.g. a condition slot) — reported
+              // bug, reproduced by hand. ownDescendants is the exact list the
+              // confirm count above is built from, so this can't miss one.
+              for (let i = ownDescendants.length - 1; i >= 0; i--) {
+                if (!ownDescendants[i].disposed)
+                  ownDescendants[i].dispose(false)
+              }
+              if (!selected.disposed) selected.dispose(true)
             } finally {
               Blockly.Events.setGroup(false)
             }
@@ -1399,6 +1425,20 @@ export const BlocklyEditor = ({
               message: `Delete ${totalCount} blocks?`,
               onConfirm: () => {
                 setConfirmDialog(null)
+                // Dispose descendants ourselves first (see the identical
+                // comment on the keyboard-delete handler above) — Blockly's
+                // native "Delete N Blocks" callback can leave a value-input
+                // child behind as an orphan when the block occupies a
+                // connection with a default shadow configured.
+                Blockly.Events.setGroup(true)
+                try {
+                  for (let i = ownDescendants.length - 1; i >= 0; i--) {
+                    if (!ownDescendants[i].disposed)
+                      ownDescendants[i].dispose(false)
+                  }
+                } finally {
+                  Blockly.Events.setGroup(false)
+                }
                 window.setTimeout(() => option.callback(), 50)
               },
               onCancel: () => setConfirmDialog(null),
@@ -1528,42 +1568,92 @@ export const BlocklyEditor = ({
             </div>
           )}
           <div className="workspace-controls-group workspace-controls-group--top-right">
-            <IconButton
-              className="workspace-control-button"
-              size="small"
-              onClick={handleUndo}
-              disabled={!historyState.canUndo}
-              aria-label="Undo"
+            <Tooltip
+              title={
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <span>Undo</span>
+                  <KeycapHint
+                    sx={{
+                      bgcolor: 'transparent',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: 'common.white',
+                    }}
+                  >
+                    {modKey()}Z
+                  </KeycapHint>
+                </Stack>
+              }
             >
-              <Undo2 size={18} />
-            </IconButton>
-            <IconButton
-              className="workspace-control-button"
-              size="small"
-              onClick={handleRedo}
-              disabled={!historyState.canRedo}
-              aria-label="Redo"
+              <span>
+                <IconButton
+                  className="workspace-control-button"
+                  size="small"
+                  onClick={handleUndo}
+                  disabled={!historyState.canUndo}
+                  aria-label="Undo"
+                >
+                  <Undo2 size={18} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip
+              title={
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <span>Redo</span>
+                  <KeycapHint
+                    sx={{
+                      bgcolor: 'transparent',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: 'common.white',
+                    }}
+                  >
+                    {modKey()}⇧Z
+                  </KeycapHint>
+                </Stack>
+              }
             >
-              <Redo2 size={18} />
-            </IconButton>
+              <span>
+                <IconButton
+                  className="workspace-control-button"
+                  size="small"
+                  onClick={handleRedo}
+                  disabled={!historyState.canRedo}
+                  aria-label="Redo"
+                >
+                  <Redo2 size={18} />
+                </IconButton>
+              </span>
+            </Tooltip>
             <span className="workspace-controls-divider" aria-hidden="true" />
-            <IconButton
-              className="workspace-control-button"
-              size="small"
-              onClick={(e) => setMoreMenuAnchorEl(e.currentTarget)}
-              aria-label="More actions"
-            >
-              <MoreHorizontal size={18} />
-            </IconButton>
-            {onViewSettingsChange && viewSettings && (
+            <Tooltip title="More actions">
               <IconButton
                 className="workspace-control-button"
                 size="small"
-                onClick={handleOpenSettings}
-                aria-label="Workspace Settings"
+                onClick={(e) => setMoreMenuAnchorEl(e.currentTarget)}
+                aria-label="More actions"
               >
-                <Settings size={18} />
+                <MoreHorizontal size={18} />
               </IconButton>
+            </Tooltip>
+            {onViewSettingsChange && viewSettings && (
+              <Tooltip title="Workspace settings">
+                <IconButton
+                  className="workspace-control-button"
+                  size="small"
+                  onClick={handleOpenSettings}
+                  aria-label="Workspace Settings"
+                >
+                  <Settings size={18} />
+                </IconButton>
+              </Tooltip>
             )}
           </div>
           <div className="workspace-controls-group workspace-controls-group--bottom-right">
@@ -1636,11 +1726,7 @@ export const BlocklyEditor = ({
               return (
                 <Divider
                   key={`sep-${idx}`}
-                  sx={{
-                    my: 0.5,
-                    mx: 0.5,
-                    borderColor: 'rgba(148,163,184,0.18)',
-                  }}
+                  sx={{ my: 0.5, mx: 0.5, borderColor: 'divider' }}
                 />
               )
             }
@@ -1706,6 +1792,7 @@ export const BlocklyEditor = ({
             message={confirmDialog.message}
             onConfirm={confirmDialog.onConfirm}
             onCancel={confirmDialog.onCancel}
+            confirmLabel={confirmDialog.confirmLabel}
           />
         )}
 
@@ -1754,12 +1841,7 @@ export const BlocklyEditor = ({
               <Search size={16} />
             </ListItemIcon>
             <ListItemText primary="Add block" />
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.secondary', ml: 3 }}
-            >
-              {ADD_BLOCK_SHORTCUT}
-            </Typography>
+            <KeycapHint sx={{ ml: 3 }}>{ADD_BLOCK_SHORTCUT}</KeycapHint>
           </MenuItem>
           <MenuItem
             onClick={() => {
@@ -1881,28 +1963,19 @@ export const BlocklyEditor = ({
                 >
                   Block detail
                 </Typography>
-                <ToggleButtonGroup
+                <SegmentedControl
                   exclusive
                   fullWidth
-                  size="small"
                   value={viewSettings.blockViewMode}
                   onChange={(_e, val) =>
                     val && onViewSettingsChange({ blockViewMode: val })
                   }
-                >
-                  <ToggleButton value="complete" sx={{ fontSize: 12, py: 0.5 }}>
-                    Complete
-                  </ToggleButton>
-                  <ToggleButton
-                    value="essential"
-                    sx={{ fontSize: 12, py: 0.5 }}
-                  >
-                    Essential
-                  </ToggleButton>
-                  <ToggleButton value="minimal" sx={{ fontSize: 12, py: 0.5 }}>
-                    Minimal
-                  </ToggleButton>
-                </ToggleButtonGroup>
+                  options={[
+                    { value: 'complete', label: 'Complete' },
+                    { value: 'essential', label: 'Essential' },
+                    { value: 'minimal', label: 'Minimal' },
+                  ]}
+                />
               </Box>
 
               <SettingSwitch
@@ -1951,25 +2024,19 @@ export const BlocklyEditor = ({
                 >
                   Delete confirmations
                 </Typography>
-                <ToggleButtonGroup
+                <SegmentedControl
                   exclusive
                   fullWidth
-                  size="small"
                   value={viewSettings.deleteConfirmMode}
                   onChange={(_e, val) =>
                     val && onViewSettingsChange({ deleteConfirmMode: val })
                   }
-                >
-                  <ToggleButton value="always" sx={{ fontSize: 12, py: 0.5 }}>
-                    Always
-                  </ToggleButton>
-                  <ToggleButton value="multiple" sx={{ fontSize: 12, py: 0.5 }}>
-                    Multiple
-                  </ToggleButton>
-                  <ToggleButton value="never" sx={{ fontSize: 12, py: 0.5 }}>
-                    Never
-                  </ToggleButton>
-                </ToggleButtonGroup>
+                  options={[
+                    { value: 'always', label: 'Always' },
+                    { value: 'multiple', label: 'Multiple' },
+                    { value: 'never', label: 'Never' },
+                  ]}
+                />
               </Box>
 
               <SettingSwitch
