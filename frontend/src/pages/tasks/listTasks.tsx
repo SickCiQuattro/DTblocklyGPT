@@ -274,6 +274,12 @@ const TaskCard = ({
       cursor: canManage ? 'pointer' : 'default',
       boxShadow: (theme) => theme.customShadows.card,
       '@media (prefers-reduced-motion: no-preference)': {
+        // Keep the card on its own compositing layer at rest too — without
+        // this, the hover-only `transform` promotes it to a layer only on
+        // hover, and Chromium re-rasterizes the outlined border with
+        // different anti-aliasing, making the (already-present) top border
+        // suddenly look like a new line popping in.
+        willChange: 'transform',
         transition: 'transform 0.2s ease',
         '&:hover': { transform: 'translateY(-2px)' },
       },

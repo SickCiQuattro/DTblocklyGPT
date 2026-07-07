@@ -8,7 +8,7 @@ import {
   Tooltip,
 } from '@mui/material'
 import { useTheme, alpha } from '@mui/material/styles'
-import { X, Pencil, Play, Square, Save, ArrowLeftRight } from 'lucide-react'
+import { X, ArrowLeftRight } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import useSWR from 'swr'
 import dayjs from 'dayjs'
@@ -108,8 +108,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   ])
   const [chatLog, setChatLog] = useState<any[]>([])
   const [message, setMessage] = useState('')
-  const [speaker, setSpeaker] = useState(false)
-  const [speaking, setSpeaking] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
 
   const {
@@ -205,17 +203,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       })
 
       if (res) {
-        if (speaker && res.response.answer) {
-          window.speechSynthesis.cancel() // drop any queued/ongoing speech
-          const utterance = new SpeechSynthesisUtterance(res.response.answer)
-          // Speak in the language the AI replied in (it/en/…), not a fixed one.
-          utterance.lang = res.response.lang || navigator.language || 'en-US'
-          utterance.onend = () => setSpeaking(false)
-          utterance.onerror = () => setSpeaking(false)
-          setSpeaking(true)
-          window.speechSynthesis.speak(utterance)
-        }
-
         const answerText = res.response.answer || CHATGPT_ERROR
         const intent = res.intent ?? res.response.intent
         // Suggestions + warnings render as typed chips below the text.
@@ -448,7 +435,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               letterSpacing: '0.12em',
             }}
           >
-            AI COPILOT
+            COPILOT
           </div>
           <div
             style={{
@@ -461,7 +448,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             Ask for help with your task
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <Tooltip
             title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
             placement="bottom"
@@ -479,14 +466,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               <ArrowLeftRight size={18} />
             </IconButton>
           </Tooltip>
-          <IconButton
-            onClick={onClose}
-            size="small"
-            className="close-btn-premium"
-            aria-label="Close chat"
-          >
-            <X size={18} style={{ color: indigo }} />
-          </IconButton>
+          <Tooltip title="Close chat" placement="bottom">
+            <IconButton
+              onClick={onClose}
+              size="small"
+              className="close-btn-premium"
+              aria-label="Close chat"
+            >
+              <X size={18} style={{ color: indigo }} />
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 
@@ -683,13 +672,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
         isMicrophoneAvailable={isMicrophoneAvailable}
         onMessageSend={onMessageSend}
-        speaker={speaker}
-        setSpeaker={setSpeaker}
-        speaking={speaking}
-        onStopSpeaking={() => {
-          window.speechSynthesis.cancel()
-          setSpeaking(false)
-        }}
       />
     </Box>
   )
