@@ -1,48 +1,22 @@
-import React, { useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { alpha, useTheme } from '@mui/material/styles'
 import {
-  useTheme,
   Avatar,
   Box,
   ButtonBase,
-  CardContent,
-  ClickAwayListener,
-  Direction,
-  Grid,
-  Paper,
-  Popper,
+  Divider,
+  Menu,
   Stack,
-  Tab,
-  Tabs,
+  Tooltip,
   Typography,
 } from '@mui/material'
-import { User } from 'lucide-react'
 
-import { MainCard } from 'components/MainCard'
-import { Transitions } from 'components/Transitions'
+import { NAV_ROW_HEIGHT } from 'layout/MainLayout/Drawer/DrawerContent/Navigation/NavItem'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { RandomUserIcon } from 'assets/robots'
 import { UserLoginInterface } from 'pages/login/LoginForm'
 
 import { ProfileTab } from './ProfileTab'
-
-interface TabPanelProps {
-  children?: React.ReactNode
-  index: any
-  value: any
-  dir: Direction
-}
-
-const TabPanel = ({ children = null, value, index, dir }: TabPanelProps) => (
-  <div
-    role="tabpanel"
-    hidden={value !== index}
-    id={`profile-tabpanel-${index}`}
-    aria-labelledby={`profile-tab-${index}`}
-    dir={dir}
-  >
-    {value === index && children}
-  </div>
-)
 
 interface ProfileProps {
   drawerOpen?: boolean
@@ -50,9 +24,9 @@ interface ProfileProps {
 
 export const Profile = ({ drawerOpen = true }: ProfileProps) => {
   const theme = useTheme()
+  const primary = theme.palette.primary.main
   const storedUser = getFromLocalStorage(LocalStorageKey.USER) as
-    | Partial<UserLoginInterface>
-    | ''
+    Partial<UserLoginInterface> | ''
   const userName =
     typeof storedUser === 'object' && storedUser !== null
       ? storedUser.username || ''
@@ -63,54 +37,34 @@ export const Profile = ({ drawerOpen = true }: ProfileProps) => {
       : ''
 
   const anchorRef = useRef<HTMLButtonElement | null>(null)
-  const [open, setOpen] = useState<boolean>(false)
-  const handleToggle = () => {
-    setOpen((prevOpen) => !prevOpen)
-  }
-
-  const handleClose = (event: MouseEvent | TouchEvent) => {
-    if (
-      anchorRef.current &&
-      event.target instanceof Node &&
-      anchorRef.current.contains(event.target)
-    ) {
-      return
-    }
-    setOpen(false)
-  }
-
-  const [value, setValue] = useState(0)
-
-  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setValue(newValue)
-  }
-
-  const iconBackColorOpen = 'grey.300'
+  const [open, setOpen] = useState(false)
 
   return (
-    <Box sx={{ flexShrink: 0, ml: 0, width: '100%' }}>
-      <ButtonBase
-        sx={{
-          p: 0.5,
-          bgcolor: open ? iconBackColorOpen : 'transparent',
-          borderRadius: 1,
-          '&:hover': { bgcolor: 'secondary.lighter' },
-          width: '100%',
-        }}
-        aria-label="open profile"
-        ref={anchorRef}
-        aria-controls={open ? 'profile-grow' : undefined}
-        aria-haspopup="true"
-        onClick={handleToggle}
-        title="Open profile menu"
+    <Box sx={{ flexShrink: 0, width: '100%' }}>
+      <Tooltip
+        title="Profile"
+        placement="right"
+        disableHoverListener={drawerOpen}
       >
-        <Stack
-          direction="row"
-          spacing={0}
+        <ButtonBase
+          ref={anchorRef}
+          onClick={() => setOpen((prev) => !prev)}
+          aria-haspopup="true"
+          aria-expanded={open}
+          aria-controls={open ? 'profile-menu' : undefined}
+          aria-label="Open profile menu"
           sx={{
-            alignItems: 'center',
-            justifyContent: drawerOpen ? 'flex-start' : 'center',
             width: '100%',
+            minHeight: NAV_ROW_HEIGHT,
+            borderRadius: '8px',
+            pl: '6px',
+            pr: 1,
+            display: 'flex',
+            justifyContent: 'flex-start',
+            alignItems: 'center',
+            bgcolor: open ? alpha(primary, 0.08) : 'transparent',
+            transition: 'background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover': { bgcolor: alpha(primary, 0.04) },
           }}
         >
           <Avatar
@@ -120,124 +74,82 @@ export const Profile = ({ drawerOpen = true }: ProfileProps) => {
             <RandomUserIcon />
           </Avatar>
           <Typography
-            variant="subtitle1"
+            variant="body2"
             sx={{
-              margin: 0,
-              ml: drawerOpen ? 1.5 : 0,
+              ml: drawerOpen ? '8px' : 0,
               opacity: drawerOpen ? 1 : 0,
               maxWidth: drawerOpen ? '140px' : '0px',
               minWidth: 0,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              fontWeight: 500,
+              color: 'text.primary',
               transition:
-                'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           >
             {userName}
           </Typography>
-        </Stack>
-      </ButtonBase>
-      <Popper
-        placement={drawerOpen ? 'bottom-start' : 'right-end'}
-        open={open}
+        </ButtonBase>
+      </Tooltip>
+
+      <Menu
+        id="profile-menu"
         anchorEl={anchorRef.current}
-        role={undefined}
-        transition
-        disablePortal
-        popperOptions={{
-          modifiers: [{ name: 'offset', options: { offset: [0, 9] } }],
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorOrigin={
+          drawerOpen
+            ? { vertical: 'top', horizontal: 'left' }
+            : { vertical: 'center', horizontal: 'right' }
+        }
+        transformOrigin={
+          drawerOpen
+            ? { vertical: 'bottom', horizontal: 'left' }
+            : { vertical: 'center', horizontal: 'left' }
+        }
+        slotProps={{
+          paper: {
+            sx: {
+              mt: drawerOpen ? '-8px' : 0,
+              ml: drawerOpen ? 0 : '8px',
+              width: 260,
+              // Same elevation language as every other editor/app popover —
+              // see features/blockly/editor/menuStyles.ts MENU_PAPER_SX.
+              borderRadius: '12px',
+              border: `1px solid ${theme.palette.slate[200]}`,
+              boxShadow: '0 12px 28px rgba(15, 23, 42, 0.12)',
+            },
+          },
         }}
       >
-        {({ TransitionProps }) => (
-          <Transitions type="fade" in={open} {...TransitionProps}>
-            {open && (
-              <Paper
-                sx={{
-                  boxShadow: theme.shadows[1],
-                  width: 290,
-                  minWidth: 240,
-                  maxWidth: 290,
-                  [theme.breakpoints.down('md')]: { maxWidth: 250 },
-                }}
+        <Box sx={{ px: 2, py: 1.5 }}>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+            <Avatar alt="profile user" sx={{ width: 32, height: 32 }}>
+              <RandomUserIcon />
+            </Avatar>
+            <Stack sx={{ minWidth: 0 }}>
+              <Typography
+                variant="subtitle2"
+                noWrap
+                sx={{ color: theme.palette.slate[900], fontWeight: 600 }}
               >
-                <ClickAwayListener onClickAway={handleClose}>
-                  <MainCard elevation={0} border={false} content={false}>
-                    <CardContent sx={{ px: 2.5, pt: 3 }}>
-                      <Grid
-                        container
-                        sx={{
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <Grid>
-                          <Stack
-                            direction="row"
-                            spacing={1.25}
-                            sx={{ alignItems: 'center' }}
-                          >
-                            <Avatar
-                              alt="profile user"
-                              sx={{ width: 32, height: 32 }}
-                            >
-                              <RandomUserIcon />
-                            </Avatar>
-                            <Stack>
-                              <Typography variant="h6">{userName}</Typography>
-                              <Typography variant="body2" color="textSecondary">
-                                {userGroup}
-                              </Typography>
-                            </Stack>
-                          </Stack>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                    {open && (
-                      <>
-                        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                          <Tabs
-                            variant="fullWidth"
-                            value={value}
-                            onChange={handleChange}
-                            aria-label="profile tabs"
-                          >
-                            <Tab
-                              sx={{
-                                display: 'flex',
-                                flexDirection: 'row',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                textTransform: 'capitalize',
-                                cursor: 'default',
-                              }}
-                              icon={
-                                <User
-                                  size={16}
-                                  style={{
-                                    marginBottom: 0,
-                                    marginRight: '10px',
-                                  }}
-                                />
-                              }
-                              label="Profile"
-                              id="profile-tab-0"
-                              aria-controls="profile-tabpanel-0"
-                            />
-                          </Tabs>
-                        </Box>
-                        <TabPanel value={value} index={0} dir={theme.direction}>
-                          <ProfileTab setOpen={setOpen} />
-                        </TabPanel>
-                      </>
-                    )}
-                  </MainCard>
-                </ClickAwayListener>
-              </Paper>
-            )}
-          </Transitions>
-        )}
-      </Popper>
+                {userName}
+              </Typography>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ color: theme.palette.slate[500] }}
+              >
+                {userGroup}
+              </Typography>
+            </Stack>
+          </Stack>
+        </Box>
+        <Divider />
+        <ProfileTab setOpen={setOpen} />
+      </Menu>
     </Box>
   )
 }

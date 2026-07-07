@@ -8,13 +8,13 @@ import {
   InputBase,
   Button,
   CircularProgress,
+  Tooltip,
 } from '@mui/material'
 import AppBar from '@mui/material/AppBar'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import {
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   PanelRight,
   Save,
   Pencil,
@@ -258,20 +258,22 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   ) : (
     <Toolbar sx={{ justifyContent: 'space-between' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <IconButton
-          disableRipple
-          aria-label="open drawer"
-          onClick={handleDrawerToggle}
-          edge="start"
-          color="secondary"
-          sx={{
-            color: 'text.primary',
-            bgcolor: open ? iconBackColorOpen : iconBackColor,
-            ml: { xs: 0, lg: -2 },
-          }}
-        >
-          {!open ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-        </IconButton>
+        <Tooltip title={open ? 'Collapse sidebar' : 'Expand sidebar'}>
+          <IconButton
+            disableRipple
+            aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+            onClick={handleDrawerToggle}
+            edge="start"
+            color="secondary"
+            sx={{
+              color: 'text.primary',
+              bgcolor: open ? iconBackColorOpen : iconBackColor,
+              ml: { xs: 0, lg: -2 },
+            }}
+          >
+            <PanelLeft size={20} />
+          </IconButton>
+        </Tooltip>
       </div>
     </Toolbar>
   )

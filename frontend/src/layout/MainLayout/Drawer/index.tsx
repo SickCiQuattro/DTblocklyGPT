@@ -68,9 +68,7 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
             {drawerContent}
           </Box>
           <Box
-            onClick={(e) => {
-              if (open) e.stopPropagation()
-            }}
+            onClick={(e) => e.stopPropagation()}
             sx={{
               display: 'flex',
               flexDirection: 'column',

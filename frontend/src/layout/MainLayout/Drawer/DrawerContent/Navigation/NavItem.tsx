@@ -20,7 +20,7 @@ import { MenuItem } from 'menu-items/types'
 // icon lives in a fixed-width column whose left edge is the same in both states,
 // so the glyph centers on the 56px rail when collapsed and stays put when open.
 export const NAV_ROW_HEIGHT = 44
-const ICON_COLUMN = 28
+export const ICON_COLUMN = 28
 
 const getListItemProps = (
   external: boolean | undefined,
