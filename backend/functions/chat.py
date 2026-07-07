@@ -1,6 +1,8 @@
 import logging
 import json
 import copy
+import time
+from collections import Counter
 from typing import List, Dict, Any, Tuple
 from django.http import HttpResponse, HttpRequest
 from backend.utils.response import (
@@ -31,8 +33,37 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
 CHATGPT_TEMPERATURE = 0.0
+# Cap the round-tripped user/assistant history — the task snapshot is already
+# re-sent in full every turn via the system prompt, so old turns are only
+# needed for conversational continuity, not task state.
+MAX_CHAT_HISTORY = 20
 
 logger = logging.getLogger(__name__)
+
+
+def _scene_summary():
+    """Live workspace state for the LLM prompt, aggregated by class+colour.
+
+    Returns e.g. [{"type": "bottle", "color": "blue", "count": 2}] — no
+    bboxes, the model only needs what is visible. "unavailable" when the
+    vision bridge is down (sim without camera, bridge off): the prompt
+    tolerates it.
+    """
+    from backend.functions.flask_ros_client import FlaskRosClient
+
+    try:
+        state = FlaskRosClient().get_vision_state()
+    except Exception:
+        return "unavailable"
+    counts = Counter(
+        (d.get("class"), d.get("color"))
+        for d in state.get("detections", [])
+        if d.get("class")
+    )
+    return [
+        {"type": cls, **({"color": color} if color else {}), "count": n}
+        for (cls, color), n in sorted(counts.items(), key=str)
+    ]
 
 
 @dataclass
@@ -59,6 +90,7 @@ class LLMProvider:
         )
 
     def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], tool_name: str, temperature: float = 0.0) -> ProviderLLMResponse:
+        started_at = time.monotonic()
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -71,6 +103,14 @@ class LLMProvider:
                 },
             },
             parallel_tool_calls=False,
+        )
+        latency_ms = (time.monotonic() - started_at) * 1000
+        usage = getattr(response, "usage", None)
+        logger.info(
+            "LLM call model=%s latency_ms=%.0f prompt_tokens=%s completion_tokens=%s",
+            self.model, latency_ms,
+            getattr(usage, "prompt_tokens", None),
+            getattr(usage, "completion_tokens", None),
         )
         msg = response.choices[0].message
         if msg.tool_calls and len(msg.tool_calls) > 0:
@@ -252,7 +292,9 @@ You must reply with a JSON response that follows this format:
 {{
   "answer": string,       // Natural language explanation or clarification to the user
   "task": AbstractStep[], // The updated or created task program
-  "taskModified": boolean // Set to true if you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. Set to false if the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.
+  "taskModified": boolean, // Set to true if you are proposing a new task, making changes, or editing the existing task in response to a user request to modify the workspace. Set to false if the user is only asking a question, asking to analyze the workspace, asking for explanations, or if no changes are being proposed to the workspace.
+  "intent": string,       // One of "explain", "analyze", "modify", "evaluate" — see # HOW YOU HELP # below
+  "lang": string          // BCP-47 code of the language used in "answer" (e.g. "en-US", "it")
 }}
 
 Where AbstractStep is one of:
@@ -380,8 +422,8 @@ Decide what the user wants and set "intent" to exactly one of "explain", "analyz
 - "explain": the user asks what a block does, where to find it, or how something works.
   → Explain it in plain words using the block's user-facing name and its category. Do NOT change the task. "task" = the current snapshot unchanged. taskModified = false.
 
-- "analyze": the user asks what is currently in their workspace ("what's in my task?", "cosa c'è nel workspace?").
-  → Describe the blocks in the # CURRENT TASK SNAPSHOT # in order, in plain words. Do NOT change anything. "task" = the snapshot unchanged. taskModified = false.
+- "analyze": the user asks what is currently in their workspace ("what's in my task?", "cosa c'è nel workspace?") OR what the camera currently sees ("what do you see?", "quali provette vedi?").
+  → For workspace questions, describe the blocks in the # CURRENT TASK SNAPSHOT # in order, in plain words. For camera questions, answer from the "Live camera scene" list only — if it is "unavailable", say the camera is offline; never invent scene contents. Do NOT change anything. "task" = the snapshot unchanged. taskModified = false.
 
 - "modify": the user asks to build, add, remove, or change steps.
   → Return the full updated task in "task" and set taskModified = true. Briefly say what you changed in "answer".
@@ -421,6 +463,7 @@ You have access to the following lists (always use exact IDs and names):
 - Objects: {{objects}}
 - Locations: {{locations}}
 - Actions: {{actions}}
+- Live camera scene (what the robot camera sees RIGHT NOW, aggregated by type and cap colour; "cap" entries are coloured test-tube caps; [] = nothing visible; "unavailable" = camera offline — never invent scene contents): {{scene}}
 
 # EXAMPLES #
 User says: "Pick the widget and place it in the bin A."
@@ -430,7 +473,10 @@ Response:
   "task": [
       {{"type": "pick", "objectId": 3, "objectName": "widget"}},
       {{"type": "place", "locationId": 2, "locationName": "bin A"}}
-    ]
+    ],
+  "taskModified": true,
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "Move to the inspection zone then open the gripper."
@@ -440,7 +486,10 @@ Response:
   "task": [
       {{"type": "move_to", "motionType": "LINEAR", "locationId": 5, "locationName": "inspection zone"}},
       {{"type": "gripper", "state": "OPEN"}}
-    ]
+    ],
+  "taskModified": true,
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "Wait for the operator to put a part on the table before starting."
@@ -451,7 +500,8 @@ Response:
       {{"type": "human_action", "description": "Please place the part on the table and confirm.", "confirmEvent": {{"type": "human_feedback"}}}}
     ],
   "taskModified": true,
-  "intent": "modify"
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "Repeat 2 times: pick red_pill and then wait 3 seconds."
@@ -469,7 +519,8 @@ Response:
     }}
   ],
   "taskModified": true,
-  "intent": "modify"
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "Keep picking the flask and placing it in the box until the box is no longer in view."
@@ -487,7 +538,8 @@ Response:
     }}
   ],
   "taskModified": true,
-  "intent": "modify"
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "If the camera sees the widget, pick it up, otherwise wait 5 seconds."
@@ -507,7 +559,8 @@ Response:
     }}
   ],
   "taskModified": true,
-  "intent": "modify"
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "Only pick the widget when the camera sees it AND you see a thumbs up."
@@ -524,7 +577,8 @@ Response:
     }}
   ],
   "taskModified": true,
-  "intent": "modify"
+  "intent": "modify",
+  "lang": "en-US"
 }}
 
 User says: "What does the Pick up block do?"
@@ -533,7 +587,8 @@ Response:
   "answer": "'Pick up' tells the robot to grab an object. You drop an item from the 'Twin Library' into it to choose what to pick. You'll find it in the 'Robot Actions' category.",
   "task": [],
   "taskModified": false,
-  "intent": "explain"
+  "intent": "explain",
+  "lang": "en-US"
 }}
 
 User says: "Is my task any good?" (snapshot: a single 'Pick up' step for 'widget', no place)
@@ -543,6 +598,7 @@ Response:
   "task": [{{"type": "pick", "objectId": 3, "objectName": "widget"}}],
   "taskModified": false,
   "intent": "evaluate",
+  "lang": "en-US",
   "messageParts": [
     {{"type": "suggestion", "content": "Add a 'Place at' step after the pick"}}
   ]
@@ -696,6 +752,210 @@ def format_blocks_catalog(data_blocks) -> str:
     return "\n".join(lines)
 
 
+def validate_condition(condition, cond_index, warnings, data_objects):
+    if not isinstance(condition, dict):
+        warnings.append({"severity": "error", "message": f"Condition {cond_index}: must be object."})
+        return
+    cond_type = condition.get("type")
+    if cond_type == "find_object":
+        object_id = condition.get("objectId")
+        object_name = condition.get("objectName")
+        obj = None
+        for o in data_objects:
+            if (object_id is not None and str(o["id"]) == str(object_id)) or \
+               (object_id is not None and o.get("name") and o["name"].lower() == str(object_id).lower()) or \
+               (object_name and o.get("name") and o["name"].lower() == object_name.lower()):
+                obj = o
+                break
+        if obj is None:
+            warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown object '{object_name or object_id}'."})
+        else:
+            condition["objectId"] = obj["id"]
+            condition["objectName"] = obj["name"]
+    elif cond_type == "gesture":
+        gesture_type = condition.get("gestureType")
+        if gesture_type not in ["THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK", "THREE_FINGERS", "PINCH", "POINTING"]:
+            warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid gestureType."})
+    elif cond_type == "timer":
+        if not isinstance(condition.get("seconds"), (int, float)) or condition.get("seconds") < 0:
+            warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid seconds."})
+    elif cond_type == "human_feedback":
+        pass
+    elif cond_type in ("and", "or"):
+        validate_condition(condition.get("left"), f"{cond_index}.{cond_type}.left", warnings, data_objects)
+        validate_condition(condition.get("right"), f"{cond_index}.{cond_type}.right", warnings, data_objects)
+    elif cond_type == "not":
+        validate_condition(condition.get("condition"), f"{cond_index}.not", warnings, data_objects)
+    else:
+        warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown condition type '{cond_type}'."})
+
+
+def validate_step(step, step_index, warnings, data_objects, data_locations, data_actions):
+    step_copy = copy.deepcopy(step)
+    step_type = step.get("type")
+
+    if step_type == "pick":
+        object_id = step.get("objectId")
+        object_name = step.get("objectName")
+        obj = None
+        for obj_item in data_objects:
+            if (object_id is not None and str(obj_item["id"]) == str(object_id)) or \
+               (object_id is not None and obj_item.get("name") and obj_item["name"].lower() == str(object_id).lower()) or \
+               (object_name and obj_item.get("name") and obj_item["name"].lower() == object_name.lower()):
+                obj = obj_item
+                break
+        if obj is None:
+            warnings.append({
+                "severity": "error",
+                "message": f"Pick step {step_index}: object '{object_name or object_id}' not found."
+            })
+        else:
+            step_copy["objectId"] = obj["id"]
+            step_copy["objectName"] = obj["name"]
+
+    elif step_type == "place":
+        location_id = step.get("locationId")
+        location_name = step.get("locationName")
+        loc = None
+        for loc_item in data_locations:
+            if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
+               (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
+               (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
+                loc = loc_item
+                break
+        if loc is None:
+            warnings.append({
+                "severity": "error",
+                "message": f"Place step {step_index}: location '{location_name or location_id}' not found."
+            })
+        else:
+            step_copy["locationId"] = loc["id"]
+            step_copy["locationName"] = loc["name"]
+
+    elif step_type == "processing":
+        action_id = step.get("actionId")
+        action_name = step.get("actionName")
+        act = None
+        for act_item in data_actions:
+            if (action_id is not None and str(act_item["id"]) == str(action_id)) or \
+               (action_id is not None and act_item.get("name") and act_item["name"].lower() == str(action_id).lower()) or \
+               (action_name and act_item.get("name") and act_item["name"].lower() == action_name.lower()):
+                act = act_item
+                break
+        if act is None:
+            warnings.append({
+                "severity": "error",
+                "message": f"Processing step {step_index}: action '{action_name or action_id}' not found."
+            })
+        else:
+            step_copy["actionId"] = act["id"]
+            step_copy["actionName"] = act["name"]
+
+    elif step_type == "move_to":
+        location_id = step.get("locationId")
+        location_name = step.get("locationName")
+        motion_type = step.get("motionType")
+        loc = None
+        for loc_item in data_locations:
+            if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
+               (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
+               (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
+                loc = loc_item
+                break
+        if loc is None:
+            warnings.append({
+                "severity": "error",
+                "message": f"MoveTo step {step_index}: location '{location_name or location_id}' not found."
+            })
+        else:
+            step_copy["locationId"] = loc["id"]
+            step_copy["locationName"] = loc["name"]
+        if motion_type not in ["LINEAR", "JOINT"]:
+            warnings.append({
+                "severity": "error",
+                "message": f"MoveTo step {step_index}: invalid motionType '{motion_type}'."
+            })
+
+    elif step_type == "gripper":
+        state = step.get("state")
+        if state not in ["OPEN", "CLOSE"]:
+            warnings.append({
+                "severity": "error",
+                "message": f"Gripper step {step_index}: invalid state '{state}'."
+            })
+
+    elif step_type == "wait":
+        seconds = step.get("seconds")
+        if not isinstance(seconds, (int, float)) or seconds < 0:
+            warnings.append({
+                "severity": "error",
+                "message": f"Wait step {step_index}: invalid seconds '{seconds}'."
+            })
+
+    elif step_type == "human_action":
+        confirm_event = step.get("confirmEvent")
+        if confirm_event is not None:
+            validate_condition(confirm_event, f"{step_index}.human_action.confirmEvent", warnings, data_objects)
+
+    elif step_type == "notify_action":
+        if not isinstance(step.get("description"), str):
+            warnings.append({
+                "severity": "error",
+                "message": f"NotifyAction step {step_index}: description must be a string."
+            })
+
+    elif step_type == "repeat":
+        times = step.get("times")
+        steps = step.get("steps")
+        if not steps:  # fallback if steps is None or empty list []
+            steps = step.get("do", [])
+        if not isinstance(times, int) or times <= 0:
+            warnings.append({
+                "severity": "error",
+                "message": f"Repeat step {step_index}: invalid times '{times}'."
+            })
+        validated_children = []
+        for i, sub_step in enumerate(steps):
+            validated_children.append(validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings, data_objects, data_locations, data_actions))
+        step_copy["steps"] = validated_children
+
+    elif step_type == "repeat_until":
+        condition = step.get("condition")
+        steps = step.get("do")
+        if not steps:  # fallback if do is None or empty list []
+            steps = step.get("steps", [])
+        if condition is not None:
+            validate_condition(condition, f"{step_index}.repeat_until.condition", warnings, data_objects)
+        validated_children = []
+        for i, sub_step in enumerate(steps):
+            validated_children.append(validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings, data_objects, data_locations, data_actions))
+        step_copy["do"] = validated_children
+
+    elif step_type == "when":
+        condition = step.get("condition")
+        do_steps = step.get("do", [])
+        otherwise_steps = step.get("otherwise", [])
+        if condition is not None:
+            validate_condition(condition, f"{step_index}.when.condition", warnings, data_objects)
+        validated_do = []
+        for i, sub_step in enumerate(do_steps):
+            validated_do.append(validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings, data_objects, data_locations, data_actions))
+        step_copy["do"] = validated_do
+        if otherwise_steps is not None:
+            validated_otherwise = []
+            for i, sub_step in enumerate(otherwise_steps):
+                validated_otherwise.append(validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings, data_objects, data_locations, data_actions))
+            step_copy["otherwise"] = validated_otherwise
+
+    else:
+        warnings.append({
+            "severity": "error",
+            "message": f"Step {step_index}: unknown step type '{step_type}'."
+        })
+
+    return step_copy
+
+
 def new_message_multimodal(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
@@ -719,6 +979,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     "{{locations}}": json.dumps(data_locations, ensure_ascii=False),
                     "{{actions}}": json.dumps(data_actions, ensure_ascii=False),
                     "{{blocks}}": format_blocks_catalog(data_blocks),
+                    "{{scene}}": json.dumps(_scene_summary(), ensure_ascii=False),
                 }
                 prompt_template = CHATGPT_INSTRUCTIONS_MULTIMODAL
                 for placeholder, value in replacements.items():
@@ -728,13 +989,14 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
 
                 system_message = {"role": "system", "content": prompt_template}
 
-                if chat_log is None or len(chat_log) == 0:
-                    chat_log = [system_message]
-                else:
-                    if chat_log[0]["role"] == "system":
-                        chat_log[0] = system_message
-                    else:
-                        chat_log.insert(0, system_message)
+                # Client only ever needs to round-trip user/assistant turns — drop
+                # anything else (e.g. an injected system message) and cap history
+                # length before rebuilding the system message fresh every turn.
+                chat_log = [
+                    msg for msg in (chat_log or [])
+                    if isinstance(msg, dict) and msg.get("role") in ("user", "assistant")
+                ][-MAX_CHAT_HISTORY:]
+                chat_log.insert(0, system_message)
 
                 chat_log.append({"role": "user", "content": message})
 
@@ -779,204 +1041,8 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         llm_task = repair_flattened_steps(llm_task, validation_warnings)
                     validated_task = []
 
-                    def validate_step(step, step_index, warnings):
-                        step_copy = copy.deepcopy(step)
-                        step_type = step.get("type")
-
-                        if step_type == "pick":
-                            object_id = step.get("objectId")
-                            object_name = step.get("objectName")
-                            obj = None
-                            for obj_item in data_objects:
-                                if (object_id is not None and str(obj_item["id"]) == str(object_id)) or \
-                                   (object_id is not None and obj_item.get("name") and obj_item["name"].lower() == str(object_id).lower()) or \
-                                   (object_name and obj_item.get("name") and obj_item["name"].lower() == object_name.lower()):
-                                    obj = obj_item
-                                    break
-                            if obj is None:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Pick step {step_index}: object '{object_name or object_id}' not found."
-                                })
-                            else:
-                                step_copy["objectId"] = obj["id"]
-                                step_copy["objectName"] = obj["name"]
-
-                        elif step_type == "place":
-                            location_id = step.get("locationId")
-                            location_name = step.get("locationName")
-                            loc = None
-                            for loc_item in data_locations:
-                                if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
-                                   (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
-                                   (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
-                                    loc = loc_item
-                                    break
-                            if loc is None:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Place step {step_index}: location '{location_name or location_id}' not found."
-                                })
-                            else:
-                                step_copy["locationId"] = loc["id"]
-                                step_copy["locationName"] = loc["name"]
-
-                        elif step_type == "processing":
-                            action_id = step.get("actionId")
-                            action_name = step.get("actionName")
-                            act = None
-                            for act_item in data_actions:
-                                if (action_id is not None and str(act_item["id"]) == str(action_id)) or \
-                                   (action_id is not None and act_item.get("name") and act_item["name"].lower() == str(action_id).lower()) or \
-                                   (action_name and act_item.get("name") and act_item["name"].lower() == action_name.lower()):
-                                    act = act_item
-                                    break
-                            if act is None:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Processing step {step_index}: action '{action_name or action_id}' not found."
-                                })
-                            else:
-                                step_copy["actionId"] = act["id"]
-                                step_copy["actionName"] = act["name"]
-
-                        elif step_type == "move_to":
-                            location_id = step.get("locationId")
-                            location_name = step.get("locationName")
-                            motion_type = step.get("motionType")
-                            loc = None
-                            for loc_item in data_locations:
-                                if (location_id is not None and str(loc_item["id"]) == str(location_id)) or \
-                                   (location_id is not None and loc_item.get("name") and loc_item["name"].lower() == str(location_id).lower()) or \
-                                   (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
-                                    loc = loc_item
-                                    break
-                            if loc is None:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"MoveTo step {step_index}: location '{location_name or location_id}' not found."
-                                })
-                            else:
-                                step_copy["locationId"] = loc["id"]
-                                step_copy["locationName"] = loc["name"]
-                            if motion_type not in ["LINEAR", "JOINT"]:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"MoveTo step {step_index}: invalid motionType '{motion_type}'."
-                                })
-
-                        elif step_type == "gripper":
-                            state = step.get("state")
-                            if state not in ["OPEN", "CLOSE"]:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Gripper step {step_index}: invalid state '{state}'."
-                                })
-
-                        elif step_type == "wait":
-                            seconds = step.get("seconds")
-                            if not isinstance(seconds, (int, float)) or seconds < 0:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Wait step {step_index}: invalid seconds '{seconds}'."
-                                })
-
-                        elif step_type == "human_action":
-                            confirm_event = step.get("confirmEvent")
-                            if confirm_event is not None:
-                                validate_condition(confirm_event, f"{step_index}.human_action.confirmEvent", warnings)
-
-                        elif step_type == "notify_action":
-                            if not isinstance(step.get("description"), str):
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"NotifyAction step {step_index}: description must be a string."
-                                })
-
-                        elif step_type == "repeat":
-                            times = step.get("times")
-                            steps = step.get("steps")
-                            if not steps:  # fallback if steps is None or empty list []
-                                steps = step.get("do", [])
-                            if not isinstance(times, int) or times <= 0:
-                                warnings.append({
-                                    "severity": "error",
-                                    "message": f"Repeat step {step_index}: invalid times '{times}'."
-                                })
-                            validated_children = []
-                            for i, sub_step in enumerate(steps):
-                                validated_children.append(validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings))
-                            step_copy["steps"] = validated_children
-
-                        elif step_type == "repeat_until":
-                            condition = step.get("condition")
-                            steps = step.get("do")
-                            if not steps:  # fallback if do is None or empty list []
-                                steps = step.get("steps", [])
-                            if condition is not None:
-                                validate_condition(condition, f"{step_index}.repeat_until.condition", warnings)
-                            validated_children = []
-                            for i, sub_step in enumerate(steps):
-                                validated_children.append(validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings))
-                            step_copy["do"] = validated_children
-
-                        elif step_type == "when":
-                            condition = step.get("condition")
-                            do_steps = step.get("do", [])
-                            otherwise_steps = step.get("otherwise", [])
-                            if condition is not None:
-                                validate_condition(condition, f"{step_index}.when.condition", warnings)
-                            validated_do = []
-                            for i, sub_step in enumerate(do_steps):
-                                validated_do.append(validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings))
-                            step_copy["do"] = validated_do
-                            if otherwise_steps is not None:
-                                validated_otherwise = []
-                                for i, sub_step in enumerate(otherwise_steps):
-                                    validated_otherwise.append(validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings))
-                                step_copy["otherwise"] = validated_otherwise
-
-                        else:
-                            warnings.append({
-                                "severity": "error",
-                                "message": f"Step {step_index}: unknown step type '{step_type}'."
-                            })
-
-                        return step_copy
-
-                    def validate_condition(condition, cond_index, warnings):
-                        if not isinstance(condition, dict):
-                            warnings.append({"severity": "error", "message": f"Condition {cond_index}: must be object."})
-                            return
-                        cond_type = condition.get("type")
-                        if cond_type == "sensor_signal":
-                            if condition.get("sensor") not in ["camera", "ir"]:
-                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid sensor."})
-                        elif cond_type == "find_object":
-                            object_id = condition.get("objectId")
-                            object_name = condition.get("objectName")
-                            obj = None
-                            for o in data_objects:
-                                if (object_id is not None and str(o["id"]) == str(object_id)) or \
-                                   (object_id is not None and o.get("name") and o["name"].lower() == str(object_id).lower()) or \
-                                   (object_name and o.get("name") and o["name"].lower() == object_name.lower()):
-                                    obj = o
-                                    break
-                            if obj is None:
-                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown object '{object_name or object_id}'."})
-                            else:
-                                condition["objectId"] = obj["id"]
-                                condition["objectName"] = obj["name"]
-                        elif cond_type == "gesture":
-                            gesture_type = condition.get("gestureType")
-                            if gesture_type not in ["THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK", "THREE_FINGERS", "PINCH", "POINTING"]:
-                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid gestureType."})
-                        elif cond_type == "timer":
-                            if not isinstance(condition.get("seconds"), int) or condition.get("seconds") < 0:
-                                warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid seconds."})
-
                     for step_index, step in enumerate(llm_task):
-                        validated_task.append(validate_step(step, step_index, validation_warnings))
+                        validated_task.append(validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions))
 
                     message_parts = []
                     if answer:
@@ -991,7 +1057,15 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     for warning_msg in frontend_warnings:
                         message_parts.append({"type": "warning", "content": warning_msg})
 
-                    chat_log.append({"role": "assistant", "content": json.dumps(response_json)})
+                    # Store a compact assistant turn in history — the full "task"
+                    # is dropped since the # CURRENT TASK SNAPSHOT # already carries
+                    # it fresh on every turn; keeping it here would just double the
+                    # tokens spent on it in every subsequent call.
+                    chat_log.append({"role": "assistant", "content": json.dumps({
+                        "answer": answer,
+                        "intent": response_json.get("intent"),
+                        "taskModified": response_json.get("taskModified"),
+                    })})
 
                     is_valid = not any(w["severity"] == "error" for w in validation_warnings)
                     task_modified = response_json.get("taskModified", True)
