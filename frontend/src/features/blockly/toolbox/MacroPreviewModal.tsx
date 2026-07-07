@@ -10,7 +10,6 @@
  */
 
 import {
-  alpha,
   Dialog,
   DialogTitle,
   IconButton,
@@ -172,10 +171,7 @@ export const MacroPreviewModal = ({
           px: 2,
           py: 1.5,
           borderBottom: `1px solid ${theme.palette.slate[200]}`,
-          background: `linear-gradient(180deg, ${theme.palette.background.paper} 0%, ${alpha(
-            theme.palette.slate[50],
-            0.92,
-          )} 100%)`,
+          background: theme.palette.background.paper,
         }}
       >
         <div

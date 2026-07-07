@@ -44,7 +44,7 @@ import {
   UnfoldVertical,
   Download,
   Upload,
-  PanelLeftOpen,
+  PanelLeft,
   MoreHorizontal,
   Search,
 } from 'lucide-react'
@@ -1554,17 +1554,18 @@ export const BlocklyEditor = ({
               lives inside the toolbox header. */}
           {onViewSettingsChange && viewSettings?.toolboxCollapsed && (
             <div className="workspace-controls-group workspace-controls-group--top-left">
-              <IconButton
-                className="workspace-control-button"
-                size="small"
-                onClick={() =>
-                  onViewSettingsChange({ toolboxCollapsed: false })
-                }
-                aria-label="Show blocks sidebar"
-                title="Show blocks sidebar"
-              >
-                <PanelLeftOpen size={18} />
-              </IconButton>
+              <Tooltip title="Expand blocks sidebar">
+                <IconButton
+                  className="workspace-control-button"
+                  size="small"
+                  onClick={() =>
+                    onViewSettingsChange({ toolboxCollapsed: false })
+                  }
+                  aria-label="Expand blocks sidebar"
+                >
+                  <PanelLeft size={18} />
+                </IconButton>
+              </Tooltip>
             </div>
           )}
           <div className="workspace-controls-group workspace-controls-group--top-right">

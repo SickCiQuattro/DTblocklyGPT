@@ -18,7 +18,7 @@ import {
   ScanEye,
   Workflow,
   Trash2,
-  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react'
 
 import { ActionListType } from 'pages/actions/types'
@@ -465,11 +465,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
         </div>
 
         {onCollapse && !isDeleting && (
-          <Tooltip title="Hide blocks sidebar">
+          <Tooltip title="Collapse blocks sidebar">
             <IconButton
               size="small"
               onClick={onCollapse}
-              aria-label="Hide blocks sidebar"
+              aria-label="Collapse blocks sidebar"
               sx={{
                 flexShrink: 0,
                 width: 30,
@@ -482,7 +482,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                 },
               }}
             >
-              <PanelLeftClose size={18} />
+              <PanelLeft size={18} />
             </IconButton>
           </Tooltip>
         )}
