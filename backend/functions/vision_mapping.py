@@ -57,6 +57,40 @@ _COCO_CLASSES = {
 }
 
 
+# Colour keywords (Italian/English) recognized inside object names, mapped to
+# the colour names emitted by the vision node (cap_color.COLOR_BINS keys).
+_COLOR_KEYWORDS: dict[str, str] = {
+    "blu": "blue",
+    "blue": "blue",
+    "giallo": "yellow",
+    "gialla": "yellow",
+    "yellow": "yellow",
+    "rosso": "red",
+    "rossa": "red",
+    "red": "red",
+    "verde": "green",
+    "green": "green",
+}
+
+
+def parse_object_query(name: str) -> tuple[str, str | None]:
+    """Split an object name into (coco_class, color | None).
+
+    "provetta blu" → ("bottle", "blue"); "blue flask" → ("bottle", "blue");
+    "mela" → ("apple", None). The first colour keyword found is extracted,
+    the remaining words go through to_coco_class unchanged.
+    """
+    color = None
+    words = []
+    for word in name.lower().strip().split():
+        if color is None and word in _COLOR_KEYWORDS:
+            color = _COLOR_KEYWORDS[word]
+        else:
+            words.append(word)
+    base = " ".join(words) if words else name
+    return to_coco_class(base), color
+
+
 def to_coco_class(name: str) -> str:
     """Return the COCO class name for a given object name.
 

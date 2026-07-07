@@ -18,7 +18,7 @@ from backend.utils.response import (
     unauthorized_request,
 )
 from backend.models import Task, Object, Location, Action
-from backend.functions.vision_mapping import to_coco_class
+from backend.functions.vision_mapping import parse_object_query
 from json import loads
 from django.db.models import Q
 import time
@@ -45,6 +45,9 @@ from backend.functions.calibration import (
     LOCATION_PROFILES,
     CONDITION_TIMEOUT_S,
     PICK_Z_FINE_TUNE,
+    HW_VERIFY_TOL_DEG,
+    HW_VERIFY_TIMEOUT_S,
+    HW_GRASP_SLIP_TOL_MM,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,15 +75,47 @@ CURRENT_JOINTS = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 CURRENT_HAND = 30.0  # Open gripper
 STATE_LOCK = threading.Lock()
 
+# Gripper aperture (mm) reported by the real arm after its last move-target call,
+# piggybacked on the MoveTarget response message. None when no hardware or the
+# node's HandCurPos read failed — _verify_hw_grasp treats that as "no data".
+_LAST_HW_HAND_MM: float | None = None
+
 # Set by stop_simulation view; checked by the parser and sleep helpers to abort early.
 # NOTE: works only with single-process Django (runserver); a multi-process WSGI
 # deployment would need shared state (e.g. Redis-backed flag).
 SIMULATION_STOP_EVENT = threading.Event()
 
+# Set by _abort_task on the first hard failure (hardware unreachable, twin
+# divergence, missed grasp, vision timeout). simulate_task() turns this into an
+# error_response instead of the usual success_response once the parser returns.
+_TASK_ABORT_REASON: str | None = None
+
 # Tracks Gazebo model names spawned in the current simulation run.
 # Used by find_object bypass: if object is in world, skip vision polling.
 # Cleared on reset_simulation_world(), delete_spawned_object_and_place(), and STOP.
 _spawned_in_world: set = set()
+
+
+def _abort_task(reason: str):
+    """Hard-abort the running task: stop the parser loop, stop Gazebo AND the real
+    arm (so the twin can't keep moving while the reason for aborting is exactly
+    that the two diverged), and tell the frontend why.
+
+    Idempotent: only the first reason is kept if called more than once.
+    """
+    global _TASK_ABORT_REASON
+    if _TASK_ABORT_REASON is None:
+        _TASK_ABORT_REASON = reason
+    SIMULATION_STOP_EVENT.set()
+    try:
+        _bridge.stop()
+    except Exception as e:
+        print(f"[ABORT] bridge stop failed: {e}")
+    try:
+        _bridge.notify("/api/notify", {"description": f"TASK ABORTED: {reason}"})
+    except Exception:
+        pass
+    print(f"[ABORT] {reason}")
 
 
 def _interruptible_sleep(seconds):
@@ -874,18 +909,92 @@ def simulate_ros_move(
         print(f"[SIMULATOR] simulate_ros_move failed params={ros_params}: {e}")
 
 
-def _send_hw_target(joints, hand, hand_only=False):
-    """Forward one key pose to the real arm via /api/move-target (best-effort, blocking)."""
+def _parse_hand_mm(message: str):
+    """Parse the {"hand_mm": float} JSON cobotta_node piggybacks on a move response."""
+    try:
+        return float(loads(message)["hand_mm"])
+    except Exception:
+        return None
+
+
+def _verify_hw_arrival(target_joints, tol_deg=HW_VERIFY_TOL_DEG, timeout_s=HW_VERIFY_TIMEOUT_S) -> bool:
+    """Poll the real arm's encoders until they match the commanded pose or timeout.
+
+    The encoder timer publishes at 10 Hz and skips ticks while a move holds the
+    B-CAP lock, so a single read right after move_target() returns can be stale.
+    move_target() is synchronous — the arm is already stopped by the time we get
+    here — so a fresh CurJnt sample lands within one or two 100 ms ticks; the
+    poll window absorbs that instead of trusting the first read.
+    """
+    deadline = time.monotonic() + timeout_s
+    last_seen = None
+    while time.monotonic() < deadline:
+        try:
+            real = _bridge.get_actual_joints_real()
+        except Exception:
+            real = []
+        if len(real) >= 6:
+            last_seen = real[:6]
+            deltas = [abs(t - a) for t, a in zip(target_joints, last_seen)]
+            if max(deltas) <= tol_deg:
+                return True
+        time.sleep(0.2)
+
+    _abort_task(
+        f"twin divergence: commanded {list(target_joints)} but encoders read "
+        f"{last_seen} (tol {tol_deg}°)"
+    )
+    return False
+
+
+def _verify_hw_grasp(commanded_close_mm) -> bool:
+    """After a pick's gripper-close move, confirm something stopped the fingers.
+
+    The grasp planner sets commanded_close_mm below the object's width on
+    purpose. If the real fingers reached (close to) that fully-closed value,
+    nothing was between them — the object was missed.
+    """
+    if not DRIVE_HARDWARE or _LAST_HW_HAND_MM is None:
+        return True  # no data — don't block the sim on a readout we don't have
+    if _LAST_HW_HAND_MM <= commanded_close_mm + HW_GRASP_SLIP_TOL_MM:
+        _abort_task(
+            f"missed grasp: hand closed to {_LAST_HW_HAND_MM:.1f}mm "
+            f"(commanded {commanded_close_mm:.1f}mm) — object not detected between fingers"
+        )
+        return False
+    return True
+
+
+def _send_hw_target(joints, hand, hand_only=False) -> bool:
+    """Forward one key pose to the real arm via /api/move-target (blocking).
+
+    Returns False and aborts the running task on any hardware failure (HTTP
+    error, service rejection, or — for arm moves — the real encoders not
+    reaching the commanded pose). Sim-only mode (DRIVE_HARDWARE unset) always
+    returns True without contacting the bridge.
+    """
+    global _LAST_HW_HAND_MM
     if not DRIVE_HARDWARE:
-        return
+        return True
     try:
         payload = {"hand": hand, "hand_only": hand_only}
         if not hand_only:
             j1, j2, j3, j4, j5, j6 = joints
             payload.update({"j1": j1, "j2": j2, "j3": j3, "j4": j4, "j5": j5, "j6": j6})
-        _bridge.move_target(payload)
+        result = _bridge.move_target(payload)
     except Exception as e:
-        print(f"[HARDWARE] _send_hw_target failed: {e}")
+        _abort_task(f"real arm unreachable: {e}")
+        return False
+
+    if not result.get("ok"):
+        _abort_task(f"real arm move failed: {result.get('message', 'unknown')}")
+        return False
+
+    _LAST_HW_HAND_MM = _parse_hand_mm(result.get("message", ""))
+
+    if not hand_only and not SIMULATION_STOP_EVENT.is_set():
+        return _verify_hw_arrival(joints)
+    return True
 
 
 def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
@@ -1201,6 +1310,11 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # Close fingers for the visual grip — object already welded, contact now harmless.
         smooth_move(pick_joints, hand_close, duration_s=0.7)
         _interruptible_sleep(0.3)
+
+        # Real arm only: fingers fully closed with nothing between them means the
+        # pick missed the object even though the sim twin already welded it.
+        if not _verify_hw_grasp(hand_close):
+            return
 
         # 4. Lift Cartesian Z-down to carry height (preserves tool orientation)
         z_carry = z_approach + CARRY_MARGIN
@@ -1537,11 +1651,32 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     return bool(simulate_event)
 
 
+def _detections_match(state: dict, coco_class: str, color: str = None) -> bool:
+    """True if any live detection satisfies a (class, optional color) query.
+
+    HSV blob detections ("cap") count for tube-like queries only: a coloured
+    cap implies its tube, but must not satisfy unrelated classes ("apple").
+    """
+    accepted = {coco_class}
+    if coco_class in ("bottle", "cup"):
+        accepted.add("cap")
+    for detection in state.get("detections", []):
+        if detection.get("class") not in accepted:
+            continue
+        if color is not None and detection.get("color") != color:
+            continue
+        return True
+    return False
+
+
 def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
     """Wait for a vision/human condition via Flask bridge (live mode only).
 
-    On timeout: continues and posts a timeout notification to the frontend.
-    Bridge-unreachable bypasses gesture and find_object with structured log.
+    On timeout: gesture/voice continue and post a timeout notification to the
+    frontend. find_object instead hard-aborts the task — an unconfirmed object
+    means the robot should not move on an assumption. Bridge-unreachable bypasses
+    gesture and find_object with a structured log (a dead vision stack is not
+    the same as "object absent").
     """
     if timeout is None:
         timeout = CONDITION_TIMEOUT_S
@@ -1591,11 +1726,11 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
     elif block_type == EventsItems.FIND.value:
         obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
         obj_name = obj_data.get("name", "")
-        coco_class = to_coco_class(obj_name)
+        coco_class, color = parse_object_query(obj_name)
         # If bridge is unreachable, bypass immediately.
         try:
             state = _bridge.get_vision_state()
-            if any(d.get("class") == coco_class for d in state.get("detections", [])):
+            if _detections_match(state, coco_class, color):
                 print(f"[CONDITION] Object '{obj_name}' detected immediately!")
                 return True
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
@@ -1613,7 +1748,8 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             logger.warning("condition_bypassed", extra={"reason": "object_in_world", "block": "find_object_block"})
             print(f"[CONDITION] Object '{obj_name}' in Gazebo world — bypassing find_object")
             return True
-        print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}' (timeout {timeout}s)...")
+        color_note = f" color '{color}'" if color else ""
+        print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}'{color_note} (timeout {timeout}s)...")
         deadline = time.monotonic() + timeout
         detected = False
         while time.monotonic() < deadline:
@@ -1621,19 +1757,20 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 break
             try:
                 state = _bridge.get_vision_state()
-                if any(d.get("class") == coco_class for d in state.get("detections", [])):
+                if _detections_match(state, coco_class, color):
                     detected = True
                     break
             except Exception:
                 pass
             _interruptible_sleep(0.5)
         if not detected:
-            print(f"[WARNING] Object '{obj_name}' not detected within {timeout}s — continuing")
+            print(f"[WARNING] Object '{obj_name}' not detected within {timeout}s — aborting task")
             try:
                 _bridge.notify("/api/human-step-timeout",
                                {"condition": "object", "value": obj_name})
             except Exception:
                 pass
+            _abort_task(f"object '{obj_name}' not detected within {timeout}s")
         else:
             print(f"[CONDITION] Object '{obj_name}' detected!")
         return detected
@@ -2184,6 +2321,7 @@ def simulation_recursive_blockly_parser(
 
 
 def simulate_task(request: HttpRequest) -> HttpResponse:
+    global _TASK_ABORT_REASON
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
@@ -2216,6 +2354,7 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                     return error_response("No published workspace available")
 
                 SIMULATION_STOP_EVENT.clear()
+                _TASK_ABORT_REASON = None
                 _set_world_paused(False)
                 reset_simulation_world()
 
@@ -2231,6 +2370,8 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                             code, objectsOfUser, actionsOfUser, locationsOfUser,
                             simulate_event, inside_conditional=False,
                         )
+                    if _TASK_ABORT_REASON:
+                        return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
                     return success_response()
                 finally:
                     _set_world_paused(True)

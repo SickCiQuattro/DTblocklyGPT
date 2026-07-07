@@ -8,6 +8,17 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
+from cobotta_rest_api.cap_color import (
+    cap_region,
+    classify_hsv,
+    detect_cap_blobs,
+    point_in_bbox,
+)
+
+# COCO classes that can stand in for a test tube; their bbox top gets a
+# cap-colour classification pass.
+_TUBE_CLASSES = ("bottle", "cup")
+
 
 class VisionNode(Node):
 
@@ -130,17 +141,51 @@ class VisionNode(Node):
     def _run_yolo(self, frame):
         try:
             results = self._yolo(frame, conf=0.5, verbose=False)
+            h_img, w_img = frame.shape[:2]
             detections = []
             for result in results:
                 for box in result.boxes:
                     class_id = int(box.cls[0])
                     confidence = float(box.conf[0])
                     class_name = result.names[class_id]
-                    detections.append({"class": class_name, "confidence": round(confidence, 4)})
+                    xyxy = [float(v) for v in box.xyxy[0]]
+                    detection = {
+                        "class": class_name,
+                        "confidence": round(confidence, 4),
+                        "bbox": [round(v, 1) for v in xyxy],
+                        "center": [
+                            round((xyxy[0] + xyxy[2]) / 2 / w_img, 4),
+                            round((xyxy[1] + xyxy[3]) / 2 / h_img, 4),
+                        ],
+                    }
+                    if class_name in _TUBE_CLASSES:
+                        color = classify_hsv(cap_region(frame, xyxy))
+                        if color:
+                            detection["color"] = color
+                    detections.append(detection)
+            detections.extend(self._blob_detections(frame, detections))
             return detections
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warning(f"VisionNode: YOLO inference error: {exc}")
             return []
+
+    def _blob_detections(self, frame, yolo_detections):
+        """HSV blob pass for caps YOLO cannot see (gate-V6 fallback, Gazebo).
+
+        Blobs whose centre falls inside a same-colour tube bbox are dropped —
+        that cap is already represented by the enriched YOLO detection.
+        """
+        tube_boxes = [d for d in yolo_detections if d["class"] in _TUBE_CLASSES]
+        blobs = []
+        for blob in detect_cap_blobs(frame):
+            duplicate = any(
+                d.get("color") == blob["color"]
+                and point_in_bbox(blob["center"], d["bbox"], frame.shape)
+                for d in tube_boxes
+            )
+            if not duplicate:
+                blobs.append({"class": "cap", "confidence": 1.0, "source": "hsv", **blob})
+        return blobs
 
     # ------------------------------------------------------------------
     # Publishers

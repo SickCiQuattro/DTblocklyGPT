@@ -38,6 +38,10 @@ _SIM_PROFILE = {
     "CONDITION_TIMEOUT_S": 30,
     "SPAWN_SETTLE_THRESHOLD_M": 0.001,
     "PICK_Z_FINE_TUNE": 0.0,
+    # Twin-coherence guards (real hardware only; see docs/cobotta-calibration.md).
+    "HW_VERIFY_TOL_DEG": 2.0,
+    "HW_VERIFY_TIMEOUT_S": 3.0,
+    "HW_GRASP_SLIP_TOL_MM": 1.5,
 }
 
 # Real-cell profile — calibrate with the teach pendant before using DRIVE_HARDWARE=1.
@@ -69,3 +73,6 @@ LOCATION_PROFILES: dict = ACTIVE["LOCATION_PROFILES"]
 CONDITION_TIMEOUT_S: int = ACTIVE["CONDITION_TIMEOUT_S"]
 SPAWN_SETTLE_THRESHOLD_M: float = ACTIVE["SPAWN_SETTLE_THRESHOLD_M"]
 PICK_Z_FINE_TUNE: float = ACTIVE["PICK_Z_FINE_TUNE"]
+HW_VERIFY_TOL_DEG: float = ACTIVE["HW_VERIFY_TOL_DEG"]
+HW_VERIFY_TIMEOUT_S: float = ACTIVE["HW_VERIFY_TIMEOUT_S"]
+HW_GRASP_SLIP_TOL_MM: float = ACTIVE["HW_GRASP_SLIP_TOL_MM"]

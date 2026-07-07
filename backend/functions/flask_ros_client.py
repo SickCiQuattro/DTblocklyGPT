@@ -24,6 +24,9 @@ _MOVE_PATH_TIMEOUT = 5.0
 _MOVE_TARGET_TIMEOUT = (0.3, 60.0)
 _VISION_TIMEOUT = (0.3, 1.5)
 _NOTIFY_TIMEOUT = 5
+# /api/stop may wait on the hardware halt channel (reconnect + retry inside
+# cobotta_node): give it more room than a plain notify.
+_STOP_TIMEOUT = 10
 
 _MOVE_PATH_RETRY_DELAY_S = 0.2
 
@@ -69,9 +72,18 @@ class FlaskRosClient:
         resp = self._session.get(self._url("/api/move-joints"), params=params, timeout=_MOVE_JOINTS_TIMEOUT)
         resp.raise_for_status()
 
-    def move_target(self, payload: dict) -> None:
-        """POST /api/move-target — forward one key pose to the real arm."""
-        self._session.post(self._url("/api/move-target"), json=payload, timeout=_MOVE_TARGET_TIMEOUT)
+    def move_target(self, payload: dict) -> dict:
+        """POST /api/move-target — forward one key pose to the real arm.
+
+        Raises on transport/HTTP failure (unreachable node, 5xx). Returns the
+        service result {"ok": bool, "message": str} so the caller can tell a
+        rejected/failed move from one that actually reached the target.
+        """
+        resp = self._session.post(
+            self._url("/api/move-target"), json=payload, timeout=_MOVE_TARGET_TIMEOUT
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     def move_path(self, waypoints: list, retries: int = 1) -> None:
         """POST /api/move-path with one bounded retry on transient failure."""
@@ -92,8 +104,14 @@ class FlaskRosClient:
         raise last_exc
 
     def stop(self) -> None:
-        """POST /api/stop — cancel any in-flight path."""
-        self._session.post(self._url("/api/stop"), timeout=_NOTIFY_TIMEOUT)
+        """POST /api/stop — cancel any in-flight path and halt the real arm."""
+        self._session.post(self._url("/api/stop"), timeout=_STOP_TIMEOUT)
+
+    def get_health(self) -> dict:
+        """GET /api/health — aggregate status of bridge/gazebo/hardware/vision."""
+        resp = self._session.get(self._url("/api/health"), timeout=_STATE_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
 
     # ── human-step / notification channel (best-effort) ──────────────────────
 
