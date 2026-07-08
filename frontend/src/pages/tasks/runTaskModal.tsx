@@ -2,11 +2,7 @@ import React from 'react'
 import { toast } from 'react-toastify'
 import {
   Checkbox,
-  FormControl,
   FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,39 +16,38 @@ import {
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText } from 'utils/messages'
-import { MyRobotType } from 'pages/myrobots/types'
 
 import { TaskType } from './types'
 
 interface RunTaskModalProps {
   task: TaskType | null
-  dataMyRobots: MyRobotType[]
   open: boolean
   handleClose: () => void
 }
 
 export const RunTaskModal = ({
   task,
-  dataMyRobots,
   open,
   handleClose,
 }: RunTaskModalProps) => {
-  const [selectedRobot, setSelectedRobot] = React.useState<number | string>('')
   const [running, setRunning] = React.useState(false)
   const [simulateEvent, setSimulateEvent] = React.useState(false)
 
+  // Real-robot runs go through the same /api/task/simulate/ path as
+  // Simulation (IK, abort-on-fault gates, encoder verification) — driveHardware
+  // just tells the server to also forward key poses to the real arm. Requires
+  // the server to be armed (DRIVE_HARDWARE); the backend refuses otherwise.
   const handleOk = () => {
     setRunning(true)
 
     fetchApi({
-      url: endpoints.task.run,
+      url: endpoints.task.simulate,
       method: MethodHTTP.POST,
-      body: { id: task?.id, robot: selectedRobot, sensorhuman: simulateEvent },
+      body: { id: task?.id, simulateEvent, driveHardware: true },
     })
       .then(() => {
         toast.success(MessageText.runningTask)
         handleClose()
-        setSelectedRobot('')
       })
       .finally(() => {
         setRunning(false)
@@ -61,7 +56,6 @@ export const RunTaskModal = ({
 
   const handleCancelClick = () => {
     handleClose()
-    setSelectedRobot('')
   }
 
   return (
@@ -108,27 +102,6 @@ export const RunTaskModal = ({
           </Typography>
         </Box>
 
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="robot-id-label">Robot</InputLabel>
-          <Select
-            labelId="robot-id-label"
-            id="robot"
-            value={selectedRobot || ''}
-            label="Robot"
-            name="robot"
-            onChange={(e) => {
-              setSelectedRobot(e.target.value)
-            }}
-            title="Robot used to run the task"
-          >
-            {dataMyRobots?.map((myRobot) => (
-              <MenuItem value={myRobot.id} key={myRobot.id}>
-                {myRobot.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
         <FormControlLabel
           control={
             <Checkbox
@@ -158,7 +131,7 @@ export const RunTaskModal = ({
           variant="contained"
           color="primary"
           onClick={handleOk}
-          disabled={!selectedRobot || running}
+          disabled={running}
           startIcon={
             running ? <CircularProgress size={14} color="inherit" /> : null
           }

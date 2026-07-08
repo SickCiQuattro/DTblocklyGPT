@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Chip,
 } from '@mui/material'
 import {
   Play,
@@ -33,12 +34,10 @@ import {
   VideoOff,
   Bell,
 } from 'lucide-react'
-import useSWR from 'swr'
 import { useDispatch, useSelector } from 'react-redux'
 import * as Blockly from 'blockly/core'
 import { useTheme } from '@mui/material/styles'
 
-import { MyRobotType } from 'pages/myrobots/types'
 import { TaskStatus } from 'pages/tasks/types'
 import { useAppSelector } from 'store/reducers'
 import { toggleSim } from 'store/reducers/task'
@@ -106,15 +105,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [notifyBanner, setNotifyBanner] = useState<string | null>(null)
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
-  const [selectedRobot, setSelectedRobot] = useState<number | string>('')
   const [confirmRealRun, setConfirmRealRun] = useState(false)
+  // Hardware-armed status (server DRIVE_HARDWARE + cobotta_node reachable),
+  // fetched when "Real robot" is selected — the b-CAP host is server config
+  // now, not a per-request robot picker.
+  const [hwStatus, setHwStatus] = useState<{
+    armed: boolean
+    hardware: { move_target_available?: boolean; halt_available?: boolean }
+  } | null>(null)
 
   const panelRef = useRef<HTMLDivElement>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
-
-  const { data: dataMyRobots } = useSWR<MyRobotType[], Error>({
-    url: endpoints.home.libraries.myRobots,
-  })
 
   const {
     gesture: rosGesture,
@@ -204,41 +205,52 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     return () => clearTimeout(t)
   }, [humanStep])
 
-  const runSimulation = async () => {
+  // Hardware-armed badge: fetch once when "Real robot" is selected. Not
+  // polled — the badge is a pre-flight check at selection time, not a live
+  // status monitor; re-select the target (or retry the run) to refresh it.
+  useEffect(() => {
+    if (executionTarget !== 'real') return
+    let cancelled = false
+    fetchApi<{
+      armed: boolean
+      hardware: { move_target_available?: boolean; halt_available?: boolean }
+    }>({ url: endpoints.task.hardwareStatus, method: MethodHTTP.GET })
+      .then((status) => {
+        if (!cancelled) setHwStatus(status)
+      })
+      .catch(() => {
+        if (!cancelled) setHwStatus({ armed: false, hardware: {} })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [executionTarget])
+
+  const hardwareArmed = !!(
+    hwStatus?.armed && hwStatus.hardware.move_target_available
+  )
+
+  // Single run path for both targets — the twin (IK, abort-on-fault gates,
+  // encoder verification) is identical either way; driveHardware just tells
+  // the server to also forward key poses to the real arm via cobotta_node.
+  // "Simulation" NEVER sets this — the physical arm cannot move from that button.
+  const runTask = async (driveHardware: boolean) => {
     if (!taskId || !canRun) return
     dispatch(startSimAction())
     try {
       await fetchApi({
         url: endpoints.task.simulate,
         method: MethodHTTP.POST,
-        body: { id: Number(taskId), simulateEvent: !liveEvents },
-      })
-      dispatch(setSimulationCompleted())
-    } catch (error: any) {
-      console.error('Error starting simulation:', error)
-      dispatch(
-        setSimulationError(error?.message || 'Error starting simulation'),
-      )
-    }
-  }
-
-  const runOnRobot = async () => {
-    if (!taskId || !selectedRobot || !canRun) return
-    dispatch(startSimAction())
-    try {
-      await fetchApi({
-        url: endpoints.task.run,
-        method: MethodHTTP.POST,
         body: {
           id: Number(taskId),
-          robot: selectedRobot,
-          sensorhuman: !liveEvents,
+          simulateEvent: !liveEvents,
+          driveHardware,
         },
       })
       dispatch(setSimulationCompleted())
     } catch (error: any) {
-      console.error('Error running on robot:', error)
-      dispatch(setSimulationError(error?.message || 'Error running on robot'))
+      console.error('Error running task:', error)
+      dispatch(setSimulationError(error?.message || 'Error running task'))
     }
   }
 
@@ -248,15 +260,23 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       setConfirmRealRun(true)
       return
     }
-    runSimulation()
+    runTask(false)
   }
 
   const confirmAndRun = () => {
     setConfirmRealRun(false)
-    runOnRobot()
+    runTask(true)
   }
 
-  const stopSimulation = () => dispatch(stopSimAction())
+  const stopSimulation = () => {
+    dispatch(stopSimAction())
+    // stop_simulation() halts the parser, Gazebo, and — if a hardware run is
+    // in flight — the real arm via the halt channel. Fire-and-forget: the UI
+    // already reflects "stopped" from the Redux dispatch above regardless.
+    fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST }).catch(
+      (error: any) => console.error('Error stopping simulation:', error),
+    )
+  }
   const handleClose = () => dispatch(toggleSim())
 
   // Focus the panel when it opens; return focus to whatever triggered it
@@ -1229,8 +1249,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             />
           </Stack>
 
-          {/* Progressive disclosure: robot picker + safety banner only matter
-              once "Real robot" is actually selected. */}
+          {/* Progressive disclosure: safety banner + hardware badge only
+              matter once "Real robot" is actually selected. */}
           {executionTarget === 'real' && (
             <>
               <Box
@@ -1253,38 +1273,33 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Typography>
               </Box>
 
-              <FormControl
-                fullWidth
-                size="small"
-                sx={{
-                  mb: 1,
-                  '.MuiOutlinedInput-notchedOutline': {
-                    borderColor: panel.selectBorder,
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: panel.selectBorderHover,
-                  },
-                  '.MuiSvgIcon-root': { color: panel.textDim },
-                }}
-              >
-                <InputLabel id="dt-robot-label" sx={{ color: panel.textDim }}>
-                  Robot
-                </InputLabel>
-                <Select
-                  labelId="dt-robot-label"
-                  label="Robot"
-                  value={selectedRobot || ''}
-                  disabled={simulation.isRunning}
-                  onChange={(e) => setSelectedRobot(e.target.value)}
-                  sx={{ color: panel.text, fontSize: '0.82rem' }}
-                >
-                  {(dataMyRobots ?? []).map((r) => (
-                    <MenuItem key={r.id} value={r.id}>
-                      {r.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Box sx={{ mb: 1 }}>
+                {hwStatus === null ? (
+                  <Chip
+                    size="small"
+                    label="Checking hardware…"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                ) : hardwareArmed ? (
+                  <Chip
+                    size="small"
+                    icon={<CheckCircle2 size={13} />}
+                    label="Hardware armed"
+                    color="success"
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                ) : (
+                  <Chip
+                    size="small"
+                    icon={<AlertTriangle size={13} />}
+                    label="Hardware unavailable"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                )}
+              </Box>
             </>
           )}
         </Box>
@@ -1304,7 +1319,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           onClick={simulation.isRunning ? stopSimulation : handleRun}
           disabled={
             !simulation.isRunning &&
-            (!canRun || (executionTarget === 'real' && !selectedRobot))
+            (!canRun || (executionTarget === 'real' && !hardwareArmed))
           }
           variant="contained"
           color={simulation.isRunning ? 'error' : 'primary'}
@@ -1369,7 +1384,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         {!simulation.isRunning &&
           canRun &&
           executionTarget === 'real' &&
-          !selectedRobot && (
+          !hardwareArmed && (
             <Typography
               sx={{
                 fontSize: '0.66rem',
@@ -1378,7 +1393,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 textAlign: 'center',
               }}
             >
-              Select a robot above to run.
+              Hardware not armed on this server — cannot run on the real robot.
             </Typography>
           )}
       </Box>

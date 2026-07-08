@@ -424,6 +424,19 @@ def hardware_recursive_blockly_parser(
 
 
 def run_task(request: HttpRequest) -> HttpResponse:
+    # Deprecated (2026-07): this legacy CAO/COM stack is Windows-only by
+    # dependency (camera + gripper need win32com, not just an over-cautious
+    # guard — see CLAUDE.md) and drives the arm from taught DB poses with no
+    # IK, no twin, none of the hardening below simulate.py. Real-robot runs
+    # now go through /api/task/simulate/ with driveHardware=true (same IK
+    # pipeline as Simulation, plus the halt channel, abort-on-fault gates,
+    # and encoder verification) — see DigitalTwinPanel's "Real robot" target.
+    # Code below is left in place, unreachable, not deleted outright.
+    return error_response(
+        "This endpoint is deprecated. Real-robot runs go through "
+        "/api/task/simulate/ with driveHardware=true.",
+        status=410,
+    )
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:

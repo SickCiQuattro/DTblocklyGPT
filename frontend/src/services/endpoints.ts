@@ -60,8 +60,9 @@ export const endpoints = {
     newMessageMultimodal: `${CHAT_API}/newMessageMultimodal/`,
   },
   task: {
-    run: `${TASK_API}/run/`,
     simulate: `${TASK_API}/simulate/`,
+    stop: `${TASK_API}/simulate/stop/`,
+    hardwareStatus: `${TASK_API}/hardware-status/`,
     analyze: `${TASK_API}/analyze/`,
     saveDraft: `${TASK_API}/save-draft/`,
     publish: `${TASK_API}/publish/`,

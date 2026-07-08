@@ -46,7 +46,7 @@ from .functions.graphic import (
 )
 
 from .functions.task import run_task, analyze_task
-from .functions.simulate import simulate_task, stop_simulation
+from .functions.simulate import simulate_task, stop_simulation, hardware_status
 from .functions.vision_live import process_vision_frame, process_voice_command
 
 from .functions.task_lifecycle import (
@@ -140,6 +140,7 @@ urlpatterns = [
     path(TASK + "run/", run_task, name="run_task"),
     path(TASK + "simulate/", simulate_task, name="simulate_task"),
     path(TASK + "simulate/stop/", stop_simulation, name="stop_simulation"),
+    path(TASK + "hardware-status/", hardware_status, name="hardware_status"),
     path(TASK + "analyze/", analyze_task, name="analyze_task"),
     path(TASK + "save-draft/", save_draft, name="save_draft"),
     path(TASK + "publish/", publish_task, name="publish_task"),

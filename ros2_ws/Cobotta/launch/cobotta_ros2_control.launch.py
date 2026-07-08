@@ -31,9 +31,11 @@ def _setup(context, *args, **kwargs):
         get_package_share_directory("cobotta_rest_api"), "config", "controllers.yaml")
 
     # Substitute the @CONTROLLERS_YAML@ token into a generated copy of the model.
+    # Source is Cobotta.sdf.template (not Cobotta.sdf) so COB_DIR never contains
+    # a same-named, unsubstituted file — see cwd note on the gz ExecuteProcess below.
     gen_dir = os.path.join(COB_DIR, ".gen")
     os.makedirs(gen_dir, exist_ok=True)
-    with open(os.path.join(COB_DIR, "Cobotta.sdf")) as f:
+    with open(os.path.join(COB_DIR, "Cobotta.sdf.template")) as f:
         sdf = f.read()
     with open(os.path.join(gen_dir, "Cobotta.sdf"), "w") as f:
         f.write(sdf.replace("@CONTROLLERS_YAML@", ctrl_yaml))
@@ -50,10 +52,20 @@ def _setup(context, *args, **kwargs):
     with open(os.path.join(COB_DIR, "urdf", "cobotta_ik.urdf")) as f:
         robot_description = f.read()
 
+    # cwd=COB_DIR (explicit, not left to the caller's shell): gz/sdformat resolves
+    # bare relative URIs/paths (model://Cobotta.sdf, objects/*/model.sdf, loose
+    # mesh textures) against the process's own working directory before
+    # GZ_SIM_RESOURCE_PATH. COB_DIR is where objects/, locations/, meshes/ etc.
+    # actually live, so this must be explicit regardless of the invoking shell's
+    # cwd. Cobotta.sdf itself is sourced from Cobotta.sdf.template (see above) so
+    # COB_DIR never has a same-named unsubstituted file to collide with — an
+    # earlier attempt to fix this by pointing cwd at .gen instead broke every
+    # other bare-relative asset lookup (confirmed empirically 2026-07-07: objects/
+    # locations spawn "Could not resolve file [texture.png]" once cwd left COB_DIR).
     gz = ExecuteProcess(
         cmd=["gz", "sim", "-s", "-r", "--headless-rendering",
              os.path.join(COB_DIR, "worldCobotta.sdf")],
-        additional_env=gz_env, output="screen")
+        additional_env=gz_env, cwd=COB_DIR, output="screen")
 
     rsp = Node(
         package="robot_state_publisher", executable="robot_state_publisher",

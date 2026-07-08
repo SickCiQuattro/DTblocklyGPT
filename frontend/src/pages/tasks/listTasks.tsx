@@ -688,7 +688,6 @@ const ListTasks = () => {
       {/* ── Modals ── */}
       <RunTaskModal
         task={runningTask}
-        dataMyRobots={dataMyRobots || []}
         open={runTaskModalVisible}
         handleClose={() => setRunTaskModalVisible(false)}
       />

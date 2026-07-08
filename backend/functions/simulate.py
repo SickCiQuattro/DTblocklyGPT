@@ -57,11 +57,29 @@ FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip
 # Shared client for all Flask-ROS bridge calls (centralizes URL + timeouts).
 _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 
-# When set, each key pose is also forwarded to the real arm via /api/move-target.
-# cobotta_node must be running with enable_hardware:=true.
+# Server-side enablement: cobotta_node must be running with enable_hardware:=true
+# for this server to be ALLOWED to drive real hardware at all. Does not, by
+# itself, move the arm — see _HW_DRIVE_REQUESTED below.
 # Default off — sim stack unchanged when unset.
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
+
+# Per-request switch, set by simulate_task() from the "driveHardware" body key.
+# NOTE: single-process runserver only (same constraint as SIMULATION_STOP_EVENT
+# above) — a multi-process WSGI deployment would need shared state. Combined
+# with the _SIM_RUN_LOCK busy-guard in simulate_task(), only one run touches
+# this flag at a time, so the single global is safe under runserver's default
+# threading.
+_HW_DRIVE_REQUESTED: bool = False
+
+
+def _hw_drive_active() -> bool:
+    """True only when the server is armed (DRIVE_HARDWARE) AND the current
+    request explicitly asked to drive hardware (driveHardware: true in the
+    /api/task/simulate/ body). Neither alone is enough — a "Simulation" run
+    must never move the real arm just because the server happens to be armed
+    for a "Real robot" session elsewhere."""
+    return DRIVE_HARDWARE and _HW_DRIVE_REQUESTED
 
 
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
@@ -89,6 +107,15 @@ SIMULATION_STOP_EVENT = threading.Event()
 # divergence, missed grasp, vision timeout). simulate_task() turns this into an
 # error_response instead of the usual success_response once the parser returns.
 _TASK_ABORT_REASON: str | None = None
+
+# Busy-guard: only one simulate_task() run at a time. Without this, Django
+# runserver's default threading lets two concurrent requests race on the
+# _HW_DRIVE_REQUESTED flag above — a "Simulation" request could read a
+# "Real robot" request's True and move the physical arm. Serializing runs
+# makes the per-request flag safe with a single global (only one request
+# ever holds it) and, as a side effect, stops two requests from ever
+# commanding the same physical arm at once.
+_SIM_RUN_LOCK = threading.Lock()
 
 # Tracks Gazebo model names spawned in the current simulation run.
 # Used by find_object bypass: if object is in world, skip vision polling.
@@ -142,11 +169,12 @@ def set_current_state(joints, hand):
 def sync_current_state_from_ros():
     """Sync joint state from the Flask bridge. Returns True on success, False if state is stale.
 
-    With DRIVE_HARDWARE, seed the joints from the physical arm's encoders
-    (/api/actual-joints-real) so IK plans from where the real robot actually is —
-    the closed loop. Falls back to the Gazebo twin if the real feed is empty.
+    When hardware is active for this request, seed the joints from the physical
+    arm's encoders (/api/actual-joints-real) so IK plans from where the real
+    robot actually is — the closed loop. Falls back to the Gazebo twin if the
+    real feed is empty.
     """
-    if DRIVE_HARDWARE:
+    if _hw_drive_active():
         try:
             real = _bridge.get_actual_joints_real()
             if len(real) >= 6:
@@ -324,6 +352,39 @@ def _ik_with_verification(target_urdf, target_orientation, initial_position, lab
         return None, float('inf')
 
 
+def _heuristic_seed_j235(z_rel: float) -> tuple:
+    """(j2, j3, j5) degrees for a top-down TCP at z_rel — linear interpolation
+    between two anchor postures instead of one fixed posture for every height.
+
+    A single fixed seed (45/70/45) converges reliably near its own height but
+    drifts into rejected local minima as the target height moves away from it
+    (ikpy's IK is a local solve from the seed) — this is why the gantry-transit
+    height band failed non-monotonically (see docs/cobotta-physical-session-
+    2026-07-07.md §7).
+
+    Anchors are empirically verified (offline grid search over j2/j3/j5, both
+    the default pick and place XY sites), not hand-picked from first
+    principles: 0.02 keeps the original low-height posture; 0.23 matches
+    CARRY_Z_MAX exactly, in the middle of a wide basin of working postures at
+    that height — z_rel is never extrapolated past it because simulate_ros_
+    place clamps z_carry into [.., CARRY_Z_MAX]. Above ~0.24 no single seed
+    (of many tried, including outside this basin) reliably converges for this
+    arm geometry regardless of posture — that's a real solver/geometry limit,
+    not a seed-tuning gap, which is why the transit height is clamped rather
+    than chased with a "better" anchor. See testing/test_ik_regression.py
+    test_transit_z_sweep for the documented reliable band.
+    """
+    zs = (0.02, 0.23)
+    j2s = (45.0, -20.0)
+    j3s = (70.0, 40.0)
+    j5s = (45.0, 10.0)
+    return (
+        float(np.interp(z_rel, zs, j2s)),
+        float(np.interp(z_rel, zs, j3s)),
+        float(np.interp(z_rel, zs, j5s)),
+    )
+
+
 def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
     if COBOTTA_CHAIN is None:
         print("[SIMULATOR] Error: ikpy chain not initialized")
@@ -348,17 +409,18 @@ def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
                     pos[i] = seed_map[link.name]
         else:
             target_j1 = math.atan2(x_rel, -y_rel)
+            j2_deg, j3_deg, j5_deg = _heuristic_seed_j235(z_rel)
             for i, link in enumerate(COBOTTA_CHAIN.links):
                 if link.name == 'joint1':
                     pos[i] = target_j1
                 elif link.name == 'joint2':
-                    pos[i] = math.radians(45.0)
+                    pos[i] = math.radians(j2_deg)
                 elif link.name == 'joint3':
-                    pos[i] = math.radians(70.0)
+                    pos[i] = math.radians(j3_deg)
                 elif link.name == 'joint4':
                     pos[i] = 0.0
                 elif link.name == 'joint5':
-                    pos[i] = math.radians(45.0)
+                    pos[i] = math.radians(j5_deg)
                 elif link.name == 'joint6':
                     pos[i] = grasp_yaw
         return pos
@@ -793,8 +855,15 @@ def get_location_profile(sdf_name: str):
 # All block type identifiers: shared source of truth
 
 
-def launch_wsl_ros_command(command: str) -> bool:
-    """Run a shell command. Returns True on success (exit code 0), False otherwise."""
+def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> bool:
+    """Run a shell command. Returns True on success (exit code 0), False otherwise.
+
+    ``expect_reply_true``: for ``gz service --reptype gz.msgs.Boolean`` calls, the
+    RPC prints its reply ("data: true"/"data: false") to stdout and still exits 0
+    even when the service refused the request (bad SDF, name collision, entity
+    not found) — exit code alone can't tell a real failure from a no-op success.
+    Set this to also require "data: true" in stdout.
+    """
     try:
         if platform.system() == "Windows":
             result = subprocess.run(
@@ -818,6 +887,13 @@ def launch_wsl_ros_command(command: str) -> bool:
             if stderr_out:
                 print(f"[SIMULATOR] stderr: {stderr_out[:200]}")
             return False
+        if expect_reply_true:
+            stdout_out = result.stdout.decode(errors="replace")
+            if "data: true" not in stdout_out.lower():
+                tail = command.split("--req")[-1][:80] if "--req" in command else command[-80:]
+                print(f"[SIMULATOR] Command exited 0 but reply was not 'data: true': ...{tail}")
+                print(f"[SIMULATOR] stdout: {stdout_out.strip()[:200]}")
+                return False
         return True
     except Exception as e:
         print(f"[SIMULATOR] launch_wsl_ros_command exception: {e}")
@@ -831,7 +907,7 @@ def _set_world_paused(paused: bool):
         f"--reqtype gz.msgs.WorldControl --reptype gz.msgs.Boolean "
         f"--timeout 3000 --req '{req}'"
     )
-    launch_wsl_ros_command(cmd)
+    launch_wsl_ros_command(cmd, expect_reply_true=True)
 
 
 def start_ros_architecture():
@@ -954,7 +1030,7 @@ def _verify_hw_grasp(commanded_close_mm) -> bool:
     purpose. If the real fingers reached (close to) that fully-closed value,
     nothing was between them — the object was missed.
     """
-    if not DRIVE_HARDWARE or _LAST_HW_HAND_MM is None:
+    if not _hw_drive_active() or _LAST_HW_HAND_MM is None:
         return True  # no data — don't block the sim on a readout we don't have
     if _LAST_HW_HAND_MM <= commanded_close_mm + HW_GRASP_SLIP_TOL_MM:
         _abort_task(
@@ -970,11 +1046,11 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
 
     Returns False and aborts the running task on any hardware failure (HTTP
     error, service rejection, or — for arm moves — the real encoders not
-    reaching the commanded pose). Sim-only mode (DRIVE_HARDWARE unset) always
-    returns True without contacting the bridge.
+    reaching the commanded pose). Sim-only mode (hardware not requested this
+    run, or server not armed) always returns True without contacting the bridge.
     """
     global _LAST_HW_HAND_MM
-    if not DRIVE_HARDWARE:
+    if not _hw_drive_active():
         return True
     try:
         payload = {"hand": hand, "hand_only": hand_only}
@@ -1132,6 +1208,11 @@ ROS_CLOSE_GRIPPER_WITH_OBJECT = 10  # Default safe close gap (10mm) for generic 
 
 CARRY_Z_MIN = 0.15    # minimum carry height above robot base (Gazebo relative, m)
 CARRY_MARGIN = 0.03   # safety margin above highest obstacle in workspace
+# Top of the IK-reliable transit band — see testing/test_ik_regression.py
+# test_transit_z_sweep. Clamping z_carry into this band is a second line of
+# defense alongside the z-adaptive seed (_heuristic_seed_j235); raise it only
+# after the sweep confirms IK is solid past this height.
+CARRY_Z_MAX = 0.23
 
 # Max per-joint change (deg) between consecutive IK solutions along a Cartesian
 # path. A larger jump signals an elbow flip / singularity, so the path is rejected.
@@ -1178,7 +1259,7 @@ def set_object_world_pose(x: float, y: float, z: float, yaw: float = 0.0) -> boo
         f'position: {{x: {x:.4f}, y: {y:.4f}, z: {z:.4f}}}; '
         f'orientation: {{x: 0, y: 0, z: {qz:.4f}, w: {qw:.4f}}}\''
     )
-    ok = launch_wsl_ros_command(cmd)
+    ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
     if not ok:
         print(f"[GRASP] set_object_world_pose FAILED (x={x:.4f} y={y:.4f} z={z:.4f})")
     return ok
@@ -1190,10 +1271,13 @@ OBJECT_SPAWN_Y = -1.48
 LOCATION_SPAWN_X = -8.8         # X of location model spawn point
 LOCATION_SPAWN_Y = -1.41
 
-# Robot base world pose in Gazebo (worldCobotta.sdf, Cobotta include pose)
+# Robot base world XY pose in Gazebo (worldCobotta.sdf, Cobotta include pose).
+# The Z counterpart (ROBOT_BASE_Z) lives in calibration.py as the SSOT for the
+# TABLE_TOP_Z_ABS / PICK_Z_REF_OFFSET frame invariant asserted there — this
+# module only ever needs the already-world-absolute TABLE_TOP_Z_ABS, never
+# ROBOT_BASE_Z directly.
 ROBOT_BASE_X = -9.0
 ROBOT_BASE_Y = -1.2
-ROBOT_BASE_Z = 1.05
 
 
 def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
@@ -1203,7 +1287,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # Sync state from ROS first to anchor the IK seeds. Abort if it fails —
         # planning from a stale seed risks singularities / collisions.
         if not sync_current_state_from_ros():
-            print("[ROBOT] PICK aborted: could not sync joint state from ROS")
+            _abort_task("PICK: could not sync joint state from ROS")
             return
 
         # Object relative coordinates — use the deterministic spawn XY (Phase 1)
@@ -1244,7 +1328,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # 1. Approach (high clearance)
         q_approach = solve_gazebo_ik(x_rel, y_rel, z_approach, grasp_yaw, seed_joints=current_joints)
         if not q_approach:
-            print(f"[SIMULATOR] ERROR: IK failed for pick approach at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f} — aborting pick")
+            _abort_task(f"pick approach IK failed at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f}")
             return
 
         debug_fk(q_approach, label="Approach")
@@ -1257,7 +1341,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             seed_joints=q_approach, n=10
         )
         if not vertical_path:
-            print("[SIMULATOR] ERROR: vertical approach IK path failed — aborting pick")
+            _abort_task("pick vertical approach IK path failed")
             return
         send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
 
@@ -1267,7 +1351,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             seed_joints=vertical_path[-1], n=6
         )
         if not final_path:
-            print("[SIMULATOR] ERROR: final descent IK path failed — aborting pick")
+            _abort_task("pick final descent IK path failed")
             return
 
         send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
@@ -1278,7 +1362,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         target_urdf = np.array([-y_rel, x_rel, z_pick + URDF_GAZEBO_Z_OFFSET])
         pos_err, _ = fk_position_error(pick_joints, target_urdf)
         if pos_err > IK_POS_TOL:
-            print(f"[SIMULATOR] ERROR: FK guard failed at pick — pos_err={pos_err * 1000:.1f}mm > {IK_POS_TOL * 1000:.0f}mm — aborting pick")
+            _abort_task(f"pick FK guard: pos_err={pos_err * 1000:.1f}mm > {IK_POS_TOL * 1000:.0f}mm")
             return
 
         # hand_close already comes from plan_pick_for_object (graspable_width).
@@ -1297,7 +1381,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             snap_z = TABLE_TOP_Z_ABS - (obj_min_z or 0.0) + PICK_Z_FINE_TUNE
             print(f"[GRASP] snap pose x={snap_x:.4f} y={snap_y:.4f} z={snap_z:.4f} yaw={grasp_yaw:.4f}")
             if not set_object_world_pose(snap_x, snap_y, snap_z, yaw=grasp_yaw):
-                print("[GRASP] ABORT: set_pose failed, refusing to weld (would float)")
+                _abort_task("pick snap-to-TCP failed (set_pose) — refusing to weld, would float")
                 return
             # Object is already held at rest, so the snap is authoritative; tight
             # delay just lets the re-parent settle before the weld.
@@ -1339,7 +1423,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # Arm stays at carry pose Z-down with object; no home until place releases
 
     except Exception as e:
-        print(str(e))
+        _abort_task(f"pick failed: {e}")
 
 
 def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = None):
@@ -1444,6 +1528,11 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
         if has_pick_context:
             z_carry = max(pick_z_carry, z_up, CARRY_Z_MIN) + CARRY_MARGIN
+            # Clamp into the IK-reliable band — never below the clearance this
+            # place actually needs (z_up + a hair), even if that's above
+            # CARRY_Z_MAX; the transit build below will then fail cleanly and
+            # abort (no silent fake-place) rather than clip clearance short.
+            z_carry = min(z_carry, max(CARRY_Z_MAX, z_up + 0.005))
 
             # 0. Pre-lift: bridge gap between pick z_carry and required z_carry
             seed_for_transit = pick_carry_joints
@@ -1468,43 +1557,57 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
                 q_above_place = transit_path[-1]
                 print(f"[SIMULATOR] Gantry transit OK: ({pick_x:.2f},{pick_y:.2f}) → ({x_rel:.2f},{y_rel:.2f}) @ z={z_carry:.3f}")
             else:
-                q_ik_fallback = solve_gazebo_ik(x_rel, y_rel, z_carry, pick_grasp_yaw, seed_joints=seed_for_transit)
-                if not q_ik_fallback:
-                    print("[SIMULATOR] WARNING: gantry transit IK fallback also failed — using last known joint state")
-                q_above_place = q_ik_fallback or current_joints
-                smooth_move(q_above_place, hand_close, duration_s=2.0)
-                print("[SIMULATOR] DEGRADED FALLBACK: gantry transit failed, using joint interp")
+                # No degraded fallback: an arm that stayed at the pick column
+                # would still detach+snap the object below, faking a place
+                # that never physically happened. Abort instead — the twin
+                # and the real arm both stop, and the frontend gets a reason.
+                _abort_task(
+                    f"place transit IK failed at z_carry={z_carry:.3f} "
+                    f"({pick_x:.2f},{pick_y:.2f}) → ({x_rel:.2f},{y_rel:.2f})"
+                )
+                return
 
             # 2. Vertical descent Cartesian Z-down: z_carry → z_place
             descent_path = build_vertical_ik_path(
                 x_rel, y_rel, z_carry, z_place, pick_grasp_yaw,
                 seed_joints=q_above_place, n=10
             )
-            if descent_path:
-                send_waypoints(descent_path, hand_close, dt=0.20)
-            place_joints = descent_path[-1] if descent_path else q_above_place
-            if descent_path:
-                target_urdf_place = np.array([-y_rel, x_rel, z_place + URDF_GAZEBO_Z_OFFSET])
-                place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
-                print(f"[PLACE] FK guard: pos_err={place_pos_err * 1000:.1f}mm (x={x_rel:.3f} y={y_rel:.3f} z={z_place:.3f})")
+            if not descent_path:
+                _abort_task(f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}")
+                return
+            send_waypoints(descent_path, hand_close, dt=0.20)
+            place_joints = descent_path[-1]
+            target_urdf_place = np.array([-y_rel, x_rel, z_place + URDF_GAZEBO_Z_OFFSET])
+            place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
+            print(f"[PLACE] FK guard: pos_err={place_pos_err * 1000:.1f}mm (x={x_rel:.3f} y={y_rel:.3f} z={z_place:.3f})")
+            if place_pos_err > IK_POS_TOL:
+                _abort_task(f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release")
+                return
             q_retreat = q_above_place
 
         else:
-            # DEGRADED FALLBACK: no pick context (place called without pick)
-            print("[SIMULATOR] DEGRADED FALLBACK: no pick context, using joint interp approach")
+            # No pick context (place called without a preceding pick this run).
+            print("[SIMULATOR] No pick context — solving place approach directly")
             q_up = solve_gazebo_ik(x_rel, y_rel, z_up, grasp_yaw, seed_joints=current_joints)
             if not q_up:
-                print("[SIMULATOR] Warning: IK solving failed for place approach")
-                q_up = list(SAFE_INTERMEDIATE_POSE)
+                _abort_task(f"place approach IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_up:.3f}")
+                return
             smooth_move(q_up, hand_close, duration_s=2.0)
 
             vertical_path = build_vertical_ik_path(
                 x_rel, y_rel, z_up, z_place, grasp_yaw,
                 seed_joints=q_up, n=8
             )
-            if vertical_path:
-                send_waypoints(vertical_path, hand_close, dt=0.20)
-            place_joints = vertical_path[-1] if vertical_path else q_up
+            if not vertical_path:
+                _abort_task(f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}")
+                return
+            send_waypoints(vertical_path, hand_close, dt=0.20)
+            place_joints = vertical_path[-1]
+            target_urdf_place = np.array([-y_rel, x_rel, z_place + URDF_GAZEBO_Z_OFFSET])
+            place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
+            if place_pos_err > IK_POS_TOL:
+                _abort_task(f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release")
+                return
             q_retreat = q_up
 
         # 3. Detach → snap object to slot → open gripper
@@ -1537,7 +1640,7 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         simulation_recursive_blockly_parser.last_pick_x = None
 
     except Exception as e:
-        print(f"[SIMULATOR] Error in simulate_ros_place: {e}")
+        _abort_task(f"place failed: {e}")
 
 
 def simulate_ros_action(action_points: list = []):
@@ -2107,7 +2210,7 @@ def simulation_recursive_blockly_parser(
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object"; '
-                f'sdf_filename: "objects/{safe_sdf_name}/model.sdf"; '
+                f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_sdf_name, "model.sdf")}"; '
                 f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_rest}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
@@ -2115,7 +2218,7 @@ def simulation_recursive_blockly_parser(
             # hold below keeps the object there, so no physics-settle read is needed.
             pick_x_rel = OBJECT_SPAWN_X - ROBOT_BASE_X
             pick_y_rel = OBJECT_SPAWN_Y - ROBOT_BASE_Y
-            spawn_ok = launch_wsl_ros_command(cmd)
+            spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
             if not spawn_ok:
                 print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
             else:
@@ -2158,11 +2261,11 @@ def simulation_recursive_blockly_parser(
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "location"; '
-                f'sdf_filename: "locations/{safe_loc_sdf_name}/model.sdf"; '
+                f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "locations", safe_loc_sdf_name, "model.sdf")}"; '
                 f'pose: {{position: {{x: {LOCATION_SPAWN_X}, y: {LOCATION_SPAWN_Y}, z: {TABLE_TOP_Z_ABS}}}, '
                 'orientation: {x: 0, y: 0, z: 0.7071, w: 0.7071}}\''
             )
-            if not launch_wsl_ros_command(loc_cmd):
+            if not launch_wsl_ros_command(loc_cmd, expect_reply_true=True):
                 print(f"[SIMULATOR] WARNING: location spawn failed for '{sdf_name}' — place may fail")
             picked_obj_name = getattr(simulation_recursive_blockly_parser, "last_picked_object", "flask")
             simulate_ros_place(picked_obj_name, objectsOfUser, sdf_name)
@@ -2321,60 +2424,73 @@ def simulation_recursive_blockly_parser(
 
 
 def simulate_task(request: HttpRequest) -> HttpResponse:
-    global _TASK_ABORT_REASON
+    global _TASK_ABORT_REASON, _HW_DRIVE_REQUESTED
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
                 data = loads(request.body)
                 task_id = data.get("id")
                 simulate_event = data.get("simulateEvent")
-                task = Task.objects.filter(id=task_id).filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                ).first()
-                if task is None:
-                    return error_response("Task not found or unauthorized")
-
-                objectsOfUser = Object.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
-                actionsOfUser = Action.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
-                locationsOfUser = Location.objects.filter(
-                    Q(owner=request.user.id) | Q(shared=True)
-                )
-                if task.status != "published":
+                drive_hardware = bool(data.get("driveHardware", False))
+                if drive_hardware and not DRIVE_HARDWARE:
                     return error_response(
-                        "Only a fully published task can be simulated. "
-                        "Publish or discard the current draft first."
+                        "Hardware not armed on this server (DRIVE_HARDWARE unset) — run refused."
                     )
 
-                code = _resolve_runtime_workspace(task)
-                if code is None:
-                    return error_response("No published workspace available")
-
-                SIMULATION_STOP_EVENT.clear()
-                _TASK_ABORT_REASON = None
-                _set_world_paused(False)
-                reset_simulation_world()
-
+                if not _SIM_RUN_LOCK.acquire(blocking=False):
+                    return error_response("A simulation is already running", status=409)
                 try:
-                    if isinstance(code, list):
-                        for block in code:
+                    task = Task.objects.filter(id=task_id).filter(
+                        Q(owner=request.user.id) | Q(shared=True)
+                    ).first()
+                    if task is None:
+                        return error_response("Task not found or unauthorized")
+
+                    objectsOfUser = Object.objects.filter(
+                        Q(owner=request.user.id) | Q(shared=True)
+                    )
+                    actionsOfUser = Action.objects.filter(
+                        Q(owner=request.user.id) | Q(shared=True)
+                    )
+                    locationsOfUser = Location.objects.filter(
+                        Q(owner=request.user.id) | Q(shared=True)
+                    )
+                    if task.status != "published":
+                        return error_response(
+                            "Only a fully published task can be simulated. "
+                            "Publish or discard the current draft first."
+                        )
+
+                    code = _resolve_runtime_workspace(task)
+                    if code is None:
+                        return error_response("No published workspace available")
+
+                    SIMULATION_STOP_EVENT.clear()
+                    _TASK_ABORT_REASON = None
+                    _HW_DRIVE_REQUESTED = drive_hardware
+                    _set_world_paused(False)
+                    reset_simulation_world()
+
+                    try:
+                        if isinstance(code, list):
+                            for block in code:
+                                simulation_recursive_blockly_parser(
+                                    block, objectsOfUser, actionsOfUser, locationsOfUser,
+                                    simulate_event, inside_conditional=False,
+                                )
+                        else:
                             simulation_recursive_blockly_parser(
-                                block, objectsOfUser, actionsOfUser, locationsOfUser,
+                                code, objectsOfUser, actionsOfUser, locationsOfUser,
                                 simulate_event, inside_conditional=False,
                             )
-                    else:
-                        simulation_recursive_blockly_parser(
-                            code, objectsOfUser, actionsOfUser, locationsOfUser,
-                            simulate_event, inside_conditional=False,
-                        )
-                    if _TASK_ABORT_REASON:
-                        return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
-                    return success_response()
+                        if _TASK_ABORT_REASON:
+                            return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
+                        return success_response()
+                    finally:
+                        _set_world_paused(True)
                 finally:
-                    _set_world_paused(True)
+                    _HW_DRIVE_REQUESTED = False
+                    _SIM_RUN_LOCK.release()
             else:
                 return invalid_request_method()
         else:
@@ -2397,6 +2513,23 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                 return success_response()
             else:
                 return invalid_request_method()
+        else:
+            return unauthorized_request()
+    except Exception as e:
+        return error_response(str(e))
+
+
+def hardware_status(request: HttpRequest) -> HttpResponse:
+    """Proxy for the Flask bridge's /api/health hardware block, plus whether
+    this server is armed to drive hardware at all (DRIVE_HARDWARE env). Used
+    by the frontend to show a "Hardware armed" badge before a Real robot run."""
+    try:
+        if request.user.is_authenticated:
+            try:
+                hardware = _bridge.get_health().get("hardware", {})
+                return success_response({"armed": DRIVE_HARDWARE, "hardware": hardware})
+            except Exception as e:
+                return success_response({"armed": DRIVE_HARDWARE, "hardware": {}, "error": str(e)})
         else:
             return unauthorized_request()
     except Exception as e:
