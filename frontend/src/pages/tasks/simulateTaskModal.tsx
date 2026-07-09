@@ -1,8 +1,11 @@
 import React from 'react'
 import { toast } from 'react-toastify'
 import {
-  Checkbox,
+  FormControl,
   FormControlLabel,
+  FormLabel,
+  Radio,
+  RadioGroup,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -41,12 +44,15 @@ export const SimulateTaskModal = ({
       method: MethodHTTP.POST,
       body: {
         id: task?.id,
-        simulateEvent: simulateEvent,
+        simulateEvent,
       },
     })
       .then(() => {
         toast.success(MessageText.success)
         handleClose()
+      })
+      .catch((error: any) => {
+        toast.error(error?.message || 'Error simulating task')
       })
       .finally(() => {
         setSimulating(false)
@@ -97,23 +103,37 @@ export const SimulateTaskModal = ({
           </Typography>
         </Box>
 
-        <FormControlLabel
-          control={
-            <Checkbox
-              id="simulateEvent"
-              value={simulateEvent}
-              name="simulateEvent"
-              onChange={() => setSimulateEvent(!simulateEvent)}
-              checked={simulateEvent}
+        <FormControl>
+          <FormLabel
+            id="simulate-when-label"
+            sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'text.primary' }}
+          >
+            WHEN conditions
+          </FormLabel>
+          <RadioGroup
+            aria-labelledby="simulate-when-label"
+            value={simulateEvent ? 'always' : 'wait'}
+            onChange={(e) => setSimulateEvent(e.target.value === 'always')}
+          >
+            <FormControlLabel
+              value="wait"
+              control={<Radio size="small" />}
+              label={
+                <Typography variant="body2">Wait for real signals</Typography>
+              }
             />
-          }
-          label={
-            <Typography variant="body2">
-              WHEN conditions always fulfilled
-            </Typography>
-          }
-          title="WHEN conditions always fulfilled"
-        />
+            <FormControlLabel
+              value="always"
+              control={<Radio size="small" />}
+              label={<Typography variant="body2">Always fulfilled</Typography>}
+            />
+          </RadioGroup>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+            {simulateEvent
+              ? 'Every WHEN block runs immediately — use this to test the rest of the task without waiting for a gesture, object, or timer.'
+              : 'Every WHEN block waits for its real trigger (gesture, object detection, timer) — matches how the task runs for real.'}
+          </Typography>
+        </FormControl>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>

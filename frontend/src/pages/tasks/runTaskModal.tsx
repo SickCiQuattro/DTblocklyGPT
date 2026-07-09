@@ -1,8 +1,11 @@
 import React from 'react'
 import { toast } from 'react-toastify'
 import {
-  Checkbox,
+  FormControl,
   FormControlLabel,
+  FormLabel,
+  Radio,
+  RadioGroup,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -12,6 +15,8 @@ import {
   Box,
   CircularProgress,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
+import { AlertTriangle } from 'lucide-react'
 
 import { MethodHTTP, fetchApi } from 'services/api'
 import { endpoints } from 'services/endpoints'
@@ -30,6 +35,7 @@ export const RunTaskModal = ({
   open,
   handleClose,
 }: RunTaskModalProps) => {
+  const theme = useTheme()
   const [running, setRunning] = React.useState(false)
   const [simulateEvent, setSimulateEvent] = React.useState(false)
 
@@ -49,6 +55,12 @@ export const RunTaskModal = ({
         toast.success(MessageText.runningTask)
         handleClose()
       })
+      .catch((error: any) => {
+        // Server refuses if hardware isn't armed; a place/pick can also abort
+        // mid-task (missed grasp, IK failure, twin divergence) — either way
+        // the operator needs to see it, not a dialog that just closes.
+        toast.error(error?.message || 'Error running task on the robot')
+      })
       .finally(() => {
         setRunning(false)
       })
@@ -66,12 +78,32 @@ export const RunTaskModal = ({
         paper: { sx: { p: 1.5, maxWidth: '480px', width: '100%' } },
       }}
     >
-      <DialogTitle sx={{ pb: 1 }}>Run task: {task?.name}</DialogTitle>
+      <DialogTitle sx={{ pb: 1 }}>Run on the real robot?</DialogTitle>
 
       <DialogContent sx={{ py: 1.5 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Are you sure you want to run this task on a robot?
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            mb: 2,
+            p: 1.5,
+            borderRadius: '8px',
+            bgcolor: 'warning.lighter',
+            border: '1px solid',
+            borderColor: 'warning.light',
+          }}
+        >
+          <AlertTriangle
+            size={16}
+            style={{ marginTop: 2, flexShrink: 0 }}
+            color={theme.palette.warning.dark}
+          />
+          <Typography variant="body2" color="text.primary">
+            <strong>{task?.name}</strong> will run on the physical robot. Make
+            sure the workcell is clear and the e-stop is within reach.
+          </Typography>
+        </Box>
 
         <Box sx={{ mb: 3 }}>
           <Typography
@@ -102,21 +134,37 @@ export const RunTaskModal = ({
           </Typography>
         </Box>
 
-        <FormControlLabel
-          control={
-            <Checkbox
-              id="simulateEvent"
-              value={simulateEvent}
-              name="simulateEvent"
-              onChange={() => setSimulateEvent(!simulateEvent)}
-              checked={simulateEvent}
+        <FormControl>
+          <FormLabel
+            id="run-when-label"
+            sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'text.primary' }}
+          >
+            WHEN conditions
+          </FormLabel>
+          <RadioGroup
+            aria-labelledby="run-when-label"
+            value={simulateEvent ? 'always' : 'wait'}
+            onChange={(e) => setSimulateEvent(e.target.value === 'always')}
+          >
+            <FormControlLabel
+              value="wait"
+              control={<Radio size="small" />}
+              label={
+                <Typography variant="body2">Wait for real signals</Typography>
+              }
             />
-          }
-          label={
-            <Typography variant="body2">Simulate condition events</Typography>
-          }
-          title="Simulate condition events for debug purpose"
-        />
+            <FormControlLabel
+              value="always"
+              control={<Radio size="small" />}
+              label={<Typography variant="body2">Always fulfilled</Typography>}
+            />
+          </RadioGroup>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+            {simulateEvent
+              ? 'Every WHEN block runs immediately, skipping its real trigger.'
+              : 'Every WHEN block waits for its real trigger (gesture, object detection, timer) on the physical robot.'}
+          </Typography>
+        </FormControl>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>

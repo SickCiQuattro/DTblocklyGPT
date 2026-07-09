@@ -1249,8 +1249,31 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             />
           </Stack>
 
-          {/* Progressive disclosure: safety banner + hardware badge only
-              matter once "Real robot" is actually selected. */}
+          {/* Both targets get an explicit, honest note — silence on the
+              Simulation side would read as "probably fine" rather than the
+              actual guarantee (the physical arm cannot move from this button,
+              full stop). Progressive disclosure only for the extra hardware
+              badge/select, which only matters once "Real robot" is chosen. */}
+          {executionTarget === 'sim' && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: panel.successTint(0.1),
+                border: `1px solid ${panel.successTint(0.3)}`,
+                mb: 1,
+              }}
+            >
+              <MonitorPlay size={15} color={panel.success} />
+              <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                Twin only — the physical arm never moves from this button.
+              </Typography>
+            </Box>
+          )}
+
           {executionTarget === 'real' && (
             <>
               <Box

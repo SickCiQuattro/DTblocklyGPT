@@ -45,6 +45,8 @@ export type SelectableShadowBlockType =
   | 'place_block'
   | 'move_to_block'
   | 'gripper_block'
+  | 'open_gripper_block'
+  | 'close_gripper_block'
   | 'wait_block'
   | 'human_action_block'
   | 'notify_action_block'

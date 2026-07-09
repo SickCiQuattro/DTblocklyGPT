@@ -188,10 +188,18 @@ export const buildSequencePickerItems = (
     },
     {
       id: -5,
-      name: 'Gripper',
-      description: 'Open or close the robot gripper',
-      keywords: ['gripper', 'open', 'close', 'hand'],
-      blockType: 'gripper_block',
+      name: 'Open Gripper',
+      description: 'Open the robot gripper',
+      keywords: ['gripper', 'open', 'release', 'hand'],
+      blockType: 'open_gripper_block',
+      group: 'Robot Actions',
+    },
+    {
+      id: -10,
+      name: 'Close Gripper',
+      description: 'Close the robot gripper',
+      keywords: ['gripper', 'close', 'grip', 'hand'],
+      blockType: 'close_gripper_block',
       group: 'Robot Actions',
     },
     {

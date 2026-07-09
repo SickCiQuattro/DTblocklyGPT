@@ -45,7 +45,6 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
       borderColor: 'divider',
       py: 1.5,
       whiteSpace: 'nowrap',
-      fontFamily: "'Geist', 'Inter', sans-serif",
     }}
   >
     {children}
@@ -130,10 +129,8 @@ const ListRobots = () => {
           onClick={handleAdd}
           sx={{
             borderRadius: '8px',
-            fontFamily: "'Geist', 'Inter', sans-serif",
             fontWeight: 500,
             fontSize: '0.875rem',
-            textTransform: 'none',
           }}
         >
           Add Robot to Fleet
