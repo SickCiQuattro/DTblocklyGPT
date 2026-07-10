@@ -15,7 +15,16 @@ logger = logging.getLogger(__name__)
 
 # Italian/lab name → COCO class name
 _OBJECT_TO_COCO: dict[str, str] = {
-    # Lab glassware (demo scenario)
+    # Pharma scenario — base object is a tube; "blue/red/green/yellow tube"
+    # reaches this entry too, since parse_object_query strips the colour
+    # word before calling to_coco_class. "test tube" kept for compat with
+    # older saved tasks/workspaces that still use the pre-rename name.
+    "tube": "bottle",
+    "test tube": "bottle",
+    "medicine bottle": "bottle",
+    "beaker": "cup",
+    "sample bowl": "bowl",
+    # Lab glassware (legacy demo names, kept for backward compatibility)
     "provetta": "bottle",
     "flask": "bottle",
     "flacone": "bottle",

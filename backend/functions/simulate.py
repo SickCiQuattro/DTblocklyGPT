@@ -122,6 +122,13 @@ _SIM_RUN_LOCK = threading.Lock()
 # Cleared on reset_simulation_world(), delete_spawned_object_and_place(), and STOP.
 _spawned_in_world: set = set()
 
+# Registry of persisted placed-object entity names (e.g. "placed_3"), spawned
+# by _persist_placed_object so a placed item survives the next pick's cleanup
+# of the reusable "object" entity. _placed_seq is monotonic and never reset
+# mid-run, so a failed sweep can't cause a name collision on next spawn.
+_placed_in_world: list = []
+_placed_seq: int = 0
+
 
 def _abort_task(reason: str):
     """Hard-abort the running task: stop the parser loop, stop Gazebo AND the real
@@ -778,6 +785,9 @@ def resolve_location_metrics(sdf_name: str) -> float:
         "box": 0.08,
         "pillbox": 0.04,
         "tube_rack": 0.045,
+        "collection_rack": 0.06,
+        "waste_bin": 0.08,
+        "sample_tray": 0.02,
     }
     if not sdf_name:
         return 0.05
@@ -898,6 +908,36 @@ def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> boo
     except Exception as e:
         print(f"[SIMULATOR] launch_wsl_ros_command exception: {e}")
         return False
+
+
+def _shell_output(command: str) -> str | None:
+    """Run a shell command and return its stdout regardless of exit code.
+
+    For composite commands (subscribe-in-background & publish-then-wait), the
+    outer shell can exit 0 even when the inner publish failed — the caller
+    must judge success from stdout content, not the return code, which is
+    why this doesn't reuse launch_wsl_ros_command's rc-gated True/False.
+    """
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["wsl", "-d", "Ubuntu-24.04", "bash", "-c", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        elif platform.system() == "Linux":
+            result = subprocess.run(
+                ["bash", "-c", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        else:
+            print("[SIMULATOR] Unsupported OS for _shell_output")
+            return None
+        return result.stdout.decode(errors="replace")
+    except Exception as e:
+        print(f"[SIMULATOR] _shell_output exception: {e}")
+        return None
 
 
 def _set_world_paused(paused: bool):
@@ -1202,6 +1242,33 @@ def build_cartesian_ik_path(x_start, y_start, z_start, x_end, y_end, z_end, gras
     return path
 
 
+def _reachable_place_carry_z(x_rel, y_rel, z_carry, z_floor, grasp_yaw, seed_joints):
+    """Lower z_carry to the reachability ceiling above the place slot.
+
+    The reachable transit height isn't uniform across the rack: targets
+    farther from the arm's centerline (larger |y_rel|) sit lower in the
+    reach envelope at a fixed top-down orientation — measured offline, the
+    tube rack's outer slot (y=-0.237) tops out around z=0.205 while the
+    other two slots reach the full z=0.213 carry height fine. Stepping down
+    from the requested z_carry until the column above the slot solves IK
+    finds that ceiling per-target instead of hardcoding it; never steps
+    below z_floor (the descent hover), so the transit still clears the rack
+    walls. If nothing down to z_floor solves, returns z_carry unchanged and
+    lets the transit build below fail/abort as it already does — no
+    fake-place from this helper either way.
+    """
+    if solve_gazebo_ik(x_rel, y_rel, z_carry, grasp_yaw, seed_joints=seed_joints):
+        return z_carry
+    z = z_carry
+    while z - 0.01 >= z_floor:
+        z -= 0.01
+        if solve_gazebo_ik(x_rel, y_rel, z, grasp_yaw, seed_joints=seed_joints):
+            print(f"[PLACE] carry height lowered {z_carry:.3f}→{z:.3f} "
+                  f"for reach at (x={x_rel:.2f},y={y_rel:.2f})")
+            return z
+    return z_carry
+
+
 ROS_OPEN_GRIPPER = 30
 ROS_GRIPPER_GENTLE_CLOSE = 10
 ROS_CLOSE_GRIPPER_WITH_OBJECT = 10  # Default safe close gap (10mm) for generic blocks
@@ -1230,13 +1297,53 @@ MAX_GRIP_WIDTH_MM = 30.0
 ATTACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/attach -m gz.msgs.Empty -p 'unused: true'"
 DETACH_CMD = "gz topic -t /model/Cobotta/detachable_joint/detach -m gz.msgs.Empty -p 'unused: true'"
 
+# Plugin publishes its weld state on request. Subscribe (bounded, -d) in the
+# background, then publish attach, then wait for both — the echo must already
+# be listening before the publish fires, so subscribe comes first in the shell.
+ATTACH_STATE_TOPIC = "/model/Cobotta/detachable_joint/state"
+ATTACH_AND_VERIFY_CMD = (
+    f"gz topic -e -d 3 -t {ATTACH_STATE_TOPIC} & "
+    "sleep 0.5; "
+    f"{ATTACH_CMD}; "
+    "wait"
+)
+
+
+# Empirically measured on this dev VM (2026-07-10), replaying the real pick
+# cadence: each `gz topic -t/-e` CLI call is a fresh short-lived process, and
+# gz-transport's peer discovery either completes in time or doesn't — waiting
+# longer before a single publish doesn't move that floor (tested up to 1.5s
+# pre-publish). What works is re-rolling on a fresh publish+subscribe pair.
+# 2 attempts (the original figure) measured 8/15 (~53%). With the harness
+# mirroring production's detach-BEFORE-delete ordering (delete_spawned_
+# object_and_place always detaches first — see its docstring), 10 attempts
+# at 0.4s spacing measured 20/20; the one hard failure seen in an earlier,
+# less faithful harness run (delete without a prior detach) reproduced the
+# known gz-sim8 re-attach quirk this whole gate exists to catch, not a false
+# negative — so that case is correctly an abort, not evidence of an
+# unreliable retry budget.
+_ATTACH_MAX_ATTEMPTS = 10
+_ATTACH_RETRY_DELAY_S = 0.4
+
 
 def attach_object_to_gripper() -> bool:
-    print("[GRASP] Attach: welding 'object' to link_j6 via DetachableJoint")
-    ok = launch_wsl_ros_command(ATTACH_CMD)
-    if not ok:
-        print("[GRASP] WARNING: attach command failed (gz topic returned error)")
-    return ok
+    """Weld 'object' to link_j6 and verify via the DetachableJoint state topic.
+
+    A blind publish can succeed (exit 0) while gz-sim silently refuses the
+    re-attach (known gz-sim8 quirk on delete+respawn of a same-named entity),
+    leaving the object behind on lift — so this reads the state topic back
+    instead of trusting the publish's own exit code.
+    """
+    for attempt in range(1, _ATTACH_MAX_ATTEMPTS + 1):
+        print(f"[GRASP] Attach attempt {attempt}/{_ATTACH_MAX_ATTEMPTS}: welding 'object' to link_j6")
+        out = _shell_output(ATTACH_AND_VERIFY_CMD) or ""
+        if '"attached"' in out or ("attached" in out and "detached" not in out):
+            print(f"[GRASP] Attach verified: state topic reports 'attached' (attempt {attempt})")
+            return True
+        print(f"[GRASP] Attach attempt {attempt} unverified (state output: {out.strip()[:120] or 'no message'})")
+        if attempt < _ATTACH_MAX_ATTEMPTS:
+            _interruptible_sleep(_ATTACH_RETRY_DELAY_S)
+    return False
 
 
 def detach_object_from_gripper() -> bool:
@@ -1386,7 +1493,12 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             # Object is already held at rest, so the snap is authoritative; tight
             # delay just lets the re-parent settle before the weld.
             _interruptible_sleep(0.05)
-            attach_object_to_gripper()
+            if not attach_object_to_gripper():
+                _abort_task(
+                    "pick weld failed: DetachableJoint never reported 'attached' "
+                    "(2 attempts) — object would be left behind"
+                )
+                return
             _interruptible_sleep(0.2)
         else:
             print("[GRASP] Attach skipped (do_attach=False: spawn failed or disabled)")
@@ -1534,6 +1646,14 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             # abort (no silent fake-place) rather than clip clearance short.
             z_carry = min(z_carry, max(CARRY_Z_MAX, z_up + 0.005))
 
+            # Some place slots (e.g. the rack's outer slot) sit lower in the
+            # reach envelope than others at the same carry height — lower
+            # z_carry to whatever this specific slot can actually reach
+            # rather than aborting a transit that a few cm less altitude
+            # would have cleared.
+            z_carry = _reachable_place_carry_z(
+                x_rel, y_rel, z_carry, max(z_up, CARRY_Z_MIN), pick_grasp_yaw, pick_carry_joints)
+
             # 0. Pre-lift: bridge gap between pick z_carry and required z_carry
             seed_for_transit = pick_carry_joints
             if z_carry > pick_z_carry + 0.005:
@@ -1632,6 +1752,11 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         # 4. Retreat up (empty gripper from here: joint interp OK)
         smooth_move(q_retreat, ROS_OPEN_GRIPPER, duration_s=1.5)
 
+        # Persist the placed object under its own identity now that the arm is
+        # clear of the slot — otherwise the next pick's cleanup of the reusable
+        # "object" entity would delete the item that was just placed.
+        _persist_placed_object(picked_obj_name, snap_x, snap_y, snap_z_slot, yaw=grasp_yaw)
+
         # 5. Return to home
         simulate_ros_initial_position(gripper_open=True)
 
@@ -1644,26 +1769,49 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
 
 def simulate_ros_action(action_points: list = []):
+    """Play back a Skill's recorded waypoints on the Gazebo twin and, when
+    hardware drive is active, on the real arm too (one verified PTP move per
+    waypoint via _send_hw_target — the plain move-path used elsewhere only
+    forwards the final pose to hardware, which would collapse an oscillating
+    skill like "shake" into a single point). Gripper aperture is held at
+    whatever the arm currently has, not forced open, so a sample carried
+    into the skill isn't dropped mid-sequence.
+    """
     try:
-        if len(action_points) > 0:
-            sync_current_state_from_ros()
-            waypoints = []
+        if len(action_points) == 0:
+            return
+        sync_current_state_from_ros()
+        _, cur_hand = get_current_state()
+        waypoints = []
+        for point in action_points:
+            waypoints.append({
+                "j1": point["j1"],
+                "j2": point["j2"],
+                "j3": point["j3"],
+                "j4": point["j4"],
+                "j5": point["j5"],
+                "j6": point["j6"],
+                "hand": cur_hand,
+                "dt": 1.0
+            })
+        try:
+            _bridge.move_path(waypoints)
+        except Exception as e:
+            print(f"[SIMULATOR] Failed to send move-path: {e}")
+
+        if _hw_drive_active():
             for point in action_points:
-                waypoints.append({
-                    "j1": point["j1"],
-                    "j2": point["j2"],
-                    "j3": point["j3"],
-                    "j4": point["j4"],
-                    "j5": point["j5"],
-                    "j6": point["j6"],
-                    "hand": 0,
-                    "dt": 1.0
-                })
-            try:
-                _bridge.move_path(waypoints)
-            except Exception as e:
-                print(f"[SIMULATOR] Failed to send move-path: {e}")
+                joints = [point["j1"], point["j2"], point["j3"], point["j4"], point["j5"], point["j6"]]
+                if not _send_hw_target(joints, cur_hand):
+                    return
+        else:
             _interruptible_sleep(len(waypoints) * 1.0)
+
+        last = action_points[-1]
+        set_current_state(
+            [last["j1"], last["j2"], last["j3"], last["j4"], last["j5"], last["j6"]],
+            cur_hand,
+        )
 
     except Exception as e:
         print(str(e))
@@ -1691,6 +1839,7 @@ def reset_simulation_world():
         if not launch_wsl_ros_command(delete_location):
             print("[SIMULATOR] reset: delete 'location' failed (may not exist)")
 
+        _delete_placed_objects()
         _interruptible_sleep(1.0)
         simulate_ros_initial_position(gripper_open=True)
         _interruptible_sleep(3.0)
@@ -1700,21 +1849,77 @@ def reset_simulation_world():
 
 def delete_spawned_object_and_place():
     """Remove temporary objects created during PICK/PLACE to allow
-    repeating the sequence without resetting the entire world."""
+    repeating the sequence without resetting the entire world.
+
+    Only the reusable "object" entity (the pick buffer) is touched here —
+    persisted placed_* copies (see _persist_placed_object) are deliberately
+    left alone so they survive across repeat() iterations; they're swept
+    only on reset_simulation_world()/stop_simulation().
+    """
     try:
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-        delete_object_place = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object_place"'"""
         # Detach before delete: prevents stale weld state across repeated runs.
         print("[GRASP] Cleanup: detaching welded child before removing 'object'")
         detach_object_from_gripper()
         _interruptible_sleep(0.2)
         launch_wsl_ros_command(delete_object)
         _interruptible_sleep(0.4)
-        launch_wsl_ros_command(delete_object_place)
-        _interruptible_sleep(0.8)
         _spawned_in_world.clear()
     except Exception as e:
         print(str(e))
+
+
+def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: float = 0.0) -> bool:
+    """Give a just-placed object a permanent identity so it survives the next
+    pick's cleanup of the reusable "object" entity.
+
+    Delete "object" FIRST: spawning the placed_* copy at the same pose while
+    the original still exists interpenetrates the two colliders (Gazebo
+    reacts by exploding them apart). A failed delete skips the spawn — that
+    naturally covers the failed-pick case, where "object" was never welded
+    and there's nothing worth persisting anyway. Best-effort like the
+    existing snap-to-slot: never aborts the task.
+    """
+    global _placed_seq
+    safe_sdf_name = sdf_name.replace(" ", "_").lower()
+    delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
+    if not launch_wsl_ros_command(delete_object, expect_reply_true=True):
+        print("[SIMULATOR] persist-placed: delete 'object' failed — skipping persistence")
+        return False
+    _interruptible_sleep(0.2)
+
+    _placed_seq += 1
+    placed_name = f"placed_{_placed_seq}"
+    qz = math.sin(yaw / 2.0)
+    qw = math.cos(yaw / 2.0)
+    cmd = (
+        'gz service -s /world/worldCobotta/create '
+        '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
+        f'--timeout 5000 --req \'name: "{placed_name}"; '
+        f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_sdf_name, "model.sdf")}"; '
+        f'pose: {{position: {{x: {x:.4f}, y: {y:.4f}, z: {z:.4f}}}, '
+        f'orientation: {{x: 0, y: 0, z: {qz:.4f}, w: {qw:.4f}}}}}\''
+    )
+    if not launch_wsl_ros_command(cmd, expect_reply_true=True):
+        print(f"[SIMULATOR] persist-placed: spawn '{placed_name}' failed")
+        return False
+    _placed_in_world.append(placed_name)
+    print(f"[SIMULATOR] Persisted placed object '{placed_name}' ({sdf_name}) at "
+          f"x={x:.4f} y={y:.4f} z={z:.4f}")
+    return True
+
+
+def _delete_placed_objects():
+    """Sweep every persisted placed_* entity (world reset / STOP)."""
+    global _placed_in_world
+    for name in _placed_in_world:
+        cmd = (
+            f'gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity '
+            f'--reptype gz.msgs.Boolean --timeout 5000 --req \'type: MODEL, name: "{name}"\''
+        )
+        if not launch_wsl_ros_command(cmd):
+            print(f"[SIMULATOR] sweep: delete '{name}' failed (may not exist)")
+    _placed_in_world = []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2200,6 +2405,13 @@ def simulation_recursive_blockly_parser(
             if object_data is None:
                 _next()
                 return
+            if _spawned_in_world:
+                # A prior pick/place in this run left an object spawned — spawning
+                # under the fixed entity name "object" would collide, and the
+                # following place would teleport the stale object instead of the
+                # new one. Clean up before spawning the next pick.
+                print("[SIMULATOR] Previous object still in world — cleaning up before new pick")
+                delete_spawned_object_and_place()
             obj = objectsOfUser.filter(id=object_data["id"]).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             safe_sdf_name = sdf_name.replace(" ", "_").lower()
@@ -2505,6 +2717,7 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.POST.value:
                 SIMULATION_STOP_EVENT.set()
                 _spawned_in_world.clear()
+                _delete_placed_objects()
                 try:
                     _bridge.stop()
                 except Exception as e:

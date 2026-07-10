@@ -16,12 +16,18 @@ from launch_ros.actions import Node
 COB_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))  # ros2_ws/Cobotta
 
 
-def _spawner(name, timeout=40):
+def _spawner(names, timeout=40):
+    # --activate-as-group: one switch_controller call for all of them, instead
+    # of one spawner process per controller each racing its own switch call —
+    # on a slow VM the gripper_controller's switch could time out (10s) while
+    # already active underneath, so its spawner exited 1 on a harmless retry
+    # and looked like a crash even though the stack came up fine.
     return Node(
         package="controller_manager",
         executable="spawner",
-        arguments=[name, "--controller-manager", "/controller_manager",
-                   "--controller-manager-timeout", str(timeout)],
+        arguments=[*names, "--controller-manager", "/controller_manager",
+                   "--controller-manager-timeout", str(timeout),
+                   "--activate-as-group"],
         output="screen",
     )
 
@@ -88,9 +94,7 @@ def _setup(context, *args, **kwargs):
 
     nodes = [
         gz, rsp, bridge,
-        _spawner("joint_state_broadcaster"),
-        _spawner("arm_controller"),
-        _spawner("gripper_controller"),
+        _spawner(["joint_state_broadcaster", "arm_controller", "gripper_controller"]),
         flask, polling, web_video,
     ]
 

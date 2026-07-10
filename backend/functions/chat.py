@@ -504,16 +504,16 @@ Response:
   "lang": "en-US"
 }}
 
-User says: "Repeat 2 times: pick red_pill and then wait 3 seconds."
+User says: "Repeat 2 times: pick a tube and then wait 3 seconds."
 Response:
 {{
-  "answer": "I added a 'Repeat times' loop that runs twice: each time it picks up 'red_pill' and then waits 3 seconds.",
+  "answer": "I added a 'Repeat times' loop that runs twice: each time it picks up a 'tube' and then waits 3 seconds.",
   "task": [
     {{
       "type": "repeat",
       "times": 2,
       "steps": [
-        {{"type": "pick", "objectId": 1, "objectName": "red_pill"}},
+        {{"type": "pick", "objectId": 1, "objectName": "tube"}},
         {{"type": "wait", "seconds": 3}}
       ]
     }}
@@ -523,17 +523,17 @@ Response:
   "lang": "en-US"
 }}
 
-User says: "Keep picking the flask and placing it in the box until the box is no longer in view."
+User says: "Keep picking tubes and placing them in the waste bin until the bin is no longer in view."
 Response:
 {{
-  "answer": "I added a 'Repeat until' loop: the robot keeps picking 'flask' and placing it at 'box', and stops once the camera no longer sees the box.",
+  "answer": "I added a 'Repeat until' loop: the robot keeps picking 'tube' and placing it at 'waste bin', and stops once the camera no longer sees the bin.",
   "task": [
     {{
       "type": "repeat_until",
-      "condition": {{"type": "not", "condition": {{"type": "find_object", "objectId": 3, "objectName": "box"}}}},
+      "condition": {{"type": "not", "condition": {{"type": "find_object", "objectId": 3, "objectName": "waste bin"}}}},
       "do": [
-        {{"type": "pick", "objectId": 4, "objectName": "flask"}},
-        {{"type": "place", "locationId": 3, "locationName": "box"}}
+        {{"type": "pick", "objectId": 4, "objectName": "tube"}},
+        {{"type": "place", "locationId": 3, "locationName": "waste bin"}}
       ]
     }}
   ],
@@ -620,7 +620,7 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                 },
                 "task": {
                     "type": "string",
-                    "description": "Sequence of robot steps (following the AbstractStep format from instructions). MUST BE A VALID JSON STRING OF AN ARRAY (e.g. \"[{\\\"type\\\": \\\"pick\\\", \\\"objectId\\\": 4, \\\"objectName\\\": \\\"flask\\\"}]\"). Return an empty array string \"[]\" if empty.",
+                    "description": "Sequence of robot steps (following the AbstractStep format from instructions). MUST BE A VALID JSON STRING OF AN ARRAY (e.g. \"[{\\\"type\\\": \\\"pick\\\", \\\"objectId\\\": 4, \\\"objectName\\\": \\\"tube\\\"}]\"). Return an empty array string \"[]\" if empty.",
                 },
                 "taskModified": {
                     "type": "boolean",

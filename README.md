@@ -352,7 +352,7 @@ cd ros2_ws/Cobotta
 SKIP_BUILD=1 bash launch_sim.sh
 ```
 
-This single script starts Gazebo (headless), the ROS-Gazebo bridge, and all ROS2 nodes (`gazebo_command_node`, `gazebo_state_node`, `flask_node`, `polling_socket_node`, `web_video_server`). It waits for `/joint_states` and the Flask API to be healthy before reporting success.
+This single script starts Gazebo (headless), `ros_gz_bridge`, the `ros2_control` spawners, and the `flask_node` / `polling_socket_node` / `web_video_server` nodes. It does not wait for or verify anything — it launches the processes and returns. To check the stack actually came up healthy, run `poetry run python testing/preflight.py`. There is no `gazebo_command_node`/`gazebo_state_node` — Gazebo↔ROS2 wiring is the standard `gz_ros2_control` plugin, not a bespoke node.
 
 > **3D GUI:** By default, Gazebo runs headless (`-s` flag). To enable the full 3D interface, edit `launch_sim.sh` and remove `-s` from the `gz sim` line.
 
@@ -376,20 +376,19 @@ Launch nodes in this order:
 ros2 run cobotta_rest_api flask_node
 
 # Terminal B
-ros2 run cobotta_rest_api gazebo_command_node
-
-# Terminal C
-ros2 run cobotta_rest_api gazebo_state_node
-
-# Terminal D
 ros2 run cobotta_rest_api polling_socket_node
 
-# Terminal E — vision node uses the Poetry env, NOT .venv.
+# Terminal C — real hardware only (enable_hardware:=true drives the b-CAP arm)
+ros2 run cobotta_rest_api cobotta_node --ros-args -p enable_hardware:=true
+
+# Terminal D — vision node uses the Poetry env, NOT .venv.
 # Launch the FILE with the Poetry python — `poetry run ros2 run …` fails with
 # ModuleNotFoundError: ultralytics (the ros2 entry-point shebang uses the system python).
 poetry run python ros2_ws/src/cobotta_rest_api/cobotta_rest_api/vision_node.py \
     --ros-args -p camera_source:=0        # USB webcam index; or an http/rtsp URL
 ```
+
+The only real console-script entry points (`ros2_ws/src/cobotta_rest_api/setup.py`) are `flask_node`, `cobotta_node`, `polling_socket_node`, `vision_node` — `gazebo_command_node`/`gazebo_state_node` don't exist.
 
 > The `vision_node` must run under the Poetry python because `ultralytics`, `mediapipe`, and `hand-gesture-engine` are only installed in the Poetry environment. All other nodes use the `.venv`.
 
@@ -417,11 +416,16 @@ cd ros2_ws/Cobotta
 BCAP_HOST=192.168.0.1 EXT_SPEED=20 bash launch_physical.sh
 #   → wait for "B-CAP connected (ExtSpeed=20)"
 #   overrides: CAMERA_SOURCE=0 (USB cam) · ENABLE_VISION=0 (no detection) · BCAP_PROVIDER=…
+```
 
-# T2 — Django with hardware profile (real arm follows the twin)
+```bash
+# T2 — Django with hardware profile (arms the server; DRIVE_HARDWARE alone
+# does not move the arm — the frontend's "Real robot" target also has to
+# send driveHardware:true per request. "Simulation" never moves the arm.)
 DRIVE_HARDWARE=1 poetry run python manage.py runserver
-#   (omit DRIVE_HARDWARE to run sim-only while the robot stays connected but idle)
+```
 
+```bash
 # T3 — frontend
 npm start
 ```
@@ -432,8 +436,10 @@ curl -s http://localhost:5000/api/actual-joints-real | python3 -m json.tool   # 
 curl -s http://localhost:5000/api/vision/state | python3 -m json.tool         # YOLO detections
 ```
 
-> **Safety:** keep the teach-pendant **e-stop** in hand. `/api/stop` halts only the Gazebo
-> stream — the real arm is stopped only by the e-stop. Start at `EXT_SPEED=20`.
+> **Safety:** keep the teach-pendant **e-stop** in hand. `/api/stop` stops the Gazebo
+> stream and sends a soft halt to the real arm over a dedicated b-CAP channel — but
+> this is best-effort, not safety-rated. The e-stop is the only certified stop. Start
+> at `EXT_SPEED=20`.
 
 Full field guide: [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md) ·
 camera/detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md).

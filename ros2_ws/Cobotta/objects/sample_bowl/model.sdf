@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <!-- Sample bowl: r=0.030 h=0.030 → width=60mm, exceeds MAX_GRIP_WIDTH_MM=30 by design
+       (vision/find_object target only, never picked in seeded tasks) -->
+  <model name="sample_bowl">
+    <link name="link">
+      <pose>0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.030</mass>
+        <inertia>
+          <!-- cylinder r=0.030 h=0.030: ixx=iyy=(m/12)*(3r²+h²), izz=mr²/2 -->
+          <ixx>9.00e-6</ixx>
+          <ixy>0</ixy><ixz>0</ixz>
+          <iyy>9.00e-6</iyy>
+          <iyz>0</iyz>
+          <izz>1.35e-5</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <cylinder><radius>0.030</radius><length>0.030</length></cylinder>
+        </geometry>
+        <surface>
+          <contact><ode><kp>1000000</kp><kd>100</kd><max_vel>0.1</max_vel><min_depth>0.001</min_depth></ode></contact>
+          <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode><torsional><coefficient>1.0</coefficient><use_patch_radius>0</use_patch_radius><surface_radius>0.030</surface_radius></torsional></friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.030</radius><length>0.030</length></cylinder></geometry>
+        <material><ambient>0.95 0.95 0.9 1</ambient><diffuse>0.95 0.95 0.9 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>
