@@ -7,10 +7,15 @@
   ros_type_name: "rosgraph_msgs/msg/Clock"
   gz_type_name: "gz.msgs.Clock"
   direction: GZ_TO_ROS
+  qos_profile: CLOCK
 
-# Overhead camera stream.
+# Overhead camera stream. SENSOR_DATA (best-effort) — a reliable QoS on a
+# continuous 15 Hz image stream risks head-of-line blocking on a slow VM;
+# best-effort is the standard profile for camera/sensor topics and a lost
+# frame here is harmless (next one is seconds away).
 - ros_topic_name: "/camera/image_raw"
   gz_topic_name: "/gz/camera/image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA

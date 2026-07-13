@@ -10,9 +10,15 @@ from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 
 from .orin.bcapclient import BCAPClient as bcapclient
-from .cobotta_utils import convert_grad_to_rad
+from .cobotta_utils import convert_grad_to_rad, JOINT_LIMITS_DEG
 
 from my_robot_interfaces.srv import MoveTarget
+
+# Consecutive encoder-read failures before the link is declared down. The
+# encoder timer runs at 10 Hz, so 3 is ~0.3s of consistently failing reads —
+# long enough to not flag a single transient b-CAP hiccup, short enough that
+# a genuinely dead link is caught well before the next move attempt.
+ENCODER_FAIL_THRESHOLD = 3
 
 
 class HardwareControl(Node):
@@ -75,6 +81,12 @@ class HardwareControl(Node):
         # _move_target_cb tell "halted on purpose" apart from a real B-CAP error
         # so it does not reconnect-and-retry the move that was just halted.
         self._halt_requested = threading.Event()
+
+        # Consecutive CurJnt read failures on the encoder timer. The b-CAP link
+        # can drop between moves (nothing else touches it then) and the timer
+        # was the only thing that would notice — but it only logged a warning
+        # and kept ticking forever, so _hw_ok stayed True with a dead link.
+        self._encoder_fail_count = 0
 
         self._enable_hardware = enable_hardware
         if enable_hardware:
@@ -185,6 +197,12 @@ class HardwareControl(Node):
             self._hw_ok = False
 
     def _disconnect(self):
+        # Halt channel is independent of the main session's _hw_ok — tear it
+        # down unconditionally, otherwise a halt socket connected while the
+        # main link was already down leaks past shutdown.
+        with self._halt_lock:
+            self._disconnect_halt_locked()
+
         if not self._hw_ok:
             return
         with self._bcap_lock:
@@ -196,8 +214,6 @@ class HardwareControl(Node):
                 self.get_logger().info("cobotta_node: B-CAP disconnected cleanly")
             except Exception as exc:
                 self.get_logger().warning(f"cobotta_node: error during disconnect: {exc}")
-        with self._halt_lock:
-            self._disconnect_halt_locked()
 
     # ── halt channel (second B-CAP session) ─────────────────────────────────────
 
@@ -303,6 +319,24 @@ class HardwareControl(Node):
             response.message = f"expected 6 joints, got {len(request.joints)}"
             return response
 
+        # Flask clamps before calling this service, but a caller hitting
+        # /cobotta/move_target directly bypasses that — reject out-of-range
+        # targets here too rather than sending them to the real arm and
+        # relying on the RC8 firmware as the only backstop.
+        if not request.hand_only:
+            limit_keys = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+            for lk, v in zip(limit_keys, request.joints[:6]):
+                lo, hi = JOINT_LIMITS_DEG[lk]
+                if not (lo <= v <= hi):
+                    response.ok = False
+                    response.message = f"{lk}={v} out of limits [{lo}, {hi}]"
+                    return response
+        lo, hi = JOINT_LIMITS_DEG["hand"]
+        if not (lo <= request.hand <= hi):
+            response.ok = False
+            response.message = f"hand={request.hand} out of limits [{lo}, {hi}]"
+            return response
+
         last_exc = None
         with self._bcap_lock:
             # A fresh move request supersedes any earlier halt.
@@ -373,12 +407,21 @@ class HardwareControl(Node):
             return
         try:
             cur = self.m_bcapclient.robot_execute(self.HRobot, "CurJnt")
+            if cur is None or len(cur) < 6:
+                raise ValueError(f"CurJnt returned {cur!r}, expected 6 values")
         except Exception as exc:
             self.get_logger().warning(f"cobotta_node: CurJnt read failed: {exc}")
+            self._encoder_fail_count += 1
+            if self._encoder_fail_count >= ENCODER_FAIL_THRESHOLD:
+                self._hw_ok = False
+                self.get_logger().error(
+                    f"cobotta_node: b-CAP link lost ({ENCODER_FAIL_THRESHOLD} consecutive "
+                    "encoder failures) — hardware marked down")
             return
         finally:
             self._bcap_lock.release()
 
+        self._encoder_fail_count = 0
         js = JointState()
         js.header.stamp = self.get_clock().now().to_msg()
         js.name = [f"joint{i}" for i in range(1, 7)]

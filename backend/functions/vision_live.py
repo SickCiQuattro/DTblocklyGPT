@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,10 +21,34 @@ FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip
 # backend/functions/vision_live.py → ../../assets/hand_landmarker.task
 _LOCAL_MODEL = Path(__file__).parent.parent / "assets" / "hand_landmarker.task"
 
+# backend/functions/vision_live.py → ../../yolov8n.pt (repo root — the same
+# weights file vision_node.py loads by relative name on the ROS side).
+_YOLO_WEIGHTS = Path(__file__).parent.parent.parent / "yolov8n.pt"
+
+# cap_color.py is pure OpenCV/numpy (no ROS imports — see its own docstring),
+# so it's safe to import directly from the ROS package tree without ROS
+# itself being installed/sourced. Same sys.path pattern as testing/test_cap_color.py.
+_ROS_PKG_DIR = str(Path(__file__).parent.parent.parent / "ros2_ws" / "src" / "cobotta_rest_api")
+
 # ── Singleton ML models (lazy, loaded once on first request) ─────────────────
 
 _models_lock = threading.Lock()
 _gesture_engine = None   # None = not attempted; False = failed permanently
+_yolo_model = None       # None = not attempted; False = failed permanently
+_classify_hsv = None     # None = not attempted; False = failed permanently (color optional)
+_cap_region = None
+
+# Detection results are cached and only refreshed at this interval — YOLOv8n on
+# CPU (no GPU on this VM) takes ~200-400ms/frame; frames arrive from the
+# browser every 300ms (useWebcamVision.CAPTURE_INTERVAL_MS), so without a
+# throttle the request queue would grow unbounded.
+_YOLO_MIN_INTERVAL_S = 1.0
+_yolo_cache_lock = threading.Lock()
+_last_yolo_ts = 0.0
+_last_yolo_detections: list = []
+
+# Mirrors vision_node.py's _TUBE_CLASSES — COCO classes that get a cap-colour pass.
+_TUBE_CLASSES = ("bottle", "cup")
 
 
 def _ensure_gesture_model() -> bool:
@@ -68,6 +93,86 @@ def _get_models():
     return _gesture_engine
 
 
+def _get_yolo_model():
+    global _yolo_model
+    with _models_lock:
+        if _yolo_model is None:
+            try:
+                if not _YOLO_WEIGHTS.exists():
+                    logger.error("yolov8n.pt not found at %s — object detection disabled", _YOLO_WEIGHTS)
+                    _yolo_model = False
+                else:
+                    from ultralytics import YOLO
+                    _yolo_model = YOLO(str(_YOLO_WEIGHTS))
+            except Exception as exc:
+                logger.error("YOLO init failed (object detection disabled): %s", exc)
+                _yolo_model = False
+
+    return _yolo_model
+
+
+def _get_cap_color_funcs():
+    """Lazy-import cap_color.py from the ROS package tree (pure OpenCV/numpy,
+    no ROS dependency — see its docstring). Colour classification is optional:
+    on failure, detections just come back without a "color" field."""
+    global _classify_hsv, _cap_region
+    with _models_lock:
+        if _classify_hsv is None:
+            try:
+                if _ROS_PKG_DIR not in sys.path:
+                    sys.path.insert(0, _ROS_PKG_DIR)
+                from cobotta_rest_api.cap_color import cap_region, classify_hsv
+                _classify_hsv = classify_hsv
+                _cap_region = cap_region
+            except Exception as exc:
+                logger.warning("cap_color import failed (detections will have no color): %s", exc)
+                _classify_hsv = False
+                _cap_region = False
+
+    return _classify_hsv, _cap_region
+
+
+def _detect_objects(frame) -> list:
+    """YOLOv8n object detection on a browser webcam frame, cap-colour enriched
+    for bottle/cup classes — mirrors vision_node.py's _run_yolo (ROS side),
+    minus the bbox/center fields (this path is display-only, see decision in
+    the plan: browser detections never feed the bridge's find_object cache)."""
+    global _last_yolo_ts, _last_yolo_detections
+
+    with _yolo_cache_lock:
+        if time.monotonic() - _last_yolo_ts < _YOLO_MIN_INTERVAL_S:
+            return _last_yolo_detections
+
+    model = _get_yolo_model()
+    if not model:
+        return []
+
+    try:
+        results = model(frame, conf=0.35, verbose=False)
+        classify_hsv, cap_region = _get_cap_color_funcs()
+        detections = []
+        for result in results:
+            for box in result.boxes:
+                class_id = int(box.cls[0])
+                confidence = float(box.conf[0])
+                class_name = result.names[class_id]
+                detection = {"class": class_name, "confidence": round(confidence, 4)}
+                if class_name in _TUBE_CLASSES and classify_hsv and cap_region:
+                    xyxy = [float(v) for v in box.xyxy[0]]
+                    color = classify_hsv(cap_region(frame, xyxy))
+                    if color:
+                        detection["color"] = color
+                detections.append(detection)
+    except Exception as exc:
+        logger.warning("YOLO inference error: %s", exc)
+        return []
+
+    with _yolo_cache_lock:
+        _last_yolo_ts = time.monotonic()
+        _last_yolo_detections = detections
+    return detections
+
+
 # ── Django view ──────────────────────────────────────────────────────────────
 
 @csrf_exempt
@@ -89,6 +194,7 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if frame is None:
             return JsonResponse({"error": "invalid image"}, status=400)
+        detect_objects_flag = bool(data.get("detect_objects", False))
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -103,7 +209,14 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
         except Exception:
             gesture = "NONE"
 
+    # ── Objects (test-screen only — never fed to the bridge, see below) ──
+    detections = _detect_objects(frame) if detect_objects_flag else []
+
     # ── Forward to Flask bridge (non-blocking best-effort) ──
+    # Gesture only, by design: the bridge's find_object cache during a real
+    # task run must stay sourced exclusively from vision_node (robot/USB
+    # camera), not the operator's test webcam — this endpoint's detections
+    # never reach it.
     def _report():
         try:
             requests.post(
@@ -116,7 +229,7 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
 
     threading.Thread(target=_report, daemon=True).start()
 
-    return JsonResponse({"gesture": gesture})
+    return JsonResponse({"gesture": gesture, "detections": detections})
 
 
 # ── Voice command (browser Web Speech API → Django cache) ────────────────────

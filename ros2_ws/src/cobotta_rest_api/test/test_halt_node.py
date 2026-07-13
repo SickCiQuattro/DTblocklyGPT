@@ -79,7 +79,9 @@ def test_halted_move_does_not_retry(node):
     node.m_bcapclient.robot_move.side_effect = move_side_effect
     node._connect_locked = MagicMock()  # would be called by the old retry path
 
-    request = SimpleNamespace(hand_only=False, joints=[0.0] * 6, hand=30.0)
+    # joint_3's limit range is (18, 140) — an all-zero vector is rejected by
+    # the joint-limit guard before it ever reaches robot_move.
+    request = SimpleNamespace(hand_only=False, joints=[0.0, 0.0, 90.0, 0.0, 0.0, 0.0], hand=30.0)
     response = SimpleNamespace()
     result = node._move_target_cb(request, response)
 
@@ -95,7 +97,7 @@ def test_fresh_move_clears_stale_halt_flag(node):
     node.m_bcapclient.robot_move.return_value = None
     node.m_bcapclient.robot_execute.return_value = 10.0  # HandCurPos read
 
-    request = SimpleNamespace(hand_only=False, joints=[0.0] * 6, hand=30.0)
+    request = SimpleNamespace(hand_only=False, joints=[0.0, 0.0, 90.0, 0.0, 0.0, 0.0], hand=30.0)
     response = SimpleNamespace()
     result = node._move_target_cb(request, response)
 

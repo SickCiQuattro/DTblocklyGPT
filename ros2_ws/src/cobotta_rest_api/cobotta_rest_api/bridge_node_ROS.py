@@ -15,6 +15,11 @@ from .cobotta_utils import (
 )
 from my_robot_interfaces.srv import MoveTarget
 
+# A stop must win over any motion command already in flight (e.g. a Flask
+# request that read "not stopped" a moment before /stop was called) — new
+# motion commands are rejected for this long after a stop.
+STOP_WINDOW_S = 1.0
+
 
 class BridgeNodeROS(Node):
     def __init__(self):
@@ -73,6 +78,13 @@ class BridgeNodeROS(Node):
         # Guards both position dicts (written by ROS spin thread, read by Flask threads).
         self._position_lock = threading.Lock()
 
+        # Guards command dispatch: serializes execute_path/stop_path across
+        # overlapping Flask request threads, and the stop-window timestamp lets
+        # a stop-in-flight kill a trajectory that was already published to the
+        # controllers before the stop was issued.
+        self._cmd_lock = threading.Lock()
+        self._last_stop_ts = 0.0
+
         self.get_logger().info(
             "BridgeNodeROS initialized — /joint_states in, arm/gripper trajectory out")
 
@@ -124,47 +136,72 @@ class BridgeNodeROS(Node):
         sec = int(t)
         return Duration(sec=sec, nanosec=int(round((t - sec) * 1e9)))
 
-    def execute_path(self, waypoints):
+    def execute_path(self, waypoints) -> bool:
         """Send waypoints {j1..j6 (deg), hand (0-30), dt (s)} as one JointTrajectory.
 
         Publishing replaces the previous trajectory; safe because the app sleeps for
         each move's duration before sending the next (smooth_move / send_waypoints).
+
+        Returns False (and publishes nothing) when the command can't possibly do
+        anything useful: no controller subscribed to the trajectory topics (e.g.
+        Gazebo/controller_manager died) or a /stop was issued in the last
+        STOP_WINDOW_S. Both used to be silent no-ops that still reported success
+        to the caller.
         """
         if not waypoints:
-            return
-        arm = JointTrajectory()
-        arm.joint_names = [f"joint{i}" for i in range(1, 7)]
-        grip = JointTrajectory()
-        grip.joint_names = ["joint_left", "joint_right"]
+            return False
 
-        t = 0.0
-        for wp in waypoints:
-            t += float(wp.get("dt", 0.05))
-            stamp = self._duration(t)
+        with self._cmd_lock:
+            if time.monotonic() - self._last_stop_ts < STOP_WINDOW_S:
+                self.get_logger().warning("execute_path rejected: stop issued moments ago")
+                return False
+            if self.arm_traj_pub.get_subscription_count() == 0 or \
+                    self.gripper_traj_pub.get_subscription_count() == 0:
+                self.get_logger().error(
+                    "execute_path rejected: no controller listening (Gazebo/"
+                    "controller_manager down?)")
+                return False
 
-            ap = JointTrajectoryPoint()
-            ap.positions = [convert_grad_to_rad(float(wp.get(f"j{i}", 0.0)))
-                            for i in range(1, 7)]
-            ap.time_from_start = stamp
-            arm.points.append(ap)
+            arm = JointTrajectory()
+            arm.joint_names = [f"joint{i}" for i in range(1, 7)]
+            grip = JointTrajectory()
+            grip.joint_names = ["joint_left", "joint_right"]
 
-            gpos = convert_hand_cobotta_gazebo(float(wp.get("hand", 0.0)))
-            gp = JointTrajectoryPoint()
-            gp.positions = [gpos, gpos]   # both fingers symmetric
-            gp.time_from_start = stamp
-            grip.points.append(gp)
+            t = 0.0
+            for wp in waypoints:
+                t += float(wp.get("dt", 0.05))
+                stamp = self._duration(t)
 
-        # header.stamp left 0 → controllers start now; time_from_start is relative.
-        self.arm_traj_pub.publish(arm)
-        self.gripper_traj_pub.publish(grip)
-        self.get_logger().debug(f"Sent trajectory: {len(arm.points)} pts over {t:.2f}s")
+                ap = JointTrajectoryPoint()
+                ap.positions = [convert_grad_to_rad(float(wp.get(f"j{i}", 0.0)))
+                                for i in range(1, 7)]
+                ap.time_from_start = stamp
+                arm.points.append(ap)
+
+                gpos = convert_hand_cobotta_gazebo(float(wp.get("hand", 0.0)))
+                gp = JointTrajectoryPoint()
+                gp.positions = [gpos, gpos]   # both fingers symmetric
+                gp.time_from_start = stamp
+                grip.points.append(gp)
+
+            # header.stamp left 0 → controllers start now; time_from_start is relative.
+            self.arm_traj_pub.publish(arm)
+            self.gripper_traj_pub.publish(grip)
+            self.get_logger().debug(f"Sent trajectory: {len(arm.points)} pts over {t:.2f}s")
+            return True
 
     def stop_path(self):
-        """Cancel motion by sending an empty trajectory to each controller."""
-        self.arm_traj_pub.publish(
-            JointTrajectory(joint_names=[f"joint{i}" for i in range(1, 7)]))
-        self.gripper_traj_pub.publish(
-            JointTrajectory(joint_names=["joint_left", "joint_right"]))
+        """Cancel motion by sending an empty trajectory to each controller.
+
+        Always attempted (best-effort) even with no subscribers — unlike
+        execute_path, a stop is never rejected.
+        """
+        with self._cmd_lock:
+            self._last_stop_ts = time.monotonic()
+            self.arm_traj_pub.publish(
+                JointTrajectory(joint_names=[f"joint{i}" for i in range(1, 7)]))
+            self.gripper_traj_pub.publish(
+                JointTrajectory(joint_names=["joint_left", "joint_right"]))
         self.get_logger().info("Stop requested — empty trajectory sent")
         return True
 
@@ -280,14 +317,27 @@ class BridgeNodeROS(Node):
             gesture = self._latest_gesture
             gesture_age = age(self._latest_gesture_time)
 
+        controllers_listening = (
+            self.arm_traj_pub.get_subscription_count() > 0
+            and self.gripper_traj_pub.get_subscription_count() > 0
+        )
+
         return {
             "flask": True,
             "ros_bridge": True,
-            "gazebo": {"joint_state_age_s": joint_state_age},
+            "gazebo": {
+                "joint_state_age_s": joint_state_age,
+                "controllers_listening": controllers_listening,
+            },
             "hardware": {
+                # move_target_available only means cobotta_node's service server
+                # is up — NOT that b-CAP is actually connected. link_ok is the
+                # real liveness signal: the 10 Hz encoder timer stops updating
+                # within ~1s of the b-CAP link going down.
                 "move_target_available": self._move_target_client.service_is_ready(),
                 "halt_available": self._halt_client.service_is_ready(),
                 "encoder_age_s": real_age,
+                "link_ok": real_age is not None and real_age < 1.0,
             },
             "vision": {"detections_age_s": detections_age, "detections": detections},
             "gesture": {"gesture": gesture, "age_s": gesture_age},

@@ -4,22 +4,13 @@ from flask import Blueprint, request, jsonify
 from ..db import get_db
 from ..flask_node import flask_pub
 from ..flask_node import sendRequestPosition
+from ..cobotta_utils import JOINT_LIMITS_DEG
 
 import time
 
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
-# Joint limits in degrees — from cobotta_description/urdf/cobotta.urdf (converted rad→deg).
-JOINT_LIMITS_DEG = {
-    "joint_1": (-150.0, 150.0),
-    "joint_2": (-60.0, 100.0),
-    "joint_3": (18.0, 140.0),
-    "joint_4": (-170.0, 170.0),
-    "joint_5": (-95.0, 135.0),
-    "joint_6": (-170.0, 170.0),
-    "hand": (0.0, 30.0),
-}
 MAX_WAYPOINTS = 5000
 
 # Bounds for caller-supplied vision-wait timeouts (seconds).
@@ -114,7 +105,8 @@ def moveCobotta():
     wp = {f"j{i}": joint_delta[i - 1] for i in range(1, 7)}
     wp["hand"] = joint_delta[6]
     wp["dt"] = 1.0
-    flask_pub.execute_path([wp])
+    if not flask_pub.execute_path([wp]):
+        return jsonify({"error": "command rejected — no controller listening or stop in progress"}), 503
     flask_pub.get_logger().info('move-joints → %s' % joint_delta)
     return jsonify({"status": "ok"})
 
@@ -129,7 +121,8 @@ def movePath():
     if err:
         return jsonify({"error": err}), 400
 
-    flask_pub.execute_path(clean)
+    if not flask_pub.execute_path(clean):
+        return jsonify({"error": "command rejected — no controller listening or stop in progress"}), 503
     return jsonify({"status": "path started"})
 
 
