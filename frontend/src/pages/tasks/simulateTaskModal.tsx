@@ -46,6 +46,8 @@ export const SimulateTaskModal = ({
         id: task?.id,
         simulateEvent,
       },
+      // Synchronous, whole-task request — see DigitalTwinPanel.tsx runTask.
+      timeout: 600000,
     })
       .then(() => {
         toast.success(MessageText.success)

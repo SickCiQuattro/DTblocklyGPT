@@ -34,6 +34,12 @@ interface FetchApiParamsInterface<TBody extends object = object> {
   url: string
   body?: TBody
   method?: MethodHTTP
+  /** Overrides axios.defaults.timeout (60s) for this call — e.g. /api/task/simulate/,
+   * which runs the whole task synchronously and can legitimately take minutes
+   * (a gesture/voice step alone waits up to its own timeout). Leaving the 60s
+   * default there aborts the request client-side while the backend keeps
+   * running to completion, which the UI then misreports as a crash. */
+  timeout?: number
 }
 
 export const fetchApi = async <
@@ -43,6 +49,7 @@ export const fetchApi = async <
   url,
   body = {} as TBody,
   method = MethodHTTP.GET,
+  timeout,
 }: FetchApiParamsInterface<TBody>): Promise<TResponse> => {
   const apiParameters = method === MethodHTTP.GET ? body : {}
   const apiData = method !== MethodHTTP.GET ? body : {}
@@ -51,6 +58,7 @@ export const fetchApi = async <
     method, // Axios default is GET
     data: apiData,
     params: apiParameters,
+    ...(timeout !== undefined ? { timeout } : {}),
   }
 
   const hasRecords = (

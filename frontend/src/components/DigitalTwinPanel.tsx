@@ -95,12 +95,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
 
-  // Camera and voice are independent toggles — mic permission shouldn't be
-  // required just to test gestures, and vice versa. Object detection is a
-  // sub-toggle of the camera (see webcam.detectObjects) since it needs frames.
-  const [cameraOn, setCameraOn] = useState(false)
-  const [voiceOn, setVoiceOn] = useState(false)
-  const liveActive = cameraOn || voiceOn
+  // Sandbox toggles for the "Test recognition" tab only — independent of any
+  // run (mic permission shouldn't be required just to test gestures, and
+  // vice versa). Object detection is a sub-toggle of the camera (see
+  // webcam.detectObjects) since it needs frames. What actually drives a real
+  // run is `runMode` below, not these.
+  const [testCameraOn, setTestCameraOn] = useState(false)
+  const [testVoiceOn, setTestVoiceOn] = useState(false)
+  // 'auto': WHEN conditions auto-fulfill, no camera/mic permission requested.
+  // 'live': the task's own gesture/voice conditions must really happen —
+  // permissions requested at Run, scoped to only what the task uses.
+  const [runMode, setRunMode] = useState<'auto' | 'live'>('auto')
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
   )
@@ -113,7 +118,6 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     text: string
   } | null>(null)
   const wasRunningRef = useRef(false)
-  const autoSwitchedToCameraRef = useRef(false)
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
   const [confirmRealRun, setConfirmRealRun] = useState(false)
   // Hardware-armed status (server DRIVE_HARDWARE + cobotta_node reachable),
@@ -159,29 +163,52 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }, [simulation.isRunning, workspace])
 
-  // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
-  const activeGesture = cameraOn && webcam.active ? webcam.gesture : rosGesture
-  const activeDetections =
-    cameraOn && webcam.active ? webcam.detections : objectDetection.detections
+  // What this task's own blocks actually need — drives which permission a
+  // live run asks for (never both by default) and which preflight note to
+  // show. find_object is deliberately excluded: it's always the robot
+  // camera (vision_node), never the operator's browser webcam.
+  const taskNeedsCamera = !!workspace
+    ?.getAllBlocks(false)
+    .some((b) => b.type === 'gesture_block')
+  const taskNeedsVoice = !!workspace
+    ?.getAllBlocks(false)
+    .some((b) => b.type === 'voice_command_block')
+  const needsCameraOrVoice = taskNeedsCamera || taskNeedsVoice
 
-  // Camera and voice each start/stop independently.
+  // The webcam/mic run whenever the sandbox toggle is on OR a live run
+  // needs them for this task — one lifecycle, regardless of which reason.
+  const cameraActive =
+    testCameraOn ||
+    (runMode === 'live' && simulation.isRunning && taskNeedsCamera)
+  const voiceActive =
+    testVoiceOn ||
+    (runMode === 'live' && simulation.isRunning && taskNeedsVoice)
+
+  // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
+  const activeGesture =
+    cameraActive && webcam.active ? webcam.gesture : rosGesture
+  const activeDetections =
+    cameraActive && webcam.active
+      ? webcam.detections
+      : objectDetection.detections
+
   useEffect(() => {
-    if (cameraOn) {
+    if (cameraActive) {
       webcam.start()
     } else {
       webcam.stop()
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [cameraOn])
+  }, [cameraActive])
 
   useEffect(() => {
-    if (voiceOn) {
+    if (voiceActive) {
       voice.start()
     } else {
       voice.stop()
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [voiceOn])
+  }, [voiceActive])
 
   // Countdown ticker
   useEffect(() => {
@@ -280,9 +307,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         method: MethodHTTP.POST,
         body: {
           id: Number(taskId),
-          simulateEvent: !liveActive,
+          simulateEvent: runMode === 'auto',
           driveHardware,
         },
+        // /api/task/simulate/ runs the whole task synchronously and returns
+        // only at the end — a gesture/voice step alone can wait tens of
+        // seconds, so the 60s default aborts client-side well before a real
+        // run finishes and misreports it as a crash.
+        timeout: 600000,
       })
       dispatch(setSimulationCompleted())
     } catch (error: any) {
@@ -346,6 +378,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
   const isHumanStepActive =
     humanStep?.status === 'started' && simulation.isRunning
+  const isGestureStep = isHumanStepActive && humanStep?.condition === 'gesture'
   const isTimeout = humanStep?.status === 'timeout'
   const gestureActive = activeGesture !== 'NONE' && activeGesture !== ''
   const expectedGesture =
@@ -357,45 +390,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const timeoutTotal = humanStep?.timeout ?? 60
   const countdownPct = countdown !== null ? (countdown / timeoutTotal) * 100 : 0
 
-  const eventsVisible = liveActive || simulation.isRunning
-
-  // Guided view: a human step waiting on a gesture or object needs the
-  // camera on screen, but a novice won't know to flip the Simulation/Camera
-  // toggle AND the Camera switch themselves. Auto-switch to the camera view
-  // (turning the webcam on if needed) when such a step starts, and return to
-  // the simulation view once it resolves — but only if we're the ones who
-  // switched away, so a manual override during the step isn't fought. The
-  // webcam itself stays on afterwards (see the `cameraOn` effect above) so
-  // the operator can keep testing recognition if they want.
-  const needsCameraInput =
-    isHumanStepActive &&
-    (humanStep?.condition === 'gesture' ||
-      humanStep?.condition === 'find_object')
-  useEffect(() => {
-    if (needsCameraInput) {
-      if (liveView !== 'camera') {
-        setLiveView('camera')
-        autoSwitchedToCameraRef.current = true
-      }
-      if (!cameraOn) setCameraOn(true)
-    } else if (autoSwitchedToCameraRef.current) {
-      setLiveView('simulation')
-      autoSwitchedToCameraRef.current = false
-    }
-    // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [needsCameraInput])
+  // The self-view (webcam mirrored into the main video area, see the
+  // Simulation-view render below) replaces the old "auto-switch to the
+  // camera tab" behaviour entirely — no more forced tab switch or camera
+  // toggle mid-run. Events panel shows whenever a live stream is actually
+  // running (sandbox test or a live-mode run) or a run is in progress.
+  const eventsVisible = cameraActive || voiceActive || simulation.isRunning
 
   // Preflight checklist: the system already knows what a task needs (its own
   // block types, its publish status, the selected target) — say so up front
   // with an inline fix, instead of a novice discovering it only after Run
   // does nothing.
-  const needsCameraOrVoice = !!workspace
-    ?.getAllBlocks(false)
-    .some((b) =>
-      ['gesture_block', 'find_object_block', 'voice_command_block'].includes(
-        b.type,
-      ),
-    )
   interface PreflightIssue {
     text: string
     action?: { label: string; onClick: () => void }
@@ -417,15 +422,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           : 'Robot not connected — check the hardware connection before running.',
     })
   }
-  if (needsCameraOrVoice && !liveActive) {
+  if (needsCameraOrVoice && runMode === 'auto') {
     preflightIssues.push({
-      text: 'This task uses gesture, voice or object recognition.',
+      text: 'This task uses gesture or voice recognition.',
       action: {
-        label: 'Turn on camera & voice',
-        onClick: () => {
-          setCameraOn(true)
-          setVoiceOn(true)
-        },
+        label: 'Switch to Execute live',
+        onClick: () => setRunMode('live'),
       },
     })
   }
@@ -659,7 +661,75 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   flexShrink: 0,
                 }}
               >
-                {simulation.isRunning ? (
+                {isGestureStep ? (
+                  // Self-view: the operator's own webcam, mirrored, replaces
+                  // the robot feed for exactly this step — no tab switch, no
+                  // losing the instruction/countdown overlay below. Reverts
+                  // to the robot feed as soon as the step resolves.
+                  <>
+                    <video
+                      ref={webcam.attachVideo}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                        transform: 'scaleX(-1)',
+                      }}
+                    />
+                    {!webcam.active && !webcam.error && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          gap: 1,
+                        }}
+                      >
+                        <CircularProgress
+                          size={20}
+                          sx={{ color: panel.primary }}
+                        />
+                        <Typography
+                          sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                        >
+                          Starting camera...
+                        </Typography>
+                      </Box>
+                    )}
+                    {webcam.error && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          gap: 1,
+                          padding: '16px',
+                        }}
+                      >
+                        <VideoOff size={22} color={panel.errorLight} />
+                        <Typography
+                          sx={{
+                            fontSize: '0.72rem',
+                            color: panel.errorLight,
+                            textAlign: 'center',
+                          }}
+                        >
+                          {webcam.error}
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                ) : simulation.isRunning ? (
                   <img
                     src={MJPEG_URL}
                     alt="Robot camera feed"
@@ -691,8 +761,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Box>
                 )}
 
-                {/* Human step overlay */}
-                {isHumanStepActive && (
+                {/* Human step overlay — skipped for gesture steps: the whole
+                    point of the self-view above is for the operator to see
+                    themselves, and this scrim's blur/full-cover background
+                    would hide it completely. The Required/Detected card
+                    below the video already carries the instruction for that
+                    case, so nothing is lost by not duplicating it here. */}
+                {isHumanStepActive && !isGestureStep && (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -921,22 +996,22 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     Camera
                   </Typography>
                   <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
-                    {cameraOn && webcam.active
+                    {testCameraOn && webcam.active
                       ? 'Webcam on — detecting gestures'
                       : 'Try it out any time — see how gesture recognition works before running the task'}
                   </Typography>
                 </Box>
                 <Tooltip
                   title={
-                    cameraOn
+                    testCameraOn
                       ? 'Webcam on — gestures must really happen'
                       : 'Gesture events auto-completed'
                   }
                 >
                   <Switch
                     size="small"
-                    checked={cameraOn}
-                    onChange={(e) => setCameraOn(e.target.checked)}
+                    checked={testCameraOn}
+                    onChange={(e) => setTestCameraOn(e.target.checked)}
                     disabled={simulation.isRunning}
                     sx={{
                       '& .MuiSwitch-switchBase.Mui-checked': {
@@ -958,7 +1033,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   alignItems: 'center',
                   pl: 2,
                   mb: 1,
-                  opacity: cameraOn ? 1 : 0.5,
+                  opacity: testCameraOn ? 1 : 0.5,
                 }}
               >
                 <Box>
@@ -974,7 +1049,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Box>
                 <Tooltip
                   title={
-                    !cameraOn
+                    !testCameraOn
                       ? 'Turn on the camera first'
                       : webcam.detectObjects
                         ? 'Object detection on'
@@ -988,7 +1063,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       onChange={(e) =>
                         webcam.setDetectObjects(e.target.checked)
                       }
-                      disabled={!cameraOn || simulation.isRunning}
+                      disabled={!testCameraOn || simulation.isRunning}
                       sx={{
                         '& .MuiSwitch-switchBase.Mui-checked': {
                           color: panel.primary,
@@ -1020,14 +1095,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
                     {!voice.browserSupported
                       ? 'Not supported in this browser (Chrome only)'
-                      : voiceOn
+                      : testVoiceOn
                         ? 'Listening — say yes / no / done / proceed'
                         : 'Try voice commands independently of the camera'}
                   </Typography>
                 </Box>
                 <Tooltip
                   title={
-                    voiceOn
+                    testVoiceOn
                       ? 'Microphone on — voice events must really happen'
                       : 'Voice events auto-completed'
                   }
@@ -1035,8 +1110,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   <span>
                     <Switch
                       size="small"
-                      checked={voiceOn}
-                      onChange={(e) => setVoiceOn(e.target.checked)}
+                      checked={testVoiceOn}
+                      onChange={(e) => setTestVoiceOn(e.target.checked)}
                       disabled={simulation.isRunning || !voice.browserSupported}
                       sx={{
                         '& .MuiSwitch-switchBase.Mui-checked': {
@@ -1052,7 +1127,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Tooltip>
               </Stack>
 
-              {!cameraOn ? (
+              {!testCameraOn ? (
                 <Box
                   sx={{
                     width: '100%',
@@ -1243,7 +1318,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               )}
 
               {/* Camera picker */}
-              {cameraOn && webcam.devices.length > 0 && (
+              {testCameraOn && webcam.devices.length > 0 && (
                 <FormControl
                   fullWidth
                   size="small"
@@ -1491,6 +1566,56 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               ]}
             />
           </Stack>
+
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
+              Events:
+            </Typography>
+            <SegmentedControl
+              dark
+              value={runMode}
+              exclusive
+              disabled={simulation.isRunning}
+              onChange={(_, v) => v && setRunMode(v)}
+              options={[
+                { value: 'auto', label: 'Auto-complete' },
+                { value: 'live', label: 'Execute live' },
+              ]}
+            />
+          </Stack>
+
+          {/* Only what this task actually uses — never both by default —
+              and said up front, since the browser's own permission prompt
+              gives no context for why it's asking. */}
+          {runMode === 'live' && needsCameraOrVoice && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: panel.primaryTint(0.08),
+                border: `1px solid ${panel.primaryTint(0.25)}`,
+                mb: 1,
+              }}
+            >
+              {taskNeedsCamera ? (
+                <Camera size={15} color={panel.primary} />
+              ) : (
+                <Mic size={15} color={panel.primary} />
+              )}
+              <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                Run will ask for{' '}
+                {taskNeedsCamera && taskNeedsVoice
+                  ? 'camera and microphone access'
+                  : taskNeedsCamera
+                    ? 'camera access'
+                    : 'microphone access'}{' '}
+                — gestures/voice must really happen.
+              </Typography>
+            </Box>
+          )}
 
           {/* Both targets get an explicit, honest note — silence on the
               Simulation side would read as "probably fine" rather than the

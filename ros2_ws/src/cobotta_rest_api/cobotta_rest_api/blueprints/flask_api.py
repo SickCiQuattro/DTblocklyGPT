@@ -313,9 +313,18 @@ def getActualJointsReal():
 @bp.route("/human-step-start", methods=["POST"])
 def humanStepStart():
     data = request.get_json(silent=True) or {}
+    # condition/value/timeout must be forwarded — the frontend keys the
+    # gesture self-view, the Required/Detected match card, and the countdown
+    # off them (simulate.py sends condition="gesture"/"voice"/"object",
+    # value=THUMBS_UP/YES/objectName, timeout=seconds). Dropping them (the
+    # previous behaviour) left every human step looking like a bare
+    # "Waiting for operator..." with no camera and no countdown.
     flask_pub.publish_step_status({
         "status": "started",
         "description": data.get("description", ""),
+        "condition": data.get("condition", ""),
+        "value": data.get("value", ""),
+        "timeout": data.get("timeout"),
         "timestamp": time.time(),
     })
     return jsonify({"status": "ok"})

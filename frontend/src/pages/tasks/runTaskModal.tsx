@@ -50,6 +50,8 @@ export const RunTaskModal = ({
       url: endpoints.task.simulate,
       method: MethodHTTP.POST,
       body: { id: task?.id, simulateEvent, driveHardware: true },
+      // Synchronous, whole-task request — see DigitalTwinPanel.tsx runTask.
+      timeout: 600000,
     })
       .then(() => {
         toast.success(MessageText.runningTask)

@@ -9,13 +9,17 @@
   direction: GZ_TO_ROS
   qos_profile: CLOCK
 
-# Overhead camera stream. SENSOR_DATA (best-effort) — a reliable QoS on a
-# continuous 15 Hz image stream risks head-of-line blocking on a slow VM;
-# best-effort is the standard profile for camera/sensor topics and a lost
-# frame here is harmless (next one is seconds away).
+# Overhead camera stream. Reliable/default QoS — required to match
+# web_video_server's subscription (ros2_ws/src/web_video_server), which
+# expects RELIABLE. A prior attempt to set this to SENSOR_DATA (best-effort,
+# the usual profile for camera topics) broke the frontend feed entirely: gz
+# bridge and web_video_server end up with incompatible QoS and ROS delivers
+# zero messages between them (confirmed via the "requesting incompatible
+# QoS... No messages will be sent" warning on both sides) — a silent black
+# screen, not a crash. Left at default until/unless web_video_server's own
+# subscription QoS is changed to match.
 - ros_topic_name: "/camera/image_raw"
   gz_topic_name: "/gz/camera/image"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
-  qos_profile: SENSOR_DATA

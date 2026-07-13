@@ -52,9 +52,21 @@ export function useWebcamVision(): WebcamVisionState {
   const [devices, setDevices] = useState<WebcamDevice[]>([])
 
   const captureAndSend = useCallback(async () => {
+    // Always re-arm while active, even on the skip paths below — the <video>
+    // element may not be mounted yet (e.g. the run-time self-view only mounts
+    // once the gesture step starts, seconds after the webcam itself started).
+    // Returning without rescheduling used to kill the capture loop permanently
+    // in exactly that window, so no frames were ever sent for the gesture step.
+    const rearm = () => {
+      if (activeRef.current) setTimeout(captureAndSend, CAPTURE_INTERVAL_MS)
+    }
+
     if (!activeRef.current || inFlightRef.current) return
     const video = videoRef.current
-    if (!video || video.readyState < 2) return
+    if (!video || video.readyState < 2) {
+      rearm()
+      return
+    }
 
     if (!canvasRef.current) {
       canvasRef.current = document.createElement('canvas')
@@ -63,7 +75,10 @@ export function useWebcamVision(): WebcamVisionState {
     canvas.width = video.videoWidth || 640
     canvas.height = video.videoHeight || 480
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      rearm()
+      return
+    }
 
     // Mirror horizontally so gesture engine sees correct orientation
     ctx.translate(canvas.width, 0)
@@ -95,9 +110,7 @@ export function useWebcamVision(): WebcamVisionState {
       // ignore transient errors
     } finally {
       inFlightRef.current = false
-      if (activeRef.current) {
-        setTimeout(captureAndSend, CAPTURE_INTERVAL_MS)
-      }
+      rearm()
     }
   }, [])
 
@@ -148,11 +161,16 @@ export function useWebcamVision(): WebcamVisionState {
         activeRef.current = true
         setActive(true)
 
-        // Watchdog: camera "connected" but video black (e.g. Continuity Camera locked)
+        // Watchdog: camera "connected" but video black (e.g. Continuity Camera
+        // locked). Only a mounted <video> that stays black is a real fault —
+        // the element may simply not be mounted yet at the 3s mark (e.g. the
+        // run-time self-view only mounts once a gesture step starts, which
+        // can be well after the webcam itself started), and that is not an
+        // error.
         setTimeout(() => {
           if (!activeRef.current) return
           const v = videoRef.current
-          if (!v || v.videoWidth === 0) {
+          if (v && v.videoWidth === 0) {
             setError(
               `No video from "${label}". Camera may be locked or in use elsewhere. ` +
                 `Select a different device from the picker below.`,
