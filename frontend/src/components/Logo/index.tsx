@@ -25,7 +25,7 @@ export const LogoSection = ({ open = true }: LogoSectionProps) => {
       }}
     >
       <img
-        src="/logo.png"
+        src="/logo.svg"
         alt="logo"
         width="28"
         height="28"
