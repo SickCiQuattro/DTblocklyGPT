@@ -35,7 +35,7 @@ const Login = () => {
               mb: { xs: -0.5, sm: 0.5 },
             }}
           >
-            <Typography variant="h3">
+            <Typography variant="h3" component="h1">
               {resetPassword ? 'Reset password' : 'Login'}
             </Typography>
           </Stack>

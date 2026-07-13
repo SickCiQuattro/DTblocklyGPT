@@ -8,7 +8,10 @@ const palette = ThemeOption()
 
 export const tokenColor = {
   successMain: palette.success.main,
+  successDarker: palette.success.darker,
   warningDark: palette.warning.dark,
+  warningDarker: palette.warning.darker,
   infoDark: palette.info.dark,
   inProgressMain: palette.inProgress.main,
+  inProgressDark: palette.inProgress.dark,
 }

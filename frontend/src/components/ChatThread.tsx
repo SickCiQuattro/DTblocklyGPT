@@ -33,6 +33,8 @@ import { ActionListType } from 'pages/actions/types'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { buildBlockCatalog } from 'features/blockly/toolbox'
 import { AbstractStep } from 'pages/tasks/types'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
+import { UserLoginInterface } from 'pages/login/LoginForm'
 
 import { UserBubble } from './UserBubble'
 import { AssistantBubble } from './AssistantBubble'
@@ -93,6 +95,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const theme = useTheme()
   const indigo = theme.palette.primary.main
   const dispatch = useDispatch()
+  const storedUser = getFromLocalStorage(LocalStorageKey.USER) as
+    Partial<UserLoginInterface> | ''
+  const userName =
+    typeof storedUser === 'object' && storedUser !== null
+      ? storedUser.username || 'You'
+      : 'You'
   const proposal = useAppSelector((state) => state.proposal)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const chatPosition =
@@ -267,7 +275,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           key={msg.id}
           text={msg.text}
           timestamp={msg.timestamp}
-          user="User"
+          user={userName}
           avatarUrl="/pages/user.png"
         />
       )

@@ -141,6 +141,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Typography
                 variant="h5"
+                component="h1"
                 sx={{ fontWeight: 600, cursor: 'pointer' }}
                 onClick={() => setIsEditing(true)}
               >
@@ -162,7 +163,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
           options={[
             {
               value: 'twin',
-              label: 'Digital Twin',
+              label: 'Robot',
               icon: <PanelRight size={14} />,
             },
             {
@@ -210,7 +211,8 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
           disabled={isSaving}
           onClick={() => dispatch(triggerSave(true))}
           sx={{
-            width: '120px',
+            minWidth: '120px',
+            px: 2,
             borderRadius: '8px',
             textTransform: 'none',
             fontWeight: 500,
@@ -240,7 +242,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             },
           }}
         >
-          {workspaceReady ? 'Save' : 'Save draft'}
+          {workspaceReady ? 'Save & Publish' : 'Save draft'}
         </Button>
         <KeycapHint>{modKey()}S</KeycapHint>
         <ConfirmDeleteDialog

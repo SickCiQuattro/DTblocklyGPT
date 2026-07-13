@@ -17,7 +17,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip,
 } from '@mui/material'
 import {
   Play,
@@ -96,7 +95,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
 
-  const [liveEvents, setLiveEvents] = useState(false)
+  // Camera and voice are independent toggles — mic permission shouldn't be
+  // required just to test gestures, and vice versa. Object detection is a
+  // sub-toggle of the camera (see webcam.detectObjects) since it needs frames.
+  const [cameraOn, setCameraOn] = useState(false)
+  const [voiceOn, setVoiceOn] = useState(false)
+  const liveActive = cameraOn || voiceOn
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
   )
@@ -104,6 +108,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [notifyBanner, setNotifyBanner] = useState<string | null>(null)
+  const [runResult, setRunResult] = useState<{
+    ok: boolean
+    text: string
+  } | null>(null)
+  const wasRunningRef = useRef(false)
+  const autoSwitchedToCameraRef = useRef(false)
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
   const [confirmRealRun, setConfirmRealRun] = useState(false)
   // Hardware-armed status (server DRIVE_HARDWARE + cobotta_node reachable),
@@ -150,21 +160,28 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }, [simulation.isRunning, workspace])
 
   // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
-  const activeGesture =
-    liveEvents && webcam.active ? webcam.gesture : rosGesture
+  const activeGesture = cameraOn && webcam.active ? webcam.gesture : rosGesture
   const activeDetections =
-    liveEvents && webcam.active ? webcam.detections : objectDetection.detections
+    cameraOn && webcam.active ? webcam.detections : objectDetection.detections
 
-  // Start/stop webcam + voice recognition with the live toggle
+  // Camera and voice each start/stop independently.
   useEffect(() => {
-    if (liveEvents) {
+    if (cameraOn) {
       webcam.start()
-      voice.start()
     } else {
       webcam.stop()
+    }
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [cameraOn])
+
+  useEffect(() => {
+    if (voiceOn) {
+      voice.start()
+    } else {
       voice.stop()
     }
-  }, [liveEvents]) // eslint-disable-line @eslint-react/exhaustive-deps
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [voiceOn])
 
   // Countdown ticker
   useEffect(() => {
@@ -205,6 +222,26 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     return () => clearTimeout(t)
   }, [humanStep])
 
+  // Run-result banner: without this, a run silently flips back to idle with
+  // no feedback (the peak-end payoff of the whole flow), see peer message
+  // text below. Skip the user's own "Simulation stopped" — that's already
+  // self-evident from having just pressed Stop.
+  useEffect(() => {
+    const wasRunning = wasRunningRef.current
+    wasRunningRef.current = simulation.isRunning
+    if (!wasRunning || simulation.isRunning) return
+    if (simulation.message === 'Simulation stopped') return
+    setRunResult({
+      ok: simulation.message === 'Simulation completed',
+      text:
+        simulation.message === 'Simulation completed'
+          ? 'Task completed successfully'
+          : simulation.message,
+    })
+    const t = setTimeout(() => setRunResult(null), 5000)
+    return () => clearTimeout(t)
+  }, [simulation.isRunning, simulation.message])
+
   // Hardware-armed badge: fetch once when "Real robot" is selected. Not
   // polled — the badge is a pre-flight check at selection time, not a live
   // status monitor; re-select the target (or retry the run) to refresh it.
@@ -243,7 +280,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         method: MethodHTTP.POST,
         body: {
           id: Number(taskId),
-          simulateEvent: !liveEvents,
+          simulateEvent: !liveActive,
           driveHardware,
         },
       })
@@ -280,7 +317,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const handleClose = () => dispatch(toggleSim())
 
   // Focus the panel when it opens; return focus to whatever triggered it
-  // (the Header's "Digital Twin" toggle) when it closes.
+  // (the Header's "Robot" toggle) when it closes.
   useEffect(() => {
     if (simOpen) {
       previouslyFocusedRef.current = document.activeElement as HTMLElement
@@ -320,7 +357,78 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const timeoutTotal = humanStep?.timeout ?? 60
   const countdownPct = countdown !== null ? (countdown / timeoutTotal) * 100 : 0
 
-  const eventsVisible = liveEvents || simulation.isRunning
+  const eventsVisible = liveActive || simulation.isRunning
+
+  // Guided view: a human step waiting on a gesture or object needs the
+  // camera on screen, but a novice won't know to flip the Simulation/Camera
+  // toggle AND the Camera switch themselves. Auto-switch to the camera view
+  // (turning the webcam on if needed) when such a step starts, and return to
+  // the simulation view once it resolves — but only if we're the ones who
+  // switched away, so a manual override during the step isn't fought. The
+  // webcam itself stays on afterwards (see the `cameraOn` effect above) so
+  // the operator can keep testing recognition if they want.
+  const needsCameraInput =
+    isHumanStepActive &&
+    (humanStep?.condition === 'gesture' ||
+      humanStep?.condition === 'find_object')
+  useEffect(() => {
+    if (needsCameraInput) {
+      if (liveView !== 'camera') {
+        setLiveView('camera')
+        autoSwitchedToCameraRef.current = true
+      }
+      if (!cameraOn) setCameraOn(true)
+    } else if (autoSwitchedToCameraRef.current) {
+      setLiveView('simulation')
+      autoSwitchedToCameraRef.current = false
+    }
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [needsCameraInput])
+
+  // Preflight checklist: the system already knows what a task needs (its own
+  // block types, its publish status, the selected target) — say so up front
+  // with an inline fix, instead of a novice discovering it only after Run
+  // does nothing.
+  const needsCameraOrVoice = !!workspace
+    ?.getAllBlocks(false)
+    .some((b) =>
+      ['gesture_block', 'find_object_block', 'voice_command_block'].includes(
+        b.type,
+      ),
+    )
+  interface PreflightIssue {
+    text: string
+    action?: { label: string; onClick: () => void }
+  }
+  const preflightIssues: PreflightIssue[] = []
+  if (!canRun) {
+    preflightIssues.push({
+      text:
+        taskStatus === 'published_with_draft'
+          ? 'Unpublished changes — use Save & Publish in the top bar to run them.'
+          : 'This task is a draft — use Save & Publish in the top bar to run it.',
+    })
+  }
+  if (executionTarget === 'real' && !hardwareArmed) {
+    preflightIssues.push({
+      text:
+        hwStatus === null
+          ? 'Checking the robot connection…'
+          : 'Robot not connected — check the hardware connection before running.',
+    })
+  }
+  if (needsCameraOrVoice && !liveActive) {
+    preflightIssues.push({
+      text: 'This task uses gesture, voice or object recognition.',
+      action: {
+        label: 'Turn on camera & voice',
+        onClick: () => {
+          setCameraOn(true)
+          setVoiceOn(true)
+        },
+      },
+    })
+  }
 
   return (
     <Box
@@ -374,7 +482,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               letterSpacing: '-0.01em',
             }}
           >
-            Digital Twin
+            Robot
           </Typography>
           <Stack
             direction="row"
@@ -411,7 +519,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         <IconButton
           onClick={handleClose}
           size="small"
-          aria-label="Close digital twin panel"
+          aria-label="Close robot panel"
           sx={{
             color: panel.iconMuted,
             '&:hover': { color: panel.white, background: panel.hover },
@@ -432,6 +540,40 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           overflowY: 'auto',
         }}
       >
+        {/* ── Run-result banner (transient) ── */}
+        {runResult && (
+          <Box
+            role="status"
+            aria-live="polite"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 14px',
+              background: runResult.ok
+                ? panel.successTint(0.12)
+                : panel.errorTint(0.12),
+              border: `1px solid ${runResult.ok ? panel.successTint(0.35) : panel.errorTint(0.35)}`,
+              borderRadius: '8px',
+            }}
+          >
+            {runResult.ok ? (
+              <CheckCircle2 size={15} color={panel.successLight} />
+            ) : (
+              <AlertTriangle size={15} color={panel.errorLight} />
+            )}
+            <Typography
+              sx={{
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: runResult.ok ? panel.successLight : panel.errorLight,
+              }}
+            >
+              {runResult.text}
+            </Typography>
+          </Box>
+        )}
+
         {/* ── Notify banner (transient) ── */}
         {notifyBanner && (
           <Box
@@ -498,7 +640,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               onChange={(_, v) => v && setLiveView(v)}
               options={[
                 { value: 'simulation', label: 'Simulation' },
-                { value: 'camera', label: 'Camera' },
+                { value: 'camera', label: 'Test recognition' },
               ]}
             />
           </Stack>
@@ -770,32 +912,31 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 sx={{
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  mb: 1,
                 }}
               >
                 <Box>
                   <Typography
                     sx={{ fontSize: '0.78rem', color: panel.textDim }}
                   >
-                    Use live camera
+                    Camera
                   </Typography>
                   <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
-                    {liveEvents && webcam.active
-                      ? 'Webcam on — detecting gestures & objects'
-                      : 'Detect real gestures & objects from webcam'}
+                    {cameraOn && webcam.active
+                      ? 'Webcam on — detecting gestures'
+                      : 'Try it out any time — see how gesture recognition works before running the task'}
                   </Typography>
                 </Box>
                 <Tooltip
                   title={
-                    liveEvents
-                      ? 'Webcam on — gestures & objects must really happen'
-                      : 'Events auto-completed'
+                    cameraOn
+                      ? 'Webcam on — gestures must really happen'
+                      : 'Gesture events auto-completed'
                   }
                 >
                   <Switch
                     size="small"
-                    checked={liveEvents}
-                    onChange={(e) => setLiveEvents(e.target.checked)}
+                    checked={cameraOn}
+                    onChange={(e) => setCameraOn(e.target.checked)}
                     disabled={simulation.isRunning}
                     sx={{
                       '& .MuiSwitch-switchBase.Mui-checked': {
@@ -810,7 +951,108 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Tooltip>
               </Stack>
 
-              {!liveEvents ? (
+              <Stack
+                direction="row"
+                sx={{
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  pl: 2,
+                  mb: 1,
+                  opacity: cameraOn ? 1 : 0.5,
+                }}
+              >
+                <Box>
+                  <Typography
+                    sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                  >
+                    Object detection
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.62rem', color: panel.muted }}>
+                    Runs YOLO on the webcam feed here — never affects real task
+                    runs (those use the robot camera only)
+                  </Typography>
+                </Box>
+                <Tooltip
+                  title={
+                    !cameraOn
+                      ? 'Turn on the camera first'
+                      : webcam.detectObjects
+                        ? 'Object detection on'
+                        : 'Object detection off'
+                  }
+                >
+                  <span>
+                    <Switch
+                      size="small"
+                      checked={webcam.detectObjects}
+                      onChange={(e) =>
+                        webcam.setDetectObjects(e.target.checked)
+                      }
+                      disabled={!cameraOn || simulation.isRunning}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: panel.primary,
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track':
+                          {
+                            backgroundColor: panel.primary,
+                          },
+                      }}
+                    />
+                  </span>
+                </Tooltip>
+              </Stack>
+
+              <Stack
+                direction="row"
+                sx={{
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 1,
+                }}
+              >
+                <Box>
+                  <Typography
+                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                  >
+                    Voice
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                    {!voice.browserSupported
+                      ? 'Not supported in this browser (Chrome only)'
+                      : voiceOn
+                        ? 'Listening — say yes / no / done / proceed'
+                        : 'Try voice commands independently of the camera'}
+                  </Typography>
+                </Box>
+                <Tooltip
+                  title={
+                    voiceOn
+                      ? 'Microphone on — voice events must really happen'
+                      : 'Voice events auto-completed'
+                  }
+                >
+                  <span>
+                    <Switch
+                      size="small"
+                      checked={voiceOn}
+                      onChange={(e) => setVoiceOn(e.target.checked)}
+                      disabled={simulation.isRunning || !voice.browserSupported}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: panel.primary,
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track':
+                          {
+                            backgroundColor: panel.primary,
+                          },
+                      }}
+                    />
+                  </span>
+                </Tooltip>
+              </Stack>
+
+              {!cameraOn ? (
                 <Box
                   sx={{
                     width: '100%',
@@ -826,7 +1068,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <Camera size={28} color={panel.border} />
                   <Typography sx={{ fontSize: '0.78rem', color: panel.faint }}>
-                    Turn on live camera to preview gestures &amp; objects
+                    Turn on the camera above to test gesture &amp; object
+                    recognition
                   </Typography>
                 </Box>
               ) : (
@@ -968,7 +1211,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                               fontFamily: "'Geist Mono', monospace",
                             }}
                           >
-                            {d.class}
+                            {d.color ? `${d.class} · ${d.color}` : d.class}
                           </Typography>
                         </Box>
                       ))}
@@ -1000,7 +1243,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               )}
 
               {/* Camera picker */}
-              {liveEvents && webcam.devices.length > 0 && (
+              {cameraOn && webcam.devices.length > 0 && (
                 <FormControl
                   fullWidth
                   size="small"
@@ -1295,34 +1538,6 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   Live hardware — the real robot will move
                 </Typography>
               </Box>
-
-              <Box sx={{ mb: 1 }}>
-                {hwStatus === null ? (
-                  <Chip
-                    size="small"
-                    label="Checking hardware…"
-                    sx={{ fontSize: '0.7rem' }}
-                  />
-                ) : hardwareArmed ? (
-                  <Chip
-                    size="small"
-                    icon={<CheckCircle2 size={13} />}
-                    label="Hardware armed"
-                    color="success"
-                    variant="outlined"
-                    sx={{ fontSize: '0.7rem' }}
-                  />
-                ) : (
-                  <Chip
-                    size="small"
-                    icon={<AlertTriangle size={13} />}
-                    label="Hardware unavailable"
-                    color="warning"
-                    variant="outlined"
-                    sx={{ fontSize: '0.7rem' }}
-                  />
-                )}
-              </Box>
             </>
           )}
         </Box>
@@ -1390,35 +1605,71 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             Use the teach-pendant e-stop to stop the arm immediately.
           </Typography>
         )}
-        {!simulation.isRunning && !canRun && (
-          <Typography
-            sx={{
-              fontSize: '0.66rem',
-              color: panel.warningLight,
-              mt: 0.8,
-              textAlign: 'center',
-            }}
-          >
-            {taskStatus === 'published_with_draft'
-              ? 'Pending draft — publish or discard it to run. Webcam still works for testing gestures.'
-              : 'Draft task — publish it to run. Webcam still works for testing gestures.'}
-          </Typography>
-        )}
         {!simulation.isRunning &&
-          canRun &&
-          executionTarget === 'real' &&
-          !hardwareArmed && (
-            <Typography
+          (preflightIssues.length > 0 ? (
+            <Stack spacing={0.6} sx={{ mt: 0.8 }}>
+              {preflightIssues.map((issue, i) => (
+                <Stack
+                  key={i}
+                  direction="row"
+                  sx={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <AlertTriangle
+                    size={12}
+                    color={panel.warning}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <Typography
+                    sx={{
+                      fontSize: '0.66rem',
+                      color: panel.warningLight,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {issue.text}
+                  </Typography>
+                  {issue.action && (
+                    <Button
+                      size="small"
+                      onClick={issue.action.onClick}
+                      sx={{
+                        fontSize: '0.64rem',
+                        minWidth: 0,
+                        py: 0,
+                        px: 0.6,
+                        textTransform: 'none',
+                        color: panel.primaryLight,
+                      }}
+                    >
+                      {issue.action.label}
+                    </Button>
+                  )}
+                </Stack>
+              ))}
+            </Stack>
+          ) : (
+            <Stack
+              direction="row"
               sx={{
-                fontSize: '0.66rem',
-                color: panel.warningLight,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
                 mt: 0.8,
-                textAlign: 'center',
               }}
             >
-              Hardware not armed on this server — cannot run on the real robot.
-            </Typography>
-          )}
+              <CheckCircle2 size={12} color={panel.success} />
+              <Typography
+                sx={{ fontSize: '0.66rem', color: panel.successLight }}
+              >
+                Ready to run
+              </Typography>
+            </Stack>
+          ))}
       </Box>
 
       {/* ── Confirm real-robot run ── */}

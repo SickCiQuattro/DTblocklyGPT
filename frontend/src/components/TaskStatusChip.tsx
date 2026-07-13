@@ -14,11 +14,11 @@ export const TaskStatusChip: React.FC<TaskStatusChipProps> = ({ status }) => {
   return (
     <Chip
       size="small"
-      icon={<Icon size={12} color={cfg.color} />}
+      icon={<Icon size={12} color={cfg.text} />}
       label={cfg.label}
       sx={{
         bgcolor: cfg.bg,
-        color: cfg.color,
+        color: cfg.text,
         borderColor: cfg.border,
         borderWidth: 1,
         borderStyle: 'solid',

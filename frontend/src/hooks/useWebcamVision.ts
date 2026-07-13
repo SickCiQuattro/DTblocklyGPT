@@ -7,6 +7,7 @@ import { endpoints } from 'services/endpoints'
 export interface WebcamDetection {
   class: string
   confidence: number
+  color?: string
 }
 
 export interface WebcamDevice {
@@ -27,6 +28,8 @@ export interface WebcamVisionState {
   start: (deviceId?: string) => Promise<void>
   stop: () => void
   selectDevice: (deviceId: string) => Promise<void>
+  detectObjects: boolean
+  setDetectObjects: (enabled: boolean) => void
 }
 
 const CAPTURE_INTERVAL_MS = 300
@@ -37,9 +40,11 @@ export function useWebcamVision(): WebcamVisionState {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const activeRef = useRef(false)
   const inFlightRef = useRef(false)
+  const detectObjectsRef = useRef(false)
 
   const [gesture, setGesture] = useState<string>('NONE')
   const [detections, setDetections] = useState<WebcamDetection[]>([])
+  const [detectObjects, setDetectObjectsState] = useState(false)
   const [active, setActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeLabel, setActiveLabel] = useState<string>('')
@@ -72,7 +77,7 @@ export function useWebcamVision(): WebcamVisionState {
     try {
       const resp = await axios.post(
         endpoints.vision.frame,
-        { frame: b64 },
+        { frame: b64, detect_objects: detectObjectsRef.current },
         {
           headers: {
             'X-CSRFToken': Cookies.get('csrftoken') ?? '',
@@ -190,6 +195,12 @@ export function useWebcamVision(): WebcamVisionState {
     setSelectedDeviceId('')
   }, [])
 
+  const setDetectObjects = useCallback((enabled: boolean) => {
+    detectObjectsRef.current = enabled
+    setDetectObjectsState(enabled)
+    if (!enabled) setDetections([])
+  }, [])
+
   const selectDevice = useCallback(
     async (deviceId: string) => {
       activeRef.current = false
@@ -226,5 +237,7 @@ export function useWebcamVision(): WebcamVisionState {
     start,
     stop,
     selectDevice,
+    detectObjects,
+    setDetectObjects,
   }
 }

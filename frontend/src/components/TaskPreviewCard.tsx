@@ -506,7 +506,7 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
             sx={{ marginBottom: '12px', borderRadius: '12px', flexShrink: 0 }}
           >
             <AlertTitle sx={{ fontWeight: 600, fontSize: '14px', m: 0 }}>
-              Validation Warnings
+              Check these before running
             </AlertTitle>
             <Box sx={{ maxHeight: '80px', overflowY: 'auto', mt: 0.5 }}>
               <Stack spacing={0.5}>

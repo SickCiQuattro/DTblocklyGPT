@@ -8,118 +8,90 @@ const Faq = () => {
   return (
     <MainCard
       title="Instructions & FAQ"
-      subtitle="Here you can understand how to use the application and exploit its full potential!"
+      subtitle="A quick reference — most of the time the app itself will guide you, but this is here if you need it."
     >
-      <h2>About</h2>
+      <h2>Building a task</h2>
       <p>
-        The DTblocklyGPT application is designed to support users in programming
-        robotic systems. This user-friendly tool streamlines the process of
-        creating customized Pick&Place tasks using two different approaches: a{' '}
-        <b>Chat</b> and a <b>Graphic Interface</b>.
+        Open a task to see the <b>Blockly workspace</b>: a canvas where you
+        build a program by dragging coloured blocks from the toolbox on the
+        left. The toolbox is grouped into categories — <b>Task Flow</b> (repeat,
+        wait for a condition), <b>Robot Actions</b> (pick up, place, open/close
+        gripper), <b>Human Actions</b> (pause and show a message, notify
+        someone), <b>Conditions</b> (wait for a gesture, a voice command, or an
+        object to appear), and <b>Saved Tasks</b> (reuse a task you already
+        built).
       </p>
       <p>
-        In the Chat you can assemble all the defined libraries or define new
-        ones to create a task interacting only in natural language.
+        Some blocks show a dashed slot with a{' '}
+        <b>
+          <i>+</i>
+        </b>{' '}
+        inside, like <i>&ldquo;Select object…&rdquo;</i>. Drag a matching block
+        into that slot to fill it — the task can&rsquo;t be saved until every
+        slot is filled. Hover a block in the toolbox to preview what it does
+        before you use it.
+      </p>
+
+      <h2>Getting help from Copilot</h2>
+      <p>
+        The <b>Copilot</b> panel on the right lets you describe what the robot
+        should do in plain language — e.g. &ldquo;pick up the flask and place it
+        in the rack&rdquo; — and it builds the matching blocks for you. When it
+        proposes blocks, review them and press <b>Apply</b> to add them to your
+        workspace, or <b>Cancel</b> to discard the suggestion. You can also just
+        ask it questions about the task you&rsquo;re building.
+      </p>
+
+      <h2>Testing before you run</h2>
+      <p>
+        Open the <b>Robot</b> panel (top right) to test your task. It has two
+        views: <b>Simulation</b> shows the robot moving once a run starts, and{' '}
+        <b>Test recognition</b> turns on your camera so you can check that
+        gesture, voice, and object detection actually work — you can try this
+        any time, even before running anything.
       </p>
       <p>
-        {' '}
-        In the Graphic interface you can create or edit a task interacting with
-        a flow diagram.
+        If your task needs the camera or microphone to work, the panel tells you
+        right there and lets you turn it on with one click — you don&rsquo;t
+        need to remember to do it yourself.
       </p>
-      <h2>Steps</h2>
       <p>
-        The task is divided into 3 main steps: <b>Pick</b>, <b>Place</b> and an
-        optional <b>Processing</b>. For each step you can define a library for
-        running the operations.
+        Before you can run a task, save it with the <b>Save &amp; Publish</b>{' '}
+        button in the top bar. A task can be:
       </p>
       <ul>
         <li>
-          <b>Pick</b>: in this step you can define the object that will be
-          grasped. You can define the <b>Object</b> with its details:
-          <ul>
-            <li>
-              <i>Name</i>: the name of the object
-            </li>
-            <li>
-              <i>Shared</i>: if the object is shared with other users
-            </li>
-            <li>
-              <i>Keywords</i>: keywords used as synonyms to refer to the object
-            </li>
-            <li>
-              <i>Height</i>: the height acquired from the robot at which to grip
-              the object
-            </li>
-            <li>
-              <i>Force</i>: the force with which to grip the object
-            </li>
-            <li>
-              <i>Photo</i>: it is also possible to acquire a photo of the object
-              to automatically recognize its shape
-            </li>
-          </ul>
+          <b>Draft</b>: not published yet — you can keep editing, but it
+          can&rsquo;t run.
         </li>
-        <br />
         <li>
-          <b>Place</b>: in this step you can define the location where to store
-          the grasped object. You can define the <b>Location</b> with its
-          details:
-          <ul>
-            <li>
-              <i>Name</i>: the name of the location
-            </li>
-            <li>
-              <i>Shared</i>: if the location is shared with other users
-            </li>
-            <li>
-              <i>Keywords</i>: keywords used as synonyms to refer to the
-              location
-            </li>
-            <li>
-              <i>Position</i>: the position of the location acquired by the
-              robot
-            </li>
-          </ul>
+          <b>Published</b>: saved and ready to run.
         </li>
-        <br />
         <li>
-          <b>Processing</b>: in this step you can define the processing
-          operation to be run on the grasped object. You can define the{' '}
-          <b>Skill</b> with its details:
-          <ul>
-            <li>
-              <i>Name</i>: the name of the skill
-            </li>
-            <li>
-              <i>Shared</i>: if the skill is shared with other users
-            </li>
-            <li>
-              <i>Keywords</i>: keywords used as synonyms to refer to the skill
-            </li>
-            <li>
-              <i>Speed</i>: the speed of the skill
-            </li>
-            <li>
-              <i>Pattern</i>: use an already defined pattern of the skill
-              (Linear, Circular, Cross)
-            </li>
-            <li>
-              <i>Height</i>: the height acquired from the robot at which to run
-              the skill
-            </li>
-            <li>
-              <i>Points</i>: it is also possible to define a custom pattern
-              acquiring points with the robot
-            </li>
-          </ul>
+          <b>Draft in progress</b>: published once, with newer changes not yet
+          published — running still uses the last published version.
         </li>
       </ul>
-      <h2>My Robot</h2>
+
+      <h2>Running on the real robot</h2>
       <p>
-        In this section you can define your personal robots by selecting an
-        already added robot from the fleet defined by Managers. You can select
-        the robot using a list or a QR code. To acquire the QR code you can use
-        your camera or upload a photo of the QR code.
+        In the Robot panel, choose <b>Run in: Simulation</b> to try the task
+        safely — the physical arm never moves. Choose <b>Real robot</b> to run
+        it on the physical arm; you&rsquo;ll be asked to confirm first, since
+        this is a real, irreversible motion.
+      </p>
+      <p>
+        The teach-pendant <b>e-stop</b> is always the fastest way to stop the
+        robot immediately, no matter what the app shows. The in-app Stop button
+        also halts the robot, but it isn&rsquo;t a substitute for the e-stop in
+        an emergency.
+      </p>
+
+      <h2>Sharing tasks</h2>
+      <p>
+        A task can be <b>Private</b> (only you can open it) or <b>Shared</b>{' '}
+        (visible to other users). You can only edit or delete a task you own — a
+        shared task from someone else shows as read-only.
       </p>
     </MainCard>
   )

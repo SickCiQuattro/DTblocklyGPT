@@ -58,6 +58,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     }
   }
 
+  const micDisabledReason = !browserSupportsSpeechRecognition
+    ? 'Voice input isn’t supported in this browser'
+    : !isMicrophoneAvailable
+      ? 'Microphone access is blocked — allow it in your browser settings'
+      : null
+  const micTitle = micDisabledReason ?? 'Speak'
+
   return (
     <div style={{ padding: '12px 16px 16px' }}>
       <style>{`
@@ -132,7 +139,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 transition: 'background-color 0.15s ease, color 0.15s ease',
                 '&:hover': { bgcolor: 'action.hover' },
               }}
-              title="Speak"
+              title={micTitle}
             >
               <Mic size={17} />
             </IconButton>

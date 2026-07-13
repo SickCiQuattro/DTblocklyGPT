@@ -34,7 +34,7 @@ export interface MessageType {
 
 export const INITIAL_MESSAGE_1: MessageType = {
   id: 0,
-  text: 'Hello! I will assist you with your task',
+  text: 'Tell me what the robot should do — e.g. "pick up the flask and place it in the rack" — and I\'ll build the blocks for you.',
   user: UserChatEnum.ROBOT,
   timestamp: dayjs().toISOString(),
   type: MessageTypeEnum.TEXT,

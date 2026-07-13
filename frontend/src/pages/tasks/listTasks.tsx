@@ -51,6 +51,7 @@ import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
+import { UserLoginInterface } from 'pages/login/LoginForm'
 import { Theme as ThemeOption } from 'themes/theme'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
@@ -202,7 +203,7 @@ const TaskRowActions = ({
           </ListItemIcon>
           <ListItemText
             primary={
-              <Typography sx={{ fontSize: '0.85rem' }}>Verify Logic</Typography>
+              <Typography sx={{ fontSize: '0.85rem' }}>Check task</Typography>
             }
           />
         </MenuItem>
@@ -253,130 +254,144 @@ const TaskCard = ({
   canManage: boolean
   onOpen: () => void
 } & Omit<React.ComponentProps<typeof TaskRowActions>, 'row' | 'canManage'>) => (
-  <Paper
-    variant="outlined"
-    tabIndex={canManage ? 0 : -1}
-    role="button"
-    aria-label={`Open ${row.name} workspace`}
-    onClick={() => canManage && onOpen()}
-    onKeyDown={(e) => {
-      if ((e.key === 'Enter' || e.key === ' ') && canManage) {
-        e.preventDefault()
-        onOpen()
-      }
-    }}
-    sx={{
-      p: 2,
-      borderRadius: '12px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 1,
-      cursor: canManage ? 'pointer' : 'default',
-      boxShadow: (theme) => theme.customShadows.card,
-      '@media (prefers-reduced-motion: no-preference)': {
-        // Keep the card on its own compositing layer at rest too — without
-        // this, the hover-only `transform` promotes it to a layer only on
-        // hover, and Chromium re-rasterizes the outlined border with
-        // different anti-aliasing, making the (already-present) top border
-        // suddenly look like a new line popping in.
-        willChange: 'transform',
-        transition: 'transform 0.2s ease',
-        '&:hover': { transform: 'translateY(-2px)' },
-      },
-    }}
+  <Tooltip
+    title={canManage ? '' : 'Shared by another user — you can’t open this task'}
+    disableHoverListener={canManage}
   >
-    <Stack
-      direction="row"
-      sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}
+    <Paper
+      variant="outlined"
+      tabIndex={canManage ? 0 : -1}
+      role="button"
+      aria-label={
+        canManage
+          ? `Open ${row.name} workspace`
+          : `${row.name} — shared by another user, read only`
+      }
+      onClick={() => canManage && onOpen()}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && canManage) {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      sx={{
+        p: 2,
+        borderRadius: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        cursor: canManage ? 'pointer' : 'default',
+        opacity: canManage ? 1 : 0.72,
+        boxShadow: (theme) => theme.customShadows.card,
+        '@media (prefers-reduced-motion: no-preference)': {
+          // Keep the card on its own compositing layer at rest too — without
+          // this, the hover-only `transform` promotes it to a layer only on
+          // hover, and Chromium re-rasterizes the outlined border with
+          // different anti-aliasing, making the (already-present) top border
+          // suddenly look like a new line popping in.
+          willChange: 'transform',
+          transition: 'transform 0.2s ease',
+          '&:hover': { transform: 'translateY(-2px)' },
+        },
+      }}
     >
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography
-          sx={{
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: 'text.primary',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {row.name}
-        </Typography>
-        {row.description && (
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography
-            variant="caption"
-            color="text.secondary"
             sx={{
-              display: 'block',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              color: 'text.primary',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
           >
-            {row.description}
+            {row.name}
           </Typography>
-        )}
-      </Box>
-      <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{
-            alignItems: 'center',
-            flexShrink: 0,
-            px: 1,
-            py: 0.25,
-            borderRadius: '999px',
-            border: '1px solid',
-            borderColor: row.shared
-              ? alpha(tokenPalette.success.main, 0.3)
-              : 'divider',
-            bgcolor: row.shared
-              ? alpha(tokenPalette.success.main, 0.08)
-              : 'transparent',
-          }}
-        >
-          {row.shared ? (
-            <Share2 size={13} color={tokenPalette.success.main} />
-          ) : (
-            <Lock size={13} color={tokenPalette.slate[500]} />
+          {row.description && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {row.description}
+            </Typography>
           )}
-          <Typography
+        </Box>
+        <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
+          <Stack
+            direction="row"
+            spacing={0.5}
             sx={{
-              fontSize: '0.68rem',
-              fontWeight: 600,
-              color: row.shared
-                ? tokenPalette.success.main
-                : tokenPalette.slate[500],
+              alignItems: 'center',
+              flexShrink: 0,
+              px: 1,
+              py: 0.25,
+              borderRadius: '999px',
+              border: '1px solid',
+              borderColor: row.shared
+                ? alpha(tokenPalette.success.main, 0.3)
+                : 'divider',
+              bgcolor: row.shared
+                ? alpha(tokenPalette.success.main, 0.08)
+                : 'transparent',
             }}
           >
-            {row.shared ? 'Shared' : 'Private'}
-          </Typography>
-        </Stack>
-      </Tooltip>
-    </Stack>
+            {row.shared ? (
+              <Share2 size={13} color={tokenPalette.success.main} />
+            ) : (
+              <Lock size={13} color={tokenPalette.slate[500]} />
+            )}
+            <Typography
+              sx={{
+                fontSize: '0.68rem',
+                fontWeight: 600,
+                color: row.shared
+                  ? tokenPalette.success.main
+                  : tokenPalette.slate[500],
+              }}
+            >
+              {row.shared ? 'Shared' : 'Private'}
+            </Typography>
+          </Stack>
+        </Tooltip>
+      </Stack>
 
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-      <TaskStatusChip status={(row as any).status} />
-      <Typography variant="caption" color="text.secondary">
-        Modified {formatDateTimeFrontend(row.last_modified)}
-      </Typography>
-    </Stack>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+        <TaskStatusChip status={(row as any).status} />
+        <Typography variant="caption" color="text.secondary">
+          Modified {formatDateTimeFrontend(row.last_modified)}
+        </Typography>
+      </Stack>
 
-    <Stack
-      direction="row"
-      sx={{
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        mt: 0.5,
-        pt: 1,
-        borderTop: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      <TaskRowActions row={row} canManage={canManage} {...actionProps} />
-    </Stack>
-  </Paper>
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          mt: 0.5,
+          pt: 1,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <TaskRowActions row={row} canManage={canManage} {...actionProps} />
+      </Stack>
+    </Paper>
+  </Tooltip>
 )
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -510,6 +525,32 @@ const ListTasks = () => {
     setPage(0)
   }
 
+  // Tasks is the app's de-facto landing page (no separate marketing/dashboard
+  // route) — the greeting + live status line replace a plain "Tasks" title
+  // with something that actually orients a returning operator.
+  const userName =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'username' in storedUser &&
+    typeof (storedUser as Partial<UserLoginInterface>).username === 'string'
+      ? (storedUser as Partial<UserLoginInterface>).username
+      : ''
+  const statusParts: string[] = []
+  if (publishedCount > 0) {
+    statusParts.push(
+      `${publishedCount} task${publishedCount !== 1 ? 's' : ''} ready to run`,
+    )
+  }
+  if (draftCount > 0) {
+    statusParts.push(
+      `${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`,
+    )
+  }
+  const liveStatusLine =
+    statusParts.length > 0
+      ? statusParts.join(' · ')
+      : 'No tasks yet — create your first one below.'
+
   const actionProps = {
     handleOpenDetails,
     setRunTaskModalVisible,
@@ -522,10 +563,16 @@ const ListTasks = () => {
   }
 
   return (
-    <MainCard
-      title="Tasks"
-      subtitle="Manage and open your robot programming tasks."
-    >
+    <MainCard>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
+          {userName ? `Welcome back, ${userName}` : 'Welcome back'}
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+          {liveStatusLine}
+        </Typography>
+      </Box>
+
       {/* ── Toolbar ── */}
       <Stack
         direction="row"
@@ -592,7 +639,14 @@ const ListTasks = () => {
 
       {/* ── Card grid ── */}
       {isLoadingTasks ? (
-        <Box sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+        <Box
+          sx={{
+            maxHeight: 'calc(100vh - 280px)',
+            overflow: 'auto',
+            p: 2,
+            m: -2,
+          }}
+        >
           <Box
             sx={{
               display: 'grid',
@@ -650,7 +704,14 @@ const ListTasks = () => {
         </Stack>
       ) : (
         <>
-          <Box sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}>
+          <Box
+            sx={{
+              maxHeight: 'calc(100vh - 280px)',
+              overflow: 'auto',
+              p: 2,
+              m: -2,
+            }}
+          >
             <Box
               sx={{
                 display: 'grid',

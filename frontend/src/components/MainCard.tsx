@@ -66,7 +66,11 @@ export const MainCard = ({
       {title && (
         <CardHeader
           sx={headerSX}
-          title={<Typography variant="h3">{title}</Typography>}
+          title={
+            <Typography variant="h3" component="h1">
+              {title}
+            </Typography>
+          }
           subheader={subtitle}
           action={
             (backFunction || customElement) && (
@@ -95,6 +99,14 @@ export const MainCard = ({
       ref={ref}
       sx={{
         ...sx,
+        // MainLayout wraps every page in a flex column with overflow:auto so
+        // long pages scroll — but Card's own overflow:hidden (MUI default,
+        // for rounded-corner clipping) gives it an automatic min-height of 0
+        // as a flex item, so with the default flexShrink:1 it gets squeezed
+        // to the viewport's height instead of scrolling, silently clipping
+        // content. flexShrink:0 keeps it at its natural content height so
+        // the ancestor's overflow:auto can do its job.
+        flexShrink: 0,
         border: border ? '1px solid' : 'none',
         borderRadius: 1, // × shape.borderRadius (8) = 8px
         borderColor:

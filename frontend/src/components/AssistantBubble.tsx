@@ -79,7 +79,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
                 color: theme.palette.success.darker,
               }}
             >
-              Robot
+              Copilot
             </span>
           </div>
           <span style={{ fontSize: '11px', color: accent, opacity: 0.8 }}>

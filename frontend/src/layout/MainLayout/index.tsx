@@ -34,12 +34,38 @@ export const MainLayout = () => {
         overflow: 'hidden',
       }}
     >
+      <Box
+        component="a"
+        href="#main-content"
+        sx={{
+          position: 'absolute',
+          left: '8px',
+          top: '-48px',
+          zIndex: 2000,
+          padding: '8px 14px',
+          borderRadius: '8px',
+          background: 'primary.dark',
+          color: 'common.white',
+          fontSize: '13px',
+          fontWeight: 600,
+          textDecoration: 'none',
+          transition: 'top 0.15s ease',
+          '&:focus': {
+            top: '8px',
+            outline: '2px solid #fff',
+            outlineOffset: '2px',
+          },
+        }}
+      >
+        Skip to main content
+      </Box>
       {showHeader && (
         <Header open={drawerOpen} handleDrawerToggle={handleDrawerToggle} />
       )}
       <MainDrawer open={drawerOpen} handleDrawerToggle={handleDrawerToggle} />
       <Box
         component="main"
+        id="main-content"
         sx={{
           width: '100%',
           flexGrow: 1,
