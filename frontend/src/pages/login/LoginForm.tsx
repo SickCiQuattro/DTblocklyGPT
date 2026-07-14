@@ -4,7 +4,6 @@ import {
   Button,
   FormControl,
   FormHelperText,
-  Grid,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -113,106 +112,104 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
         values,
       }) => (
         <form noValidate onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
-            <Grid size={12}>
-              <Stack spacing={1}>
-                <TextField
-                  id="username-login"
-                  type="username"
-                  value={values.username}
-                  name="username"
-                  label="Username"
+          <Stack spacing={2.5}>
+            <Stack spacing={1}>
+              <TextField
+                id="username-login"
+                type="username"
+                value={values.username}
+                name="username"
+                label="Username"
+                onBlur={handleBlur}
+                onChange={handleChange}
+                fullWidth
+                error={Boolean(touched.username && errors.username)}
+              />
+              {touched.username && errors.username && (
+                <FormHelperText
+                  error
+                  id="helper-text-username-login"
+                  style={{ marginTop: 3 }}
+                >
+                  {errors.username}
+                </FormHelperText>
+              )}
+            </Stack>
+            <Stack spacing={1}>
+              <FormControl>
+                <InputLabel
+                  htmlFor="password-login"
+                  error={Boolean(touched.password && errors.password)}
+                >
+                  Password
+                </InputLabel>
+                <OutlinedInput
+                  fullWidth
+                  error={Boolean(touched.password && errors.password)}
+                  id="password-login"
+                  type={showPassword ? 'text' : 'password'}
+                  value={values.password}
+                  name="password"
+                  label="Password"
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  fullWidth
-                  error={Boolean(touched.username && errors.username)}
+                  endAdornment={
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label="toggle password visibility"
+                        onClick={() => setShowPassword(!showPassword)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        edge="end"
+                        size="large"
+                      >
+                        {showPassword ? (
+                          <Eye size={16} />
+                        ) : (
+                          <EyeOff size={16} />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  }
                 />
-                {touched.username && errors.username && (
+                {touched.password && errors.password && (
                   <FormHelperText
                     error
-                    id="helper-text-username-login"
-                    style={{ marginTop: 3 }}
+                    id="helper-text-password-login"
+                    style={{ margin: 0, marginTop: 3 }}
                   >
-                    {errors.username}
+                    {errors.password}
                   </FormHelperText>
                 )}
-              </Stack>
-            </Grid>
-            <Grid size={12}>
-              <Stack spacing={1}>
-                <FormControl>
-                  <InputLabel
-                    htmlFor="password-login"
-                    error={Boolean(touched.password && errors.password)}
-                  >
-                    Password
-                  </InputLabel>
-                  <OutlinedInput
-                    fullWidth
-                    error={Boolean(touched.password && errors.password)}
-                    id="password-login"
-                    type={showPassword ? 'text' : 'password'}
-                    value={values.password}
-                    name="password"
-                    label="Password"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    endAdornment={
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label="toggle password visibility"
-                          onClick={() => setShowPassword(!showPassword)}
-                          onMouseDown={(e) => e.preventDefault()}
-                          edge="end"
-                          size="large"
-                        >
-                          {showPassword ? (
-                            <Eye size={16} />
-                          ) : (
-                            <EyeOff size={16} />
-                          )}
-                        </IconButton>
-                      </InputAdornment>
-                    }
-                  />
-                  {touched.password && errors.password && (
-                    <FormHelperText
-                      error
-                      id="helper-text-password-login"
-                      style={{ margin: 0, marginTop: 3 }}
-                    >
-                      {errors.password}
-                    </FormHelperText>
-                  )}
-                </FormControl>
-              </Stack>
-            </Grid>
-            <Grid size={12}>
-              <Button
-                disableElevation
-                disabled={isSubmitting}
-                fullWidth
-                size="large"
-                type="submit"
-                variant="contained"
-                color="primary"
-              >
-                Login
-              </Button>
-            </Grid>
-            <Grid size={12} sx={{ display: 'none' }}>
-              <Button
-                fullWidth
-                size="small"
-                variant="text"
-                color="primary"
-                onClick={() => setResetPassword(true)}
-                disabled
-              >
-                Forgot the password?
-              </Button>
-            </Grid>
-          </Grid>
+              </FormControl>
+            </Stack>
+            <Button
+              disableElevation
+              disabled={isSubmitting}
+              fullWidth
+              size="large"
+              type="submit"
+              variant="contained"
+              color="primary"
+              sx={{
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Login
+            </Button>
+            <Button
+              fullWidth
+              size="small"
+              variant="text"
+              color="primary"
+              onClick={() => setResetPassword(true)}
+              disabled
+              sx={{ display: 'none' }}
+            >
+              Forgot the password?
+            </Button>
+          </Stack>
         </form>
       )}
     </Formik>

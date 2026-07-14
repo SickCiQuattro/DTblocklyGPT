@@ -1,22 +1,18 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
-import { ButtonBase, Typography, useTheme } from '@mui/material'
-
-import { defaultPath } from 'utils/constants'
+import { Box, Typography, useTheme } from '@mui/material'
 
 interface LogoSectionProps {
   open?: boolean
 }
 
+// Static brand mark — not a link. The sidebar wires its own click behavior
+// (expand when collapsed) around this; on its own it does nothing, so it
+// doesn't compete with that or read as a stray "go home" affordance.
 export const LogoSection = ({ open = true }: LogoSectionProps) => {
   const theme = useTheme()
 
   return (
-    <ButtonBase
-      disableRipple
-      component={Link}
-      to={defaultPath}
-      title="Go to the Homepage"
+    <Box
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -51,6 +47,6 @@ export const LogoSection = ({ open = true }: LogoSectionProps) => {
       >
         DTblocklyGPT
       </Typography>
-    </ButtonBase>
+    </Box>
   )
 }

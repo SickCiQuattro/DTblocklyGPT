@@ -5,6 +5,5 @@
  */
 
 export { BlockSearchDialog } from './BlockSearchDialog'
-export { ConfirmDeleteDialog } from './ConfirmDeleteDialog'
 export { InlineTaskDialog } from './InlineTaskDialog'
 export { KeyboardHelpDialog } from './KeyboardHelpDialog'

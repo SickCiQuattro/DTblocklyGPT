@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Grid, Stack, Typography } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
@@ -25,28 +25,20 @@ const Login = () => {
 
   return (
     <LoginWrapper>
-      <Grid container spacing={3}>
-        <Grid size={12}>
-          <Stack
-            direction="row"
-            sx={{
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              mb: { xs: -0.5, sm: 0.5 },
-            }}
-          >
-            <Typography variant="h3" component="h1">
-              {resetPassword ? 'Reset password' : 'Login'}
-            </Typography>
-          </Stack>
-        </Grid>
-        <Grid size={12}>
-          {!resetPassword && <LoginForm setResetPassword={setResetPassword} />}
-          {resetPassword && (
-            <ResetPasswordForm setResetPassword={setResetPassword} />
-          )}
-        </Grid>
-      </Grid>
+      <Box sx={{ mb: 3, textAlign: 'center' }}>
+        <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
+          {resetPassword ? 'Reset password' : 'Welcome back'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {resetPassword
+            ? 'Enter your new password below.'
+            : 'Sign in to your DTblocklyGPT account.'}
+        </Typography>
+      </Box>
+      {!resetPassword && <LoginForm setResetPassword={setResetPassword} />}
+      {resetPassword && (
+        <ResetPasswordForm setResetPassword={setResetPassword} />
+      )}
     </LoginWrapper>
   )
 }

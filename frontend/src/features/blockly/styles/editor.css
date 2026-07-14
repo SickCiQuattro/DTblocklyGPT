@@ -327,14 +327,14 @@
    ========================================================================== */
 .block--executing > .blocklyPath,
 .block--executing-entity > .blocklyPath {
-  stroke: #ec4899 !important;
+  stroke: #6366f1 !important;
   stroke-width: 2.5px !important;
   animation: blockExecuting 1.4s ease-in-out infinite;
 }
 
 @keyframes blockExecuting {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(236, 72, 153, 0)); }
-  50%      { filter: drop-shadow(0 0 7px rgba(236, 72, 153, 0.7)); }
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(99, 102, 241, 0)); }
+  50%      { filter: drop-shadow(0 0 7px rgba(99, 102, 241, 0.7)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -342,6 +342,6 @@
   .block--executing-entity > .blocklyPath {
     animation: none;
     stroke-width: 3px !important;
-    filter: drop-shadow(0 0 5px rgba(236, 72, 153, 0.55));
+    filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.55));
   }
 }

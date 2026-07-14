@@ -1,13 +1,3 @@
-/**
- * ConfirmDeleteDialog.tsx
- *
- * Generic confirmation dialog shown before irreversible delete operations
- * in the Blockly workspace (deleting a block with children, or deleting all blocks).
- *
- * Pressing Enter triggers the confirm action; Escape or clicking outside closes
- * the dialog and fires `onCancel`.
- */
-
 import {
   Button,
   Dialog,
@@ -18,35 +8,44 @@ import {
   Typography,
 } from '@mui/material'
 
-interface ConfirmDeleteDialogProps {
+interface ConfirmDialogProps {
   /** Whether the dialog is currently visible. */
   open: boolean
-  /** Message shown in the dialog body (e.g. "Delete 3 blocks?"). */
+  /** Message shown in the dialog body (e.g. "Delete this object?"). */
   message: string
-  /** Called when the user confirms the delete action. */
+  /** Called when the user confirms the action. */
   onConfirm: () => void
   /** Called when the user cancels or dismisses the dialog. */
   onCancel: () => void
-  /** Confirm button label, for reuse beyond literal deletes (e.g. "Import"). */
+  /** Dialog title. Default "Confirm" — override for higher-stakes actions (e.g. "Run on the real robot?"). */
+  title?: string
+  /** Confirm button label. Default "Confirm". */
   confirmLabel?: string
+  /** 'danger' (default) for destructive actions (terracotta accent), 'default' for neutral confirms (primary indigo). */
+  tone?: 'danger' | 'default'
 }
 
-/** Shared MUI `sx` style for the delete confirm button (terracotta accent). */
-const deleteButtonSx = (theme: Theme) => ({
-  textTransform: 'none',
-  backgroundColor: theme.palette.accent.main,
-  color: theme.palette.accent.contrastText,
+const confirmButtonSx = (tone: 'danger' | 'default') => (theme: Theme) => ({
+  textTransform: 'none' as const,
+  backgroundColor:
+    tone === 'danger' ? theme.palette.accent.main : theme.palette.primary.main,
+  color:
+    tone === 'danger'
+      ? theme.palette.accent.contrastText
+      : theme.palette.primary.contrastText,
   fontWeight: 600,
   borderRadius: '8px',
   px: 2,
   '&:hover': {
-    backgroundColor: theme.palette.accent.dark,
+    backgroundColor:
+      tone === 'danger'
+        ? theme.palette.accent.dark
+        : theme.palette.primary.dark,
   },
 })
 
-/** Shared MUI `sx` style for the cancel button. */
 const cancelButtonSx = (theme: Theme) => ({
-  textTransform: 'none',
+  textTransform: 'none' as const,
   color: theme.palette.slate[500],
   fontWeight: 600,
   borderRadius: '8px',
@@ -58,17 +57,20 @@ const cancelButtonSx = (theme: Theme) => ({
 })
 
 /**
- * Confirmation dialog that guards irreversible delete operations.
- * Renders a destructive (red) confirm button and a neutral cancel button.
- * The Enter key shortcut triggers `onConfirm` for keyboard-accessible workflows.
+ * The one confirmation modal used across the app — deletes, discards, and
+ * any other "are you sure" moment. Centered dialog, not an inline popover,
+ * so a destructive confirm always reads the same way regardless of where
+ * it's triggered from.
  */
-export const ConfirmDeleteDialog = ({
+export const ConfirmDialog = ({
   open,
   message,
   onConfirm,
   onCancel,
-  confirmLabel = 'Delete',
-}: ConfirmDeleteDialogProps) => (
+  title = 'Confirm',
+  confirmLabel = 'Confirm',
+  tone = 'danger',
+}: ConfirmDialogProps) => (
   <Dialog
     open={open}
     onClose={onCancel}
@@ -82,7 +84,7 @@ export const ConfirmDeleteDialog = ({
       paper: { elevation: 0, sx: { p: 1.5, maxWidth: 400 } },
     }}
   >
-    <DialogTitle sx={{ pb: 1 }}>Confirm</DialogTitle>
+    <DialogTitle sx={{ pb: 1 }}>{title}</DialogTitle>
     <DialogContent>
       <Typography
         variant="body2"
@@ -106,7 +108,7 @@ export const ConfirmDeleteDialog = ({
         disableFocusRipple
         autoFocus
         onClick={onConfirm}
-        sx={deleteButtonSx}
+        sx={confirmButtonSx(tone)}
       >
         {confirmLabel}
       </Button>

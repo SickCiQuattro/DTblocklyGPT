@@ -24,7 +24,7 @@ import { Eye, Plus, CheckCircle2, XCircle, Trash2 } from 'lucide-react'
 import { slate } from 'themes/theme'
 import { MainCard } from 'components/MainCard'
 import { tokenColor } from 'utils/tokenColors'
-import { ConfirmPopover } from 'components/ConfirmPopover'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
@@ -57,6 +57,7 @@ const ListActions = () => {
   useDocumentTitle('Skills')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -230,22 +231,15 @@ const ListActions = () => {
                       )}
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
-                      <ConfirmPopover
-                        title="Delete this skill?"
-                        onConfirm={() => handleDelete(row.id)}
+                      <IconButton
+                        color="error"
+                        disabled={!canManageAction(row.owner)}
+                        title="Delete this skill"
+                        onClick={() => setDeleteId(row.id)}
+                        size="small"
                       >
-                        {(onOpen) => (
-                          <IconButton
-                            color="error"
-                            disabled={!canManageAction(row.owner)}
-                            title="Delete this skill"
-                            onClick={onOpen}
-                            size="small"
-                          >
-                            <Trash2 size={18} />
-                          </IconButton>
-                        )}
-                      </ConfirmPopover>
+                        <Trash2 size={18} />
+                      </IconButton>
                     </TableCell>
                   </TableRow>
                 ))
@@ -267,6 +261,16 @@ const ListActions = () => {
           sx={{ borderTop: '1px solid', borderColor: 'divider' }}
         />
       </Paper>
+      <ConfirmDialog
+        open={deleteId !== null}
+        message="Delete this skill? This can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (deleteId !== null) handleDelete(deleteId)
+          setDeleteId(null)
+        }}
+        onCancel={() => setDeleteId(null)}
+      />
     </MainCard>
   )
 }

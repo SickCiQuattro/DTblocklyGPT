@@ -20,11 +20,11 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Divider,
 } from '@mui/material'
 import {
   Eye,
   Play,
-  Cpu,
   BrainCircuit,
   Plus,
   Search,
@@ -33,10 +33,11 @@ import {
   Lock,
   ListChecks,
   MoreVertical,
+  Undo2,
 } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
-import { ConfirmPopover } from 'components/ConfirmPopover'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { TaskStatusChip } from 'components/TaskStatusChip'
 import { SegmentedControl } from 'components/SegmentedControl'
 import { KeycapHint, modKey } from 'components/KeycapHint'
@@ -45,7 +46,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem, openDrawer } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage } from 'utils/constants'
-import { formatDateTimeFrontend } from 'utils/date'
+import { formatDateTimeShortFrontend } from 'utils/date'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -55,9 +56,7 @@ import { UserLoginInterface } from 'pages/login/LoginForm'
 import { Theme as ThemeOption } from 'themes/theme'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
-import { RunTaskModal } from './runTaskModal'
 import { TaskType } from './types'
-import { SimulateTaskModal } from './simulateTaskModal'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
 
 // Menu/status icon colors sourced once from the design-system tokens (these
@@ -88,27 +87,26 @@ const TaskRowActions = ({
   row,
   canManage,
   handleOpenDetails,
-  setRunTaskModalVisible,
-  setRunningTask,
-  setSimulateTaskModalVisible,
-  setSimulatingTask,
   setAnalyzeModalVisible,
   setAnalyzingTask,
   handleDelete,
+  handleDiscard,
 }: {
   row: TaskType
   canManage: boolean
   handleOpenDetails: (id: number) => void
-  setRunTaskModalVisible: (v: boolean) => void
-  setRunningTask: (t: TaskType) => void
-  setSimulateTaskModalVisible: (v: boolean) => void
-  setSimulatingTask: (t: TaskType) => void
   setAnalyzeModalVisible: (v: boolean) => void
   setAnalyzingTask: (t: TaskType) => void
   handleDelete: (id: number) => void
+  handleDiscard: (id: number) => void
 }) => {
+  const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const open = Boolean(anchorEl)
+  const isPublishedWithDraft =
+    (row as any).status?.toLowerCase() === 'published_with_draft'
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
@@ -125,15 +123,16 @@ const TaskRowActions = ({
       sx={{ alignItems: 'center' }}
       onClick={(e) => e.stopPropagation()}
     >
-      <Tooltip title="Run task">
+      <Tooltip title="Run on the real robot">
         <IconButton
-          sx={{ width: 40, height: 40, color: 'success.main' }}
-          onClick={() => {
-            setRunTaskModalVisible(true)
-            setRunningTask(row)
-          }}
+          sx={{ width: 40, height: 40, color: 'success.dark' }}
+          onClick={() =>
+            navigate(`/task/${row.id}`, {
+              state: { autoOpenRobot: true, executionTarget: 'real' },
+            })
+          }
           id={`btn-run-task-${row.id}`}
-          aria-label="run task"
+          aria-label="run on the real robot"
         >
           <Play size={17} />
         </IconButton>
@@ -169,24 +168,7 @@ const TaskRowActions = ({
           </ListItemIcon>
           <ListItemText
             primary={
-              <Typography sx={{ fontSize: '0.85rem' }}>View details</Typography>
-            }
-          />
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            handleClose()
-            setSimulateTaskModalVisible(true)
-            setSimulatingTask(row)
-          }}
-        >
-          <ListItemIcon>
-            <Cpu size={15} style={{ color: tokenPalette.warning.dark }} />
-          </ListItemIcon>
-          <ListItemText
-            primary={
-              <Typography sx={{ fontSize: '0.85rem' }}>Simulate</Typography>
+              <Typography sx={{ fontSize: '0.85rem' }}>Edit details</Typography>
             }
           />
         </MenuItem>
@@ -203,41 +185,83 @@ const TaskRowActions = ({
           </ListItemIcon>
           <ListItemText
             primary={
-              <Typography sx={{ fontSize: '0.85rem' }}>Check task</Typography>
+              <Typography sx={{ fontSize: '0.85rem' }}>
+                Check for problems
+              </Typography>
             }
           />
         </MenuItem>
 
-        <ConfirmPopover
-          title="Delete this task?"
-          onConfirm={() => {
-            handleClose()
-            handleDelete(row.id)
+        {isPublishedWithDraft && (
+          <MenuItem
+            onClick={(e) => {
+              if (!canManage) return
+              e.stopPropagation()
+              setDiscardConfirmOpen(true)
+            }}
+            disabled={!canManage}
+          >
+            <ListItemIcon>
+              <Undo2 size={15} style={{ color: tokenPalette.warning.dark }} />
+            </ListItemIcon>
+            <ListItemText
+              primary={
+                <Typography sx={{ fontSize: '0.85rem' }}>
+                  Discard draft
+                </Typography>
+              }
+            />
+          </MenuItem>
+        )}
+
+        <Divider />
+
+        <MenuItem
+          onClick={(e) => {
+            if (!canManage) return
+            e.stopPropagation()
+            setDeleteConfirmOpen(true)
           }}
+          disabled={!canManage}
+          sx={{ color: 'error.main' }}
         >
-          {(onOpen) => (
-            <MenuItem
-              onClick={(e) => {
-                if (!canManage) return
-                onOpen(e)
-              }}
-              disabled={!canManage}
-              sx={{ color: 'error.main' }}
-            >
-              <ListItemIcon>
-                <Trash2 size={15} color="red" />
-              </ListItemIcon>
-              <ListItemText
-                primary={
-                  <Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>
-                    Delete
-                  </Typography>
-                }
-              />
-            </MenuItem>
-          )}
-        </ConfirmPopover>
+          <ListItemIcon>
+            <Trash2 size={15} color="red" />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>
+                Delete
+              </Typography>
+            }
+          />
+        </MenuItem>
       </Menu>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        message="Delete this task? This can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          setDeleteConfirmOpen(false)
+          handleClose()
+          handleDelete(row.id)
+        }}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title="Discard draft?"
+        message="Discard this draft? Your unpublished changes will be lost and the task will revert to its last published version."
+        confirmLabel="Discard"
+        onConfirm={() => {
+          setDiscardConfirmOpen(false)
+          handleClose()
+          handleDiscard(row.id)
+        }}
+        onCancel={() => setDiscardConfirmOpen(false)}
+      />
     </Stack>
   )
 }
@@ -373,7 +397,7 @@ const TaskCard = ({
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
         <TaskStatusChip status={(row as any).status} />
         <Typography variant="caption" color="text.secondary">
-          Modified {formatDateTimeFrontend(row.last_modified)}
+          Modified {formatDateTimeShortFrontend(row.last_modified)}
         </Typography>
       </Stack>
 
@@ -382,7 +406,7 @@ const TaskCard = ({
         sx={{
           alignItems: 'center',
           justifyContent: 'flex-end',
-          mt: 0.5,
+          mt: 'auto',
           pt: 1,
           borderTop: '1px solid',
           borderColor: 'divider',
@@ -451,11 +475,6 @@ const ListTasks = () => {
     url: endpoints.home.libraries.actions,
   })
 
-  const [runTaskModalVisible, setRunTaskModalVisible] = useState(false)
-  const [runningTask, setRunningTask] = useState<TaskType | null>(null)
-  const [simulateTaskModalVisible, setSimulateTaskModalVisible] =
-    useState(false)
-  const [simulatingTask, setSimulatingTask] = useState<TaskType | null>(null)
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
 
@@ -491,6 +510,20 @@ const ListTasks = () => {
       mutate()
       const remaining = (dataTasks?.length ?? 1) - 1
       if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
+    })
+  }
+
+  const handleDiscard = (id: number) => {
+    // No manual .catch — same as handleDelete above: fetchApi already toasts
+    // every failure path (services/api.ts), a second toast here would just
+    // stack a redundant one behind it.
+    fetchApi({
+      url: endpoints.task.discardDraft,
+      method: MethodHTTP.POST,
+      body: { id },
+    }).then(() => {
+      toast.success('Draft discarded successfully')
+      mutate()
     })
   }
 
@@ -535,31 +568,36 @@ const ListTasks = () => {
     typeof (storedUser as Partial<UserLoginInterface>).username === 'string'
       ? (storedUser as Partial<UserLoginInterface>).username
       : ''
-  const statusParts: string[] = []
-  if (publishedCount > 0) {
-    statusParts.push(
-      `${publishedCount} task${publishedCount !== 1 ? 's' : ''} ready to run`,
-    )
-  }
-  if (draftCount > 0) {
-    statusParts.push(
-      `${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`,
-    )
-  }
-  const liveStatusLine =
-    statusParts.length > 0
+  const liveStatusLine = (() => {
+    if (rows.length === 0) return 'No tasks yet — create your first one below.'
+    if (statusFilter === 'published') {
+      return `Showing ${publishedCount} published task${publishedCount !== 1 ? 's' : ''} ready to run`
+    }
+    if (statusFilter === 'draft') {
+      return `Showing ${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`
+    }
+    const statusParts: string[] = []
+    if (publishedCount > 0) {
+      statusParts.push(
+        `${publishedCount} task${publishedCount !== 1 ? 's' : ''} ready to run`,
+      )
+    }
+    if (draftCount > 0) {
+      statusParts.push(
+        `${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`,
+      )
+    }
+    return statusParts.length > 0
       ? statusParts.join(' · ')
       : 'No tasks yet — create your first one below.'
+  })()
 
   const actionProps = {
     handleOpenDetails,
-    setRunTaskModalVisible,
-    setRunningTask,
-    setSimulateTaskModalVisible,
-    setSimulatingTask,
     setAnalyzeModalVisible,
     setAnalyzingTask,
     handleDelete,
+    handleDiscard,
   }
 
   return (
@@ -747,16 +785,6 @@ const ListTasks = () => {
       )}
 
       {/* ── Modals ── */}
-      <RunTaskModal
-        task={runningTask}
-        open={runTaskModalVisible}
-        handleClose={() => setRunTaskModalVisible(false)}
-      />
-      <SimulateTaskModal
-        task={simulatingTask}
-        open={simulateTaskModalVisible}
-        handleClose={() => setSimulateTaskModalVisible(false)}
-      />
       <AnalyzeTaskModal
         task={analyzingTask}
         dataMyRobots={dataMyRobots || []}

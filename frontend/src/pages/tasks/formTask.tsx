@@ -1,47 +1,33 @@
 import React, { useCallback, useState } from 'react'
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Button,
   Checkbox,
   Divider,
   FormControlLabel,
   FormHelperText,
-  Grid,
   Stack,
   TextField,
-  Tooltip,
 } from '@mui/material'
-import { ChevronDown, Wrench } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { Formik } from 'formik'
 import { toast } from 'react-toastify'
 import { string as YupString, object as YupObject } from 'yup'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
-import { activeItem, openDrawer } from 'store/reducers/menu'
+import { activeItem } from 'store/reducers/menu'
 import { TaskStatusChip } from 'components/TaskStatusChip'
 
-import { TaskDetailType, TaskStatus, TaskTypeField } from './types'
+import { TaskDetailType, TaskStatus } from './types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export enum TypeNewTask {
-  CHAT = 'chat',
-  GRAPHIC = 'graphic',
-  MULTIMODAL = 'multimodal',
-}
-
 interface FormTaskProps {
-  data: TaskDetailType | undefined
-  insertMode: boolean
+  data: TaskDetailType
   backFunction: () => void
-  onLifecycleChange?: () => void | Promise<void>
-  taskType?: TaskTypeField
 }
 
 interface SaveTaskResponse {
@@ -55,135 +41,57 @@ type FormValues = Omit<TaskDetailType, 'code'> & {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const FormTask = ({
-  data,
-  insertMode,
-  backFunction,
-  onLifecycleChange,
-  taskType = 'task',
-}: FormTaskProps) => {
+// This form only ever edits an existing task — every "New Task" flow creates
+// the task directly in the Blockly workspace (`/task/new`) and metadata gets
+// filled in here afterwards. The publish/save-draft/discard lifecycle lives
+// on the workspace's own header (Save & Publish, Discard draft), which is
+// where the task's blocks are actually visible — not duplicated here.
+export const FormTask = ({ data, backFunction }: FormTaskProps) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const [searchParams] = useSearchParams()
-  const type = searchParams.get('type')
+  const [isSaving, setIsSaving] = useState(false)
 
-  const [lifecycleLoading, setLifecycleLoading] = useState(false)
-
-  // ── Formik submit (metadata: name / description / shared) ──────────────────
-
-  const onSubmit = async (
-    values: FormValues,
-    { setStatus, setSubmitting, setFieldError, setFieldTouched },
-  ) => {
-    const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
-    void fetchApi<SaveTaskResponse, FormValues>({
-      url: endpoints.home.libraries.task,
-      method,
-      body: values,
-    })
-      .then(async (res) => {
+  const onSubmit = useCallback(
+    async (
+      values: FormValues,
+      { setStatus, setFieldError, setFieldTouched },
+    ) => {
+      setIsSaving(true)
+      try {
+        const res = await fetchApi<SaveTaskResponse, FormValues>({
+          url: endpoints.home.libraries.task,
+          method: MethodHTTP.PUT,
+          body: values,
+        })
         if (res?.nameAlreadyExists) {
           await setFieldTouched('name', true)
           await setFieldError('name', MessageText.alreadyExists)
           setStatus({ success: false })
           return
         }
-        const newTaskId = insertMode ? (res?.id ?? null) : null
         setStatus({ success: true })
-        if (!type) toast.success(MessageText.success)
-        if (type === TypeNewTask.CHAT) {
-          dispatch(openDrawer(false))
-          navigate(`/chat/${newTaskId}`)
-          return
-        }
-        if (type === TypeNewTask.GRAPHIC) {
-          dispatch(openDrawer(false))
-          navigate(`/graphic/${newTaskId}?newTask=true`)
-          return
-        }
-        if (type === TypeNewTask.MULTIMODAL) {
-          dispatch(openDrawer(false))
-          navigate(`/multimodal/${newTaskId}?newTask=true`)
-          return
-        }
+        toast.success(MessageText.success)
         backFunction()
-      })
-      .finally(() => {
-        setSubmitting(false)
-      })
-  }
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [backFunction],
+  )
 
-  // ── Lifecycle actions ───────────────────────────────────────────────────────
-
-  const handlePublish = useCallback(async () => {
-    if (!data?.id) return
-    setLifecycleLoading(true)
-    try {
-      await fetchApi({
-        url: endpoints.task.publish,
-        method: MethodHTTP.POST,
-        body: { id: data.id, taskStructure: data.code ?? null },
-      })
-      toast.success('Task published successfully')
-      await onLifecycleChange?.()
-    } catch {
-      toast.error('Error publishing task')
-    } finally {
-      setLifecycleLoading(false)
-    }
-  }, [data?.id, data?.code, onLifecycleChange])
-
-  const handleSaveDraft = useCallback(async () => {
-    if (!data?.id) return
-    setLifecycleLoading(true)
-    try {
-      await fetchApi({
-        url: endpoints.task.saveDraft,
-        method: MethodHTTP.PUT,
-        body: { id: data.id, taskStructure: data.code ?? null },
-      })
-      toast.success('Draft saved')
-      await onLifecycleChange?.()
-    } catch {
-      toast.error('Error saving draft')
-    } finally {
-      setLifecycleLoading(false)
-    }
-  }, [data?.id, data?.code, onLifecycleChange])
-
-  const handleDiscardDraft = useCallback(async () => {
-    if (!data?.id) return
-    setLifecycleLoading(true)
-    try {
-      await fetchApi({
-        url: endpoints.task.discardDraft,
-        method: MethodHTTP.POST,
-        body: { id: data.id },
-      })
-      toast.success('Draft discarded — published version restored')
-      await onLifecycleChange?.()
-    } catch {
-      toast.error('Error discarding draft')
-    } finally {
-      setLifecycleLoading(false)
-    }
-  }, [data?.id, onLifecycleChange])
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-
-  const currentStatus: TaskStatus = data?.status ?? 'draft'
+  const currentStatus: TaskStatus = data.status ?? 'draft'
 
   return (
     <Formik<FormValues>
       initialValues={{
-        id: data?.id ?? -1,
-        name: data?.name ?? '',
-        description: data?.description ?? '',
-        code: data?.code ?? null,
-        shared: data?.shared ?? false,
-        task_type: data?.task_type ?? taskType,
-        status: data?.status ?? 'draft',
-        signature: data?.signature ?? '',
+        id: data.id,
+        name: data.name ?? '',
+        description: data.description ?? '',
+        code: data.code ?? null,
+        shared: data.shared ?? false,
+        task_type: data.task_type ?? 'task',
+        status: data.status ?? 'draft',
+        signature: data.signature ?? '',
       }}
       validationSchema={YupObject().shape({
         name: YupString()
@@ -197,7 +105,6 @@ export const FormTask = ({
         handleBlur,
         handleChange,
         handleSubmit,
-        isSubmitting,
         touched,
         values,
         setFieldValue,
@@ -209,141 +116,95 @@ export const FormTask = ({
             if (e.key === 'Enter') e.preventDefault()
           }}
         >
-          <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
-            {/* ── Graphic shortcut ── */}
-            {!insertMode && (
-              <Grid size={1}>
-                <Stack spacing={1}>
-                  <Button
-                    onClick={() => {
-                      dispatch(openDrawer(false))
-                      dispatch(activeItem('definegraphic'))
-                      navigate(`/graphic/${values.id}`)
-                    }}
-                    color="primary"
-                    aria-label="detail"
-                    size="medium"
-                    title="Go to graphic interface"
-                    startIcon={<Wrench size={20} />}
-                  >
-                    Graphic
-                  </Button>
-                </Stack>
-              </Grid>
-            )}
-
-            {/* ── Name ── */}
-            <Grid size={insertMode ? 3 : 2}>
-              <Stack spacing={1}>
-                <TextField
-                  id="name"
-                  value={values.name}
-                  name="name"
-                  label="Name"
-                  onBlur={handleBlur}
-                  onChange={handleChange}
-                  error={Boolean(touched.name && errors.name)}
-                  title="Name of the task"
-                />
-                {touched.name && errors.name && (
-                  <FormHelperText error id="helper-text-name">
-                    {errors.name}
-                  </FormHelperText>
-                )}
-              </Stack>
-            </Grid>
-
-            {/* ── Description ── */}
-            <Grid size={8}>
-              <Stack spacing={1}>
-                <TextField
-                  id="description"
-                  value={values.description}
-                  name="description"
-                  label="Description"
-                  onBlur={handleBlur}
-                  onChange={handleChange}
-                  title="Description of the task"
-                />
-              </Stack>
-            </Grid>
-
-            {/* ── Shared ── */}
-            <Grid size={1}>
-              <Stack spacing={1}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      id="shared"
-                      value={values.shared}
-                      name="shared"
-                      onBlur={handleBlur}
-                      onChange={() => setFieldValue('shared', !values.shared)}
-                      checked={values.shared}
-                    />
-                  }
-                  title="Share this task with other users"
-                  label="Shared"
-                />
-              </Stack>
-            </Grid>
+          <Stack spacing={2.5}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <TaskStatusChip status={currentStatus} />
+              <Button
+                onClick={() => {
+                  dispatch(activeItem('tasks'))
+                  navigate(`/task/${values.id}`)
+                }}
+                size="small"
+                variant="text"
+                title="Open the blocks for this task"
+                endIcon={<ArrowUpRight size={14} />}
+                sx={{ textTransform: 'none', fontWeight: 500 }}
+              >
+                Open in workspace
+              </Button>
+            </Stack>
 
             <Divider />
 
-            {/* ── Debug JSON ── */}
-            {!insertMode && (
-              <Grid size={12}>
-                <Stack spacing={1}>
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ChevronDown size={16} />}>
-                      Task JSON
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <pre>
-                        {values.code
-                          ? JSON.stringify(values.code, null, 2)
-                          : ''}
-                      </pre>
-                    </AccordionDetails>
-                  </Accordion>
-                </Stack>
-              </Grid>
-            )}
-
-            {/* ── Save metadata ── */}
-            <Grid size={12}>
-              <Button
-                disableElevation
-                disabled={isSubmitting || lifecycleLoading}
+            <Stack spacing={1}>
+              <TextField
+                id="name"
+                value={values.name}
+                name="name"
+                label="Name"
+                onBlur={handleBlur}
+                onChange={handleChange}
+                error={Boolean(touched.name && errors.name)}
+                title="Name of the task"
                 fullWidth
-                size="large"
-                type="submit"
-                variant="contained"
-                color="primary"
-                title="Save task"
-              >
-                Save
-              </Button>
-            </Grid>
+              />
+              {touched.name && errors.name && (
+                <FormHelperText error id="helper-text-name">
+                  {errors.name}
+                </FormHelperText>
+              )}
+            </Stack>
 
-            {/* ── Lifecycle toolbar ── */}
-            {!insertMode && (
-              <>
-                <Divider sx={{ width: '100%' }} />
+            <TextField
+              id="description"
+              value={values.description}
+              name="description"
+              label="Description"
+              onBlur={handleBlur}
+              onChange={handleChange}
+              title="Description of the task"
+              fullWidth
+              multiline
+              minRows={2}
+            />
 
-                <Grid size={12}>
-                  <Stack
-                    direction="row"
-                    spacing={1.5}
-                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                  >
-                    {/* Status badge */}
-                    <TaskStatusChip status={currentStatus} />
-                  </Stack>
-                </Grid>
-              </>
-            )}
-          </Grid>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="shared"
+                  value={values.shared}
+                  name="shared"
+                  onBlur={handleBlur}
+                  onChange={() => setFieldValue('shared', !values.shared)}
+                  checked={values.shared}
+                />
+              }
+              title="Share this task with other users"
+              label="Shared — visible to other users"
+            />
+
+            <Button
+              disableElevation
+              disabled={isSaving}
+              fullWidth
+              size="large"
+              type="submit"
+              variant="contained"
+              color="primary"
+              title="Save task"
+              sx={{
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Save
+            </Button>
+          </Stack>
         </form>
       )}
     </Formik>

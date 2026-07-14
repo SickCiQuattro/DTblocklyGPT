@@ -1,5 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  useParams,
+  useNavigate,
+  useSearchParams,
+  useLocation,
+} from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { Box, CircularProgress, Typography } from '@mui/material'
 import useSWR, { useSWRConfig } from 'swr'
@@ -14,9 +19,12 @@ import {
   setLastSaved,
   triggerSave,
   triggerDiscard,
+  triggerSavedFlash,
   setWorkspaceReady,
   toggleChat,
+  toggleSim,
 } from 'store/reducers/task'
+import { openDrawer } from 'store/reducers/menu'
 import { BlocklyEditor, getBlocklyStructure } from 'features/blockly'
 import { useViewSettings } from 'features/blockly/utils/useViewSettings'
 import { useConformance } from 'features/blockly/utils/useConformance'
@@ -49,9 +57,18 @@ export const UnifiedWorkspace = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const location = useLocation()
   const { mutate } = useSWRConfig()
   const [searchParams] = useSearchParams()
   const typeParam = searchParams.get('type')
+  // The Tasks list "Run on the real robot" button lands here with this state
+  // instead of a query param — it's a one-shot instruction, not a bookmarkable
+  // URL, so it's consumed once and doesn't need to survive a refresh.
+  const navState = location.state as {
+    autoOpenRobot?: boolean
+    executionTarget?: 'sim' | 'real'
+  } | null
+  const initialExecutionTarget = navState?.executionTarget
 
   // Redux layout/sync states
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
@@ -83,9 +100,55 @@ export const UnifiedWorkspace = () => {
     }
   }, [typeParam, chatOpen, dispatch])
 
+  // Sync the robot panel to this visit's intent, once per mount. simOpen is
+  // a single global Redux flag with no per-task scope, so without this it
+  // leaks open from whichever task it was last toggled on into the next
+  // workspace you visit (including a brand-new task) — open only on the
+  // explicit "Run on the real robot" card action, force closed otherwise.
+  // Guarded by a ref, not just a simOpen check, so closing the panel
+  // afterwards doesn't reopen/reclose it on an unrelated re-render.
+  const autoOpenRobotHandledRef = useRef(false)
+  useEffect(() => {
+    if (autoOpenRobotHandledRef.current) return
+    autoOpenRobotHandledRef.current = true
+    const shouldBeOpen = !!navState?.autoOpenRobot
+    if (simOpen !== shouldBeOpen) dispatch(toggleSim())
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [])
+
   // Blockly View Settings
   const { viewSettings, updateViewSettings, resetViewSettings } =
     useViewSettings()
+
+  // Focus mode: collapse the nav rail and the Blockly toolbox while a run is
+  // in flight, then restore exactly what was open before. Ref-guarded so a
+  // re-render mid-run doesn't re-snapshot an already-collapsed layout.
+  const drawerOpen = useAppSelector((state) => state.menu.drawerOpen)
+  const isSimulationRunning = useAppSelector(
+    (state) => state.simulation.isRunning,
+  )
+  const preRunLayoutRef = useRef<{
+    drawerOpen: boolean
+    toolboxCollapsed: boolean
+  } | null>(null)
+  useEffect(() => {
+    if (isSimulationRunning && !preRunLayoutRef.current) {
+      preRunLayoutRef.current = {
+        drawerOpen,
+        toolboxCollapsed: viewSettings.toolboxCollapsed,
+      }
+      if (drawerOpen) dispatch(openDrawer(false))
+      if (!viewSettings.toolboxCollapsed) {
+        updateViewSettings({ toolboxCollapsed: true })
+      }
+    } else if (!isSimulationRunning && preRunLayoutRef.current) {
+      const snapshot = preRunLayoutRef.current
+      preRunLayoutRef.current = null
+      dispatch(openDrawer(snapshot.drawerOpen))
+      updateViewSettings({ toolboxCollapsed: snapshot.toolboxCollapsed })
+    }
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [isSimulationRunning])
 
   // Chat interaction states
   const [newChatResponse, setNewChatResponse] = useState(false)
@@ -164,6 +227,15 @@ export const UnifiedWorkspace = () => {
           status: taskData.status,
         }),
       )
+      // lastSaved is a single global Redux flag with no per-task scope, so
+      // without seeding it here it either stays null (StatusBar wrongly
+      // shows "Draft not saved" on a freshly-opened, untouched task) or
+      // leaks a previous task's save time into this one when navigating
+      // task-to-task without a remount. Seed it from the record's own
+      // last_modified so it reflects reality until the next real save.
+      if (taskData.last_modified) {
+        dispatch(setLastSaved(dayjs(taskData.last_modified).format('HH:mm:ss')))
+      }
       if (taskData.code) {
         const isVisual = (item: any): boolean => {
           if (typeof item !== 'object' || item === null) return false
@@ -193,6 +265,10 @@ export const UnifiedWorkspace = () => {
           status: 'draft',
         }),
       )
+      // Same leak as above, the other direction: a brand-new task has never
+      // been saved, but lastSaved would still carry whatever the previously
+      // open task last saved at if not cleared here.
+      dispatch(setLastSaved(null))
       setTaskStructure([])
     }
   }, [taskData, id, dispatch])
@@ -330,6 +406,7 @@ export const UnifiedWorkspace = () => {
         }
         void mutate({ url: endpoints.home.libraries.tasks })
         dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
+        dispatch(triggerSavedFlash(true))
 
         if (!id && targetId) {
           // If it was a newly created task, navigate to the correct URL path
@@ -534,6 +611,7 @@ export const UnifiedWorkspace = () => {
         <ChatThread
           taskId={id || null}
           taskStructure={taskStructure}
+          workspace={workspace}
           onClose={() => dispatch(toggleChat())}
           onApplyProposedTask={(proposed) => {
             setTaskStructure(proposed)
@@ -556,6 +634,7 @@ export const UnifiedWorkspace = () => {
         taskId={id || ''}
         taskStatus={taskData?.status}
         workspace={workspace}
+        initialExecutionTarget={initialExecutionTarget}
       />
 
       {/* JSON Viewer Bottom Panel (Step 6) */}

@@ -1,6 +1,7 @@
 import logging
 import json
 import copy
+import re
 import time
 from collections import Counter
 from typing import List, Dict, Any, Tuple
@@ -41,29 +42,48 @@ MAX_CHAT_HISTORY = 20
 logger = logging.getLogger(__name__)
 
 
+# ponytail: process-global cache, not per-request — fine for a single dev
+# server; a multi-worker deployment would need a shared cache (e.g. Redis).
+_SCENE_CACHE = {"value": None, "at": 0.0}
+_SCENE_CACHE_TTL_OK = 3       # seconds — scene changes slowly, avoid re-fetch on rapid chat turns
+_SCENE_CACHE_TTL_DOWN = 30    # seconds — don't re-pay the bridge timeout on every message while it's down
+
+
 def _scene_summary():
     """Live workspace state for the LLM prompt, aggregated by class+colour.
 
     Returns e.g. [{"type": "bottle", "color": "blue", "count": 2}] — no
     bboxes, the model only needs what is visible. "unavailable" when the
     vision bridge is down (sim without camera, bridge off): the prompt
-    tolerates it.
+    tolerates it. Cached briefly so a burst of chat messages (or a message
+    unrelated to vision) doesn't re-hit the bridge, and re-probe less often
+    while it's down instead of eating its timeout on every turn.
     """
+    now = time.monotonic()
+    cached = _SCENE_CACHE["value"]
+    ttl = _SCENE_CACHE_TTL_DOWN if cached == "unavailable" else _SCENE_CACHE_TTL_OK
+    if cached is not None and (now - _SCENE_CACHE["at"]) < ttl:
+        return cached
+
     from backend.functions.flask_ros_client import FlaskRosClient
 
     try:
         state = FlaskRosClient().get_vision_state()
+        counts = Counter(
+            (d.get("class"), d.get("color"))
+            for d in state.get("detections", [])
+            if d.get("class")
+        )
+        result = [
+            {"type": cls, **({"color": color} if color else {}), "count": n}
+            for (cls, color), n in sorted(counts.items(), key=str)
+        ]
     except Exception:
-        return "unavailable"
-    counts = Counter(
-        (d.get("class"), d.get("color"))
-        for d in state.get("detections", [])
-        if d.get("class")
-    )
-    return [
-        {"type": cls, **({"color": color} if color else {}), "count": n}
-        for (cls, color), n in sorted(counts.items(), key=str)
-    ]
+        result = "unavailable"
+
+    _SCENE_CACHE["value"] = result
+    _SCENE_CACHE["at"] = now
+    return result
 
 
 @dataclass
@@ -384,7 +404,8 @@ Where AbstractStep is one of:
 
 Conditions (AbstractCondition) can be one of:
 - {{"type": "find_object", "objectId": number, "objectName": string}}  // true while the camera sees the object
-- {{"type": "gesture", "gestureType": "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK" | "THREE_FINGERS" | "PINCH" | "POINTING"}}  // true when the camera sees that hand gesture
+- {{"type": "gesture", "gestureType": "THUMBS_UP" | "THUMBS_DOWN" | "OPEN_HAND" | "FIST" | "PEACE" | "OK"}}  // true when the camera sees that hand gesture
+- {{"type": "voice", "voiceWord": "YES" | "NO" | "DONE" | "PROCEED"}}  // true when the operator says that word out loud
 - {{"type": "timer", "seconds": number}}  // true once the given number of seconds has passed
 - {{"type": "and", "left": AbstractCondition, "right": AbstractCondition}}  // true only if BOTH inner conditions are true
 - {{"type": "or", "left": AbstractCondition, "right": AbstractCondition}}   // true if AT LEAST ONE inner condition is true
@@ -616,7 +637,7 @@ CHATGPT_FUNCTION_MULTIMODAL = {
             "properties": {
                 "answer": {
                     "type": "string",
-                    "description": "Natural language explanation shown to the user",
+                    "description": "Natural language explanation shown to the user. Plain text — write real \" characters and real → arrows directly, do NOT backslash-escape quotes or use \\uXXXX sequences here (that JSON-string-escaping style is only for the 'task' field below, never for 'answer').",
                 },
                 "task": {
                     "type": "string",
@@ -653,6 +674,28 @@ CHATGPT_FUNCTION_MULTIMODAL = {
         },
     },
 }
+
+
+def fix_stray_json_escapes(text: str) -> str:
+    """Defensive normalization for a known LLM formatting slip: the model
+    occasionally JSON-escapes free text (the 'answer' field, suggestion
+    chips) as if it were going to be re-embedded in JSON — likely pattern-
+    matching the 'task' field's own schema example, which is documented as
+    a JSON-string-encoded array right next to plain-text fields. That leaves
+    literal backslash-quote (\\") and \\uXXXX sequences visible in text the
+    user actually reads instead of a real " or →. The prompt now tells the
+    model not to do this, but LLM instruction-following isn't guaranteed, so
+    this undoes just those two specific patterns — narrow enough not to
+    mangle a legitimate backslash (e.g. in a Windows-style path) the model
+    might type on purpose.
+    """
+    if not text or "\\" not in text:
+        return text
+    text = text.replace('\\"', '"')
+    text = re.sub(
+        r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), text
+    )
+    return text
 
 
 def repair_flattened_steps(steps, warnings=None):
@@ -774,8 +817,12 @@ def validate_condition(condition, cond_index, warnings, data_objects):
             condition["objectName"] = obj["name"]
     elif cond_type == "gesture":
         gesture_type = condition.get("gestureType")
-        if gesture_type not in ["THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK", "THREE_FINGERS", "PINCH", "POINTING"]:
+        if gesture_type not in ["THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK"]:
             warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid gestureType."})
+    elif cond_type == "voice":
+        voice_word = condition.get("voiceWord")
+        if voice_word not in ["YES", "NO", "DONE", "PROCEED"]:
+            warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid voiceWord."})
     elif cond_type == "timer":
         if not isinstance(condition.get("seconds"), (int, float)) or condition.get("seconds") < 0:
             warnings.append({"severity": "error", "message": f"Condition {cond_index}: invalid seconds."})
@@ -893,7 +940,10 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             })
 
     elif step_type == "human_action":
-        confirm_event = step.get("confirmEvent")
+        # Read/validate on step_copy, not step: validate_condition mutates the
+        # condition dict in place (DB id/name normalization) and step_copy is
+        # what gets returned — mutating the original left the fix discarded.
+        confirm_event = step_copy.get("confirmEvent")
         if confirm_event is not None:
             validate_condition(confirm_event, f"{step_index}.human_action.confirmEvent", warnings, data_objects)
 
@@ -916,11 +966,15 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             })
         validated_children = []
         for i, sub_step in enumerate(steps):
-            validated_children.append(validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings, data_objects, data_locations, data_actions))
+            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings, data_objects, data_locations, data_actions)
+            if validated_sub_step is not None:
+                validated_children.append(validated_sub_step)
         step_copy["steps"] = validated_children
 
     elif step_type == "repeat_until":
-        condition = step.get("condition")
+        # See human_action above: read/validate on step_copy so the DB
+        # normalization validate_condition applies in place actually sticks.
+        condition = step_copy.get("condition")
         steps = step.get("do")
         if not steps:  # fallback if do is None or empty list []
             steps = step.get("steps", [])
@@ -928,30 +982,47 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             validate_condition(condition, f"{step_index}.repeat_until.condition", warnings, data_objects)
         validated_children = []
         for i, sub_step in enumerate(steps):
-            validated_children.append(validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings, data_objects, data_locations, data_actions))
+            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings, data_objects, data_locations, data_actions)
+            if validated_sub_step is not None:
+                validated_children.append(validated_sub_step)
         step_copy["do"] = validated_children
 
     elif step_type == "when":
-        condition = step.get("condition")
+        # See human_action above: read/validate on step_copy so the DB
+        # normalization validate_condition applies in place actually sticks.
+        condition = step_copy.get("condition")
         do_steps = step.get("do", [])
         otherwise_steps = step.get("otherwise", [])
         if condition is not None:
             validate_condition(condition, f"{step_index}.when.condition", warnings, data_objects)
         validated_do = []
         for i, sub_step in enumerate(do_steps):
-            validated_do.append(validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings, data_objects, data_locations, data_actions))
+            validated_sub_step = validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings, data_objects, data_locations, data_actions)
+            if validated_sub_step is not None:
+                validated_do.append(validated_sub_step)
         step_copy["do"] = validated_do
         if otherwise_steps is not None:
             validated_otherwise = []
             for i, sub_step in enumerate(otherwise_steps):
-                validated_otherwise.append(validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings, data_objects, data_locations, data_actions))
+                validated_sub_step = validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings, data_objects, data_locations, data_actions)
+                if validated_sub_step is not None:
+                    validated_otherwise.append(validated_sub_step)
             step_copy["otherwise"] = validated_otherwise
 
     else:
+        # A step with no recognizable type is a malformed LLM output, not a
+        # real step to show the user — drop it instead of passing a phantom
+        # entry through to the proposed-task preview (callers must filter the
+        # None out, see the four validate_step(...) call sites below).
+        # Warning, not error: dropping it already keeps garbage out of the
+        # workspace, so the rest of an otherwise-valid proposal shouldn't be
+        # discarded wholesale over one malformed step (is_valid only looks at
+        # "error"-severity entries — see requires_confirmation below).
         warnings.append({
-            "severity": "error",
-            "message": f"Step {step_index}: unknown step type '{step_type}'."
+            "severity": "warning",
+            "message": f"Step {step_index}: the assistant proposed a step with no type — it was dropped."
         })
+        return None
 
     return step_copy
 
@@ -1014,7 +1085,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         temperature=CHATGPT_TEMPERATURE
                     )
                     response_json = llm_response.raw_arguments
-                    answer = response_json.get("answer", "").strip()
+                    answer = fix_stray_json_escapes(response_json.get("answer", "").strip())
                     llm_task_raw = response_json.get("task", "[]")
                     if isinstance(llm_task_raw, str):
                         try:
@@ -1042,7 +1113,9 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     validated_task = []
 
                     for step_index, step in enumerate(llm_task):
-                        validated_task.append(validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions))
+                        validated_step = validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions)
+                        if validated_step is not None:
+                            validated_task.append(validated_step)
 
                     message_parts = []
                     if answer:
@@ -1051,7 +1124,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     # LLM-provided actionable suggestions (shown as chips).
                     for part in (response_json.get("messageParts") or []):
                         if isinstance(part, dict) and part.get("type") == "suggestion" and part.get("content"):
-                            message_parts.append({"type": "suggestion", "content": str(part["content"])})
+                            message_parts.append({"type": "suggestion", "content": fix_stray_json_escapes(str(part["content"]))})
 
                     frontend_warnings = [w["message"] for w in validation_warnings]
                     for warning_msg in frontend_warnings:

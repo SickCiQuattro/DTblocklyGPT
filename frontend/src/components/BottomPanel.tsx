@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Box, Typography, IconButton } from '@mui/material'
+import { Box, Typography, IconButton, Tooltip } from '@mui/material'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
 import { Theme as ThemeOption } from 'themes/theme'
@@ -11,6 +11,34 @@ const PANEL_BG = '#141423'
 const PANEL_TEXT = '#A9B2C3'
 const PANEL_ACCENT = tokens.primary.main
 const TERMINAL_GREEN = tokens.success.light
+const TERMINAL_NUMBER = tokens.info.light
+const TERMINAL_KEYWORD = tokens.warning.light
+
+// Design spec §3.8 calls for "syntax highlight" on the JSON view — this is
+// the classic escape-then-tag-tokens approach (MDN's canonical json-format
+// snippet): HTML-escape the whole string FIRST, then a single regex finds
+// string/number/boolean/null tokens in the already-escaped text and wraps
+// each in a <span>. Because escaping happens before any tag is introduced,
+// no user-authored field (e.g. a step description containing "<") can break
+// out of its span — dangerouslySetInnerHTML below is safe on that ordering.
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const highlightJson = (data: unknown): string => {
+  const escaped = escapeHtml(JSON.stringify(data, null, 2))
+  return escaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false)\b|\bnull\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    (match) => {
+      let color = TERMINAL_NUMBER
+      if (/^"/.test(match)) {
+        color = /:$/.test(match) ? PANEL_ACCENT : TERMINAL_GREEN
+      } else if (/^(true|false|null)$/.test(match)) {
+        color = TERMINAL_KEYWORD
+      }
+      return `<span style="color:${color}">${match}</span>`
+    },
+  )
+}
 
 interface BottomPanelProps {
   data: any[]
@@ -56,21 +84,22 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
         >
           Task Logic (JSON)
         </Typography>
-        <IconButton
-          size="small"
-          onClick={() => setIsExpanded(!isExpanded)}
-          sx={{
-            color: PANEL_TEXT,
-            padding: '2px',
-            '&:hover': {
-              color: '#FFF',
-              background: 'rgba(255, 255, 255, 0.08)',
-            },
-          }}
-          title={isExpanded ? 'Minimize panel' : 'Maximize panel'}
-        >
-          {isExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        </IconButton>
+        <Tooltip title={isExpanded ? 'Minimize panel' : 'Maximize panel'}>
+          <IconButton
+            size="small"
+            onClick={() => setIsExpanded(!isExpanded)}
+            sx={{
+              color: PANEL_TEXT,
+              padding: '2px',
+              '&:hover': {
+                color: '#FFF',
+                background: 'rgba(255, 255, 255, 0.08)',
+              },
+            }}
+          >
+            {isExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       <Box
@@ -101,11 +130,12 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             fontFamily: "'Geist Mono', 'SFMono-Regular', Consolas, monospace",
             fontSize: '0.8rem',
             lineHeight: 1.5,
-            color: TERMINAL_GREEN,
+            color: PANEL_TEXT,
           }}
-        >
-          {JSON.stringify(data, null, 2)}
-        </pre>
+          // Safe: highlightJson HTML-escapes the full string before wrapping
+          // any token in a <span> — see the comment above its definition.
+          dangerouslySetInnerHTML={{ __html: highlightJson(data) }}
+        />
       </Box>
     </Box>
   )

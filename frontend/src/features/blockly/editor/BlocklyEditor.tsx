@@ -7,7 +7,7 @@
  *  - Shadow-block picker popover (useShadowPicker + ShadowPickerMenu)
  *  - Context-menu bridge (installContextMenuBridge)
  *  - Workspace controls overlay (zoom, undo/redo)
- *  - Confirmation dialogs (ConfirmDeleteDialog, InlineTaskDialog)
+ *  - Confirmation dialogs (ConfirmDialog, InlineTaskDialog)
  *
  * Complex sub-systems (shadow picker catalog, dialog presentation) live in
  * dedicated modules under editor/shadowPicker/ and editor/dialogs/.
@@ -95,11 +95,11 @@ import {
 } from './macroExplosion'
 import {
   BlockSearchDialog,
-  ConfirmDeleteDialog,
   InlineTaskDialog,
   KeyboardHelpDialog,
 } from './dialogs'
 
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
 import { KeycapHint, modKey } from 'components/KeycapHint'
 import { SegmentedControl } from 'components/SegmentedControl'
@@ -470,7 +470,7 @@ interface BlocklyEditorProps {
  *
  * Sub-systems are delegated to dedicated hooks/components:
  *  - Shadow picker → useShadowPicker + ShadowPickerMenu
- *  - Dialogs       → ConfirmDeleteDialog + InlineTaskDialog
+ *  - Dialogs       → ConfirmDialog + InlineTaskDialog
  *  - Context menu  → installContextMenuBridge (contextMenu.ts)
  */
 export const BlocklyEditor = ({
@@ -1788,7 +1788,7 @@ export const BlocklyEditor = ({
 
         {/* Generic delete confirmation dialog */}
         {confirmDialog && (
-          <ConfirmDeleteDialog
+          <ConfirmDialog
             open
             message={confirmDialog.message}
             onConfirm={confirmDialog.onConfirm}

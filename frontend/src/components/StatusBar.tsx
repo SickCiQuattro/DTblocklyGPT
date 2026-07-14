@@ -5,16 +5,39 @@ import { useDispatch } from 'react-redux'
 import { Code } from 'lucide-react'
 
 import { useAppSelector } from 'store/reducers'
-import { toggleCode } from 'store/reducers/task'
+import { toggleCode, triggerSavedFlash } from 'store/reducers/task'
 
 export const StatusBar: React.FC = () => {
   const theme = useTheme()
   const dispatch = useDispatch()
   const lastSaved = useAppSelector((state) => state.task.lastSaved)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
+  const savedFlash = useAppSelector((state) => state.task.savedFlash)
   const isSimulationRunning = useAppSelector(
     (state) => state.simulation.isRunning,
   )
+
+  // Brief "Saved ✓" flash driven by a dedicated one-shot Redux flag, fired
+  // only by a genuine save round-trip (task-workspace/index.tsx) — NOT
+  // derived from lastSaved changing, since lastSaved is also seeded from the
+  // task's own last_modified on load/task-switch and that must display the
+  // timestamp quietly, without flashing the checkmark as if a save just
+  // happened.
+  const [justSaved, setJustSaved] = React.useState(false)
+  React.useEffect(() => {
+    if (!savedFlash) return
+    setJustSaved(true)
+    // Reset the Redux flag inside the same timeout that clears the local
+    // flash, not synchronously here — dispatching it right away would flip
+    // savedFlash back to false within this same tick, re-running this effect
+    // and firing its cleanup (clearTimeout) before the 2s window elapses,
+    // canceling the flash-off almost immediately after it starts.
+    const timer = setTimeout(() => {
+      setJustSaved(false)
+      dispatch(triggerSavedFlash(false))
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [savedFlash, dispatch])
 
   return (
     <Box
@@ -56,16 +79,22 @@ export const StatusBar: React.FC = () => {
         </Typography>
       </Box>
 
-      {/* Center: Last saved timestamp */}
+      {/* Center: Last saved timestamp, brief success flash on save */}
       <Box>
         <Typography
           sx={{
             fontFamily: 'inherit',
-            fontSize: '0.74rem',
-            fontWeight: 500,
+            fontSize: justSaved ? '0.8rem' : '0.74rem',
+            fontWeight: justSaved ? 700 : 500,
+            color: justSaved ? 'success.dark' : 'inherit',
+            transition: 'color 0.6s ease, font-size 0.3s ease',
           }}
         >
-          {lastSaved ? `Saved at ${lastSaved}` : 'Draft not saved'}
+          {justSaved
+            ? 'Saved ✓'
+            : lastSaved
+              ? `Saved at ${lastSaved}`
+              : 'Draft not saved'}
         </Typography>
       </Box>
 

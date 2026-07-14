@@ -13,10 +13,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from '@mui/material'
 import {
   Play,
@@ -32,6 +28,9 @@ import {
   CheckCircle2,
   VideoOff,
   Bell,
+  Maximize2,
+  Minimize2,
+  Info,
 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import * as Blockly from 'blockly/core'
@@ -39,7 +38,11 @@ import { useTheme } from '@mui/material/styles'
 
 import { TaskStatus } from 'pages/tasks/types'
 import { useAppSelector } from 'store/reducers'
-import { toggleSim } from 'store/reducers/task'
+import { toggleSim, toggleRobotPanelWidth } from 'store/reducers/task'
+import {
+  RECOGNIZED_GESTURES,
+  RECOGNIZED_VOICE_COMMANDS,
+} from 'constants/recognitionRegistry'
 import { endpoints } from 'services/endpoints'
 import { MethodHTTP, fetchApi } from 'services/api'
 import {
@@ -56,6 +59,7 @@ import {
   clearExecutingHighlights,
 } from 'features/blockly/utils/blockHighlight'
 import { SegmentedControl } from 'components/SegmentedControl'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 
 import { panel } from './digitalTwin/panelTokens'
 
@@ -66,6 +70,8 @@ interface DigitalTwinPanelProps {
   taskStatus?: TaskStatus
   /** Live editor workspace, used to highlight the block currently executing. */
   workspace?: Blockly.WorkspaceSvg | null
+  /** Preselects "Run in" (e.g. arriving via the Tasks list "Run on the real robot" action). Defaults to 'sim'. */
+  initialExecutionTarget?: 'sim' | 'real'
 }
 
 // Section-header pattern shared by LIVE VIEW / EVENTS / RUN, matching the
@@ -89,11 +95,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   taskId,
   taskStatus,
   workspace,
+  initialExecutionTarget,
 }) => {
   const theme = useTheme()
   const dispatch = useDispatch()
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
+  const robotPanelWidth = useAppSelector((state) => state.task.robotPanelWidth)
 
   // Sandbox toggles for the "Test recognition" tab only — independent of any
   // run (mic permission shouldn't be required just to test gestures, and
@@ -109,6 +117,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
   )
+  // First-MJPEG-frame gate: without this, the video area sits empty (no
+  // feedback at all) for however long Gazebo takes to spin up after Run.
+  const [feedFrameLoaded, setFeedFrameLoaded] = useState(false)
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -118,8 +129,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     text: string
   } | null>(null)
   const wasRunningRef = useRef(false)
-  const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>('sim')
+  const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>(
+    initialExecutionTarget ?? 'sim',
+  )
   const [confirmRealRun, setConfirmRealRun] = useState(false)
+  const isWide = robotPanelWidth === 'wide'
   // Hardware-armed status (server DRIVE_HARDWARE + cobotta_node reachable),
   // fetched when "Real robot" is selected — the b-CAP host is server config
   // now, not a per-request robot picker.
@@ -268,6 +282,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     const t = setTimeout(() => setRunResult(null), 5000)
     return () => clearTimeout(t)
   }, [simulation.isRunning, simulation.message])
+
+  // A fresh run starts with an empty feed again — without this the "Starting
+  // simulation…" spinner would only ever show on the very first run.
+  useEffect(() => {
+    if (simulation.isRunning) setFeedFrameLoaded(false)
+  }, [simulation.isRunning])
+
+  // Auto-completing a gesture/voice wait makes no sense once the arm is
+  // physically moving — force live (real) event handling for as long as
+  // "Real robot" is selected. The switch itself is hidden in that case
+  // (see the merged Run in / Events section below).
+  useEffect(() => {
+    if (executionTarget === 'real') setRunMode('live')
+  }, [executionTarget])
 
   // Hardware-armed badge: fetch once when "Real robot" is selected. Not
   // polled — the badge is a pre-flight check at selection time, not a live
@@ -445,7 +473,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         right: '12px',
         top: 'calc(var(--layout-appbar-height, 56px) + 12px)',
         bottom: 'calc(var(--layout-statusbar-height, 40px) + 12px)',
-        width: '35vw',
+        width: isWide ? '50vw' : '35vw',
         zIndex: 100,
         background: panel.surface,
         backdropFilter: 'blur(24px)',
@@ -453,7 +481,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         border: `1px solid ${panel.hairlineStrong}`,
         boxShadow: theme.customShadows.cardDark,
         transform: simOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition:
+          'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
@@ -518,17 +547,34 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             </Typography>
           </Stack>
         </Stack>
-        <IconButton
-          onClick={handleClose}
-          size="small"
-          aria-label="Close robot panel"
-          sx={{
-            color: panel.iconMuted,
-            '&:hover': { color: panel.white, background: panel.hover },
-          }}
-        >
-          <X size={16} />
-        </IconButton>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <Tooltip title={isWide ? 'Standard width' : 'Wide'}>
+            <IconButton
+              onClick={() => dispatch(toggleRobotPanelWidth())}
+              size="small"
+              aria-label={
+                isWide ? 'Switch to standard width' : 'Switch to wide'
+              }
+              sx={{
+                color: panel.iconMuted,
+                '&:hover': { color: panel.white, background: panel.hover },
+              }}
+            >
+              {isWide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            onClick={handleClose}
+            size="small"
+            aria-label="Close robot panel"
+            sx={{
+              color: panel.iconMuted,
+              '&:hover': { color: panel.white, background: panel.hover },
+            }}
+          >
+            <X size={16} />
+          </IconButton>
+        </Stack>
       </Box>
 
       {/* ── Scrollable body ── */}
@@ -641,7 +687,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               exclusive
               onChange={(_, v) => v && setLiveView(v)}
               options={[
-                { value: 'simulation', label: 'Simulation' },
+                { value: 'simulation', label: 'Task Execution' },
                 { value: 'camera', label: 'Test recognition' },
               ]}
             />
@@ -730,16 +776,47 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     )}
                   </>
                 ) : simulation.isRunning ? (
-                  <img
-                    src={MJPEG_URL}
-                    alt="Robot camera feed"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                  />
+                  <>
+                    <img
+                      src={MJPEG_URL}
+                      alt="Robot camera feed"
+                      onLoad={() => setFeedFrameLoaded(true)}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        // 'contain' (not 'cover') so the feed stays
+                        // proportional — no crop/deformation — at both the
+                        // standard and wide panel widths.
+                        objectFit: 'contain',
+                        display: 'block',
+                        background: panel.videoBg,
+                      }}
+                    />
+                    {!feedFrameLoaded && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          gap: 1,
+                          background: panel.videoBg,
+                        }}
+                      >
+                        <CircularProgress
+                          size={20}
+                          sx={{ color: panel.primary }}
+                        />
+                        <Typography
+                          sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                        >
+                          Starting simulation...
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
                 ) : (
                   <Box
                     sx={{
@@ -982,6 +1059,33 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             </>
           ) : (
             <Box>
+              {/* Sandbox intro — this tab is diagnostic, not the run path;
+                  say so plainly since nothing here has a Run button to make
+                  it obvious. */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: panel.primaryTint(0.06),
+                  border: `1px solid ${panel.primaryTint(0.2)}`,
+                  mb: 1.5,
+                }}
+              >
+                <Info
+                  size={15}
+                  color={panel.primaryLight}
+                  style={{ flexShrink: 0, marginTop: 1 }}
+                />
+                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                  Test recognition — try the webcam, gestures, and voice
+                  commands before running the task. Nothing here moves the real
+                  arm or changes the workspace.
+                </Typography>
+              </Box>
+
               <Stack
                 direction="row"
                 sx={{
@@ -1354,6 +1458,95 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Select>
                 </FormControl>
               )}
+
+              {/* Recognition legend — what the pipeline actually recognizes,
+                  sourced from the same registry the gesture_block/
+                  voice_command_block dropdowns use, so this can never drift
+                  out of sync with what a task can actually check for. */}
+              <Box
+                sx={{
+                  mt: 1.5,
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${panel.hairline}`,
+                  background: panel.chromeStrong,
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: panel.muted,
+                    mb: 0.8,
+                  }}
+                >
+                  Gestures ({RECOGNIZED_GESTURES.length})
+                </Typography>
+                <Stack
+                  direction="row"
+                  sx={{ flexWrap: 'wrap', gap: '6px', mb: 1.2 }}
+                >
+                  {RECOGNIZED_GESTURES.map((g) => (
+                    <Box
+                      key={g.code}
+                      sx={{
+                        padding: '3px 9px',
+                        borderRadius: '12px',
+                        border: `1px solid ${panel.hairlineStrong}`,
+                        background: panel.chrome,
+                      }}
+                    >
+                      <Typography
+                        sx={{ fontSize: '0.68rem', color: panel.textDim }}
+                      >
+                        {g.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+
+                <Typography
+                  sx={{
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: panel.muted,
+                    mb: 0.8,
+                  }}
+                >
+                  Voice ({RECOGNIZED_VOICE_COMMANDS.length})
+                </Typography>
+                <Stack
+                  direction="row"
+                  sx={{ flexWrap: 'wrap', gap: '6px', mb: 1.2 }}
+                >
+                  {RECOGNIZED_VOICE_COMMANDS.map((v) => (
+                    <Box
+                      key={v.code}
+                      sx={{
+                        padding: '3px 9px',
+                        borderRadius: '12px',
+                        border: `1px solid ${panel.hairlineStrong}`,
+                        background: panel.chrome,
+                      }}
+                    >
+                      <Typography
+                        sx={{ fontSize: '0.68rem', color: panel.textDim }}
+                      >
+                        {v.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+
+                <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                  Objects are detected via the robot's camera (YOLO) — see the
+                  object catalog in the docs for the full list.
+                </Typography>
+              </Box>
             </Box>
           )}
         </Box>
@@ -1500,150 +1693,118 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Box>
         )}
 
-        {/* ── RUN ── */}
-        <Box>
-          <SectionLabel>Run</SectionLabel>
+        {/* ── RUN — only on the Task Execution tab; the Test recognition
+              sandbox is a diagnostic space with no run affordance at all ── */}
+        {liveView === 'simulation' && (
+          <Box>
+            <SectionLabel>Run</SectionLabel>
 
-          <Box
-            sx={{
-              padding: '10px 14px',
-              background: panel.chrome,
-              borderRadius: '8px',
-              border: `1px solid ${panel.hairlineStrong}`,
-              mb: 1.5,
-            }}
-          >
-            <Typography
+            <Box
               sx={{
-                fontFamily: "'Geist Mono', monospace",
-                fontSize: '0.68rem',
-                color: panel.faint,
-                marginBottom: '3px',
-                letterSpacing: '0.05em',
+                padding: '10px 14px',
+                background: panel.chrome,
+                borderRadius: '8px',
+                border: `1px solid ${panel.hairlineStrong}`,
+                mb: 1.5,
               }}
             >
-              STATUS
-            </Typography>
-            <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
-              {simulation.isRunning && (
-                <CircularProgress size={11} sx={{ color: panel.primary }} />
-              )}
               <Typography
                 sx={{
-                  fontSize: '0.8rem',
-                  fontWeight: 500,
-                  color: simulation.isRunning
-                    ? panel.primaryLight
-                    : panel.muted,
+                  fontFamily: "'Geist Mono', monospace",
+                  fontSize: '0.68rem',
+                  color: panel.faint,
+                  marginBottom: '3px',
+                  letterSpacing: '0.05em',
                 }}
               >
-                {simulation.message}
+                STATUS
               </Typography>
+              <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
+                {simulation.isRunning && (
+                  <CircularProgress size={11} sx={{ color: panel.primary }} />
+                )}
+                <Typography
+                  sx={{
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                    color: simulation.isRunning
+                      ? panel.primaryLight
+                      : panel.muted,
+                  }}
+                >
+                  {simulation.message}
+                </Typography>
+              </Stack>
+            </Box>
+
+            <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
+              <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
+                Run in:
+              </Typography>
+              <SegmentedControl
+                dark
+                value={executionTarget}
+                exclusive
+                disabled={simulation.isRunning}
+                onChange={(_, v) => v && setExecutionTarget(v)}
+                options={[
+                  {
+                    value: 'sim',
+                    label: 'Simulation',
+                    icon: <MonitorPlay size={13} />,
+                  },
+                  {
+                    value: 'real',
+                    label: 'Real robot',
+                    icon: <Cpu size={13} />,
+                  },
+                ]}
+              />
             </Stack>
-          </Box>
 
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
-            <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
-              Run in:
-            </Typography>
-            <SegmentedControl
-              dark
-              value={executionTarget}
-              exclusive
-              disabled={simulation.isRunning}
-              onChange={(_, v) => v && setExecutionTarget(v)}
-              options={[
-                {
-                  value: 'sim',
-                  label: 'Simulation',
-                  icon: <MonitorPlay size={13} />,
-                },
-                {
-                  value: 'real',
-                  label: 'Real robot',
-                  icon: <Cpu size={13} />,
-                },
-              ]}
-            />
-          </Stack>
-
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
-            <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
-              Events:
-            </Typography>
-            <SegmentedControl
-              dark
-              value={runMode}
-              exclusive
-              disabled={simulation.isRunning}
-              onChange={(_, v) => v && setRunMode(v)}
-              options={[
-                { value: 'auto', label: 'Auto-complete' },
-                { value: 'live', label: 'Execute live' },
-              ]}
-            />
-          </Stack>
-
-          {/* Only what this task actually uses — never both by default —
-              and said up front, since the browser's own permission prompt
-              gives no context for why it's asking. */}
-          {runMode === 'live' && needsCameraOrVoice && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                background: panel.primaryTint(0.08),
-                border: `1px solid ${panel.primaryTint(0.25)}`,
-                mb: 1,
-              }}
-            >
-              {taskNeedsCamera ? (
-                <Camera size={15} color={panel.primary} />
-              ) : (
-                <Mic size={15} color={panel.primary} />
-              )}
-              <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
-                Run will ask for{' '}
-                {taskNeedsCamera && taskNeedsVoice
-                  ? 'camera and microphone access'
-                  : taskNeedsCamera
-                    ? 'camera access'
-                    : 'microphone access'}{' '}
-                — gestures/voice must really happen.
-              </Typography>
-            </Box>
-          )}
-
-          {/* Both targets get an explicit, honest note — silence on the
-              Simulation side would read as "probably fine" rather than the
-              actual guarantee (the physical arm cannot move from this button,
-              full stop). Progressive disclosure only for the extra hardware
-              badge/select, which only matters once "Real robot" is chosen. */}
-          {executionTarget === 'sim' && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                background: panel.successTint(0.1),
-                border: `1px solid ${panel.successTint(0.3)}`,
-                mb: 1,
-              }}
-            >
-              <MonitorPlay size={15} color={panel.success} />
-              <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
-                Twin only — the physical arm never moves from this button.
-              </Typography>
-            </Box>
-          )}
-
-          {executionTarget === 'real' && (
-            <>
+            {/* Event handling folds into the target choice instead of being a
+              separate, unrelated-sounding "Events" control: on Simulation
+              it's an optional convenience switch; on Real robot it's not a
+              choice at all (auto-completing a physical gesture/voice wait
+              makes no sense and is unsafe), so the switch is replaced by a
+              plain safety notice and runMode is forced to 'live'. */}
+            {executionTarget === 'sim' ? (
+              <Stack
+                direction="row"
+                sx={{
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 1,
+                }}
+              >
+                <Box>
+                  <Typography
+                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                  >
+                    Auto-complete gesture/voice steps
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                    Skip the camera/microphone requirements during simulation.
+                  </Typography>
+                </Box>
+                <Switch
+                  size="small"
+                  checked={runMode === 'auto'}
+                  disabled={simulation.isRunning}
+                  onChange={(e) =>
+                    setRunMode(e.target.checked ? 'auto' : 'live')
+                  }
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: panel.primary,
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: panel.primary,
+                    },
+                  }}
+                />
+              </Stack>
+            ) : (
               <Box
                 sx={{
                   display: 'flex',
@@ -1660,177 +1821,215 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 <Typography
                   sx={{ fontSize: '0.72rem', color: panel.warningLight }}
                 >
-                  Live hardware — the real robot will move
+                  Live hardware — the real robot will move. Gestures and voice
+                  commands must be performed live.
                 </Typography>
               </Box>
-            </>
-          )}
-        </Box>
+            )}
+
+            {/* Only what this task actually uses — never both by default —
+              and said up front, since the browser's own permission prompt
+              gives no context for why it's asking. */}
+            {runMode === 'live' && needsCameraOrVoice && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: panel.primaryTint(0.08),
+                  border: `1px solid ${panel.primaryTint(0.25)}`,
+                  mb: 1,
+                }}
+              >
+                {taskNeedsCamera ? (
+                  <Camera size={15} color={panel.primary} />
+                ) : (
+                  <Mic size={15} color={panel.primary} />
+                )}
+                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                  Run will ask for{' '}
+                  {taskNeedsCamera && taskNeedsVoice
+                    ? 'camera and microphone access'
+                    : taskNeedsCamera
+                      ? 'camera access'
+                      : 'microphone access'}{' '}
+                  — gestures/voice must really happen.
+                </Typography>
+              </Box>
+            )}
+
+            {/* Both targets get an explicit, honest note — silence on the
+              Simulation side would read as "probably fine" rather than the
+              actual guarantee (the physical arm cannot move from this button,
+              full stop). Progressive disclosure only for the extra hardware
+              badge/select, which only matters once "Real robot" is chosen. */}
+            {executionTarget === 'sim' && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: panel.successTint(0.1),
+                  border: `1px solid ${panel.successTint(0.3)}`,
+                  mb: 1,
+                }}
+              >
+                <MonitorPlay size={15} color={panel.success} />
+                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                  Twin only — the physical arm never moves from this button.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
       </Box>
 
-      {/* ── Sticky footer: primary action, always visible ── */}
-      <Box
-        sx={{
-          flexShrink: 0,
-          padding: '14px 16px',
-          borderTop: `1px solid ${panel.hairline}`,
-          background: panel.chrome,
-        }}
-      >
-        <Button
-          fullWidth
-          onClick={simulation.isRunning ? stopSimulation : handleRun}
-          disabled={
-            !simulation.isRunning &&
-            (!canRun || (executionTarget === 'real' && !hardwareArmed))
-          }
-          variant="contained"
-          color={simulation.isRunning ? 'error' : 'primary'}
-          startIcon={
-            simulation.isRunning ? <Square size={15} /> : <Play size={15} />
-          }
+      {/* ── Sticky footer: primary action — hidden entirely in the Test
+            recognition sandbox, which has no run affordance ── */}
+      {liveView === 'simulation' && (
+        <Box
           sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            fontWeight: 600,
-            fontSize: '0.85rem',
-            py: 1,
-            boxShadow: 'none',
-            '&:hover': { boxShadow: 'none' },
-            ...(simulation.isRunning
-              ? {}
-              : {
-                  background: panel.primary,
-                  '&:hover': {
-                    background: panel.primaryDark,
-                    boxShadow: 'none',
-                  },
-                }),
-            '&.Mui-disabled': {
-              background: panel.primaryTint(0.18),
-              color: panel.iconMuted,
-            },
+            flexShrink: 0,
+            padding: '14px 16px',
+            borderTop: `1px solid ${panel.hairline}`,
+            background: panel.chrome,
           }}
         >
-          {simulation.isRunning
-            ? 'Stop'
-            : executionTarget === 'real'
-              ? 'Run on Robot'
-              : 'Run simulation'}
-        </Button>
-        {executionTarget === 'real' && (
-          <Typography
+          <Button
+            fullWidth
+            onClick={simulation.isRunning ? stopSimulation : handleRun}
+            disabled={
+              !simulation.isRunning &&
+              (!canRun || (executionTarget === 'real' && !hardwareArmed))
+            }
+            variant="contained"
+            color={simulation.isRunning ? 'error' : 'primary'}
+            startIcon={
+              simulation.isRunning ? <Square size={15} /> : <Play size={15} />
+            }
             sx={{
-              fontSize: '0.66rem',
-              color: panel.textDim,
-              mt: 0.8,
-              textAlign: 'center',
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              py: 1,
+              boxShadow: 'none',
+              '&:hover': { boxShadow: 'none' },
+              ...(simulation.isRunning
+                ? {}
+                : {
+                    background: panel.primary,
+                    '&:hover': {
+                      background: panel.primaryDark,
+                      boxShadow: 'none',
+                    },
+                  }),
+              '&.Mui-disabled': {
+                background: panel.primaryTint(0.18),
+                color: panel.iconMuted,
+              },
             }}
           >
-            Use the teach-pendant e-stop to stop the arm immediately.
-          </Typography>
-        )}
-        {!simulation.isRunning &&
-          (preflightIssues.length > 0 ? (
-            <Stack spacing={0.6} sx={{ mt: 0.8 }}>
-              {preflightIssues.map((issue, i) => (
-                <Stack
-                  key={i}
-                  direction="row"
-                  sx={{
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <AlertTriangle
-                    size={12}
-                    color={panel.warning}
-                    style={{ flexShrink: 0 }}
-                  />
-                  <Typography
-                    sx={{
-                      fontSize: '0.66rem',
-                      color: panel.warningLight,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {issue.text}
-                  </Typography>
-                  {issue.action && (
-                    <Button
-                      size="small"
-                      onClick={issue.action.onClick}
-                      sx={{
-                        fontSize: '0.64rem',
-                        minWidth: 0,
-                        py: 0,
-                        px: 0.6,
-                        textTransform: 'none',
-                        color: panel.primaryLight,
-                      }}
-                    >
-                      {issue.action.label}
-                    </Button>
-                  )}
-                </Stack>
-              ))}
-            </Stack>
-          ) : (
-            <Stack
-              direction="row"
+            {simulation.isRunning
+              ? 'Stop'
+              : executionTarget === 'real'
+                ? 'Run on Robot'
+                : 'Run simulation'}
+          </Button>
+          {executionTarget === 'real' && (
+            <Typography
               sx={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
+                fontSize: '0.66rem',
+                color: panel.textDim,
                 mt: 0.8,
+                textAlign: 'center',
               }}
             >
-              <CheckCircle2 size={12} color={panel.success} />
-              <Typography
-                sx={{ fontSize: '0.66rem', color: panel.successLight }}
+              Use the teach-pendant e-stop to stop the arm immediately.
+            </Typography>
+          )}
+          {!simulation.isRunning &&
+            (preflightIssues.length > 0 ? (
+              <Stack spacing={0.6} sx={{ mt: 0.8 }}>
+                {preflightIssues.map((issue, i) => (
+                  <Stack
+                    key={i}
+                    direction="row"
+                    sx={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <AlertTriangle
+                      size={12}
+                      color={panel.warning}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Typography
+                      sx={{
+                        fontSize: '0.66rem',
+                        color: panel.warningLight,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {issue.text}
+                    </Typography>
+                    {issue.action && (
+                      <Button
+                        size="small"
+                        onClick={issue.action.onClick}
+                        sx={{
+                          fontSize: '0.64rem',
+                          minWidth: 0,
+                          py: 0,
+                          px: 0.6,
+                          textTransform: 'none',
+                          color: panel.primaryLight,
+                        }}
+                      >
+                        {issue.action.label}
+                      </Button>
+                    )}
+                  </Stack>
+                ))}
+              </Stack>
+            ) : (
+              <Stack
+                direction="row"
+                sx={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  mt: 0.8,
+                }}
               >
-                Ready to run
-              </Typography>
-            </Stack>
-          ))}
-      </Box>
+                <CheckCircle2 size={12} color={panel.success} />
+                <Typography
+                  sx={{ fontSize: '0.66rem', color: panel.successLight }}
+                >
+                  Ready to run
+                </Typography>
+              </Stack>
+            ))}
+        </Box>
+      )}
 
       {/* ── Confirm real-robot run ── */}
-      <Dialog
+      <ConfirmDialog
         open={confirmRealRun}
-        onClose={() => setConfirmRealRun(false)}
-        slotProps={{
-          paper: { sx: { p: 1, maxWidth: 420 } },
-        }}
-      >
-        <DialogTitle>Run on the real robot?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            The physical robot will move and execute this task. Make sure the
-            workcell is clear and the e-stop is within reach.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 1.5, justifyContent: 'space-between' }}>
-          <Button
-            variant="text"
-            onClick={() => setConfirmRealRun(false)}
-            sx={{ fontWeight: 500 }}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={confirmAndRun}
-            startIcon={<AlertTriangle size={15} />}
-            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
-          >
-            Run on robot
-          </Button>
-        </DialogActions>
-      </Dialog>
+        title="Run on the real robot?"
+        message="The physical arm will move and execute this task for real. Make sure the workcell is clear before confirming — the teach-pendant e-stop is the fastest way to stop it if something goes wrong."
+        confirmLabel="Run on robot"
+        tone="danger"
+        onConfirm={confirmAndRun}
+        onCancel={() => setConfirmRealRun(false)}
+      />
     </Box>
   )
 }

@@ -26,7 +26,7 @@ export const blockDescriptionsByType = {
   repeat_block: 'Repeats these steps a specific number of times.',
   when_block: 'Runs these steps once, when a specific condition becomes true.',
   when_otherwise_block:
-    'When a condition is true, the robot does the first steps. When it is not, it does the second steps.',
+    'Runs the first steps if the condition is true, otherwise runs the second steps.',
   macro_task_block: 'Runs all the steps of a previously saved task.',
   repeat_until_block: 'Repeats these steps until a specific event happens.',
   notify_action_block:

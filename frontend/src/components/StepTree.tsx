@@ -19,18 +19,26 @@ const StepTreeNode: React.FC<StepTreeNodeProps> = ({ node, depth = 0 }) => {
   const hasChildren = node.children && node.children.length > 0
 
   return (
-    <Box sx={{ pl: depth * 2 }}>
-      <Stack direction="row" spacing={1} sx={{ py: 0.5, alignItems: 'center' }}>
+    // Tighter than a generic file-tree gutter on purpose: most proposals here
+    // are short flat lists with zero nesting, so the chevron-or-spacer column
+    // that every row reserves (even leaf rows with nothing to expand) was
+    // eating real width in a ~320-600px chat panel for no reason.
+    <Box sx={{ pl: depth * 1.5 }}>
+      <Stack
+        direction="row"
+        spacing={0.5}
+        sx={{ py: 0.5, alignItems: 'center' }}
+      >
         {hasChildren ? (
           <IconButton
             size="small"
             onClick={() => setOpen((o) => !o)}
             sx={{ p: 0.25, color: 'text.secondary' }}
           >
-            {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </IconButton>
         ) : (
-          <Box sx={{ width: 24 }} />
+          <Box sx={{ width: 18 }} />
         )}
         {node.icon && (
           <Box sx={{ display: 'flex', alignItems: 'center' }}>{node.icon}</Box>
@@ -43,7 +51,7 @@ const StepTreeNode: React.FC<StepTreeNodeProps> = ({ node, depth = 0 }) => {
         </Typography>
       </Stack>
       {hasChildren && open && (
-        <Box sx={{ borderLeft: '1px solid', borderColor: 'divider', ml: 1.5 }}>
+        <Box sx={{ borderLeft: '1px solid', borderColor: 'divider', ml: 1 }}>
           {node.children!.map((child) => (
             <StepTreeNode key={child.key} node={child} depth={depth + 1} />
           ))}

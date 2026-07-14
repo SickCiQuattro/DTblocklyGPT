@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTheme } from '@mui/material/styles'
-import { Box, IconButton, Tooltip } from '@mui/material'
+import { Box, ButtonBase, IconButton, Tooltip } from '@mui/material'
 import { PanelLeft } from 'lucide-react'
 
 import { LogoSection } from 'components/Logo'
@@ -29,7 +29,19 @@ export const DrawerHeader = ({
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <LogoSection open={open} />
+      {open || !handleDrawerToggle ? (
+        <LogoSection open={open} />
+      ) : (
+        <Tooltip title="Expand sidebar" placement="right">
+          <ButtonBase
+            disableRipple
+            onClick={handleDrawerToggle}
+            sx={{ display: 'flex', alignItems: 'center', borderRadius: 1 }}
+          >
+            <LogoSection open={open} />
+          </ButtonBase>
+        </Tooltip>
+      )}
       {open && handleDrawerToggle && (
         <Tooltip title="Collapse sidebar" placement="right">
           <IconButton

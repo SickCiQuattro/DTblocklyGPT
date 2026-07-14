@@ -15,10 +15,10 @@ import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import {
   PanelLeft,
-  PanelRight,
   Save,
   Pencil,
   MessageSquare,
+  Play,
   RotateCcw,
 } from 'lucide-react'
 
@@ -31,9 +31,8 @@ import {
   toggleChat,
 } from 'store/reducers/task'
 import { TaskStatusChip } from 'components/TaskStatusChip'
-import { SegmentedControl } from 'components/SegmentedControl'
-import { KeycapHint, modKey } from 'components/KeycapHint'
-import { ConfirmDeleteDialog } from 'features/blockly/editor/dialogs/ConfirmDeleteDialog'
+import { modKey } from 'components/KeycapHint'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { drawerWidth } from 'utils/constants'
 import {
   RAIL_CLOSED_WIDTH,
@@ -62,6 +61,13 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const workspaceReady = useAppSelector((state) => state.task.workspaceReady)
 
+  // Exactly one of Save/Run is ever the filled (primary) button. Run only
+  // takes over once there is truly nothing left to do: the task is already
+  // published AND the live workspace still passes conformance (activeTaskStatus
+  // only updates after a save round-trip, so workspaceReady catches the case
+  // where the user broke a block on an already-published task).
+  const isRunPrimary = activeTaskStatus === 'published' && workspaceReady
+
   const [isEditing, setIsEditing] = React.useState(false)
   const [localName, setLocalName] = React.useState(activeTaskName)
   const [discardConfirmOpen, setDiscardConfirmOpen] = React.useState(false)
@@ -82,20 +88,6 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const iconBackColorOpen = 'grey.200'
 
   const statusChip = <TaskStatusChip status={activeTaskStatus} />
-
-  // Digital Twin / Copilot are independent toggles, modeled as one
-  // non-exclusive SegmentedControl instead of two separate outlined buttons.
-  const segmentValues = [
-    ...(simOpen ? ['twin'] : []),
-    ...(chatOpen ? ['copilot'] : []),
-  ]
-  const handleSegmentChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newValue: string[],
-  ) => {
-    if (newValue.includes('twin') !== simOpen) dispatch(toggleSim())
-    if (newValue.includes('copilot') !== chatOpen) dispatch(toggleChat())
-  }
 
   const mainHeader = isIDERoute ? (
     <Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -157,26 +149,34 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <SegmentedControl
-          value={segmentValues}
-          onChange={handleSegmentChange}
-          options={[
-            {
-              value: 'twin',
-              label: 'Robot',
-              icon: <PanelRight size={14} />,
-            },
-            {
-              value: 'copilot',
-              label: 'Copilot',
-              icon: <MessageSquare size={14} />,
-            },
-          ]}
-        />
+        <Tooltip title={chatOpen ? 'Close Copilot' : 'Ask Copilot for help'}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={() => dispatch(toggleChat())}
+            aria-label={chatOpen ? 'Close Copilot' : 'Open Copilot'}
+            startIcon={<MessageSquare size={16} />}
+            sx={{
+              height: theme.spacing(3.75),
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: '0.85rem',
+              color: chatOpen ? 'primary.main' : 'text.secondary',
+              bgcolor: chatOpen
+                ? alpha(theme.palette.primary.main, 0.08)
+                : 'transparent',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+              },
+            }}
+          >
+            Copilot
+          </Button>
+        </Tooltip>
         {activeTaskStatus === 'published_with_draft' && (
           <Button
             variant="text"
-            color="error"
             size="small"
             startIcon={
               isSaving ? (
@@ -188,64 +188,98 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             disabled={isSaving}
             onClick={() => setDiscardConfirmOpen(true)}
             sx={{
+              height: theme.spacing(3.75),
               borderRadius: '8px',
               textTransform: 'none',
               fontWeight: 500,
               fontSize: '0.85rem',
+              color: 'error.darker',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.error.main, 0.08),
+              },
             }}
           >
             Discard draft
           </Button>
         )}
-        <Button
-          variant={workspaceReady ? 'contained' : 'outlined'}
-          color={workspaceReady ? 'success' : 'primary'}
-          size="small"
-          startIcon={
-            isSaving ? (
-              <CircularProgress size={14} color="inherit" />
-            ) : (
-              <Save size={14} />
-            )
-          }
-          disabled={isSaving}
-          onClick={() => dispatch(triggerSave(true))}
-          sx={{
-            minWidth: '120px',
-            px: 2,
-            borderRadius: '8px',
-            textTransform: 'none',
-            fontWeight: 500,
-            fontSize: '0.85rem',
-            borderColor: workspaceReady
-              ? 'transparent'
-              : alpha(theme.palette.primary.main, 0.2),
-            color: workspaceReady ? 'common.white' : 'primary.main',
-            bgcolor: workspaceReady ? 'success.main' : 'transparent',
-            boxShadow: 'none',
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': {
-              boxShadow: 'none',
-              borderColor: workspaceReady ? 'success.dark' : 'primary.main',
-              bgcolor: workspaceReady
-                ? 'success.dark'
-                : alpha(theme.palette.primary.main, 0.04),
-            },
-            '&.Mui-disabled': {
-              color: workspaceReady ? 'common.white' : 'primary.main',
-              bgcolor: workspaceReady ? 'success.main' : 'transparent',
-              borderColor: workspaceReady
-                ? 'transparent'
-                : alpha(theme.palette.primary.main, 0.2),
-              opacity: 0.7,
-              cursor: 'not-allowed',
-            },
-          }}
+        <Tooltip
+          title={`${workspaceReady ? 'Save & Publish' : 'Save draft'} (${modKey()}S)`}
         >
-          {workspaceReady ? 'Save & Publish' : 'Save draft'}
-        </Button>
-        <KeycapHint>{modKey()}S</KeycapHint>
-        <ConfirmDeleteDialog
+          <Button
+            variant={isRunPrimary ? 'outlined' : 'contained'}
+            color="primary"
+            size="small"
+            startIcon={
+              isSaving ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <Save size={14} />
+              )
+            }
+            disabled={isSaving}
+            onClick={() => dispatch(triggerSave(true))}
+            sx={{
+              height: theme.spacing(3.75),
+              minWidth: '120px',
+              px: 2,
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: '0.85rem',
+              boxShadow: 'none',
+              ...(isRunPrimary && {
+                borderColor: alpha(theme.palette.primary.dark, 0.5),
+                color: 'primary.dark',
+              }),
+              '&:hover': {
+                boxShadow: 'none',
+                ...(isRunPrimary && {
+                  borderColor: 'primary.dark',
+                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                }),
+              },
+              '&.Mui-disabled': {
+                opacity: 0.7,
+                cursor: 'not-allowed',
+              },
+            }}
+          >
+            {workspaceReady ? 'Save & Publish' : 'Save draft'}
+          </Button>
+        </Tooltip>
+        <Tooltip title="Open the robot panel to simulate or run">
+          <Button
+            variant={isRunPrimary ? 'contained' : 'outlined'}
+            color="primary"
+            size="small"
+            startIcon={<Play size={14} />}
+            onClick={() => {
+              if (!simOpen) dispatch(toggleSim())
+            }}
+            sx={{
+              height: theme.spacing(3.75),
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: '0.85rem',
+              boxShadow: 'none',
+              ...(!isRunPrimary && {
+                borderColor: alpha(theme.palette.primary.dark, 0.5),
+                color: 'primary.dark',
+              }),
+              '&:hover': {
+                boxShadow: 'none',
+                ...(!isRunPrimary && {
+                  borderColor: 'primary.dark',
+                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                }),
+              },
+            }}
+          >
+            Run
+          </Button>
+        </Tooltip>
+        <ConfirmDialog
           open={discardConfirmOpen}
           message="Discard this draft? Your unpublished changes will be lost and the task will revert to its last published version."
           confirmLabel="Discard"

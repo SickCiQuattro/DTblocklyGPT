@@ -24,7 +24,7 @@ import { Eye, Plus, CheckCircle2, XCircle } from 'lucide-react'
 import { slate } from 'themes/theme'
 import { MainCard } from 'components/MainCard'
 import { tokenColor } from 'utils/tokenColors'
-import { ConfirmPopover } from 'components/ConfirmPopover'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
@@ -57,6 +57,11 @@ const ListUsers = () => {
   useDocumentTitle('User Accounts')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
+  const [resetPasswordId, setResetPasswordId] = useState<number | null>(null)
+  const [disableTarget, setDisableTarget] = useState<{
+    id: number
+    isActive: boolean
+  } | null>(null)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -224,58 +229,45 @@ const ListUsers = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <Stack direction="row" spacing={1}>
-                        <ConfirmPopover
-                          title="Reset password?"
-                          onConfirm={() => handleResetPassword(row.id)}
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => setResetPasswordId(row.id)}
+                          title="Reset user password"
+                          sx={{
+                            py: 0.25,
+                            px: 1,
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                          }}
                         >
-                          {(onOpen) => (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={onOpen}
-                              title="Reset user password"
-                              sx={{
-                                py: 0.25,
-                                px: 1,
-                                fontSize: '0.75rem',
-                                borderRadius: '6px',
-                              }}
-                            >
-                              Reset
-                            </Button>
-                          )}
-                        </ConfirmPopover>
+                          Reset
+                        </Button>
 
-                        <ConfirmPopover
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color={row.is_active ? 'error' : 'primary'}
+                          onClick={() =>
+                            setDisableTarget({
+                              id: row.id,
+                              isActive: row.is_active,
+                            })
+                          }
                           title={
-                            row.is_active ? 'Disable user?' : 'Enable user?'
+                            row.is_active
+                              ? 'Disable this user'
+                              : 'Enable this user'
                           }
-                          onConfirm={() =>
-                            handleDisable(row.id, !row.is_active)
-                          }
+                          sx={{
+                            py: 0.25,
+                            px: 1,
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                          }}
                         >
-                          {(onOpen) => (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color={row.is_active ? 'error' : 'primary'}
-                              onClick={onOpen}
-                              title={
-                                row.is_active
-                                  ? 'Disable this user'
-                                  : 'Enable this user'
-                              }
-                              sx={{
-                                py: 0.25,
-                                px: 1,
-                                fontSize: '0.75rem',
-                                borderRadius: '6px',
-                              }}
-                            >
-                              {row.is_active ? 'Disable' : 'Enable'}
-                            </Button>
-                          )}
-                        </ConfirmPopover>
+                          {row.is_active ? 'Disable' : 'Enable'}
+                        </Button>
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -298,6 +290,34 @@ const ListUsers = () => {
           sx={{ borderTop: '1px solid', borderColor: 'divider' }}
         />
       </Paper>
+      <ConfirmDialog
+        open={resetPasswordId !== null}
+        message="Reset this user's password? They'll need to set a new one."
+        confirmLabel="Reset"
+        tone="default"
+        onConfirm={() => {
+          if (resetPasswordId !== null) handleResetPassword(resetPasswordId)
+          setResetPasswordId(null)
+        }}
+        onCancel={() => setResetPasswordId(null)}
+      />
+      <ConfirmDialog
+        open={disableTarget !== null}
+        message={
+          disableTarget?.isActive
+            ? "Disable this user? They won't be able to log in."
+            : "Enable this user? They'll be able to log in again."
+        }
+        confirmLabel={disableTarget?.isActive ? 'Disable' : 'Enable'}
+        tone={disableTarget?.isActive ? 'danger' : 'default'}
+        onConfirm={() => {
+          if (disableTarget) {
+            handleDisable(disableTarget.id, !disableTarget.isActive)
+          }
+          setDisableTarget(null)
+        }}
+        onCancel={() => setDisableTarget(null)}
+      />
     </MainCard>
   )
 }

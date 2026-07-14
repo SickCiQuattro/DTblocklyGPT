@@ -1,5 +1,3 @@
-import dayjs from 'dayjs'
-
 import { AbstractStep } from 'pages/tasks/types'
 
 export enum UserChatEnum {
@@ -36,7 +34,10 @@ export const INITIAL_MESSAGE_1: MessageType = {
   id: 0,
   text: 'Tell me what the robot should do — e.g. "pick up the flask and place it in the rack" — and I\'ll build the blocks for you.',
   user: UserChatEnum.ROBOT,
-  timestamp: dayjs().toISOString(),
+  // null, not dayjs() — this is a module-level const evaluated once at import
+  // time, so a fixed timestamp would freeze at app-start time forever.
+  // AssistantBubble already falls back to the render-time clock when null.
+  timestamp: null,
   type: MessageTypeEnum.TEXT,
 }
 

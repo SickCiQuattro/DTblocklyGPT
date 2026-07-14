@@ -296,3 +296,18 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     ],
   },
 ]
+
+/**
+ * Flat type → { label, colour } lookup derived from TOOLBOX_CATEGORIES, so
+ * any UI that needs to name/colour a block by its Blockly type (e.g. the
+ * chat's proposed-task preview) can't drift from what the toolbox itself
+ * shows — same pattern as blockDescriptionsByType.
+ */
+export const blockMetaByType: Record<
+  string,
+  { label: string; colour: string }
+> = Object.fromEntries(
+  TOOLBOX_CATEGORIES.flatMap((c) =>
+    c.blocks.map((b) => [b.type, { label: b.label, colour: b.colour }]),
+  ),
+)

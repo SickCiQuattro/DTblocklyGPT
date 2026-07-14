@@ -40,6 +40,7 @@ export type TaskDetailType = {
   task_type: TaskTypeField
   status: TaskStatus
   signature: string
+  last_modified?: string
 }
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
@@ -231,16 +232,7 @@ export type AbstractCondition =
   | {
       type: 'gesture'
       gestureType:
-        | 'THUMBS_UP'
-        | 'THUMBS_DOWN'
-        | 'OPEN_HAND'
-        | 'FIST'
-        | 'PEACE'
-        | 'OK'
-        | 'THREE_FINGERS'
-        | 'PINCH'
-        | 'POINTING'
-        | 'STOP'
+        'THUMBS_UP' | 'THUMBS_DOWN' | 'OPEN_HAND' | 'FIST' | 'PEACE' | 'OK'
     }
   | { type: 'voice'; voiceWord: 'YES' | 'NO' | 'DONE' | 'PROCEED' }
   | { type: 'timer'; seconds: number }

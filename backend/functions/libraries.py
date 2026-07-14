@@ -123,6 +123,7 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     "status": task.status,
                     "code": raw_workspace,
                     "signature": task.signature,
+                    "last_modified": task.last_modified,
                 }
                 return success_response(task_fields)
             if request.method == HttpMethod.DELETE.value:

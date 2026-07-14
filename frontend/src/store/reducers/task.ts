@@ -17,8 +17,14 @@ export type TaskState = {
   isSaving: boolean
   saveTriggered: boolean
   discardTriggered: boolean
+  // One-shot flag for the StatusBar's "Saved ✓" flash — distinct from
+  // lastSaved itself, which is also seeded from the task's own
+  // last_modified on load/task-switch (see task-workspace/index.tsx) and
+  // must NOT flash the checkmark just because it changed.
+  savedFlash: boolean
   workspaceReady: boolean
   chatPosition: 'left' | 'right'
+  robotPanelWidth: 'standard' | 'wide'
 }
 
 export const initialState: TaskState = {
@@ -28,17 +34,28 @@ export const initialState: TaskState = {
   activeTaskName: 'New Task',
   activeTaskStatus: 'draft',
   lastSaved: null,
-  chatOpen: true,
+  // Defaults open on a fresh browser (helps a first-time operator discover
+  // the Copilot) but remembers the user's own choice afterward — same
+  // persisted-preference pattern as chatPosition below.
+  chatOpen:
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('chatOpen')
+      : null) !== 'false',
   simOpen: false,
   codeOpen: false,
   isSaving: false,
   saveTriggered: false,
   discardTriggered: false,
+  savedFlash: false,
   workspaceReady: false,
   chatPosition:
     (typeof window !== 'undefined'
       ? (localStorage.getItem('chatPosition') as 'left' | 'right')
       : null) || 'right',
+  robotPanelWidth:
+    (typeof window !== 'undefined'
+      ? (localStorage.getItem('robotPanelWidth') as 'standard' | 'wide')
+      : null) || 'standard',
 }
 
 const taskSlice = createSlice({
@@ -74,6 +91,9 @@ const taskSlice = createSlice({
     },
     toggleChat(state) {
       state.chatOpen = !state.chatOpen
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('chatOpen', String(state.chatOpen))
+      }
     },
     toggleSim(state) {
       state.simOpen = !state.simOpen
@@ -90,6 +110,9 @@ const taskSlice = createSlice({
     triggerDiscard(state, action: PayloadAction<boolean>) {
       state.discardTriggered = action.payload
     },
+    triggerSavedFlash(state, action: PayloadAction<boolean>) {
+      state.savedFlash = action.payload
+    },
     setWorkspaceReady(state, action: PayloadAction<boolean>) {
       state.workspaceReady = action.payload
     },
@@ -100,6 +123,13 @@ const taskSlice = createSlice({
       state.chatPosition = state.chatPosition === 'left' ? 'right' : 'left'
       if (typeof window !== 'undefined') {
         localStorage.setItem('chatPosition', state.chatPosition)
+      }
+    },
+    toggleRobotPanelWidth(state) {
+      state.robotPanelWidth =
+        state.robotPanelWidth === 'standard' ? 'wide' : 'standard'
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('robotPanelWidth', state.robotPanelWidth)
       }
     },
   },
@@ -118,9 +148,11 @@ export const {
   setSaving,
   triggerSave,
   triggerDiscard,
+  triggerSavedFlash,
   setWorkspaceReady,
   setLastSaved,
   toggleChatPosition,
+  toggleRobotPanelWidth,
 } = taskSlice.actions
 
 export const taskReducers = taskSlice.reducer

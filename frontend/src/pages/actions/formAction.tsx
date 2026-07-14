@@ -25,7 +25,7 @@ import { string as YupString, object as YupObject } from 'yup'
 import { Target, Plus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
-import { ConfirmPopover } from 'components/ConfirmPopover'
+import { ConfirmDialog } from 'components/ConfirmDialog'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
@@ -88,6 +88,7 @@ export const FormAction = ({
   const [searchParams] = useSearchParams()
   const [addKeyword, setAddKeyword] = React.useState<string>('')
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
+  const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null)
   const forcedName = searchParams.get('forcedName')
 
   const onSubmit = (
@@ -472,27 +473,30 @@ export const FormAction = ({
                     </Grid>
                     <Grid size={2}>
                       <Stack spacing={1}>
-                        <ConfirmPopover
-                          title="Delete?"
-                          onConfirm={() =>
-                            handleDelete(values.points, index, setFieldValue)
-                          }
+                        <Button
+                          color="error"
+                          title="Delete this point"
+                          onClick={() => setDeleteIndex(index)}
                         >
-                          {(onOpen) => (
-                            <Button
-                              color="error"
-                              title="Delete this point"
-                              onClick={onOpen}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </ConfirmPopover>
+                          Delete
+                        </Button>
                       </Stack>
                     </Grid>
                   </React.Fragment>
                 ),
               )}
+              <ConfirmDialog
+                open={deleteIndex !== null}
+                message="Delete this point? This can't be undone."
+                confirmLabel="Delete"
+                onConfirm={() => {
+                  if (deleteIndex !== null) {
+                    handleDelete(values.points, deleteIndex, setFieldValue)
+                  }
+                  setDeleteIndex(null)
+                }}
+                onCancel={() => setDeleteIndex(null)}
+              />
               <Grid size={12}>
                 <Button
                   disableElevation

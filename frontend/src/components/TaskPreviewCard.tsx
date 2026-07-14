@@ -8,12 +8,28 @@ import {
   Stack,
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
-import { PlayCircle, AlertCircle, ArrowLeft } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Bot,
+  Zap,
+  User,
+  Repeat2,
+  Split,
+  ScanEye,
+  Mic,
+  Clock,
+} from 'lucide-react'
 import { useDispatch } from 'react-redux'
 
 import { AbstractStep, AbstractCondition } from 'pages/tasks/types'
 import { clearProposedTask } from 'store/reducers/proposal'
 import { abstractToBlockly } from 'utils/blocklyParser'
+import {
+  RECOGNIZED_GESTURES,
+  RECOGNIZED_VOICE_COMMANDS,
+} from 'constants/recognitionRegistry'
+import { blockMetaByType } from 'features/blockly/toolbox/toolboxRegistry'
 
 import { StepTree } from './StepTree'
 
@@ -26,6 +42,37 @@ const getNameFromId = (
   if (id === null || id === undefined) return ''
   const item = catalog.find((item: any) => item.id === id)
   return item ? item[nameField] : `Unknown ID: ${id}`
+}
+
+// Friendly label for a gesture/voice code (falls back to the raw code for
+// values no longer in the registry, e.g. a legacy saved gesture).
+const codeLabel = (
+  options: { label: string; code: string }[],
+  code: string,
+): string => options.find((o) => o.code === code)?.label ?? code
+
+// Same icon-per-block-type language already on the canvas (blocks/icons.ts,
+// blocks/definitions.ts iconConfig calls) — pure reuse, not a new choice, so
+// the preview reinforces the same visual vocabulary the operator already
+// builds with instead of a uniform generic glyph for every step.
+const STEP_ICON_BY_BLOCK_TYPE: Record<
+  string,
+  React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+> = {
+  pick_block: Bot,
+  place_block: Bot,
+  move_to_block: Bot,
+  gripper_block: Bot,
+  open_gripper_block: Bot,
+  close_gripper_block: Bot,
+  wait_block: Bot,
+  processing_block: Zap,
+  human_action_block: User,
+  notify_action_block: User,
+  repeat_block: Repeat2,
+  repeat_until_block: Repeat2,
+  when_block: Split,
+  when_otherwise_block: Split,
 }
 
 interface TreeColors {
@@ -50,44 +97,84 @@ const buildTreeNodes = (
     let icon: React.ReactNode | undefined
     let children: any[] = []
 
+    // Canonical label/colour of the block this step renders as, sourced from
+    // the toolbox registry — falls back to a neutral step colour for any
+    // type the registry doesn't know (shouldn't happen for valid steps). The
+    // glyph itself mirrors the same per-block-type icon already used on the
+    // canvas (STEP_ICON_BY_BLOCK_TYPE above).
+    const stepIcon = (blockType: string) => {
+      const Icon = STEP_ICON_BY_BLOCK_TYPE[blockType] ?? Bot
+      return (
+        <Icon
+          size={16}
+          style={{ color: blockMetaByType[blockType]?.colour ?? colors.step }}
+        />
+      )
+    }
+
     switch (type) {
       case 'pick':
-        title = `Pick: ${getNameFromId((step as any).objectId, dataObjects)}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.pick_block.label}: ${getNameFromId((step as any).objectId, dataObjects)}`
+        icon = stepIcon('pick_block')
         break
       case 'place':
-        title = `Place: ${getNameFromId((step as any).locationId, dataLocations)}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.place_block.label}: ${getNameFromId((step as any).locationId, dataLocations)}`
+        icon = stepIcon('place_block')
         break
       case 'processing':
-        // MAPPING REFERENCE:
-        // - step type: 'processing' ➔ User-facing title prefix: 'Run' (renamed from 'Perform')
-        title = `Run: ${getNameFromId((step as any).actionId, dataActions)}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.processing_block.label}: ${getNameFromId((step as any).actionId, dataActions)}`
+        icon = stepIcon('processing_block')
         break
       case 'move_to':
-        title = `Move To: ${getNameFromId((step as any).locationId, dataLocations)} (${(step as any).motionType})`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.move_to_block.label}: ${getNameFromId((step as any).locationId, dataLocations)} (${(step as any).motionType})`
+        icon = stepIcon('move_to_block')
         break
-      case 'gripper':
-        title = `Gripper: ${(step as any).state}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+      case 'gripper': {
+        const gripperBlockType =
+          (step as any).state === 'OPEN'
+            ? 'open_gripper_block'
+            : 'close_gripper_block'
+        title = blockMetaByType[gripperBlockType].label
+        icon = stepIcon(gripperBlockType)
         break
+      }
       case 'wait':
-        title = `Wait: ${(step as any).seconds}s`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.wait_block.label}: ${(step as any).seconds}s`
+        icon = stepIcon('wait_block')
         break
-      case 'human_action':
-        title = `Human Action: ${(step as any).description || 'No description'}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+      case 'human_action': {
+        title = `${blockMetaByType.human_action_block.label}: ${(step as any).description || 'No description'}`
+        icon = stepIcon('human_action_block')
+        // human_feedback/null both mean "just wait for a manual confirm" —
+        // nothing sensor-based to show. Any real condition (find_object,
+        // gesture, voice, timer, and/or/not) is shown exactly like when/
+        // repeat_until do for their own condition, so the operator can see
+        // what this step actually waits on before applying — the canvas
+        // block already shows it as "Resume when: …", the preview shouldn't
+        // hide it.
+        const confirmEvent = (step as any).confirmEvent
+        if (confirmEvent && confirmEvent.type !== 'human_feedback') {
+          const conditionNode = renderConditionNode(
+            confirmEvent,
+            dataObjects,
+            dataLocations,
+            dataActions,
+            colors,
+            `${currentPath}-cond`,
+          )
+          if (conditionNode) {
+            children.push(conditionNode)
+          }
+        }
         break
+      }
       case 'notify_action':
-        title = `Notify: ${(step as any).description || 'No description'}`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = `${blockMetaByType.notify_action_block.label}: ${(step as any).description || 'No description'}`
+        icon = stepIcon('notify_action_block')
         break
       case 'repeat':
         title = `Repeat ${(step as any).times} times`
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        icon = stepIcon('repeat_block')
         if ((step as any).steps && (step as any).steps.length > 0) {
           children = buildTreeNodes(
             (step as any).steps,
@@ -100,8 +187,8 @@ const buildTreeNodes = (
         }
         break
       case 'repeat_until': {
-        title = 'Repeat Until'
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+        title = blockMetaByType.repeat_until_block.label
+        icon = stepIcon('repeat_until_block')
         if ((step as any).condition) {
           const conditionNode = renderConditionNode(
             (step as any).condition,
@@ -131,9 +218,13 @@ const buildTreeNodes = (
         }
         break
       }
-      case 'when':
-        title = 'When'
-        icon = <PlayCircle size={16} style={{ color: colors.step }} />
+      case 'when': {
+        const hasOtherwise =
+          (step as any).otherwise && (step as any).otherwise.length > 0
+        title = hasOtherwise
+          ? blockMetaByType.when_otherwise_block.label
+          : blockMetaByType.when_block.label
+        icon = stepIcon(hasOtherwise ? 'when_otherwise_block' : 'when_block')
         // Build condition node
         if ((step as any).condition) {
           const conditionNode = renderConditionNode(
@@ -177,6 +268,7 @@ const buildTreeNodes = (
           ]
         }
         break
+      }
       default:
         title = `Unknown step: ${type}`
         icon = <AlertCircle size={16} style={{ color: colors.cond }} />
@@ -211,13 +303,13 @@ const renderConditionNode = (
       }
     case 'find_object':
       return {
-        title: `Find Object: ${getNameFromId(condition.objectId, dataObjects)}`,
-        icon: <AlertCircle size={16} style={{ color: colors.cond }} />,
+        title: `${blockMetaByType.find_object_block.label}: ${getNameFromId(condition.objectId, dataObjects)}`,
+        icon: <ScanEye size={16} style={{ color: colors.cond }} />,
         key: `${path}-find-object`,
       }
     case 'human_feedback':
       return {
-        title: 'Human Feedback',
+        title: 'Wait for confirmation',
         icon: <AlertCircle size={16} style={{ color: colors.cond }} />,
         key: `${path}-human-feedback`,
       }
@@ -229,14 +321,20 @@ const renderConditionNode = (
       }
     case 'gesture':
       return {
-        title: `Gesture: ${condition.gestureType}`,
-        icon: <AlertCircle size={16} style={{ color: colors.cond }} />,
+        title: `${blockMetaByType.gesture_block.label}: ${codeLabel(RECOGNIZED_GESTURES, condition.gestureType)}`,
+        icon: <ScanEye size={16} style={{ color: colors.cond }} />,
         key: `${path}-gesture`,
+      }
+    case 'voice':
+      return {
+        title: `${blockMetaByType.voice_command_block.label}: ${codeLabel(RECOGNIZED_VOICE_COMMANDS, condition.voiceWord)}`,
+        icon: <Mic size={16} style={{ color: colors.cond }} />,
+        key: `${path}-voice`,
       }
     case 'timer':
       return {
-        title: `Timer: ${condition.seconds}s`,
-        icon: <AlertCircle size={16} style={{ color: colors.cond }} />,
+        title: `Time passed: ${condition.seconds}s`,
+        icon: <Clock size={16} style={{ color: colors.cond }} />,
         key: `${path}-timer`,
       }
     case 'and':

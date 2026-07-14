@@ -78,16 +78,7 @@ export interface CustomBlock {
     DISTANCE?: number
     GRIPPER_STATE?: 'OPEN' | 'CLOSE'
     GESTURE_TYPE?:
-      | 'THUMBS_UP'
-      | 'THUMBS_DOWN'
-      | 'OPEN_HAND'
-      | 'FIST'
-      | 'PEACE'
-      | 'OK'
-      | 'THREE_FINGERS'
-      | 'PINCH'
-      | 'POINTING'
-      | 'STOP'
+      'THUMBS_UP' | 'THUMBS_DOWN' | 'OPEN_HAND' | 'FIST' | 'PEACE' | 'OK'
     VOICE_WORD?: 'YES' | 'NO' | 'DONE' | 'PROCEED'
     SECONDS?: number
     sensor?: string
@@ -239,17 +230,25 @@ export const abstractToBlockly = (
         }
       }
       case 'when': {
+        // An empty array is truthy in JS — the LLM sends "otherwise": []
+        // for a plain "When → Do" step just as often as it omits the key
+        // entirely, so only a genuinely non-empty array should promote this
+        // to the Otherwise variant.
+        const otherwiseSteps = Array.isArray(step.otherwise)
+          ? step.otherwise
+          : []
+        const hasOtherwise = otherwiseSteps.length > 0
         const condBlock = conditionToBlock(step.condition)
         const doBlock = stepsToSequence(step.do)
-        const otherwiseBlock = step.otherwise
-          ? stepsToSequence(step.otherwise)
+        const otherwiseBlock = hasOtherwise
+          ? stepsToSequence(otherwiseSteps)
           : null
         return {
-          type: step.otherwise ? 'when_otherwise_block' : 'when_block',
+          type: hasOtherwise ? 'when_otherwise_block' : 'when_block',
           inputs: {
             WHEN: condBlock ? { block: condBlock } : {},
             DO: doBlock ? { block: doBlock } : {},
-            ...(step.otherwise
+            ...(hasOtherwise
               ? { OTHERWISE: otherwiseBlock ? { block: otherwiseBlock } : {} }
               : {}),
           },

@@ -41,8 +41,13 @@ import {
   sequencePlusFieldConfig,
   startPlusFieldConfig,
 } from './icons'
+
 import './mutators'
 import './collapseSummary'
+import {
+  GESTURE_DROPDOWN_OPTIONS,
+  VOICE_DROPDOWN_OPTIONS,
+} from 'constants/recognitionRegistry'
 
 // Re-export palette and icons for consumers that import from this file directly.
 // Prefer importing from './palette' or './icons' in new code.
@@ -120,17 +125,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         type: 'field_dropdown',
         name: 'GESTURE_TYPE',
-        options: [
-          ['Thumbs up', 'THUMBS_UP'],
-          ['Thumbs down', 'THUMBS_DOWN'],
-          ['Open hand', 'OPEN_HAND'],
-          ['Fist', 'FIST'],
-          ['Peace sign', 'PEACE'],
-          ['OK sign', 'OK'],
-          ['Three fingers', 'THREE_FINGERS'],
-          ['Pinch', 'PINCH'],
-          ['Pointing', 'POINTING'],
-        ],
+        options: GESTURE_DROPDOWN_OPTIONS,
       },
     ],
     output: 'Boolean',
@@ -145,12 +140,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         type: 'field_dropdown',
         name: 'VOICE_WORD',
-        options: [
-          ['Yes', 'YES'],
-          ['No', 'NO'],
-          ['Done', 'DONE'],
-          ['Proceed', 'PROCEED'],
-        ],
+        options: VOICE_DROPDOWN_OPTIONS,
       },
     ],
     output: 'Boolean',
@@ -337,7 +327,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         type: 'field_input',
         name: 'TASK_DESC',
-        text: 'Describe what the person must do',
+        text: 'Load the next item',
       },
     ],
     message1: 'Resume when: %1',

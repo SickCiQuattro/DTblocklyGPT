@@ -8,12 +8,17 @@ import {
   Tooltip,
 } from '@mui/material'
 import { useTheme, alpha } from '@mui/material/styles'
-import { X, ArrowLeftRight } from 'lucide-react'
+import { X, ArrowLeftRight, Sparkles } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import useSWR from 'swr'
 import dayjs from 'dayjs'
+import * as Blockly from 'blockly/core'
 
 import { useSpeechRecognition } from 'utils/speechRecognition'
+import {
+  computeConformance,
+  formatIssue,
+} from 'features/blockly/utils/conformance'
 import { useAppSelector } from 'store/reducers'
 import { clearProposedTask, setProposedTask } from 'store/reducers/proposal'
 import { toggleChatPosition } from 'store/reducers/task'
@@ -51,6 +56,9 @@ export type BlockGeneratedPayload = {
 interface ChatThreadProps {
   taskId: string | null
   taskStructure: any[]
+  /** Live editor workspace — used only to compute conformance for the
+   * contextual welcome/proactive-help feature. Not required otherwise. */
+  workspace?: Blockly.WorkspaceSvg | null
   onBlocksGenerated?: (blocks: BlockGeneratedPayload[]) => void
   onApplyProposedTask?: (proposedTask: any[]) => void
   onClose?: () => void
@@ -88,6 +96,7 @@ const areStepsIdentical = (a: any, b: any) => {
 export const ChatThread: React.FC<ChatThreadProps> = ({
   taskId,
   taskStructure,
+  workspace,
   onBlocksGenerated,
   onApplyProposedTask,
   onClose,
@@ -117,6 +126,27 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const [chatLog, setChatLog] = useState<any[]>([])
   const [message, setMessage] = useState('')
   const [isRecording, setIsRecording] = useState(false)
+
+  // Contextual help — persisted like chatOpen/chatPosition. Governs both the
+  // dynamic welcome message (computed locally, zero token cost) and the one
+  // proactive LLM analysis call per task open (the only part that actually
+  // spends tokens) — this is the switch a user flips off during test/dev
+  // sessions to stop that call firing.
+  const [contextualHelpEnabled, setContextualHelpEnabled] = useState(
+    () =>
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('contextualHelpEnabled')
+        : null) !== 'false',
+  )
+  const toggleContextualHelp = () => {
+    setContextualHelpEnabled((prev) => {
+      const next = !prev
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('contextualHelpEnabled', String(next))
+      }
+      return next
+    })
+  }
 
   const {
     transcript,
@@ -179,6 +209,57 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [listMessages])
 
+  // Shared by a normal send and the proactive-help call below: append the
+  // assistant's reply to whatever message list preceded it, and apply the
+  // same task-proposal handling either way.
+  const applyAssistantResponse = (
+    res: ChatResponse,
+    priorMessages: MessageType[],
+  ) => {
+    const answerText = res.response.answer || CHATGPT_ERROR
+    const intent = res.intent ?? res.response.intent
+    // Suggestions + warnings render as typed chips below the text.
+    const parts = (res.messageParts ?? []).filter((p) => p.type !== 'text')
+
+    const newRobotMessage: MessageType = {
+      text: answerText,
+      id: (priorMessages[priorMessages.length - 1]?.id ?? 0) + 1,
+      user: UserChatEnum.ROBOT,
+      timestamp: dayjs().toISOString(),
+      type: MessageTypeEnum.TEXT,
+      parts,
+      intent,
+    }
+
+    setListMessages([...priorMessages, newRobotMessage])
+    setChatLog(res.chatLog)
+
+    const taskModified = res.response?.taskModified ?? true
+
+    if (!taskModified) {
+      dispatch(clearProposedTask())
+    } else {
+      const isIdentical = areStepsIdentical(res.response.task, taskStructure)
+
+      if (isIdentical) {
+        dispatch(clearProposedTask())
+      } else if (
+        Array.isArray(res.response.task) &&
+        res.response.task.length > 0
+      ) {
+        dispatch(
+          setProposedTask({
+            proposedTask: res.response.task,
+            validationWarnings: res.response.validationWarnings || [],
+            answer: res.response.answer || '',
+          }),
+        )
+      } else {
+        dispatch(clearProposedTask())
+      }
+    }
+  }
+
   const onMessageSend = async () => {
     if (!message.trim() || isProcessing) return
 
@@ -210,54 +291,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         },
       })
 
-      if (res) {
-        const answerText = res.response.answer || CHATGPT_ERROR
-        const intent = res.intent ?? res.response.intent
-        // Suggestions + warnings render as typed chips below the text.
-        const parts = (res.messageParts ?? []).filter((p) => p.type !== 'text')
-
-        const newRobotMessage: MessageType = {
-          text: answerText,
-          id:
-            messagesWithUserRequest[messagesWithUserRequest.length - 1].id + 1,
-          user: UserChatEnum.ROBOT,
-          timestamp: dayjs().toISOString(),
-          type: MessageTypeEnum.TEXT,
-          parts,
-          intent,
-        }
-
-        setListMessages([...messagesWithUserRequest, newRobotMessage])
-        setChatLog(res.chatLog)
-
-        const taskModified = res.response?.taskModified ?? true
-
-        if (!taskModified) {
-          dispatch(clearProposedTask())
-        } else {
-          const isIdentical = areStepsIdentical(
-            res.response.task,
-            taskStructure,
-          )
-
-          if (isIdentical) {
-            dispatch(clearProposedTask())
-          } else if (
-            Array.isArray(res.response.task) &&
-            res.response.task.length > 0
-          ) {
-            dispatch(
-              setProposedTask({
-                proposedTask: res.response.task,
-                validationWarnings: res.response.validationWarnings || [],
-                answer: res.response.answer || '',
-              }),
-            )
-          } else {
-            dispatch(clearProposedTask())
-          }
-        }
-      }
+      if (res) applyAssistantResponse(res, messagesWithUserRequest)
     } catch (error) {
       // fetchApi already toasts every failure path (services/api.ts) — a
       // second toast here just stacks a redundant message behind it.
@@ -267,6 +301,82 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       setIsProcessing(false)
     }
   }
+
+  // Contextual help, part 2 — the one LLM call this feature actually spends
+  // tokens on. Fires at most once per task open, only when the workspace has
+  // conformance issues and the toggle above is on. No synthetic user bubble:
+  // the operator didn't type this, so only the assistant's reply is shown.
+  // `priorMessages` is passed explicitly (not read from `listMessages` state)
+  // because the caller just replaced that state synchronously moments
+  // earlier with the dynamic welcome text — reading the closed-over state
+  // here would still see the pre-update array and silently drop that edit
+  // once this response lands.
+  const requestProactiveHelp = async (
+    issueTexts: string[],
+    priorMessages: MessageType[],
+  ) => {
+    setIsProcessing(true)
+    try {
+      const res: ChatResponse = await fetchApi({
+        url: endpoints.chat.newMessageMultimodal,
+        method: MethodHTTP.POST,
+        body: {
+          id: Number(taskId),
+          message: `The workspace has unresolved steps: ${issueTexts.join(' ')} Help me fix them.`,
+          chatLog,
+          dataObjects,
+          dataLocations,
+          dataActions,
+          dataBlocks: buildBlockCatalog(),
+          taskStructure: taskStructure,
+        },
+      })
+      if (res) applyAssistantResponse(res, priorMessages)
+    } catch (error) {
+      console.error('Error requesting proactive help:', error)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  // Contextual welcome — seeded once per task, when the workspace is
+  // available. Naming the current issues is free (computed locally from the
+  // workspace, no LLM call); if there are any, it also kicks off the one
+  // proactive LLM call above. A short delay covers the gap between the
+  // workspace becoming available (injection) and the task's saved blocks
+  // finishing their load into it, since conformance read too early would
+  // misreport an existing task as empty.
+  const hasSeededWelcomeRef = useRef(false)
+  useEffect(() => {
+    if (hasSeededWelcomeRef.current) return
+    if (!workspace || !contextualHelpEnabled) return
+
+    // Latch only once the timeout actually fires, not when it's scheduled —
+    // if `workspace`'s reference changes again before then (Blockly can
+    // dispose/re-inject during the task load), the cleanup below cancels
+    // this attempt and a fresh effect run reschedules against the new
+    // reference instead of silently giving up.
+    const t = setTimeout(() => {
+      hasSeededWelcomeRef.current = true
+      const result = computeConformance(workspace)
+      const issueTexts = result.errors.map(formatIssue)
+      if (issueTexts.length === 0) return // clean workspace: default opener stays
+
+      const dynamicWelcome: MessageType[] = [
+        {
+          ...INITIAL_MESSAGE_1,
+          text:
+            issueTexts.length === 1
+              ? `I can see one thing to finish here: ${issueTexts[0]} Want help, or tell me what the robot should do.`
+              : `I can see ${issueTexts.length} things to finish here: ${issueTexts.join(' ')} Want help, or tell me what the robot should do.`,
+        },
+      ]
+      setListMessages(dynamicWelcome)
+      void requestProactiveHelp(issueTexts, dynamicWelcome)
+    }, 500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [workspace, contextualHelpEnabled])
 
   const renderMessage = (msg: MessageType) => {
     if (msg.user === UserChatEnum.USER) {
@@ -457,6 +567,37 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Tooltip
+            title={
+              contextualHelpEnabled
+                ? 'Contextual help: on — proactively analyzes workspace issues (uses tokens)'
+                : 'Contextual help: off — no automatic analysis'
+            }
+            placement="bottom"
+          >
+            <IconButton
+              onClick={toggleContextualHelp}
+              size="small"
+              aria-label={
+                contextualHelpEnabled
+                  ? 'Turn off contextual help'
+                  : 'Turn on contextual help'
+              }
+              sx={{
+                color: contextualHelpEnabled
+                  ? indigo
+                  : theme.palette.slate[400],
+                '&:hover': {
+                  background: alpha(indigo, 0.08),
+                },
+              }}
+            >
+              <Sparkles
+                size={17}
+                fill={contextualHelpEnabled ? indigo : 'none'}
+              />
+            </IconButton>
+          </Tooltip>
           <Tooltip
             title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
             placement="bottom"

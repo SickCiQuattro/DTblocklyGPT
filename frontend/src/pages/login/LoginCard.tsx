@@ -14,8 +14,8 @@ export const LoginCard = ({ children }: AuthCardProps) => {
   return (
     <MainCard
       sx={{
-        maxWidth: { xs: 400, lg: 475 },
-        margin: { xs: 2.5, md: 3 },
+        width: '100%',
+        maxWidth: { xs: 380, sm: 420 },
         '& > *': {
           flexGrow: 1,
           flexBasis: '50%',
@@ -26,7 +26,7 @@ export const LoginCard = ({ children }: AuthCardProps) => {
       boxShadow
       shadow={shadow}
     >
-      <Box sx={{ p: { xs: 2, sm: 3, md: 4, xl: 5 } }}>{children}</Box>
+      <Box sx={{ p: { xs: 3, sm: 4 } }}>{children}</Box>
     </MainCard>
   )
 }

@@ -14,9 +14,8 @@ const EXECUTING_ENTITY_CLASS = 'block--executing-entity'
 
 /**
  * Highlight `blockId` as currently executing, plus its value-input children
- * (the connected object/location). Auto-centers the block unless the user is
- * mid-gesture. No-ops safely if the block is gone (e.g. simulated workspace !=
- * displayed workspace) or the workspace isn't ready.
+ * (the connected object/location). No-ops safely if the block is gone (e.g.
+ * simulated workspace != displayed workspace) or the workspace isn't ready.
  */
 export function highlightExecutingBlock(
   ws: Blockly.WorkspaceSvg,
@@ -34,17 +33,6 @@ export function highlightExecutingBlock(
     const target = input.connection.targetBlock()
     if (target instanceof Blockly.BlockSvg) {
       target.getSvgRoot()?.classList.add(EXECUTING_ENTITY_CLASS)
-    }
-  }
-
-  // currentGesture_ is private (trailing _) — same convention as the redoStack_
-  // pattern elsewhere. The `?? false` guard keeps this safe if it's absent.
-  const dragging = (ws as any).currentGesture_?.isDragging?.() ?? false
-  if (!dragging) {
-    try {
-      ws.centerOnBlock(blockId)
-    } catch {
-      // workspace not ready / block off-tree — ignore
     }
   }
 }
