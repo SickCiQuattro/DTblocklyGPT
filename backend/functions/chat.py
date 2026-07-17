@@ -111,10 +111,9 @@ class LLMProvider:
 
     def complete(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], tool_name: str, temperature: float = 0.0) -> ProviderLLMResponse:
         started_at = time.monotonic()
-        response = self.client.chat.completions.create(
+        request_kwargs = dict(
             model=self.model,
             messages=messages,
-            temperature=temperature,
             tools=tools,
             tool_choice={
                 "type": "function",
@@ -124,6 +123,12 @@ class LLMProvider:
             },
             parallel_tool_calls=False,
         )
+        # gpt-5.x rejects any non-default temperature (400 "does not support
+        # 0.0 with this model") — only the implicit default is accepted, so
+        # omit the param entirely rather than pass a value that always 400s.
+        if not self.model.startswith("gpt-5"):
+            request_kwargs["temperature"] = temperature
+        response = self.client.chat.completions.create(**request_kwargs)
         latency_ms = (time.monotonic() - started_at) * 1000
         usage = getattr(response, "usage", None)
         logger.info(
@@ -838,6 +843,13 @@ def validate_condition(condition, cond_index, warnings, data_objects):
 
 
 def validate_step(step, step_index, warnings, data_objects, data_locations, data_actions):
+    if not isinstance(step, dict):
+        # A malformed/misplaced token from a bad tool-call parse (e.g. a
+        # flattened-container repair mistaking a literal key like "do" for a
+        # sibling step) — drop it as a warning rather than crash the whole
+        # proposal on step.get() below.
+        warnings.append({"severity": "warning", "message": f"Step {step_index}: expected an object, got {type(step).__name__}; dropped."})
+        return None
     step_copy = copy.deepcopy(step)
     step_type = step.get("type")
 
