@@ -11,7 +11,7 @@ Run with:
     poetry run python testing/eval_llm_chat.py --models gemini:gemini-3.1-flash-lite ollama:llama3.1:8b
 
 Default matrix (no --models): gemini from env if GEMINI_API_KEY/LLM_API_KEY is
-set, plus ollama:llama3.1 if http://localhost:11434 answers. Either is
+set, plus ollama:qwen3.5:9b if http://localhost:11434 answers. Either is
 skipped with a note if unavailable.
 
 Repeat each case N times with --runs (default 5) to get mean/stdev per metric
@@ -109,7 +109,7 @@ DATA_BLOCKS = [
 PROVIDER_DEFAULTS = {
     "gemini": "gemini-3.1-flash-lite",
     "openai": "gpt-4.1-nano",
-    "ollama": "qwen2.5:7b",
+    "ollama": "qwen3.5:9b",
 }
 
 # $ per million tokens (input, output). Ollama and Gemini's free tier are $0.
