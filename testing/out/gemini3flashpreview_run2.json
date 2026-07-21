@@ -1,0 +1,172 @@
+{
+  "gemini:gemini-3-flash-preview": [
+    {
+      "name": "pick_place",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 10723.35722798016,
+      "prompt_tokens": 5790,
+      "completion_tokens": 132,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "pick",
+        "place"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "move_gripper",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 11181.66270799702,
+      "prompt_tokens": 5790,
+      "completion_tokens": 138,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "move_to",
+        "gripper"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "repeat_times",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 13432.552607002435,
+      "prompt_tokens": 5796,
+      "completion_tokens": 167,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "repeat"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "repeat_until_not_find",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 13289.522202976514,
+      "prompt_tokens": 5799,
+      "completion_tokens": 207,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "repeat_until"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "when_otherwise",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 9774.821284983773,
+      "prompt_tokens": 5797,
+      "completion_tokens": 190,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "when"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "when_and_gesture",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 10357.945736992406,
+      "prompt_tokens": 5796,
+      "completion_tokens": 204,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "when"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "human_action_confirm",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 11268.093613995006,
+      "prompt_tokens": 5794,
+      "completion_tokens": 140,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "human_action"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "explain_block",
+      "category": "core",
+      "lang": "en",
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 10133.74106300762,
+      "prompt_tokens": 5789,
+      "completion_tokens": 140,
+      "cost_usd": null,
+      "got_intent": "explain",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
+    }
+  ]
+}
