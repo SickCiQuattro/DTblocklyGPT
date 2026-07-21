@@ -67,6 +67,18 @@ _SIM_PROFILE = {
 # re-measurement after the cell is moved).
 _REAL_PROFILE = {
     **_SIM_PROFILE,
+    # Real-cell only: the wrist-mounted Canon camera looks straight down at
+    # the sim SCAN_POSE's J5=80 (near-vertical wrist pitch), so YOLO only
+    # ever sees the top face of an object (e.g. a tube reads as a circle,
+    # not a cylinder). Lowering J5 tilts the camera toward an oblique view
+    # (top+side) without moving the arm's XY position, for better class/cap-
+    # colour recognition. No effect in sim — the sim detection camera is a
+    # fixed world model (worldCobotta.sdf), not robot-mounted, so a wrist
+    # angle change there wouldn't change what it sees anyway.
+    # Measured 2026-07-13: jogged with the teach pendant to an oblique angle,
+    # read back via GET /api/actual-joints-real, verified with
+    # testing/scan_recognition_check.py against the live Canon feed.
+    "SCAN_POSE": [-4.55, -59.73, 139.49, 1.97, 66.59, -10.22],
 }
 
 # Guard against a profile drifting out of sync with the baseline key set.

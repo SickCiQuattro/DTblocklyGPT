@@ -1461,7 +1461,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             _abort_task("pick final descent IK path failed")
             return
 
-        send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.20)
+        send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.30)
         pick_joints = final_path[-1]
         debug_fk(pick_joints, label="Pick Point")
 

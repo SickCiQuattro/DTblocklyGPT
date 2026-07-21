@@ -23,3 +23,5 @@ ros2_ws/Cobotta/.gen/
 brain/
 DesignSystem/
 docs/
+yoloe-11s-seg.pt
+mobileclip_blt.ts

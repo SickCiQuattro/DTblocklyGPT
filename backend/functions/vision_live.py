@@ -37,6 +37,7 @@ _gesture_engine = None   # None = not attempted; False = failed permanently
 _yolo_model = None       # None = not attempted; False = failed permanently
 _classify_hsv = None     # None = not attempted; False = failed permanently (color optional)
 _cap_region = None
+_sample_background_hue = None
 
 # Detection results are cached and only refreshed at this interval — YOLOv8n on
 # CPU (no GPU on this VM) takes ~200-400ms/frame; frames arrive from the
@@ -115,21 +116,23 @@ def _get_cap_color_funcs():
     """Lazy-import cap_color.py from the ROS package tree (pure OpenCV/numpy,
     no ROS dependency — see its docstring). Colour classification is optional:
     on failure, detections just come back without a "color" field."""
-    global _classify_hsv, _cap_region
+    global _classify_hsv, _cap_region, _sample_background_hue
     with _models_lock:
         if _classify_hsv is None:
             try:
                 if _ROS_PKG_DIR not in sys.path:
                     sys.path.insert(0, _ROS_PKG_DIR)
-                from cobotta_rest_api.cap_color import cap_region, classify_hsv
+                from cobotta_rest_api.cap_color import cap_region, classify_hsv, sample_background_hue
                 _classify_hsv = classify_hsv
                 _cap_region = cap_region
+                _sample_background_hue = sample_background_hue
             except Exception as exc:
                 logger.warning("cap_color import failed (detections will have no color): %s", exc)
                 _classify_hsv = False
                 _cap_region = False
+                _sample_background_hue = False
 
-    return _classify_hsv, _cap_region
+    return _classify_hsv, _cap_region, _sample_background_hue
 
 
 def _detect_objects(frame) -> list:
@@ -149,7 +152,7 @@ def _detect_objects(frame) -> list:
 
     try:
         results = model(frame, conf=0.35, verbose=False)
-        classify_hsv, cap_region = _get_cap_color_funcs()
+        classify_hsv, cap_region, sample_background_hue = _get_cap_color_funcs()
         detections = []
         for result in results:
             for box in result.boxes:
@@ -159,7 +162,8 @@ def _detect_objects(frame) -> list:
                 detection = {"class": class_name, "confidence": round(confidence, 4)}
                 if class_name in _TUBE_CLASSES and classify_hsv and cap_region:
                     xyxy = [float(v) for v in box.xyxy[0]]
-                    color = classify_hsv(cap_region(frame, xyxy))
+                    bg_hue = sample_background_hue(frame, xyxy) if sample_background_hue else None
+                    color = classify_hsv(cap_region(frame, xyxy), background_hue=bg_hue)
                     if color:
                         detection["color"] = color
                 detections.append(detection)

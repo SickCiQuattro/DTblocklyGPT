@@ -56,7 +56,7 @@ _OBJECT_TO_COCO: dict[str, str] = {
     # Lab glassware (legacy demo names, kept for backward compatibility —
     # not part of the live pharma catalog, so not switched by VISION_MODEL).
     "flask": "bottle",
-    "orange flask": "bottle",
+    "orange tube": "bottle",
     "flacone": "bottle",
     "bottiglia": "bottle",
     "tappo": "cup",
