@@ -10,6 +10,12 @@ Run at the lab with tubes in front of the camera:
     poetry run python testing/test_vision_color.py http://CAM/.../image.cgi [user] [pass]
     poetry run python testing/test_vision_color.py 0        # USB webcam index
 
+Same gate, against an open-vocabulary model instead of stock YOLOv8n (see
+docs/vision-object-catalog.md §7 for the adoption threshold this feeds):
+
+    poetry run python testing/test_vision_color.py http://CAM/.../image.cgi "" "" \\
+        --model yoloe-11s-seg.pt --classes "test tube,vial,medicine bottle,beaker,bowl"
+
 Takes N snapshots ~0.5s apart and reports, per frame, YOLO tube detections
 (with cap colour from the bbox crop) and standalone HSV blob detections.
 
@@ -58,12 +64,19 @@ def _grabber(source, user, password):
     return grab
 
 
-def main(source, user="", password=""):
+def main(source, user="", password="", model="yolov8n.pt", classes=None, conf=0.5):
     from ultralytics import YOLO
 
     from cobotta_rest_api.cap_color import cap_region, classify_hsv, detect_cap_blobs
 
-    yolo = YOLO("yolov8n.pt")
+    yolo = YOLO(model)
+    if classes:
+        try:
+            yolo.set_classes(classes)
+        except AttributeError:
+            print(f"{model} has no set_classes (not an open-vocabulary model) — ignoring --classes")
+            classes = None
+    tube_classes = set(classes) if classes else set(TUBE_CLASSES)
     grab = _grabber(source, user, password)
 
     frames_ok = 0
@@ -80,10 +93,10 @@ def main(source, user="", password=""):
         frames_ok += 1
 
         tubes = []
-        for result in yolo(frame, conf=0.5, verbose=False):
+        for result in yolo(frame, conf=conf, verbose=False):
             for box in result.boxes:
                 name = result.names[int(box.cls[0])]
-                if name not in TUBE_CLASSES:
+                if name not in tube_classes:
                     continue
                 xyxy = [float(v) for v in box.xyxy[0]]
                 color = classify_hsv(cap_region(frame, xyxy))
@@ -119,4 +132,18 @@ def main(source, user="", password=""):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    main(sys.argv[1], *(sys.argv[2:4]))
+    argv = sys.argv[1:]
+    model, classes, conf = "yolov8n.pt", None, 0.5
+    if "--model" in argv:
+        i = argv.index("--model")
+        model = argv.pop(i + 1)
+        argv.pop(i)
+    if "--classes" in argv:
+        i = argv.index("--classes")
+        classes = [c.strip() for c in argv.pop(i + 1).split(",") if c.strip()]
+        argv.pop(i)
+    if "--conf" in argv:
+        i = argv.index("--conf")
+        conf = float(argv.pop(i + 1))
+        argv.pop(i)
+    main(argv[0], *(argv[1:3]), model=model, classes=classes, conf=conf)

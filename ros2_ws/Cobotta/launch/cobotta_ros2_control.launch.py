@@ -122,7 +122,9 @@ def _setup(context, *args, **kwargs):
                  "-p", "camera_source:=" + LaunchConfiguration("camera_source").perform(context),
                  "-p", "camera_user:=" + LaunchConfiguration("camera_user").perform(context),
                  "-p", "camera_pass:=" + LaunchConfiguration("camera_pass").perform(context),
-                 "-p", "camera_fallback:=" + LaunchConfiguration("camera_fallback").perform(context)],
+                 "-p", "camera_fallback:=" + LaunchConfiguration("camera_fallback").perform(context),
+                 "-p", "yolo_model:=" + LaunchConfiguration("yolo_model").perform(context),
+                 "-p", "yolo_classes:=" + LaunchConfiguration("yolo_classes").perform(context)],
             cwd=proj_root, output="screen"))
     return nodes
 
@@ -143,5 +145,9 @@ def generate_launch_description():
         DeclareLaunchArgument("camera_pass", default_value="password"),
         # Auto-fallback if the Canon keeps failing (e.g. USB webcam "0"); "" disables.
         DeclareLaunchArgument("camera_fallback", default_value="0"),
+        # Default stays stock YOLOv8n; set yolo_classes to run an open-vocabulary
+        # model instead — see docs/vision-object-catalog.md §7.
+        DeclareLaunchArgument("yolo_model", default_value="yolov8n.pt"),
+        DeclareLaunchArgument("yolo_classes", default_value=""),
         OpaqueFunction(function=_setup),
     ])

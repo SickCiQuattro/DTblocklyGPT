@@ -1,32 +1,62 @@
 """
-Mapping from user-facing object names to YOLO COCO class names.
+Mapping from user-facing object names to YOLO class names.
 
-YOLOv8 pretrained (yolov8n.pt) uses the 80 COCO classes.
+Two vocabularies, selected by the VISION_MODEL env var (must be kept in
+sync with vision_node's own `yolo_model`/`yolo_classes` ROS launch
+parameters — see docs/vision-object-catalog.md §7 for the adoption gate
+this came out of and why the two configs can't auto-discover each other):
+
+- unset / "yolov8n" (default): stock YOLOv8n, COCO's 80 classes. The pharma
+  catalog has no real classes here, so tube-shaped items approximate to
+  "bottle"/"cup" — see docs/vision-object-catalog.md §5.
+- "yoloe": the pharma-vocabulary YOLOE model vision_node loads when given
+  `yolo_classes:="test tube,medicine bottle,beaker,bowl"` — class names
+  match the app's catalog directly, no approximation needed.
+
 Object names in DTblocklyGPT tasks may be in Italian or lab-specific terms;
-this mapping translates them to the corresponding COCO class name.
+this mapping translates them to the corresponding class name for whichever
+vocabulary is active.
 
-If a name is already a COCO class, it passes through unchanged.
-If no mapping is found, the original name is returned and a warning is logged.
+If a name is already a class of the active vocabulary, it passes through
+unchanged. If no mapping is found, the original name is returned and a
+warning is logged.
 """
 
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
-# Italian/lab name → COCO class name
-_OBJECT_TO_COCO: dict[str, str] = {
-    # Pharma scenario — base object is a tube; "blue/red/green/yellow tube"
-    # reaches this entry too, since parse_object_query strips the colour
-    # word before calling to_coco_class. "test tube" kept for compat with
-    # older saved tasks/workspaces that still use the pre-rename name.
+_ACTIVE_MODEL = os.getenv("VISION_MODEL", "yolov8n").strip().lower()
+
+# Pharma scenario — base object is a tube; "blue/red/green/yellow tube"
+# reaches this entry too, since parse_object_query strips the colour word
+# before calling to_coco_class. "test tube"/"provetta" kept for compat with
+# older saved tasks/workspaces that still use the pre-rename name.
+_PHARMA_STOCK = {
     "tube": "bottle",
     "test tube": "bottle",
     "medicine bottle": "bottle",
     "beaker": "cup",
     "sample bowl": "bowl",
-    # Lab glassware (legacy demo names, kept for backward compatibility)
     "provetta": "bottle",
+}
+_PHARMA_YOLOE = {
+    "tube": "test tube",
+    "test tube": "test tube",
+    "medicine bottle": "medicine bottle",
+    "beaker": "beaker",
+    "sample bowl": "bowl",
+    "provetta": "test tube",
+}
+
+# Italian/lab name → class name
+_OBJECT_TO_COCO: dict[str, str] = {
+    **(_PHARMA_YOLOE if _ACTIVE_MODEL == "yoloe" else _PHARMA_STOCK),
+    # Lab glassware (legacy demo names, kept for backward compatibility —
+    # not part of the live pharma catalog, so not switched by VISION_MODEL).
     "flask": "bottle",
+    "orange flask": "bottle",
     "flacone": "bottle",
     "bottiglia": "bottle",
     "tappo": "cup",

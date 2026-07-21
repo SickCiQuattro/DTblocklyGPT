@@ -12,11 +12,16 @@ from cobotta_rest_api.cap_color import (
     cap_region,
     classify_hsv,
     detect_cap_blobs,
+    normalize_white_balance,
     point_in_bbox,
+    sample_background_hue,
 )
 
-# COCO classes that can stand in for a test tube; their bbox top gets a
-# cap-colour classification pass.
+# Stock-model default: COCO classes that can stand in for a test tube; their
+# bbox top gets a cap-colour classification pass. Overridden per-instance by
+# the yolo_classes parameter when running an open-vocabulary model (see
+# docs/vision-object-catalog.md §7) — keep backend/functions/vision_mapping.py's
+# VISION_MODEL switch in sync with whatever's launched here.
 _TUBE_CLASSES = ("bottle", "cup")
 
 
@@ -41,6 +46,16 @@ class VisionNode(Node):
         # primary every retry_primary_secs while running on the fallback.
         self.declare_parameter("max_failures", 6)
         self.declare_parameter("retry_primary_secs", 15.0)
+        # Default stays stock YOLOv8n (unchanged behaviour). Set yolo_classes
+        # to run an open-vocabulary model (YOLOE/YOLO-World) with the pharma
+        # catalog as its vocabulary instead of the COCO bottle/cup approximation
+        # — see docs/vision-object-catalog.md §7 for the adoption gate this
+        # came out of. Must match backend/functions/vision_mapping.py's
+        # VISION_MODEL env var on the Django side, e.g.:
+        #   yolo_model:=yoloe-11s-seg.pt yolo_classes:="test tube,medicine bottle,beaker,bowl"
+        #   VISION_MODEL=yoloe (Django)
+        self.declare_parameter("yolo_model", "yolov8n.pt")
+        self.declare_parameter("yolo_classes", "")
 
         def p(name):
             return str(self.get_parameter(name).value)
@@ -62,7 +77,14 @@ class VisionNode(Node):
 
         # Lazy-import heavy deps here so ROS2 init is not blocked
         from ultralytics import YOLO
-        self._yolo = YOLO("yolov8n.pt")
+        self._yolo = YOLO(p("yolo_model"))
+        classes = [c.strip() for c in p("yolo_classes").split(",") if c.strip()]
+        if classes:
+            self._yolo.set_classes(classes)
+            self._tube_classes = set(classes)
+            self.get_logger().info(f"VisionNode: open-vocab classes = {classes}")
+        else:
+            self._tube_classes = set(_TUBE_CLASSES)
 
         self._frame_counter = 0
         self.create_timer(0.1, self._timer_callback)   # 10 Hz
@@ -142,6 +164,12 @@ class VisionNode(Node):
         try:
             results = self._yolo(frame, conf=0.5, verbose=False)
             h_img, w_img = frame.shape[:2]
+            # Cap-colour crops all come from this whitened copy — gray-world
+            # needs a large, roughly-neutral sample to estimate a cast from,
+            # which only the full frame gives (see cap_color.py docstring).
+            # YOLO itself still sees the raw frame; bbox geometry is
+            # colour-independent, so it's safe to reuse xyxy on wb_frame.
+            wb_frame = normalize_white_balance(frame)
             detections = []
             for result in results:
                 for box in result.boxes:
@@ -158,12 +186,13 @@ class VisionNode(Node):
                             round((xyxy[1] + xyxy[3]) / 2 / h_img, 4),
                         ],
                     }
-                    if class_name in _TUBE_CLASSES:
-                        color = classify_hsv(cap_region(frame, xyxy))
+                    if class_name in self._tube_classes:
+                        bg_hue = sample_background_hue(wb_frame, xyxy)
+                        color = classify_hsv(cap_region(wb_frame, xyxy), background_hue=bg_hue)
                         if color:
                             detection["color"] = color
                     detections.append(detection)
-            detections.extend(self._blob_detections(frame, detections))
+            detections.extend(self._blob_detections(wb_frame, detections))
             return detections
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warning(f"VisionNode: YOLO inference error: {exc}")
@@ -175,7 +204,7 @@ class VisionNode(Node):
         Blobs whose centre falls inside a same-colour tube bbox are dropped —
         that cap is already represented by the enriched YOLO detection.
         """
-        tube_boxes = [d for d in yolo_detections if d["class"] in _TUBE_CLASSES]
+        tube_boxes = [d for d in yolo_detections if d["class"] in self._tube_classes]
         blobs = []
         for blob in detect_cap_blobs(frame):
             duplicate = any(

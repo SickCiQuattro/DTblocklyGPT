@@ -8,6 +8,21 @@ Two entry points share the same HSV colour bins:
   blobs. Used when YOLO does not see the tube (gate-V6 fallback) and in
   Gazebo, where rendered cap colours are pure.
 
+A third helper, ``sample_background_hue``, feeds ``classify_hsv`` the local
+background colour so it can be excluded from the vote — see its docstring
+for why (real-camera false positive found 2026-07-13: a warm light cast
+made a plain brown table read as "red").
+
+A fourth, ``normalize_white_balance``, corrects a uniform colour cast (same
+kind of warm-light problem, upstream of it) — callers apply it ONCE to the
+whole raw frame, before any cropping, and feed the corrected frame into
+``cap_region``/``sample_background_hue``/``detect_cap_blobs``. Gray-world
+white balance only holds over a large, roughly-neutral sample; running it on
+a small crop (a cap-sized ROI, or a background ring already isolated from
+its object) can be dominated by whatever single colour is in that crop and
+invent a cast that was never there — so it must run on the full frame, not
+per-crop.
+
 Pure OpenCV/numpy — no ROS imports, unit-testable offline.
 """
 
@@ -36,6 +51,31 @@ MAX_BLOB_AREA_FRACTION = 0.05
 # Fraction of a tube bbox (from the top) where the cap sits.
 CAP_REGION_FRACTION = 0.3
 
+# How far outside the bbox to sample the local background (and how thick a
+# ring), and how close a cap_region hue has to be to that background hue to
+# be treated as "background bleed" rather than the cap's own colour.
+BACKGROUND_MARGIN_PX = 15
+BACKGROUND_HUE_TOLERANCE = 12
+# Need at least this many saturated background pixels to trust the sample —
+# a background with almost no saturated pixels has nothing worth excluding.
+MIN_BACKGROUND_SATURATED_PX = 10
+
+
+def normalize_white_balance(bgr_frame):
+    """Gray-world white balance: scale each channel so its mean matches the
+    frame's overall grey mean, cancelling a uniform colour cast (e.g. warm
+    tungsten light) before HSV classification sees it. Neutral on already-
+    balanced input (Gazebo renders), which is why it's safe to always apply.
+
+    Assumes a non-empty frame — callers already guard None/empty before
+    reaching this point (see classify_hsv, detect_cap_blobs).
+    """
+    means = bgr_frame.reshape(-1, 3).mean(axis=0)
+    if (means <= 1e-6).any():
+        return bgr_frame
+    gain = means.mean() / means
+    return np.clip(bgr_frame.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+
 
 def cap_region(bgr_frame, xyxy):
     """Return the top CAP_REGION_FRACTION slice of a bbox crop (cap zone)."""
@@ -49,17 +89,73 @@ def cap_region(bgr_frame, xyxy):
     return bgr_frame[y1:y1 + cap_h, x1:x2]
 
 
-def classify_hsv(bgr_roi):
+def sample_background_hue(bgr_frame, xyxy, margin_px=BACKGROUND_MARGIN_PX):
+    """Dominant hue of a thin ring just outside a detection's bbox, or None.
+
+    ``cap_region`` crops a RECTANGLE from the top of a bbox, but a cap's own
+    footprint in that rectangle is round — so the crop's corners are always
+    background, whatever the cap-to-body width ratio (this holds regardless
+    of object shape, unlike a fixed circular mask sized for one shape). That
+    background is normally too dull to matter, but under a coloured light
+    cast (e.g. warm tungsten light shifting a neutral table toward orange/
+    red) it can itself look saturated enough to win classify_hsv's vote —
+    reading a plain grey cap as "red" (found testing against the real
+    camera, 2026-07-13). This samples what "background" actually looks like
+    right now, in this frame, so classify_hsv can tell it apart from the
+    cap's own colour.
+
+    Returns None (nothing to exclude) if the background sample doesn't
+    exist (bbox fills the frame) or isn't saturated enough to matter.
+    """
+    if bgr_frame is None or bgr_frame.size == 0:
+        return None
+    h_img, w_img = bgr_frame.shape[:2]
+    x1, y1, x2, y2 = (int(v) for v in xyxy)
+    ox1, oy1 = max(0, x1 - margin_px), max(0, y1 - margin_px)
+    ox2, oy2 = min(w_img, x2 + margin_px), min(h_img, y2 + margin_px)
+    outer = bgr_frame[oy1:oy2, ox1:ox2]
+    if outer.size == 0:
+        return None
+
+    # Mask out the bbox itself (in the outer crop's local coordinates) so
+    # only the surrounding ring is sampled, not the object itself.
+    mask = np.ones(outer.shape[:2], dtype=bool)
+    ry1, ry2 = max(0, y1 - oy1), max(0, y2 - oy1)
+    rx1, rx2 = max(0, x1 - ox1), max(0, x2 - ox1)
+    mask[ry1:ry2, rx1:rx2] = False
+    if not mask.any():
+        return None
+
+    hsv = cv2.cvtColor(outer, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    saturated = mask & (s >= SAT_MIN) & (v >= VAL_MIN)
+    if int(saturated.sum()) < MIN_BACKGROUND_SATURATED_PX:
+        return None
+    return int(np.median(h[saturated]))
+
+
+def _hue_circular_distance(hues, reference_hue):
+    """Shortest distance from each hue to reference_hue on the 0-179 wheel."""
+    diff = np.abs(hues.astype(np.int16) - int(reference_hue))
+    return np.minimum(diff, 180 - diff)
+
+
+def classify_hsv(bgr_roi, background_hue=None):
     """Return the dominant colour name of a BGR crop, or None.
 
     Saturated pixels vote into hue bins; a histogram vote (not a median)
-    handles the red wrap-around at hue 0/179.
+    handles the red wrap-around at hue 0/179. If ``background_hue`` is given
+    (see ``sample_background_hue``), pixels within BACKGROUND_HUE_TOLERANCE
+    of it are excluded from the vote first — see that function's docstring
+    for why a rectangular crop needs this regardless of cap shape.
     """
     if bgr_roi is None or bgr_roi.size == 0:
         return None
     hsv = cv2.cvtColor(bgr_roi, cv2.COLOR_BGR2HSV)
     h, s, v = cv2.split(hsv)
     saturated = (s >= SAT_MIN) & (v >= VAL_MIN)
+    if background_hue is not None:
+        saturated &= _hue_circular_distance(h, background_hue) > BACKGROUND_HUE_TOLERANCE
     total = int(saturated.sum())
     if total < MIN_SATURATED_FRACTION * bgr_roi.shape[0] * bgr_roi.shape[1]:
         return None
