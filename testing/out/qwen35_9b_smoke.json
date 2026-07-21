@@ -1,0 +1,20 @@
+{
+  "ollama:qwen3.5:9b": [
+    {
+      "name": "voice_condition",
+      "category": "condition_variant",
+      "lang": "en",
+      "error": "Request timed out.",
+      "pass": false,
+      "latency_ms": 91568.04791698232
+    },
+    {
+      "name": "notify_human_combo",
+      "category": "combo",
+      "lang": "en",
+      "error": "Request timed out.",
+      "pass": false,
+      "latency_ms": 91312.80454102671
+    }
+  ]
+}

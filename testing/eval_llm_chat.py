@@ -27,6 +27,10 @@ import sys
 import time
 import urllib.request
 from datetime import date
+from types import SimpleNamespace
+from typing import Union
+
+import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "django_project_conf.settings")
@@ -53,6 +57,7 @@ from backend.functions.chat import (  # noqa: E402
     OPENAI_API_KEY,
     OLLAMA_BASE_URL,
     LLMProvider,
+    ProviderLLMResponse,
     format_blocks_catalog,
     repair_flattened_steps,
     validate_step,
@@ -110,6 +115,7 @@ PROVIDER_DEFAULTS = {
     "gemini": "gemini-3.1-flash-lite",
     "openai": "gpt-4.1-nano",
     "ollama": "qwen3.5:9b",
+    "ollama-nothink": "qwen3.5:9b",
 }
 
 # $ per million tokens (input, output). Ollama and Gemini's free tier are $0.
@@ -143,11 +149,67 @@ def build_system_prompt(scene="unavailable"):
     return prompt
 
 
-def build_provider(spec: str) -> LLMProvider:
+class OllamaNativeProvider:
+    """Talks to Ollama's native /api/chat instead of the OpenAI-compatible
+    /v1/chat/completions that LLMProvider uses. Exists solely to make
+    Ollama-only request options (here: think=False) actually take effect —
+    both `extra_body={"options": {"num_ctx": N}}` and `extra_body={"think":
+    False}` are silently ignored on the OpenAI-compat endpoint (verified,
+    see EVAL_LLM.md bug #3/#4); only /api/chat honors them. Mirrors
+    LLMProvider's .complete() signature/return type so run_case() doesn't
+    need to know which one it's holding."""
+
+    def __init__(self, model: str, base_url: str, timeout: int = 120, think: bool = False):
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self.think = think
+
+    def complete(self, messages, tools, tool_name, temperature: float = 0.0) -> ProviderLLMResponse:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "stream": False,
+            "think": self.think,
+            "options": {"temperature": temperature},
+        }
+        response = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        msg = data.get("message", {})
+
+        tool_calls = msg.get("tool_calls") or []
+        if tool_calls:
+            arguments = tool_calls[0]["function"]["arguments"]
+            raw_arguments = arguments if isinstance(arguments, dict) else json.loads(arguments or "{}")
+        else:
+            try:
+                raw_arguments = json.loads(msg.get("content") or "{}")
+            except Exception:
+                raw_arguments = {}
+
+        usage = SimpleNamespace(prompt_tokens=data.get("prompt_eval_count"), completion_tokens=data.get("eval_count"))
+        return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage))
+
+
+# Either provider works with call_with_throttle_and_retry/run_case: same
+# .complete(messages, tools, tool_name, temperature) -> ProviderLLMResponse shape.
+Provider = Union[LLMProvider, OllamaNativeProvider]
+
+
+def build_provider(spec: str) -> Provider:
     if ":" in spec:
         provider_name, model = spec.split(":", 1)
     else:
         provider_name, model = spec, PROVIDER_DEFAULTS.get(spec)
+
+    if provider_name == "ollama-nothink":
+        if not model:
+            raise ValueError(f"No model for provider '{provider_name}' (spec was '{spec}').")
+        # Bypasses the api_key/OpenAI-client path entirely — native Ollama
+        # needs no auth and this class isn't an LLMProvider.
+        return OllamaNativeProvider(model=model, base_url=OLLAMA_BASE_URL.replace("/v1", ""), timeout=120, think=False)
 
     if provider_name == "gemini":
         api_key = LLM_API_KEY or GEMINI_API_KEY
@@ -175,7 +237,13 @@ def build_provider(spec: str) -> LLMProvider:
     if not api_key:
         raise ValueError(f"No API key for provider '{provider_name}'.")
 
-    return LLMProvider(api_key=api_key, base_url=base_url, model=model, timeout=30, max_retries=2)
+    # Ollama on modest local hardware routinely exceeds the 30s that's plenty
+    # for cloud providers (granite4.1:8b/qwen3.5:9b measured 33-41s on a
+    # single well-formed reply) — a short timeout there just turns a slow-but-
+    # correct answer into a spurious ERROR after burning 3x the timeout on
+    # retries that fail identically.
+    timeout = 120 if provider_name == "ollama" else 30
+    return LLMProvider(api_key=api_key, base_url=base_url, model=model, timeout=timeout, max_retries=2)
 
 
 def ollama_available() -> bool:
@@ -258,7 +326,7 @@ def _throttle(rpm: int, last_call_at: list):
     last_call_at[0] = time.monotonic()
 
 
-def call_with_throttle_and_retry(provider: LLMProvider, messages, rpm: int, last_call_at: list):
+def call_with_throttle_and_retry(provider: Provider, messages, rpm: int, last_call_at: list):
     """Throttle for --rpm, then call the provider, retrying on 429 with
     backoff honoring Retry-After when the server sends one (free-tier quotas
     like Gemini's return 429 fast and reliably once RPM is exceeded). Returns
@@ -294,7 +362,7 @@ def call_with_throttle_and_retry(provider: LLMProvider, messages, rpm: int, last
     raise RuntimeError("unreachable: retry loop exited without returning or raising")
 
 
-def run_case(provider: LLMProvider, case: dict, model_spec: str, rpm: int, last_call_at: list) -> dict:
+def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_call_at: list) -> dict:
     system_prompt = build_system_prompt(case.get("scene", "unavailable")) + f"\n\n# CURRENT TASK SNAPSHOT #\n{json.dumps(case['snapshot'], ensure_ascii=False)}"
     messages = [
         {"role": "system", "content": system_prompt},

@@ -1,0 +1,47 @@
+{
+  "ollama:llama3.1:8b": [
+    {
+      "name": "voice_condition",
+      "category": "condition_variant",
+      "lang": "en",
+      "pass": false,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 43850.30958300922,
+      "prompt_tokens": 5520,
+      "completion_tokens": 93,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "pick"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "notify_human_combo",
+      "category": "combo",
+      "lang": "en",
+      "pass": false,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 8794.096958998125,
+      "prompt_tokens": 5531,
+      "completion_tokens": 129,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action"
+      ],
+      "warnings": []
+    }
+  ]
+}
