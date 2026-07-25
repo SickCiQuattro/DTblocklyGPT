@@ -37,6 +37,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   const startRecording = () => {
     SpeechRecognition.startListening({
+      owner: 'chat-composer',
       // Match the speaker's own language (browser/OS locale) — no UI toggle.
       language: navigator.language || 'en-US',
       continuous: true,
@@ -45,7 +46,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   }
 
   const stopRecording = () => {
-    SpeechRecognition.stopListening()
+    SpeechRecognition.stopListening('chat-composer')
     setMessage(transcript)
     resetTranscript()
     setIsRecording(false)

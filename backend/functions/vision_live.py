@@ -48,6 +48,14 @@ _yolo_cache_lock = threading.Lock()
 _last_yolo_ts = 0.0
 _last_yolo_detections: list = []
 
+# Gestures the app actually exposes as a block condition (see
+# frontend/src/constants/recognitionRegistry.ts, the single source of truth
+# on the frontend side). The recognizer can emit more labels (THREE, PINCH,
+# POINTING) than this — those are filtered to NONE here so they never leak
+# into the bridge cache, the ROS topic, or the UI as a phantom "detected"
+# value for a gesture nobody can select.
+_GESTURE_WORDS = {"THUMBS_UP", "THUMBS_DOWN", "OPEN_HAND", "FIST", "PEACE", "OK"}
+
 # Mirrors vision_node.py's _TUBE_CLASSES — COCO classes that get a cap-colour pass.
 _TUBE_CLASSES = ("bottle", "cup")
 
@@ -209,9 +217,17 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
     if engine:
         try:
             _, stable_gesture = engine.process(frame)
-            gesture = stable_gesture.upper().replace(" ", "_") if stable_gesture else "NONE"
+            code = stable_gesture.upper().replace(" ", "_") if stable_gesture else "NONE"
+            # Recognizer can emit more labels (THREE, PINCH, POINTING) than
+            # the app exposes as a block condition — drop anything outside
+            # the allow-list instead of forwarding a phantom "detected".
+            gesture = code if code in _GESTURE_WORDS else "NONE"
         except Exception:
             gesture = "NONE"
+    # engine is False only after a permanent model-load failure (as opposed
+    # to "no hand in this frame", which still reports "NONE" with engine
+    # truthy) — the frontend needs this to tell the two apart.
+    engine_ok = engine is not False
 
     # ── Objects (test-screen only — never fed to the bridge, see below) ──
     detections = _detect_objects(frame) if detect_objects_flag else []
@@ -233,7 +249,7 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
 
     threading.Thread(target=_report, daemon=True).start()
 
-    return JsonResponse({"gesture": gesture, "detections": detections})
+    return JsonResponse({"gesture": gesture, "detections": detections, "engine_ok": engine_ok})
 
 
 # ── Voice command (browser Web Speech API → Django cache) ────────────────────
@@ -250,12 +266,32 @@ _latest_voice_time = 0.0
 _VOICE_WORDS = {"YES", "NO", "DONE", "PROCEED"}
 
 
-def get_latest_voice(max_age_s: float = 3.0) -> str:
-    """Return the last recognised voice command if fresh, else ``"NONE"``."""
+def get_latest_voice(max_age_s: float = 3.0, consume: bool = False) -> str:
+    """Return the last recognised voice command if fresh, else ``"NONE"``.
+
+    consume=True clears the cache after reading, so one utterance satisfies
+    exactly one waiting condition instead of every condition polled within
+    the freshness window (back-to-back human_action steps, AND of two voice
+    leaves, etc).
+    """
+    global _latest_voice, _latest_voice_time
     with _voice_lock:
         if time.monotonic() - _latest_voice_time <= max_age_s:
-            return _latest_voice
+            word = _latest_voice
+            if consume:
+                _latest_voice = "NONE"
+                _latest_voice_time = 0.0
+            return word
     return "NONE"
+
+
+def reset_voice() -> None:
+    """Drop any cached voice command so a word spoken before a step starts
+    can't satisfy it (stale replay)."""
+    global _latest_voice, _latest_voice_time
+    with _voice_lock:
+        _latest_voice = "NONE"
+        _latest_voice_time = 0.0
 
 
 @csrf_exempt
@@ -281,3 +317,53 @@ def process_voice_command(request: HttpRequest) -> JsonResponse:
         _latest_voice_time = time.monotonic()
 
     return JsonResponse({"status": "ok", "voice": word})
+
+
+# ── Human confirm (operator presses "Confirm" in the Digital Twin panel) ─────
+# The manual counterpart to gesture/voice/find_object as a human_action resume
+# trigger — no sensor, just a button. Same cache shape as voice (reset at step
+# entry, consume on read) so a press can't replay across steps or runs.
+
+_confirm_lock = threading.Lock()
+_confirm_pending = False
+_confirm_time = 0.0
+
+
+def get_confirm(max_age_s: float = 3.0, consume: bool = False) -> bool:
+    """Return True if the operator pressed Confirm recently, else False.
+
+    consume=True clears the pending flag after reading, so one press satisfies
+    exactly one waiting step instead of every step polled within the window.
+    """
+    global _confirm_pending
+    with _confirm_lock:
+        if _confirm_pending and time.monotonic() - _confirm_time <= max_age_s:
+            if consume:
+                _confirm_pending = False
+            return True
+    return False
+
+
+def reset_confirm() -> None:
+    """Drop any pending confirm so a press from before a step starts can't
+    satisfy it (stale replay — same class of bug fixed on voice/gesture)."""
+    global _confirm_pending, _confirm_time
+    with _confirm_lock:
+        _confirm_pending = False
+        _confirm_time = 0.0
+
+
+@csrf_exempt
+def process_human_confirm(request: HttpRequest) -> JsonResponse:
+    """Record that the operator pressed the manual Confirm button."""
+    global _confirm_pending, _confirm_time
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "unauthorized"}, status=401)
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    with _confirm_lock:
+        _confirm_pending = True
+        _confirm_time = time.monotonic()
+
+    return JsonResponse({"status": "ok"})

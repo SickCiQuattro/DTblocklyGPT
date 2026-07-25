@@ -22,6 +22,10 @@ export interface WebcamVisionState {
   detections: WebcamDetection[]
   active: boolean
   error: string | null
+  /** False only after a permanent model-load failure on the backend — as
+   * opposed to "no hand in this frame", which still reports gesture=NONE
+   * with this true. Lets the UI tell "engine down" from "nothing detected". */
+  engineOk: boolean
   activeLabel: string
   selectedDeviceId: string
   devices: WebcamDevice[]
@@ -41,12 +45,14 @@ export function useWebcamVision(): WebcamVisionState {
   const activeRef = useRef(false)
   const inFlightRef = useRef(false)
   const detectObjectsRef = useRef(false)
+  const captureFailuresRef = useRef(0)
 
   const [gesture, setGesture] = useState<string>('NONE')
   const [detections, setDetections] = useState<WebcamDetection[]>([])
   const [detectObjects, setDetectObjectsState] = useState(false)
   const [active, setActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [engineOk, setEngineOk] = useState(true)
   const [activeLabel, setActiveLabel] = useState<string>('')
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
   const [devices, setDevices] = useState<WebcamDevice[]>([])
@@ -105,9 +111,22 @@ export function useWebcamVision(): WebcamVisionState {
       if (result && activeRef.current) {
         setGesture(result.gesture ?? 'NONE')
         setDetections(result.detections ?? [])
+        setEngineOk(result.engine_ok ?? true)
+        captureFailuresRef.current = 0
       }
-    } catch {
-      // ignore transient errors
+    } catch (err: any) {
+      // A single dropped frame is normal network jitter — only surface an
+      // error once failures are sustained, so this doesn't flap the UI on
+      // every blip while still catching a dead session or backend.
+      captureFailuresRef.current += 1
+      if (activeRef.current && captureFailuresRef.current >= 3) {
+        const status = err?.response?.status
+        setError(
+          status === 401
+            ? 'Session expired — reload to keep using gesture recognition.'
+            : 'Lost connection to the gesture recognition backend.',
+        )
+      }
     } finally {
       inFlightRef.current = false
       rearm()
@@ -132,6 +151,7 @@ export function useWebcamVision(): WebcamVisionState {
         return
       }
       setError(null)
+      captureFailuresRef.current = 0
       try {
         const videoConstraints: MediaTrackConstraints = {
           width: { ideal: 640 },
@@ -211,6 +231,8 @@ export function useWebcamVision(): WebcamVisionState {
     setDetections([])
     setActiveLabel('')
     setSelectedDeviceId('')
+    setEngineOk(true)
+    captureFailuresRef.current = 0
   }, [])
 
   const setDetectObjects = useCallback((enabled: boolean) => {
@@ -249,6 +271,7 @@ export function useWebcamVision(): WebcamVisionState {
     detections,
     active,
     error,
+    engineOk,
     activeLabel,
     selectedDeviceId,
     devices,
