@@ -47,7 +47,7 @@ from .functions.graphic import (
 
 from .functions.task import run_task, analyze_task
 from .functions.simulate import simulate_task, stop_simulation, hardware_status
-from .functions.vision_live import process_vision_frame, process_voice_command
+from .functions.vision_live import process_vision_frame, process_voice_command, process_human_confirm
 
 from .functions.task_lifecycle import (
     save_draft,
@@ -147,6 +147,7 @@ urlpatterns = [
     path(TASK + "discard-draft/", discard_draft, name="discard_draft"),
     path(API + "vision/frame/", process_vision_frame, name="vision_frame"),
     path(API + "vision/voice/", process_voice_command, name="vision_voice"),
+    path(API + "human/confirm/", process_human_confirm, name="human_confirm"),
     # Static + SPA catch-all (must be LAST)
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
     re_path(r"^.*$", TemplateView.as_view(template_name="base.html")),

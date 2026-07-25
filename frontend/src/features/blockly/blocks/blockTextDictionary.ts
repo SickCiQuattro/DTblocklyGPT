@@ -11,6 +11,8 @@ export const blockDescriptionsByType = {
   voice_command_block:
     'Checks if the operator says a specific word (like "yes" or "done").',
   timer_block: 'Checks if the set amount of time has passed.',
+  human_feedback_block:
+    'Waits until the operator presses Confirm in the robot panel.',
   pick_block: 'Tells the robot to pick up the chosen object.',
   // MAPPING REFERENCE:
   // - processing_block ➔ Represents the 'Execute Skill' visual block

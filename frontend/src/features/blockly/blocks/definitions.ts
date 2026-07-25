@@ -35,6 +35,7 @@ import {
   CLOCK_ICON_URI,
   WORKFLOW_ICON_URI,
   USER_ICON_URI,
+  CHECK_CIRCLE_ICON_URI,
   iconConfig,
   plusFieldConfig,
   triggerPlusFieldConfig,
@@ -157,6 +158,14 @@ Blockly.defineBlocksWithJsonArray([
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
     tooltip: blockDescriptionsByType.timer_block,
+  },
+  {
+    type: 'human_feedback_block',
+    message0: '%1 Operator confirms',
+    args0: [iconConfig(CHECK_CIRCLE_ICON_URI, 'Confirm')],
+    output: 'Boolean',
+    colour: blocksColours.eventsConditions,
+    tooltip: blockDescriptionsByType.human_feedback_block,
   },
   {
     type: 'logic_and_block',

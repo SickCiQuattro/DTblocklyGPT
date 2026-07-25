@@ -8,17 +8,18 @@ import { AbstractCondition, AbstractStep } from 'pages/tasks/types'
  *
  * BLOCK SUPPORT STATUS:
  *  FULLY SUPPORTED (Blockly ↔ backend):
- *    - pick, place, processing, move_to, gripper, wait
+ *    - pick, place, processing, move_to, wait
+ *    - open_gripper, close_gripper (toolbox); gripper (legacy unified form, kept for back-compat)
  *    - repeat, repeat_until, when, when_otherwise
  *    - human_action, notify_action
- *    - find_object, gesture, timer
+ *    - find_object, gesture, voice, timer, human_feedback
  *    - logic_and, logic_or, logic_not
+ *    - macro_task (chat.py only ever echoes an existing one back, never authors from scratch)
  *
  *  REMOVED (no longer in toolbox or backend):
  *    - loop_block: unsafe on non-replenishing real cell; serialization was null
  *    - sensor_signal_block: redundant with program Stop + robot panic button
  *    - touch_detect_block: collision-stop, not a readable condition
- *    - human_feedback_block: no frontend definition; orphaned
  */
 
 // ---------------------------------------------
@@ -45,6 +46,7 @@ export interface CustomBlock {
     | 'gesture_block'
     | 'voice_command_block'
     | 'timer_block'
+    | 'human_feedback_block'
     | 'human_action_block'
     | 'notify_action_block'
     | 'wait_block'
@@ -198,6 +200,15 @@ export const abstractToBlockly = (
         return { type: 'open_gripper_block' }
       case 'close_gripper':
         return { type: 'close_gripper_block' }
+      case 'macro_task':
+        return {
+          type: 'macro_task_block',
+          data: JSON.stringify({
+            id: step.macroId ?? null,
+            name: step.macroName ?? null,
+          }),
+          fields: { name: step.macroName ?? '' },
+        }
       case 'wait':
         return {
           type: 'wait_block',
@@ -318,6 +329,8 @@ export const abstractToBlockly = (
           type: 'timer_block',
           fields: { SECONDS: condition.seconds ?? 5 },
         }
+      case 'human_feedback':
+        return { type: 'human_feedback_block' }
       case 'and': {
         const left = conditionToBlock(condition.left)
         const right = conditionToBlock(condition.right)
@@ -417,6 +430,8 @@ export const blocklyToAbstract = (
         }
       case 'timer_block':
         return { type: 'timer', seconds: block.fields?.SECONDS ?? 5 }
+      case 'human_feedback_block':
+        return { type: 'human_feedback' }
       case 'logic_and_block': {
         const left = blockToCondition(resolveBlock(block.inputs?.A))
         const right = blockToCondition(resolveBlock(block.inputs?.B))

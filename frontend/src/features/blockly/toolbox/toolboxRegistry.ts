@@ -241,6 +241,13 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         outputs: 'Yes or No',
         inputs: 'Word to listen for',
       },
+      {
+        type: 'human_feedback_block',
+        label: 'Operator confirms',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.human_feedback_block,
+        outputs: 'Yes or No',
+      },
       // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
       //    timer 'Time passed' + logic AND/OR/NOT. Block definitions, parser and
       //    backend enums remain intact — only the toolbox pills are suppressed.

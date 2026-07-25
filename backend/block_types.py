@@ -44,6 +44,7 @@ class EventsItems(Enum):
     TIMER = "timer_block"
     GESTURE = "gesture_block"
     VOICE = "voice_command_block"
+    HUMAN_FEEDBACK = "human_feedback_block"
 
 
 # ── Library Entities (drag-and-drop references) ────────────────────────────────

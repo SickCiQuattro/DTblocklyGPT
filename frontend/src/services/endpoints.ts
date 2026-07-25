@@ -12,6 +12,7 @@ const GRAPHIC_API = `${SERVER_API}/graphic`
 const CHAT_API = `${SERVER_API}/chat`
 const TASK_API = `${SERVER_API}/task`
 const VISION_API = `${SERVER_API}/vision`
+const HUMAN_API = `${SERVER_API}/human`
 
 export const endpoints = {
   auth: {
@@ -71,6 +72,9 @@ export const endpoints = {
   vision: {
     frame: `${VISION_API}/frame/`,
     voice: `${VISION_API}/voice/`,
+  },
+  human: {
+    confirm: `${HUMAN_API}/confirm/`,
   },
   // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
   get macro() {

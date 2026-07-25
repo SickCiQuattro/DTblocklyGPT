@@ -99,6 +99,11 @@ export const SCAN_EYE_ICON_URI = createLucideIconURI(
   '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
 )
 
+/** CheckCircle icon — used on the operator-confirm condition block (manual, no sensor). */
+export const CHECK_CIRCLE_ICON_URI = createLucideIconURI(
+  '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+)
+
 /** Flag icon — used on the when_start entry-point block. */
 export const FLAG_ICON_URI = createLucideIconURI(
   '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',

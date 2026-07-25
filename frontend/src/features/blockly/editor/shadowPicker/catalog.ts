@@ -12,10 +12,10 @@
  */
 
 import { TaskType } from 'pages/tasks/types'
+import { slate } from 'themes/theme'
 
 import { normalizeKeywords } from '../../utils/keywords'
 import { blocksColours } from '../../blocks/palette'
-import { slate } from 'themes/theme'
 
 import {
   DIRECT_BLOCK_TYPES,
@@ -57,6 +57,15 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
     paramHint: 'word',
     keywords: ['voice', 'say', 'word', 'speak', 'speech'],
     blockType: 'voice_command_block',
+  },
+  {
+    id: 10,
+    name: 'Operator confirms',
+    description:
+      'Waits until the operator presses Confirm in the robot panel — no camera or microphone needed.',
+    group: 'Conditions',
+    keywords: ['confirm', 'press', 'button', 'manual', 'operator'],
+    blockType: 'human_feedback_block',
   },
   // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
   //    'Time passed' (timer_block) + logic AND/OR/NOT. Block definitions, parser

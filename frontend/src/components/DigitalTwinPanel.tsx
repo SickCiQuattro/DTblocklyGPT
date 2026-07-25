@@ -122,8 +122,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [feedFrameLoaded, setFeedFrameLoaded] = useState(false)
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [confirmSending, setConfirmSending] = useState(false)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [notifyBanner, setNotifyBanner] = useState<string | null>(null)
+  const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [runResult, setRunResult] = useState<{
     ok: boolean
     text: string
@@ -153,7 +155,6 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     connected,
   } = useRosEvents()
   const webcam = useWebcamVision()
-  const voice = useVoiceCommand()
 
   // ── Live block-execution highlight ──────────────────────────────────────────
   // Per-step reaction: highlight the running block (+ its object/location),
@@ -181,12 +182,38 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // live run asks for (never both by default) and which preflight note to
   // show. find_object is deliberately excluded: it's always the robot
   // camera (vision_node), never the operator's browser webcam.
-  const taskNeedsCamera = !!workspace
+  const taskNeedsCameraLive = !!workspace
     ?.getAllBlocks(false)
     .some((b) => b.type === 'gesture_block')
-  const taskNeedsVoice = !!workspace
+  const taskNeedsVoiceLive = !!workspace
     ?.getAllBlocks(false)
     .some((b) => b.type === 'voice_command_block')
+
+  // Freeze what a run needs at the moment it starts: `workspace` is the live
+  // editor (draft) canvas, still mutable while a run is in flight (toolbox
+  // is collapsed during a run, but existing blocks can still be deleted).
+  // Without this, an edit mid-run can silently flip taskNeedsVoice and kill
+  // or start the mic out from under a step that's still waiting on it.
+  const runNeedsRef = useRef({
+    camera: taskNeedsCameraLive,
+    voice: taskNeedsVoiceLive,
+  })
+  useEffect(() => {
+    if (simulation.isRunning) {
+      runNeedsRef.current = {
+        camera: taskNeedsCameraLive,
+        voice: taskNeedsVoiceLive,
+      }
+    }
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [simulation.isRunning])
+
+  const taskNeedsCamera = simulation.isRunning
+    ? runNeedsRef.current.camera
+    : taskNeedsCameraLive
+  const taskNeedsVoice = simulation.isRunning
+    ? runNeedsRef.current.voice
+    : taskNeedsVoiceLive
   const needsCameraOrVoice = taskNeedsCamera || taskNeedsVoice
 
   // The webcam/mic run whenever the sandbox toggle is on OR a live run
@@ -197,6 +224,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const voiceActive =
     testVoiceOn ||
     (runMode === 'live' && simulation.isRunning && taskNeedsVoice)
+
+  // The hook owns voice's own start/stop/cleanup lifecycle entirely — it
+  // just needs to know whether it should be listening right now.
+  const voice = useVoiceCommand(voiceActive)
 
   // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
   const activeGesture =
@@ -215,14 +246,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [cameraActive])
 
+  // The sandbox toggle is only *disabled* during a run, not forced off — if
+  // it was left on, its own <video> mount would coexist with the gesture-step
+  // self-view <video> below, and both bind the same webcam.videoRef. Force it
+  // off the moment a run starts so only one <video> is ever mounted at a time.
   useEffect(() => {
-    if (voiceActive) {
-      voice.start()
-    } else {
-      voice.stop()
-    }
-    // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [voiceActive])
+    if (simulation.isRunning) setTestCameraOn(false)
+  }, [simulation.isRunning])
 
   // Countdown ticker
   useEffect(() => {
@@ -255,12 +285,25 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     return () => clearTimeout(t)
   }, [humanStep])
 
-  // Notify banner (auto-dismisses)
+  // Notify banner (auto-dismisses) — benign, informational only. A task
+  // abort must not look like this: it uses the separate error banner
+  // below, which stays up until the operator dismisses it.
   useEffect(() => {
     if (humanStep?.status !== 'notify') return
     setNotifyBanner(humanStep.description || 'Notification')
     const t = setTimeout(() => setNotifyBanner(null), 4000)
     return () => clearTimeout(t)
+  }, [humanStep])
+
+  // Error banner (task aborted) — persistent until the operator closes it,
+  // distinct styling from the informational notify banner above. A stopped
+  // task with no visible reason (or one that silently disappears after 4s)
+  // is worse than no banner at all.
+  useEffect(() => {
+    if (humanStep?.status !== 'error') return
+    setErrorBanner(
+      humanStep.description || 'The task stopped because of a problem.',
+    )
   }, [humanStep])
 
   // Run-result banner: without this, a run silently flips back to idle with
@@ -328,6 +371,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // "Simulation" NEVER sets this — the physical arm cannot move from that button.
   const runTask = async (driveHardware: boolean) => {
     if (!taskId || !canRun) return
+    setErrorBanner(null) // clear any abort banner left over from a previous run
     dispatch(startSimAction())
     try {
       await fetchApi({
@@ -365,13 +409,42 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     runTask(true)
   }
 
+  // Manual counterpart to gesture/voice/find_object as a human_action resume
+  // trigger — no sensor, just a button press recorded server-side and polled
+  // by the same _wait_for_condition loop.
+  const handleConfirmHumanStep = async () => {
+    setConfirmSending(true)
+    try {
+      await fetchApi({ url: endpoints.human.confirm, method: MethodHTTP.POST })
+    } catch (error: any) {
+      // fetchApi() already toasts the raw HTTP error — that alone doesn't
+      // tell the operator what to do next: the robot is still waiting on
+      // this exact step, so the fix is simply to press Confirm again.
+      console.error('Error sending confirm:', error)
+      setErrorBanner(
+        "Your confirmation didn't go through — press Confirm again.",
+      )
+    } finally {
+      setConfirmSending(false)
+    }
+  }
+
   const stopSimulation = () => {
     dispatch(stopSimAction())
     // stop_simulation() halts the parser, Gazebo, and — if a hardware run is
-    // in flight — the real arm via the halt channel. Fire-and-forget: the UI
-    // already reflects "stopped" from the Redux dispatch above regardless.
+    // in flight — the real arm via the halt channel. Optimistic: the UI
+    // reflects "stopped" immediately rather than waiting on the round trip.
+    // If the request itself fails, the arm may still be moving even though
+    // the panel says otherwise — that must not stay a console-only error,
+    // since the teach-pendant e-stop is the operator's real fallback here.
     fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST }).catch(
-      (error: any) => console.error('Error stopping simulation:', error),
+      (error: any) => {
+        console.error('Error stopping simulation:', error)
+        setErrorBanner(
+          'The stop request failed to reach the robot — it may still be moving. ' +
+            'Use the teach-pendant e-stop now if the real arm is running.',
+        )
+      },
     )
   }
   const handleClose = () => dispatch(toggleSim())
@@ -457,6 +530,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         label: 'Switch to Execute live',
         onClick: () => setRunMode('live'),
       },
+    })
+  }
+  if (taskNeedsVoice && runMode === 'live' && !voice.browserSupported) {
+    preflightIssues.push({
+      text: 'This task needs voice recognition, not supported in this browser (Chrome only) — the voice step will time out.',
     })
   }
 
@@ -644,6 +722,42 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           </Box>
         )}
 
+        {/* ── Error banner (task aborted, persistent) ── */}
+        {errorBanner && (
+          <Box
+            role="alert"
+            aria-live="assertive"
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px',
+              padding: '10px 14px',
+              background: panel.errorTint(0.1),
+              border: `1px solid ${panel.errorTint(0.3)}`,
+              borderRadius: '8px',
+            }}
+          >
+            <AlertTriangle
+              size={15}
+              color={panel.error}
+              style={{ marginTop: '1px', flexShrink: 0 }}
+            />
+            <Typography
+              sx={{ fontSize: '0.78rem', color: panel.error, flex: 1 }}
+            >
+              {errorBanner}
+            </Typography>
+            <IconButton
+              size="small"
+              aria-label="Dismiss"
+              onClick={() => setErrorBanner(null)}
+              sx={{ padding: '2px', marginTop: '-2px' }}
+            >
+              <X size={14} color={panel.error} />
+            </IconButton>
+          </Box>
+        )}
+
         {/* ── Timeout warning ── */}
         {isTimeout && (
           <Box
@@ -664,8 +778,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               Timeout:{' '}
               {humanStep?.condition === 'gesture'
                 ? `gesture "${humanStep?.value}" not detected`
-                : `object "${humanStep?.value}" not detected`}{' '}
-              — simulation continued
+                : humanStep?.condition === 'voice'
+                  ? `voice command "${humanStep?.value}" not heard`
+                  : humanStep?.condition === 'human_feedback'
+                    ? 'operator confirmation not received'
+                    : `object "${humanStep?.value}" not detected`}
+              {/* Whether the run continues or stops depends on where this
+                  condition was used (e.g. a bare "When" step continues; a
+                  "Pause and show message" confirm now stops the task) — the
+                  persistent error banner above is the authoritative signal
+                  for that, so this banner only states what timed out. */}
             </Typography>
           </Box>
         )}
@@ -906,6 +1028,21 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         Waiting for operator...
                       </Typography>
                     </Stack>
+                    {humanStep?.condition === 'human_feedback' && (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleConfirmHumanStep}
+                        disabled={confirmSending}
+                        sx={{
+                          mt: 0.5,
+                          bgcolor: panel.primary,
+                          '&:hover': { bgcolor: panel.primary },
+                        }}
+                      >
+                        Confirm
+                      </Button>
+                    )}
                   </Box>
                 )}
 
@@ -1592,7 +1729,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     fontFamily: "'Geist Mono', monospace",
                   }}
                 >
-                  {activeGesture || 'NONE'}
+                  {cameraActive && webcam.active && !webcam.engineOk
+                    ? 'gesture engine unavailable'
+                    : cameraActive && webcam.active && webcam.error
+                      ? 'capture error — retry'
+                      : activeGesture || 'NONE'}
                 </Typography>
               </Stack>
 
@@ -1686,7 +1827,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   {!voice.browserSupported
                     ? 'not supported in this browser'
-                    : voice.word || (voice.active ? 'listening…' : 'idle')}
+                    : voice.micDenied
+                      ? 'microphone permission denied'
+                      : voice.lastError
+                        ? 'heard, but send failed — retry'
+                        : voice.word || (voice.active ? 'listening…' : 'idle')}
                 </Typography>
               </Stack>
             </Stack>
@@ -2024,9 +2169,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       <ConfirmDialog
         open={confirmRealRun}
         title="Run on the real robot?"
-        message="The physical arm will move and execute this task for real. Make sure the workcell is clear before confirming — the teach-pendant e-stop is the fastest way to stop it if something goes wrong."
+        message="The physical arm will move for real, not just in the simulation. Before confirming: make sure the area around the robot is clear. If anything looks wrong once it starts, use the red e-stop button on the teach pendant — that stops the arm immediately."
         confirmLabel="Run on robot"
         tone="danger"
+        confirmOnEnter={false}
         onConfirm={confirmAndRun}
         onCancel={() => setConfirmRealRun(false)}
       />
