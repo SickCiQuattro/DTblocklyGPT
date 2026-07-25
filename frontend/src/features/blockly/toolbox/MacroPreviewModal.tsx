@@ -91,14 +91,21 @@ export const toMacroRootState = (macroCode: string): State | State[] | null => {
     const parsed = parseJson<unknown>(macroCode)
     if (!parsed) return null
 
-    if (isValidBlockState(parsed)) {
-      return parsed
-    }
-
+    // Abstract-step arrays must be checked BEFORE isValidBlockState: an
+    // AbstractStep like {type: 'pick', objectId, ...} also satisfies
+    // isValidBlockState's shape test (any object with a string `.type`), so
+    // checking block-state first misclassifies abstract-format macros as
+    // already-native and skips conversion — BlocklyViewer then fails to
+    // resolve unregistered types like 'pick' (the real type is 'pick_block').
+    // Matches the order macroExplosion.ts already gets right.
     if (isAbstractStepArray(parsed) || hasAbstractStepsArray(parsed)) {
       const steps = isAbstractStepArray(parsed) ? parsed : parsed.steps
       const converted = abstractToBlockly(steps, [], [], [])
       return isValidBlockState(converted) ? converted : null
+    }
+
+    if (isValidBlockState(parsed)) {
+      return parsed
     }
 
     if (hasWorkspaceBlocksPayload(parsed)) {

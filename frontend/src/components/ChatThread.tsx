@@ -35,7 +35,6 @@ import {
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { abstractToBlockly } from 'utils/blocklyParser'
 import { buildBlockCatalog } from 'features/blockly/toolbox'
 import { AbstractStep } from 'pages/tasks/types'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
@@ -47,19 +46,12 @@ import { ChatComposer } from './ChatComposer'
 import { TaskPreviewCard } from './TaskPreviewCard'
 import { EvaluationCard } from './EvaluationCard'
 
-export type BlockGeneratedPayload = {
-  blockType: string
-  blockXml: string
-  insertAt?: 'end' | 'cursor'
-}
-
 interface ChatThreadProps {
   taskId: string | null
   taskStructure: any[]
   /** Live editor workspace — used only to compute conformance for the
    * contextual welcome/proactive-help feature. Not required otherwise. */
   workspace?: Blockly.WorkspaceSvg | null
-  onBlocksGenerated?: (blocks: BlockGeneratedPayload[]) => void
   onApplyProposedTask?: (proposedTask: any[]) => void
   onClose?: () => void
 }
@@ -97,7 +89,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   taskId,
   taskStructure,
   workspace,
-  onBlocksGenerated,
   onApplyProposedTask,
   onClose,
 }) => {
@@ -334,6 +325,20 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       if (res) applyAssistantResponse(res, priorMessages)
     } catch (error) {
       console.error('Error requesting proactive help:', error)
+      // This call is automatic (the operator never asked for it), so the
+      // typing indicator disappearing with no reply at all would look like
+      // Copilot just stopped responding — say so and suggest the fallback.
+      setListMessages([
+        ...priorMessages,
+        {
+          text: "I couldn't check the workspace for issues automatically. You can ask me directly if something isn't working.",
+          id: (priorMessages[priorMessages.length - 1]?.id ?? 0) + 1,
+          user: UserChatEnum.ROBOT,
+          timestamp: dayjs().toISOString(),
+          type: MessageTypeEnum.TEXT,
+          parts: [],
+        },
+      ])
     } finally {
       setIsProcessing(false)
     }
@@ -605,6 +610,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             <IconButton
               onClick={() => dispatch(toggleChatPosition())}
               size="small"
+              aria-label={
+                chatPosition === 'left' ? 'Move to right' : 'Move to left'
+              }
               sx={{
                 color: indigo,
                 '&:hover': {
@@ -683,22 +691,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               onApply={() => {
                 if (onApplyProposedTask && proposal.proposedTask) {
                   onApplyProposedTask(proposal.proposedTask)
-                }
-                if (onBlocksGenerated && proposal.proposedTask) {
-                  const converted = abstractToBlockly(
-                    proposal.proposedTask,
-                    dataObjects,
-                    dataLocations,
-                    dataActions,
-                  )
-                  // Find all generated blocks inside converted state
-                  if (converted && Array.isArray(converted.blocks)) {
-                    const mappedPayloads = converted.blocks.map((b: any) => ({
-                      blockType: b.type,
-                      blockXml: b.xml || '',
-                    }))
-                    onBlocksGenerated(mappedPayloads)
-                  }
                 }
                 dispatch(clearProposedTask())
               }}
