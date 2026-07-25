@@ -3,11 +3,14 @@ import { Box, Typography, IconButton, Tooltip } from '@mui/material'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
 import { Theme as ThemeOption } from 'themes/theme'
+import { panel as panelTokens } from './digitalTwin/panelTokens'
 
-// Intentionally-dark developer terminal (design spec §3.8). The slate chrome is
-// a deliberate local palette; brand/terminal accents come from theme tokens.
+// Intentionally-dark developer terminal (design spec §3.8) — same spec
+// section, and the same dark surface, as the robot panel (panelTokens.ts
+// cites §3.6/§3.8 too). Reuse its bg token instead of a second near-black
+// literal that drifted from it (#141423 vs #0c0c1c).
 const tokens = ThemeOption()
-const PANEL_BG = '#141423'
+const PANEL_BG = panelTokens.bg
 const PANEL_TEXT = '#A9B2C3'
 const PANEL_ACCENT = tokens.primary.main
 const TERMINAL_GREEN = tokens.success.light

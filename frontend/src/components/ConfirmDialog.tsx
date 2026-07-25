@@ -23,6 +23,9 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   /** 'danger' (default) for destructive actions (terracotta accent), 'default' for neutral confirms (primary indigo). */
   tone?: 'danger' | 'default'
+  /** Default true. Set false for high-stakes irreversible actions (e.g. real robot motion) so
+   * Enter/autofocus can't accidentally trigger the confirm button — focus lands on Cancel instead. */
+  confirmOnEnter?: boolean
 }
 
 const confirmButtonSx = (tone: 'danger' | 'default') => (theme: Theme) => ({
@@ -70,12 +73,13 @@ export const ConfirmDialog = ({
   title = 'Confirm',
   confirmLabel = 'Confirm',
   tone = 'danger',
+  confirmOnEnter = true,
 }: ConfirmDialogProps) => (
   <Dialog
     open={open}
     onClose={onCancel}
     onKeyDown={(e) => {
-      if (e.key === 'Enter') {
+      if (confirmOnEnter && e.key === 'Enter') {
         e.preventDefault()
         onConfirm()
       }
@@ -97,6 +101,7 @@ export const ConfirmDialog = ({
       <Button
         variant="text"
         disableElevation
+        autoFocus={!confirmOnEnter}
         onClick={onCancel}
         sx={cancelButtonSx}
       >
@@ -106,7 +111,7 @@ export const ConfirmDialog = ({
         variant="contained"
         disableElevation
         disableFocusRipple
-        autoFocus
+        autoFocus={confirmOnEnter}
         onClick={onConfirm}
         sx={confirmButtonSx(tone)}
       >

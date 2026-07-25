@@ -254,6 +254,7 @@ export const FormLocation = ({
                               values.keywords.includes(addKeyword)
                             }
                             edge="end"
+                            aria-label="Add keyword"
                           >
                             <Plus size={16} />
                           </IconButton>

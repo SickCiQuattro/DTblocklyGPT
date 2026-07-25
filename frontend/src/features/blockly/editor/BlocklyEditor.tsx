@@ -880,7 +880,7 @@ export const BlocklyEditor = ({
   // ── Macro explosion ────────────────────────────────────────────────────────
   const explodeMacro = useCallback(
     (block: Blockly.BlockSvg, workspace: Blockly.WorkspaceSvg) => {
-      expandMacroTask({
+      const result = expandMacroTask({
         block,
         workspace,
         dataMacros: availableMacros,
@@ -889,6 +889,9 @@ export const BlocklyEditor = ({
         dataLocations,
         dataActions,
       })
+      if (!result.ok) {
+        toast.error(result.reason)
+      }
     },
     [
       availableMacros,
@@ -934,7 +937,11 @@ export const BlocklyEditor = ({
   // Blockly's built-in "Delete All Blocks" fires window.confirm. We intercept
   // it to show our own React modal instead of the browser's native dialog.
   useEffect(() => {
-    const originalConfirm = window.confirm
+    // .bind(window): window.confirm isn't declared `this: void`, so a bare
+    // reference trips @typescript-eslint/unbound-method — it's never
+    // actually called (only reassigned back on cleanup below), but bind it
+    // anyway rather than suppress the rule.
+    const originalConfirm = window.confirm.bind(window)
 
     window.confirm = (_message?: string): boolean => {
       const workspace = workspaceRef.current

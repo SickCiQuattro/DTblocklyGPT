@@ -235,6 +235,7 @@ const ListLocations = () => {
                         color="error"
                         disabled={!canManageLocation(row.owner)}
                         title="Delete this location"
+                        aria-label="Delete this location"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
                       >

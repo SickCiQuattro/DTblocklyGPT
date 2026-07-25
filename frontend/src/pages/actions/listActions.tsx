@@ -235,6 +235,7 @@ const ListActions = () => {
                         color="error"
                         disabled={!canManageAction(row.owner)}
                         title="Delete this skill"
+                        aria-label="Delete this skill"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
                       >

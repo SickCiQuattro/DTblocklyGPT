@@ -83,7 +83,7 @@ export const validateWorkspace = (
         warnings.push({
           type: 'warning',
           code: 'ORPHAN_MACRO_REF',
-          message: `Macro "${ref.name}" is not published and cannot be executed.`,
+          message: `Saved task "${ref.name}" is not published and cannot be run.`,
           blockId: ref.blockId,
         })
       }
@@ -91,7 +91,7 @@ export const validateWorkspace = (
         warnings.push({
           type: 'warning',
           code: 'STALE_SIGNATURE',
-          message: `Macro "${ref.name}" has been updated — re-publish to use the latest version.`,
+          message: `Saved task "${ref.name}" has been updated — re-publish to use the latest version.`,
           blockId: ref.blockId,
         })
       }

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
+import { accent } from 'themes/theme'
 
 export interface ContextMenuAction {
   id: number
@@ -133,7 +134,11 @@ export const rewriteLabel = (raw: string): string => {
 }
 
 const NEUTRAL = '#475569'
-const DESTRUCTIVE = '#DC2626'
+// Same terracotta as every other destructive affordance in the app
+// (ConfirmDialog's "danger" tone) — this used to be a plain red (#DC2626)
+// that belonged to no other surface, so "Delete" in this menu looked like
+// a different, unrelated kind of warning than the confirm dialog it opens.
+const DESTRUCTIVE = accent.dark
 const ADDITIVE = '#15803D'
 
 export const getMenuIconInfo = (text: string) => {

@@ -21,6 +21,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { useDispatch } from 'react-redux'
+import { toast } from 'react-toastify'
 
 import { AbstractStep, AbstractCondition } from 'pages/tasks/types'
 import { clearProposedTask } from 'store/reducers/proposal'
@@ -445,13 +446,10 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
     }
 
     try {
-      // Convert the proposed task to Blockly XML
-      const blocklyXml = abstractToBlockly(
-        proposedTask,
-        dataObjects,
-        dataLocations,
-        dataActions,
-      )
+      // Validate the proposed task converts cleanly before touching the
+      // workspace — onApply() takes no payload, the parent re-derives the
+      // blocks itself; this call exists purely as a pre-flight check.
+      abstractToBlockly(proposedTask, dataObjects, dataLocations, dataActions)
 
       // Call the onApply callback (parent should handle updating the task structure)
       onApply()
@@ -460,7 +458,9 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
       dispatch(clearProposedTask())
     } catch (error) {
       console.error('Error applying task:', error)
-      // Optionally show an error message
+      toast.error(
+        "Couldn't add these blocks to the workspace — the proposal wasn't applied.",
+      )
     }
   }
 

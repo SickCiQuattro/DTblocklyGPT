@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
+  CircularProgress,
   FormControl,
   FormHelperText,
   IconButton,
@@ -190,13 +191,18 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
               type="submit"
               variant="contained"
               color="primary"
+              startIcon={
+                isSubmitting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : undefined
+              }
               sx={{
                 borderRadius: '8px',
                 textTransform: 'none',
                 fontWeight: 600,
               }}
             >
-              Login
+              {isSubmitting ? 'Signing in…' : 'Login'}
             </Button>
             <Button
               fullWidth

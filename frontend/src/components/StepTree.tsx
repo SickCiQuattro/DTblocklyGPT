@@ -33,6 +33,8 @@ const StepTreeNode: React.FC<StepTreeNodeProps> = ({ node, depth = 0 }) => {
           <IconButton
             size="small"
             onClick={() => setOpen((o) => !o)}
+            aria-label={open ? 'Collapse' : 'Expand'}
+            aria-expanded={open}
             sx={{ p: 0.25, color: 'text.secondary' }}
           >
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}

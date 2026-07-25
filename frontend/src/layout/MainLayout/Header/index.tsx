@@ -139,7 +139,12 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               >
                 {activeTaskName}
               </Typography>
-              <IconButton size="small" onClick={() => setIsEditing(true)}>
+              <IconButton
+                size="small"
+                onClick={() => setIsEditing(true)}
+                aria-label="Rename task"
+                title="Rename task"
+              >
                 <Pencil size={14} />
               </IconButton>
             </div>

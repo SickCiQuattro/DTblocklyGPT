@@ -194,6 +194,7 @@ const ListMyRobots = () => {
                       <IconButton
                         color="error"
                         title="Delete this robot"
+                        aria-label="Delete this robot"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
                       >

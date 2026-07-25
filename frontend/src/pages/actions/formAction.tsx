@@ -299,6 +299,7 @@ export const FormAction = ({
                               }
                               edge="end"
                               size="large"
+                              aria-label="Add keyword"
                             >
                               <Plus size={16} />
                             </IconButton>

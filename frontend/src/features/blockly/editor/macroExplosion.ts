@@ -238,8 +238,25 @@ interface ExplodeMacroParams {
 }
 
 /**
+ * Result of `explodeMacro`. `reason`, when present, is operator-facing
+ * (plain language, no "console"/internal-id references) — callers show it
+ * directly instead of a generic "see console for details".
+ */
+export type ExplodeMacroResult = { ok: true } | { ok: false; reason: string }
+
+const EXPLODE_FAIL = (reason: string): ExplodeMacroResult => ({
+  ok: false,
+  reason,
+})
+
+/**
  * Replace a macro block with its concrete block sequence while preserving
  * chain connections and registering a single undoable snapshot event.
+ *
+ * Returns `{ ok: false, reason }` (and leaves the workspace untouched) if
+ * the macro could not be expanded — callers should surface `reason` to the
+ * user instead of treating a no-op as success (every early-return path
+ * here used to fail silently: no toast, only a `console.warn`/nothing at all).
  */
 export const explodeMacro = ({
   block,
@@ -249,20 +266,34 @@ export const explodeMacro = ({
   dataObjects,
   dataLocations,
   dataActions,
-}: ExplodeMacroParams): void => {
-  if (!block || block.type !== 'macro_task_block') return
+}: ExplodeMacroParams): ExplodeMacroResult => {
+  if (!block || block.type !== 'macro_task_block') {
+    return EXPLODE_FAIL('This is not a saved task block.')
+  }
 
   const macroId = getMacroIdFromBlockData(block.data)
-  if (!macroId) return
+  if (!macroId) {
+    return EXPLODE_FAIL("This saved task's reference is missing or corrupted.")
+  }
 
   const macro = dataMacros.find((t) => `${t.id}` === macroId)
-  if (!macro) return
+  if (!macro) {
+    return EXPLODE_FAIL(
+      'This saved task could not be found — it may have been deleted.',
+    )
+  }
 
   const numericId = Number(macroId)
-  if (Number.isNaN(numericId)) return
+  if (Number.isNaN(numericId)) {
+    return EXPLODE_FAIL("This saved task's reference is missing or corrupted.")
+  }
 
   const macroDetail = macroDetailsById[numericId]
-  if (!macroDetail) return
+  if (!macroDetail) {
+    return EXPLODE_FAIL(
+      "This saved task's details couldn't be loaded — try reopening the editor.",
+    )
+  }
 
   // Resolve the published block state. If it is null the macro has no stable
   // published version yet (e.g. still in draft) — abort with a clear guard
@@ -273,7 +304,23 @@ export const explodeMacro = ({
     dataLocations,
     dataActions,
   )
-  if (!isBlockStateLike(blockState)) return
+  if (!isBlockStateLike(blockState)) {
+    return EXPLODE_FAIL(
+      `"${macro.name}" has no published content yet — publish it first.`,
+    )
+  }
+
+  // Resolved and null-checked BEFORE any mutation below — a macro published
+  // with no real steps (only a when_start/shadow-start scaffold) strips down
+  // to null here. Checking this only *after* disposing the macro block (as
+  // this used to do) meant an empty macro vanished from the workspace
+  // permanently: the removal is a plain `return`, not a `throw`, so the
+  // try/catch snapshot-restore below never sees it and never fires the
+  // undo-tracked WorkspaceSnapshotEvent — irrecoverable even with Ctrl+Z.
+  const cleanedState = stripStartBlock(blockState)
+  if (!cleanedState) {
+    return EXPLODE_FAIL(`"${macro.name}" has no steps to expand — it's empty.`)
+  }
 
   // Snapshot all connections before touching the DOM.
   const prevConnection = block.previousConnection?.targetConnection ?? null
@@ -285,6 +332,7 @@ export const explodeMacro = ({
   const shouldManageGroup = !existingGroup
   if (shouldManageGroup) Blockly.Events.setGroup(true)
 
+  let failureReason: string | null = null
   try {
     Blockly.Events.disable()
 
@@ -295,9 +343,6 @@ export const explodeMacro = ({
         block.nextConnection.disconnect()
       }
       block.dispose(false)
-
-      const cleanedState = stripStartBlock(blockState)
-      if (!cleanedState) return
 
       const newFirstBlock = Blockly.serialization.blocks.append(
         cleanedState,
@@ -338,6 +383,7 @@ export const explodeMacro = ({
       workspace,
       { recordUndo: false },
     )
+    failureReason = `"${macro.name}" couldn't be expanded — the workspace was restored.`
     console.error(
       '[explodeMacro] explosion failed — workspace restored:',
       error,
@@ -345,4 +391,5 @@ export const explodeMacro = ({
   } finally {
     if (shouldManageGroup) Blockly.Events.setGroup(false)
   }
+  return failureReason ? EXPLODE_FAIL(failureReason) : { ok: true }
 }

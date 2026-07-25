@@ -7,7 +7,7 @@ export interface ObjectDetection {
 }
 
 export interface HumanStepStatus {
-  status: 'started' | 'completed' | 'timeout' | 'notify'
+  status: 'started' | 'completed' | 'timeout' | 'notify' | 'error'
   description?: string
   condition?: string
   value?: string

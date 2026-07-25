@@ -13,6 +13,6 @@ export const ToastContainerStyled = () => (
     pauseOnFocusLoss
     draggable
     pauseOnHover
-    limit={1}
+    limit={3}
   />
 )

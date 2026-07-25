@@ -235,6 +235,7 @@ const ListObjects = () => {
                         color="error"
                         disabled={!canManageObject(row.owner)}
                         title="Delete this object"
+                        aria-label="Delete this object"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
                       >

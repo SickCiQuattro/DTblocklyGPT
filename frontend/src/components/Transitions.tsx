@@ -5,12 +5,7 @@ interface TransitionProps {
   children: ReactNode
   type?: 'grow' | 'fade' | 'collapse' | 'slide' | 'zoom'
   position?:
-    | 'top-left'
-    | 'top-right'
-    | 'top'
-    | 'bottom-left'
-    | 'bottom-right'
-    | 'bottom'
+    'top-left' | 'top-right' | 'top' | 'bottom-left' | 'bottom-right' | 'bottom'
   ref?: React.Ref<HTMLDivElement>
   displayName?: string
 }
