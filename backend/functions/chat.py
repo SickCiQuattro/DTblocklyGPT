@@ -353,10 +353,24 @@ Where AbstractStep is one of:
       "locationName": string
     }}
 
-  - Gripper Step (open or close the robot gripper):
+  - Gripper Step, legacy unified form (open or close the robot gripper) — prefer the two
+    separate steps below, which match the toolbox block names ("Open Gripper"/"Close Gripper")
+    the user actually sees:
     {{
       "type": "gripper",
       "state": "OPEN" | "CLOSE"
+    }}
+
+  - Open Gripper Step / Close Gripper Step (no extra fields):
+    {{"type": "open_gripper"}}
+    {{"type": "close_gripper"}}
+
+  - Saved Task Step (runs a previously saved task, "Saved Tasks" category — only ever preserve
+    one exactly as found in the snapshot, never author a new one from scratch):
+    {{
+      "type": "macro_task",
+      "macroId": number,
+      "macroName": string
     }}
 
   - Wait Step (pause the robot for a set amount of seconds):
@@ -511,7 +525,7 @@ Response:
   "answer": "I added a move-to step towards the inspection zone followed by an open-gripper step.",
   "task": [
       {{"type": "move_to", "motionType": "LINEAR", "locationId": 5, "locationName": "inspection zone"}},
-      {{"type": "gripper", "state": "OPEN"}}
+      {{"type": "open_gripper"}}
     ],
   "taskModified": true,
   "intent": "modify",
@@ -966,6 +980,25 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
                 "message": f"NotifyAction step {step_index}: description must be a string."
             })
 
+    elif step_type in ("open_gripper", "close_gripper"):
+        # No fields to check — the open/closed state is the type itself.
+        # Real, toolbox-reachable blocks (definitions.ts, toolboxRegistry.ts);
+        # without this branch they fell into the "unknown type" catch-all
+        # below and were silently dropped from any chat-touched proposal,
+        # including ones the user built by hand and never asked to change.
+        pass
+
+    elif step_type == "macro_task":
+        # Echoed back from the snapshot, not authored fresh by the LLM (the
+        # AbstractStep schema above doesn't document this shape) — light
+        # presence check only, no existence check against the macro library
+        # (validate_step isn't handed one; see docs/analisi-sistema).
+        if not step.get("macroId"):
+            warnings.append({
+                "severity": "warning",
+                "message": f"Saved Task step {step_index}: missing macroId."
+            })
+
     elif step_type == "repeat":
         times = step.get("times")
         steps = step.get("steps")
@@ -1103,7 +1136,15 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         try:
                             llm_task = json.loads(llm_task_raw)
                         except Exception:
-                            llm_task = []
+                            try:
+                                # Some models (observed: gemini-3.5-flash-lite)
+                                # intermittently double-escape quotes inside
+                                # this string (\"type\" instead of "type").
+                                # One extra unescape pass recovers an
+                                # otherwise-valid payload before giving up.
+                                llm_task = json.loads(llm_task_raw.replace('\\"', '"'))
+                            except Exception:
+                                llm_task = []
                     else:
                         llm_task = llm_task_raw or []
 
