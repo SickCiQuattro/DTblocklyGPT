@@ -94,7 +94,14 @@ def task_detail(request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
                 task_id = request.GET.get("id")
-                task = Task.objects.filter(id=task_id).first()
+                # Same visibility boundary as get_task_list — a raw id lookup
+                # with no filter let any authenticated user read another
+                # user's private (non-shared) task by guessing/enumerating
+                # its id, bypassing the exact owner-or-shared check that
+                # already exists one function above in this file.
+                task = Task.objects.filter(
+                    Q(owner=request.user) | Q(shared=True), id=task_id
+                ).first()
                 if task is None:
                     return success_response()
 
@@ -129,7 +136,16 @@ def task_detail(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)
                 task_id = data.get("id")
-                task = Task.objects.filter(id=task_id)
+                # Ownership only, unlike the GET above — Q(shared=True) is a
+                # *visibility* boundary (get_task_list uses it for reads),
+                # not a mutation grant. A first version of this fix reused
+                # the read filter here too, which let any authenticated
+                # user delete another user's shared task; the frontend
+                # already restricts Delete/Edit to the owner
+                # (listTasks.tsx's canManage), so the backend must match.
+                task = Task.objects.filter(owner=request.user, id=task_id)
+                if not task.exists():
+                    return error_response("Task not found", status=404)
                 task.delete()
                 return success_response()
             if request.method == HttpMethod.POST.value:
@@ -185,7 +201,12 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     return bad_request("Name already exists", data_result)
 
                 # task_type is immutable after creation — never updated here.
-                Task.objects.filter(id=task_id).update(
+                # Ownership only for the mutation itself — see the DELETE
+                # branch above for why Q(shared=True) doesn't belong here.
+                task_qs = Task.objects.filter(owner=task_owner, id=task_id)
+                if not task_qs.exists():
+                    return error_response("Task not found", status=404)
+                task_qs.update(
                     name=task_name,
                     description=task_description,
                     shared=task_shared,

@@ -213,7 +213,12 @@ class Task(models.Model):
     signature = models.CharField(max_length=64, blank=True, default="")
 
     # List of IDs (int) of the tasks this task directly depends on.
-    # Populated by the frontend at publish time; used for DAG check.
+    # Verified 2026-07-24/25 (docs/analisi-sistema/p2-2-ciclo-vita-task.md): dead field.
+    # publish_task() (task_lifecycle.py) never writes it — only seed_library.py
+    # sets it, always to []. Nothing reads it except to_dict() echoing it back
+    # to the API response. No DAG check exists anywhere (see the
+    # accepted_response()/conflict_response() correction in CLAUDE.md); this
+    # comment used to claim otherwise.
     dependencies = models.JSONField(default=list, blank=True)
 
     def to_dict(self, keys):
