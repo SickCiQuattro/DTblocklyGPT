@@ -63,6 +63,13 @@ _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 # Default off — sim stack unchanged when unset.
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
+# Macro-call recursion cap. No DAG cycle detection exists at publish time
+# (see docs/analisi-sistema/p0-3-blockly-editor.md) — a macro cycle (A calls
+# B calls A) is creatable from the UI today, and without this cap it would
+# recurse until Python's own RecursionError, which the parser's blanket
+# except swallows silently, truncating the task with only a log line. This
+# turns that into an explicit, reported _abort_task instead.
+MAX_MACRO_DEPTH = int(os.getenv("MAX_MACRO_DEPTH", "10"))
 
 # Per-request switch, set by simulate_task() from the "driveHardware" body key.
 # NOTE: single-process runserver only (same constraint as SIMULATION_STOP_EVENT
@@ -71,6 +78,14 @@ MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
 # this flag at a time, so the single global is safe under runserver's default
 # threading.
 _HW_DRIVE_REQUESTED: bool = False
+
+# Owner of the task currently running, set by simulate_task() for the
+# duration of the run (same single-run-lock safety as _HW_DRIVE_REQUESTED
+# above). _h_macro() needs it to scope a nested macro lookup to
+# owner-or-shared — without it, a macro_task_block with an arbitrary id
+# could execute another user's private task (the same visibility rule
+# simulate_task() itself already applies to the top-level task).
+_RUN_OWNER_ID: int | None = None
 
 
 def _hw_drive_active() -> bool:
@@ -130,10 +145,17 @@ _placed_in_world: list = []
 _placed_seq: int = 0
 
 
-def _abort_task(reason: str):
+def _abort_task(reason: str, detail: str | None = None):
     """Hard-abort the running task: stop the parser loop, stop Gazebo AND the real
     arm (so the twin can't keep moving while the reason for aborting is exactly
     that the two diverged), and tell the frontend why.
+
+    `reason` is shown to the operator verbatim — plain language (what
+    happened + what to do next), no engineering jargon (docs/ui-glossary.md).
+    It becomes the persistent error banner in the robot panel and the
+    HTTP error message. `detail`, when given, is the technical version
+    (function names, coordinates, exception text) and stays in the server
+    log only — never sent to the frontend.
 
     Idempotent: only the first reason is kept if called more than once.
     """
@@ -146,10 +168,10 @@ def _abort_task(reason: str):
     except Exception as e:
         print(f"[ABORT] bridge stop failed: {e}")
     try:
-        _bridge.notify("/api/notify", {"description": f"TASK ABORTED: {reason}"})
+        _bridge.notify("/api/notify", {"description": reason, "status": "error"})
     except Exception:
         pass
-    print(f"[ABORT] {reason}")
+    print(f"[ABORT] {reason}" + (f" — {detail}" if detail else ""))
 
 
 def _interruptible_sleep(seconds):
@@ -1057,8 +1079,9 @@ def _verify_hw_arrival(target_joints, tol_deg=HW_VERIFY_TOL_DEG, timeout_s=HW_VE
         time.sleep(0.2)
 
     _abort_task(
-        f"twin divergence: commanded {list(target_joints)} but encoders read "
-        f"{last_seen} (tol {tol_deg}°)"
+        "The robot arm didn't reach the position it was commanded to — stopped for safety.",
+        detail=f"twin divergence: commanded {list(target_joints)} but encoders read "
+               f"{last_seen} (tol {tol_deg}°)",
     )
     return False
 
@@ -1074,8 +1097,9 @@ def _verify_hw_grasp(commanded_close_mm) -> bool:
         return True  # no data — don't block the sim on a readout we don't have
     if _LAST_HW_HAND_MM <= commanded_close_mm + HW_GRASP_SLIP_TOL_MM:
         _abort_task(
-            f"missed grasp: hand closed to {_LAST_HW_HAND_MM:.1f}mm "
-            f"(commanded {commanded_close_mm:.1f}mm) — object not detected between fingers"
+            "The gripper closed on empty air — the object wasn't picked up.",
+            detail=f"hand closed to {_LAST_HW_HAND_MM:.1f}mm "
+                   f"(commanded {commanded_close_mm:.1f}mm) — object not detected between fingers",
         )
         return False
     return True
@@ -1092,6 +1116,8 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
     global _LAST_HW_HAND_MM
     if not _hw_drive_active():
         return True
+    if SIMULATION_STOP_EVENT.is_set():
+        return False
     try:
         payload = {"hand": hand, "hand_only": hand_only}
         if not hand_only:
@@ -1099,11 +1125,14 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
             payload.update({"j1": j1, "j2": j2, "j3": j3, "j4": j4, "j5": j5, "j6": j6})
         result = _bridge.move_target(payload)
     except Exception as e:
-        _abort_task(f"real arm unreachable: {e}")
+        _abort_task("Lost connection to the robot arm.", detail=f"move-target request failed: {e}")
         return False
 
     if not result.get("ok"):
-        _abort_task(f"real arm move failed: {result.get('message', 'unknown')}")
+        _abort_task(
+            "The robot arm rejected the last move command.",
+            detail=f"move-target response: {result.get('message', 'unknown')}",
+        )
         return False
 
     _LAST_HW_HAND_MM = _parse_hand_mm(result.get("message", ""))
@@ -1118,6 +1147,8 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     Interpolates movement from current state to target state with ease-in-out curve.
     Uses the currently stored STATE as starting point.
     """
+    if SIMULATION_STOP_EVENT.is_set():
+        return
     start_joints, start_hand = get_current_state()
 
     # Calculate angular distance to check if movement is needed
@@ -1168,7 +1199,7 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
 
 def send_waypoints(joints_list, hand, dt):
     """Send a pre-computed IK path as a single move-path POST (no interpolation)."""
-    if not joints_list:
+    if not joints_list or SIMULATION_STOP_EVENT.is_set():
         return
     waypoints = [
         {
@@ -1389,12 +1420,15 @@ ROBOT_BASE_Y = -1.2
 
 def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
                       pick_x_rel: float = None, pick_y_rel: float = None,
-                      obj_min_z: float = None):
+                      obj_min_z: float = None, grasp_yaw_override: float = None):
     try:
         # Sync state from ROS first to anchor the IK seeds. Abort if it fails —
         # planning from a stale seed risks singularities / collisions.
         if not sync_current_state_from_ros():
-            _abort_task("PICK: could not sync joint state from ROS")
+            _abort_task(
+                "Lost track of the robot arm's position — couldn't start the pick.",
+                detail="PICK: could not sync joint state from ROS",
+            )
             return
 
         # Object relative coordinates — use the deterministic spawn XY (Phase 1)
@@ -1412,7 +1446,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         if obj_min_z is None:
             obj_min_z = model.min_z
         z_pick = plan.z_pick
-        grasp_yaw = plan.tool_yaw
+        grasp_yaw = plan.tool_yaw if grasp_yaw_override is None else grasp_yaw_override
         hand_close = plan.hand_close
         logger.info("pick_plan", extra={
             "sdf_name": sdf_name,
@@ -1435,7 +1469,10 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # 1. Approach (high clearance)
         q_approach = solve_gazebo_ik(x_rel, y_rel, z_approach, grasp_yaw, seed_joints=current_joints)
         if not q_approach:
-            _abort_task(f"pick approach IK failed at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f}")
+            _abort_task(
+                f"Couldn't pick up '{sdf_name}' — no safe path found to reach it.",
+                detail=f"pick approach IK failed at x={x_rel:.3f} y={y_rel:.3f} z={z_approach:.3f}",
+            )
             return
 
         debug_fk(q_approach, label="Approach")
@@ -1448,7 +1485,10 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             seed_joints=q_approach, n=10
         )
         if not vertical_path:
-            _abort_task("pick vertical approach IK path failed")
+            _abort_task(
+                f"Couldn't pick up '{sdf_name}' — no safe path found to reach it.",
+                detail="pick vertical approach IK path failed",
+            )
             return
         send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
 
@@ -1458,7 +1498,10 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             seed_joints=vertical_path[-1], n=6
         )
         if not final_path:
-            _abort_task("pick final descent IK path failed")
+            _abort_task(
+                f"Couldn't pick up '{sdf_name}' — no safe path found to reach it.",
+                detail="pick final descent IK path failed",
+            )
             return
 
         send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.30)
@@ -1469,7 +1512,10 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         target_urdf = np.array([-y_rel, x_rel, z_pick + URDF_GAZEBO_Z_OFFSET])
         pos_err, _ = fk_position_error(pick_joints, target_urdf)
         if pos_err > IK_POS_TOL:
-            _abort_task(f"pick FK guard: pos_err={pos_err * 1000:.1f}mm > {IK_POS_TOL * 1000:.0f}mm")
+            _abort_task(
+                f"Couldn't pick up '{sdf_name}' — the arm didn't reach the object precisely enough.",
+                detail=f"pick FK guard: pos_err={pos_err * 1000:.1f}mm > {IK_POS_TOL * 1000:.0f}mm",
+            )
             return
 
         # hand_close already comes from plan_pick_for_object (graspable_width).
@@ -1488,15 +1534,19 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             snap_z = TABLE_TOP_Z_ABS - (obj_min_z or 0.0) + PICK_Z_FINE_TUNE
             print(f"[GRASP] snap pose x={snap_x:.4f} y={snap_y:.4f} z={snap_z:.4f} yaw={grasp_yaw:.4f}")
             if not set_object_world_pose(snap_x, snap_y, snap_z, yaw=grasp_yaw):
-                _abort_task("pick snap-to-TCP failed (set_pose) — refusing to weld, would float")
+                _abort_task(
+                    f"Couldn't pick up '{sdf_name}' — the object didn't attach to the gripper.",
+                    detail="pick snap-to-TCP failed (set_pose) — refusing to weld, would float",
+                )
                 return
             # Object is already held at rest, so the snap is authoritative; tight
             # delay just lets the re-parent settle before the weld.
             _interruptible_sleep(0.05)
             if not attach_object_to_gripper():
                 _abort_task(
-                    "pick weld failed: DetachableJoint never reported 'attached' "
-                    "(2 attempts) — object would be left behind"
+                    f"Couldn't pick up '{sdf_name}' — the object didn't attach to the gripper.",
+                    detail="pick weld failed: DetachableJoint never reported 'attached' "
+                           "(2 attempts) — object would be left behind",
                 )
                 return
             _interruptible_sleep(0.2)
@@ -1535,7 +1585,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         # Arm stays at carry pose Z-down with object; no home until place releases
 
     except Exception as e:
-        _abort_task(f"pick failed: {e}")
+        _abort_task(f"Couldn't pick up '{sdf_name}' — something went wrong.", detail=f"pick failed: {e}")
 
 
 def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = None):
@@ -1622,7 +1672,9 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             z_place = PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
         z_up = z_place + 0.12
 
-        grasp_yaw = getattr(obj, "grasp_yaw", 0.0) or 0.0
+        # Rack slots may need a rotated grasp to clear neighboring tubes — same
+        # config the pick side reads (LOCATION_PROFILES[...]["grasp_yaw"]).
+        grasp_yaw = slot_cfg.get("grasp_yaw", 0.0) if slot_cfg else 0.0
 
         current_joints, current_hand = get_current_state()
 
@@ -1682,8 +1734,9 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
                 # that never physically happened. Abort instead — the twin
                 # and the real arm both stop, and the frontend gets a reason.
                 _abort_task(
-                    f"place transit IK failed at z_carry={z_carry:.3f} "
-                    f"({pick_x:.2f},{pick_y:.2f}) → ({x_rel:.2f},{y_rel:.2f})"
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — no safe path found.",
+                    detail=f"place transit IK failed at z_carry={z_carry:.3f} "
+                           f"({pick_x:.2f},{pick_y:.2f}) → ({x_rel:.2f},{y_rel:.2f})",
                 )
                 return
 
@@ -1693,7 +1746,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
                 seed_joints=q_above_place, n=10
             )
             if not descent_path:
-                _abort_task(f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}")
+                _abort_task(
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — no safe path found.",
+                    detail=f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}",
+                )
                 return
             send_waypoints(descent_path, hand_close, dt=0.20)
             place_joints = descent_path[-1]
@@ -1701,7 +1757,11 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
             print(f"[PLACE] FK guard: pos_err={place_pos_err * 1000:.1f}mm (x={x_rel:.3f} y={y_rel:.3f} z={z_place:.3f})")
             if place_pos_err > IK_POS_TOL:
-                _abort_task(f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release")
+                _abort_task(
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — "
+                    "the arm didn't reach the spot precisely enough.",
+                    detail=f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release",
+                )
                 return
             q_retreat = q_above_place
 
@@ -1710,7 +1770,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             print("[SIMULATOR] No pick context — solving place approach directly")
             q_up = solve_gazebo_ik(x_rel, y_rel, z_up, grasp_yaw, seed_joints=current_joints)
             if not q_up:
-                _abort_task(f"place approach IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_up:.3f}")
+                _abort_task(
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — no safe path found.",
+                    detail=f"place approach IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_up:.3f}",
+                )
                 return
             smooth_move(q_up, hand_close, duration_s=2.0)
 
@@ -1719,14 +1782,21 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
                 seed_joints=q_up, n=8
             )
             if not vertical_path:
-                _abort_task(f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}")
+                _abort_task(
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — no safe path found.",
+                    detail=f"place descent IK failed at ({x_rel:.2f},{y_rel:.2f}) z={z_place:.3f}",
+                )
                 return
             send_waypoints(vertical_path, hand_close, dt=0.20)
             place_joints = vertical_path[-1]
             target_urdf_place = np.array([-y_rel, x_rel, z_place + URDF_GAZEBO_Z_OFFSET])
             place_pos_err, _ = fk_position_error(place_joints, target_urdf_place)
             if place_pos_err > IK_POS_TOL:
-                _abort_task(f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release")
+                _abort_task(
+                    f"Couldn't place '{picked_obj_name}' at '{location_name}' — "
+                    "the arm didn't reach the spot precisely enough.",
+                    detail=f"place FK guard: {place_pos_err * 1000:.1f}mm off target — refusing to release",
+                )
                 return
             q_retreat = q_up
 
@@ -1734,7 +1804,6 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         detach_object_from_gripper()
         _interruptible_sleep(0.1)
         # Snap-to-slot: teleport object to exact slot centre so it always lands in the hole.
-        # Best-effort (not a hard gate): if set_pose fails, log and continue.
         snap_x = ROBOT_BASE_X + x_rel
         snap_y = ROBOT_BASE_Y + y_rel
         _, _, obj_place_min_z = get_sdf_dimensions(picked_obj_name)
@@ -1744,7 +1813,18 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             snap_z_slot = TABLE_TOP_Z_ABS + loc_height - (obj_place_min_z or 0.0)
         print(f"[PLACE] snap-to-slot x={snap_x:.4f} y={snap_y:.4f} z={snap_z_slot:.4f} yaw={grasp_yaw:.4f}")
         if not set_object_world_pose(snap_x, snap_y, snap_z_slot, yaw=grasp_yaw):
-            print("[PLACE] snap-to-slot failed (best-effort: object may miss)")
+            # The weld is already released above — this can't undo the detach —
+            # but continuing would let _persist_placed_object spawn a fresh
+            # entity at snap_x/y/z as if the teleport succeeded, reporting a
+            # confident "placed" when reality is unknown. Abort instead of
+            # letting the place finish as if nothing happened (see CLAUDE.md's
+            # abort-machinery philosophy).
+            _abort_task(
+                f"Lost track of '{picked_obj_name}' after releasing it — check the workcell "
+                "before running again.",
+                detail="place snap-to-slot failed (set_pose) — object position after detach is unknown",
+            )
+            return
         _interruptible_sleep(0.2)
         smooth_move(place_joints, ROS_OPEN_GRIPPER, duration_s=0.6)
         _interruptible_sleep(0.5)
@@ -1765,7 +1845,7 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         simulation_recursive_blockly_parser.last_pick_x = None
 
     except Exception as e:
-        _abort_task(f"place failed: {e}")
+        _abort_task(f"Couldn't place '{picked_obj_name}' — something went wrong.", detail=f"place failed: {e}")
 
 
 def simulate_ros_action(action_points: list = []):
@@ -1822,8 +1902,9 @@ def reset_simulation_world():
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
-        # Reset slot cycling counter and spawned-object tracking.
+        # Reset slot cycling counters and spawned-object tracking.
         simulation_recursive_blockly_parser.place_slot_index = 0
+        simulation_recursive_blockly_parser.pick_slot_index = 0
         _spawned_in_world.clear()
 
         # Detach before delete: removing a welded child without detaching first
@@ -1937,7 +2018,10 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     block_type = condition_block.get("type", "")
 
     if block_type == EventsItems.FIND.value:
-        obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+        try:
+            obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+        except (KeyError, TypeError, ValueError):
+            obj_data = {}
         label = f"Object detected '{obj_data.get('name', '?')}'"
     elif block_type == EventsItems.GESTURE.value:
         gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
@@ -1951,6 +2035,8 @@ def _log_condition(condition_block: dict, simulate_event: bool) -> bool:
     elif block_type == EventsItems.VOICE.value:
         word = condition_block.get("fields", {}).get("VOICE_WORD", "YES")
         label = f"Voice command ({word})"
+    elif block_type == EventsItems.HUMAN_FEEDBACK.value:
+        label = "Operator confirm"
     else:
         label = f"Condition ({block_type})"
 
@@ -1992,11 +2078,13 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
 
     if block_type == EventsItems.GESTURE.value:
         gesture = condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")
+        entry_time = time.monotonic()
         # Probe bridge once before entering the wait loop.
         # If unreachable (camera/gesture engine off) bypass immediately.
         try:
             _bridge.get_vision_state()
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                 requests.exceptions.HTTPError):
             logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
             print(f"[CONDITION] Gesture bridge unreachable — bypassing gesture '{gesture}'")
             try:
@@ -2013,8 +2101,16 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             if SIMULATION_STOP_EVENT.is_set():
                 break
             try:
+                poll_time = time.monotonic()
                 state = _bridge.get_vision_state()
-                if state.get("gesture") == gesture:
+                age = state.get("gesture_age_s")
+                # Reject a gesture reported before this step started (stale
+                # replay) — a value held from a prior step/run must not
+                # satisfy this one. Permissive when the bridge omits the
+                # age field, to not break against an older bridge.
+                reported_at = poll_time - age if age is not None else None
+                is_fresh = reported_at is None or reported_at >= entry_time
+                if state.get("gesture") == gesture and is_fresh:
                     detected = True
                     break
             except Exception:
@@ -2032,7 +2128,13 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         return detected
 
     elif block_type == EventsItems.FIND.value:
-        obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+        try:
+            obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+        except (KeyError, TypeError, ValueError):
+            # Unresolved OBJECT slot (empty shadow, never filled in) — fall
+            # through with an empty name so this behaves like "never
+            # detected" (abort on timeout) instead of crashing the parser.
+            obj_data = {}
         obj_name = obj_data.get("name", "")
         coco_class, color = parse_object_query(obj_name)
         # If bridge is unreachable, bypass immediately.
@@ -2078,7 +2180,10 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                                {"condition": "object", "value": obj_name})
             except Exception:
                 pass
-            _abort_task(f"object '{obj_name}' not detected within {timeout}s")
+            _abort_task(
+                f"Couldn't find '{obj_name}' — check it's in view of the camera and try again.",
+                detail=f"find_object timeout: '{obj_name}' not detected within {timeout}s",
+            )
         else:
             print(f"[CONDITION] Object '{obj_name}' detected!")
         return detected
@@ -2094,16 +2199,17 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         # Voice recognition happens in the operator's browser (Web Speech API);
         # the matched word is cached in-process by vision_live.process_voice_command.
         # No ROS bridge involved — poll the Django-side cache directly.
-        from backend.functions.vision_live import get_latest_voice
+        from backend.functions.vision_live import get_latest_voice, reset_voice
 
-        word = condition_block.get("fields", {}).get("VOICE_WORD", "YES")
+        word = condition_block.get("fields", {}).get("VOICE_WORD") or "YES"
         print(f"[CONDITION] Waiting for voice command: {word} (timeout {timeout}s)...")
+        reset_voice()  # drop any word heard before this step started (stale replay)
         deadline = time.monotonic() + timeout
         detected = False
         while time.monotonic() < deadline:
             if SIMULATION_STOP_EVENT.is_set():
                 break
-            if get_latest_voice() == word:
+            if get_latest_voice(consume=True) == word:
                 detected = True
                 break
             _interruptible_sleep(0.5)
@@ -2118,7 +2224,35 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             print(f"[CONDITION] Voice command '{word}' heard!")
         return detected
 
-    # Fallback: sensor_signal, touch_detect, human_feedback → treat as fulfilled
+    elif block_type == EventsItems.HUMAN_FEEDBACK.value:
+        # Pure UI confirm — no sensor. Same cache shape as voice: drain at
+        # entry so a press from before this step started can't satisfy it,
+        # consume on read so it can't satisfy more than one step.
+        from backend.functions.vision_live import get_confirm, reset_confirm
+
+        print(f"[CONDITION] Waiting for operator confirm (timeout {timeout}s)...")
+        reset_confirm()
+        deadline = time.monotonic() + timeout
+        detected = False
+        while time.monotonic() < deadline:
+            if SIMULATION_STOP_EVENT.is_set():
+                break
+            if get_confirm(consume=True):
+                detected = True
+                break
+            _interruptible_sleep(0.5)
+        if not detected:
+            print(f"[WARNING] Operator confirm not received within {timeout}s — continuing")
+            try:
+                _bridge.notify("/api/human-step-timeout",
+                               {"condition": "human_feedback", "value": ""})
+            except Exception:
+                pass
+        else:
+            print("[CONDITION] Operator confirm received!")
+        return detected
+
+    # Fallback: sensor_signal, touch_detect → treat as fulfilled
     return _log_condition(condition_block, simulate_event=True)
 
 
@@ -2151,27 +2285,41 @@ def _eval_condition_tree(block: dict, simulate_event: bool) -> bool:
     """Evaluate a condition block tree, handling AND/OR/NOT recursively.
 
     AND/OR/NOT blocks route to child branches; leaf blocks fall through to
-    _resolve_condition (gesture, find_object, timer, etc.).
+    _resolve_condition (gesture, find_object, timer, etc.). A missing/
+    unattached operand anywhere in the tree makes the whole guard
+    unusable: it always evaluates to False, regardless of the operator or
+    of what the other operand evaluates to. Without this, an empty OR/AND
+    slot could still let the surviving branch (or, under NOT, the absence
+    itself) look "satisfied" and run a robot action on an incomplete
+    guard — same rule _h_when/_h_repeat_until already apply at entry, but
+    it must also hold one level down, inside the AND/OR/NOT recursion
+    itself, since a shadow slot can be left empty at any depth of the tree.
     """
     if block is None:
-        return True
+        return False
 
     btype = block.get("type", "")
     inputs = block.get("inputs", {})
 
     if btype == "logic_and_block":
-        a = _eval_condition_tree(inputs.get("A", {}).get("block"), simulate_event)
-        b = _eval_condition_tree(inputs.get("B", {}).get("block"), simulate_event)
-        return a and b
+        a_block = inputs.get("A", {}).get("block")
+        b_block = inputs.get("B", {}).get("block")
+        if a_block is None or b_block is None:
+            return False
+        return _eval_condition_tree(a_block, simulate_event) and _eval_condition_tree(b_block, simulate_event)
 
     if btype == "logic_or_block":
-        a = _eval_condition_tree(inputs.get("A", {}).get("block"), simulate_event)
-        b = _eval_condition_tree(inputs.get("B", {}).get("block"), simulate_event)
-        return a or b
+        a_block = inputs.get("A", {}).get("block")
+        b_block = inputs.get("B", {}).get("block")
+        if a_block is None or b_block is None:
+            return False
+        return _eval_condition_tree(a_block, simulate_event) or _eval_condition_tree(b_block, simulate_event)
 
     if btype == "logic_not_block":
-        inner = _eval_condition_tree(inputs.get("BOOL", {}).get("block"), simulate_event)
-        return not inner
+        bool_block = inputs.get("BOOL", {}).get("block")
+        if bool_block is None:
+            return False
+        return not _eval_condition_tree(bool_block, simulate_event)
 
     # Leaf block: gesture, find_object, timer, etc.
     return _resolve_condition(block, simulate_event)
@@ -2219,6 +2367,7 @@ def simulation_recursive_blockly_parser(
     locationsOfUser: List[Location],
     simulate_event: bool,
     inside_conditional: bool = False,
+    _macro_depth: int = 0,
 ):
     """Recursive parser: Blockly JSON → Gazebo/ROS2 simulation commands.
 
@@ -2249,7 +2398,7 @@ def simulation_recursive_blockly_parser(
                 simulation_recursive_blockly_parser(
                     code["next"]["block"],
                     objectsOfUser, actionsOfUser, locationsOfUser,
-                    simulate_event, inside_conditional,
+                    simulate_event, inside_conditional, _macro_depth,
                 )
 
         def _recurse(input_name: str):
@@ -2258,7 +2407,7 @@ def simulation_recursive_blockly_parser(
             if blk:
                 simulation_recursive_blockly_parser(
                     blk, objectsOfUser, actionsOfUser, locationsOfUser,
-                    simulate_event, inside_conditional=True,
+                    simulate_event, inside_conditional=True, _macro_depth=_macro_depth,
                 )
 
         def _safe_block_data(input_name: str, label: str):
@@ -2285,7 +2434,11 @@ def simulation_recursive_blockly_parser(
         # (a registry keyed by block type) instead of a long if/elif chain.
 
         def _h_repeat():
-            times = int(code["fields"]["times"])
+            try:
+                times = int(code["fields"]["times"])
+            except (KeyError, TypeError, ValueError) as exc:
+                print(f"[ERROR] Repeat: invalid/missing 'times' field, skipping loop entirely: {exc}")
+                times = 0
             print(f"[LOGIC] Repeat x{times}")
             for i in range(times):
                 if SIMULATION_STOP_EVENT.is_set():
@@ -2299,18 +2452,25 @@ def simulation_recursive_blockly_parser(
         def _h_repeat_until():
             print(f"[LOGIC] Repeat-Until (max {MAX_LOOP_ITERATIONS} iterations)")
             condition_block = code.get("inputs", {}).get("CONDITION", {}).get("block")
+            if not condition_block:
+                # Mirror _h_when: an unattached exit condition must never let a
+                # robot action run — skip the loop entirely instead of treating
+                # the absent guard as trivially satisfied after one iteration
+                # (that used to run DO once unconditionally, the exact opposite
+                # of WHEN's "no condition = never run" rule for the same
+                # reachable case — condition: null passes chat.py validation).
+                print("[WARNING] Repeat-Until: no condition attached — skipping loop entirely")
+                _next()
+                return
             _fulfilled = False
             for i in range(MAX_LOOP_ITERATIONS):
                 if SIMULATION_STOP_EVENT.is_set():
                     break
                 print(f"[LOGIC]   repeat-until iteration {i + 1}/{MAX_LOOP_ITERATIONS}")
                 _recurse("DO")
-                if condition_block:
-                    if _condition_contains_find(condition_block):
-                        _move_to_scan_pose()
-                    _fulfilled = _eval_condition_tree(condition_block, simulate_event)
-                else:
-                    _fulfilled = True
+                if _condition_contains_find(condition_block):
+                    _move_to_scan_pose()
+                _fulfilled = _eval_condition_tree(condition_block, simulate_event)
                 if _fulfilled:
                     print("[LOGIC] Repeat-Until: condition met, exiting loop")
                     break
@@ -2328,20 +2488,32 @@ def simulation_recursive_blockly_parser(
             _next()
 
         def _h_when():
-            condition_block = code["inputs"]["WHEN"]["block"]
-            if _condition_contains_find(condition_block):
-                _move_to_scan_pose()
-            fulfilled = _eval_condition_tree(condition_block, simulate_event)
+            # An unattached WHEN condition serializes as {} (no "block" key) —
+            # reachable from a real, isValid:true chat proposal (condition:
+            # null passes chat.py validation) or a hand-built block with an
+            # empty shadow slot. Treat "no condition" as "not fulfilled", not
+            # a crash: an ambiguous/incomplete guard must never let a robot
+            # action run, and a raised KeyError here used to be swallowed by
+            # the parser's blanket except, silently truncating every step
+            # after this one while the run still reported success.
+            condition_block = code.get("inputs", {}).get("WHEN", {}).get("block")
+            fulfilled = False
+            if condition_block:
+                if _condition_contains_find(condition_block):
+                    _move_to_scan_pose()
+                fulfilled = _eval_condition_tree(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
                 _interruptible_sleep(3)
             _next()
 
         def _h_when_otherwise():
-            condition_block = code["inputs"]["WHEN"]["block"]
-            if _condition_contains_find(condition_block):
-                _move_to_scan_pose()
-            fulfilled = _eval_condition_tree(condition_block, simulate_event)
+            condition_block = code.get("inputs", {}).get("WHEN", {}).get("block")
+            fulfilled = False
+            if condition_block:
+                if _condition_contains_find(condition_block):
+                    _move_to_scan_pose()
+                fulfilled = _eval_condition_tree(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
             else:
@@ -2373,6 +2545,20 @@ def simulation_recursive_blockly_parser(
                         step_start_payload["value"] = obj_data.get("name", "")
                     except Exception:
                         pass
+                elif ev_type == EventsItems.HUMAN_FEEDBACK.value:
+                    step_start_payload["condition"] = "human_feedback"
+                # Drain the relevant cache BEFORE the human-step-start notify
+                # goes out, not after. _wait_for_condition() below resets
+                # again at its own entry, but that happens only once the
+                # notify has already been sent to the operator's browser —
+                # a press/utterance landing in that gap would be recorded
+                # then immediately wiped, and silently lost.
+                if ev_type == EventsItems.VOICE.value:
+                    from backend.functions.vision_live import reset_voice
+                    reset_voice()
+                elif ev_type == EventsItems.HUMAN_FEEDBACK.value:
+                    from backend.functions.vision_live import reset_confirm
+                    reset_confirm()
             try:
                 _bridge.notify("/api/human-step-start", step_start_payload)
             except Exception:
@@ -2380,7 +2566,18 @@ def simulation_recursive_blockly_parser(
             if confirm_event:
                 if _condition_contains_find(confirm_event):
                     _move_to_scan_pose()
-                _eval_condition_tree(confirm_event, simulate_event)
+                # The return value used to be discarded here: a confirm that
+                # timed out (or, after the A1 fix, a malformed nested AND/OR
+                # confirm) still notified human-step-complete and let the
+                # task proceed — the exact failure a human confirm step
+                # exists to prevent (e.g. placing a never-verified item).
+                confirmed = _eval_condition_tree(confirm_event, simulate_event)
+                if not confirmed:
+                    _abort_task(
+                        "The task stopped because the operator didn't confirm in time.",
+                        detail=f"human_action confirm not received in time for '{task_desc}'",
+                    )
+                    return
             try:
                 _bridge.notify("/api/human-step-complete")
             except Exception:
@@ -2412,24 +2609,40 @@ def simulation_recursive_blockly_parser(
                 # new one. Clean up before spawning the next pick.
                 print("[SIMULATOR] Previous object still in world — cleaning up before new pick")
                 delete_spawned_object_and_place()
-            obj = objectsOfUser.filter(id=object_data["id"]).first()
+            obj = objectsOfUser.filter(id=object_data.get("id")).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             safe_sdf_name = sdf_name.replace(" ", "_").lower()
             print(f"[ROBOT] PICK: {sdf_name}")
             _, _, obj_min_z = get_sdf_dimensions(safe_sdf_name)
             z_rest = TABLE_TOP_Z_ABS - obj_min_z
+
+            # Pick source is always the tube rack — cycle its slots the same way
+            # place already does (LOCATION_PROFILES["tube_rack"]["slot_y_offsets"]),
+            # so consecutive picks in one run take from different holes.
+            pick_grasp_yaw = None
+            spawn_x, spawn_y = OBJECT_SPAWN_X, OBJECT_SPAWN_Y
+            rack_cfg = LOCATION_PROFILES.get("tube_rack")
+            if rack_cfg:
+                slot_idx = getattr(simulation_recursive_blockly_parser, "pick_slot_index", 0)
+                offsets = rack_cfg["slot_y_offsets"]
+                y_offset = offsets[slot_idx % len(offsets)]
+                spawn_y = OBJECT_SPAWN_Y + y_offset
+                pick_grasp_yaw = rack_cfg.get("grasp_yaw", 0.0)
+                simulation_recursive_blockly_parser.pick_slot_index = slot_idx + 1
+                print(f"[SIMULATOR] Pick slot {slot_idx % len(offsets)}: spawn_y={spawn_y:.3f} yaw={pick_grasp_yaw:.3f}")
+
             cmd = (
                 'gz service -s /world/worldCobotta/create '
                 '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
                 '--timeout 5000 --req \'name: "object"; '
                 f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_sdf_name, "model.sdf")}"; '
-                f'pose: {{position: {{x: {OBJECT_SPAWN_X}, y: {OBJECT_SPAWN_Y}, z: {z_rest}}}, '
+                f'pose: {{position: {{x: {spawn_x}, y: {spawn_y}, z: {z_rest}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
             # Pick aims at the KNOWN spawn XY (deterministic) — the deterministic
             # hold below keeps the object there, so no physics-settle read is needed.
-            pick_x_rel = OBJECT_SPAWN_X - ROBOT_BASE_X
-            pick_y_rel = OBJECT_SPAWN_Y - ROBOT_BASE_Y
+            pick_x_rel = spawn_x - ROBOT_BASE_X
+            pick_y_rel = spawn_y - ROBOT_BASE_Y
             spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
             if not spawn_ok:
                 print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
@@ -2446,18 +2659,21 @@ def simulation_recursive_blockly_parser(
                 # (kills the home-drop + tip of tall/thin objects). No polling settle.
                 # GATE (mirror the pre-attach snap): a failed hold breaks determinism,
                 # so abort this pick rather than grasping an unheld/unstable object.
-                if set_object_world_pose(OBJECT_SPAWN_X, OBJECT_SPAWN_Y, z_rest, yaw=0.0):
+                if set_object_world_pose(spawn_x, spawn_y, z_rest, yaw=0.0):
                     print(f"[GRASP] hold confirmed: upright at rest "
-                          f"({OBJECT_SPAWN_X},{OBJECT_SPAWN_Y},z={z_rest:.4f})")
+                          f"({spawn_x},{spawn_y},z={z_rest:.4f})")
                 else:
-                    print("[GRASP] ABORT: post-spawn hold failed — skipping pick")
-                    _next()
+                    _abort_task(
+                        f"Couldn't pick up '{sdf_name}' — it wasn't resting stably where expected.",
+                        detail=f"post-spawn hold failed for '{sdf_name}' (set_pose) — "
+                               "refusing to pick an unstable/unheld object",
+                    )
                     return
                 _interruptible_sleep(0.3)
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
             simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok,
                               pick_x_rel=pick_x_rel, pick_y_rel=pick_y_rel,
-                              obj_min_z=obj_min_z)
+                              obj_min_z=obj_min_z, grasp_yaw_override=pick_grasp_yaw)
             _next()
 
         def _h_place():
@@ -2465,7 +2681,7 @@ def simulation_recursive_blockly_parser(
             if location_data is None:
                 _next()
                 return
-            location = locationsOfUser.filter(id=location_data["id"]).first()
+            location = locationsOfUser.filter(id=location_data.get("id")).first()
             sdf_name = location.name if location else location_data.get("name", "unknown")
             safe_loc_sdf_name = sdf_name.replace(" ", "_").lower()
             print(f"[ROBOT] PLACE: {sdf_name}")
@@ -2478,7 +2694,16 @@ def simulation_recursive_blockly_parser(
                 'orientation: {x: 0, y: 0, z: 0.7071, w: 0.7071}}\''
             )
             if not launch_wsl_ros_command(loc_cmd, expect_reply_true=True):
-                print(f"[SIMULATOR] WARNING: location spawn failed for '{sdf_name}' — place may fail")
+                # The snap-to-slot hard gate in simulate_ros_place (below)
+                # teleports the object to this location's coordinates — if
+                # the location itself never spawned, that gate would place
+                # the object at a target that doesn't exist in the world.
+                # Same "never fake a success" rule, one step earlier.
+                _abort_task(
+                    f"Couldn't place '{sdf_name}' — the destination location wasn't ready.",
+                    detail=f"location spawn failed for '{sdf_name}' target",
+                )
+                return
             picked_obj_name = getattr(simulation_recursive_blockly_parser, "last_picked_object", "flask")
             simulate_ros_place(picked_obj_name, objectsOfUser, sdf_name)
             _interruptible_sleep(1)
@@ -2489,7 +2714,7 @@ def simulation_recursive_blockly_parser(
             if action_data is None:
                 _next()
                 return
-            action = actionsOfUser.filter(id=action_data["id"]).first()
+            action = actionsOfUser.filter(id=action_data.get("id")).first()
             action_name = action.name if action else action_data.get("name", "unknown")
             print(f"[ROBOT] PROCESSING action: {action_name}")
             if action and action.points:
@@ -2564,7 +2789,10 @@ def simulation_recursive_blockly_parser(
             _next()
 
         def _h_wait():
-            seconds = int(code.get("fields", {}).get("SECONDS", 1))
+            try:
+                seconds = int(code.get("fields", {}).get("SECONDS", 1))
+            except (TypeError, ValueError):
+                seconds = 1
             print(f"[ROBOT] Wait {seconds}s (interruptible)")
             _interruptible_sleep(seconds)
             _next()
@@ -2576,19 +2804,33 @@ def simulation_recursive_blockly_parser(
         def _h_macro():
             try:
                 macro_data = loads(code["data"])
+                macro_id = macro_data["id"]
             except (KeyError, TypeError, ValueError) as exc:
                 print(f"[ERROR] MACRO: malformed/missing block data, skipping: {exc}")
                 _next()
                 return
-            macro_id = macro_data["id"]
             macro_name = macro_data.get("name", str(macro_id))
+            if _macro_depth >= MAX_MACRO_DEPTH:
+                print(f"[MACRO] ABORT: recursion depth {_macro_depth} exceeded "
+                      f"MAX_MACRO_DEPTH={MAX_MACRO_DEPTH} at '{macro_name}' — likely a macro cycle")
+                _abort_task(
+                    f"'{macro_name}' didn't finish — too many nested saved tasks (possible loop). "
+                    "Check this saved task for a step that refers back to itself.",
+                    detail=f"macro recursion depth {_macro_depth} exceeded MAX_MACRO_DEPTH={MAX_MACRO_DEPTH}",
+                )
+                return
             print(f"[MACRO] Starting macro: {macro_name}")
-            macro_task = Task.objects.filter(id=macro_id).first()
+            # Owner-or-shared, same visibility rule simulate_task() applies to
+            # the top-level task — an arbitrary macro id must not reach
+            # another user's private task.
+            macro_task = Task.objects.filter(
+                Q(owner=_RUN_OWNER_ID) | Q(shared=True), id=macro_id
+            ).first()
             if macro_task and macro_task.code:
                 simulation_recursive_blockly_parser(
                     loads(macro_task.code),
                     objectsOfUser, actionsOfUser, locationsOfUser,
-                    simulate_event, inside_conditional,
+                    simulate_event, inside_conditional, _macro_depth + 1,
                 )
             else:
                 print(f"[MACRO] WARNING: macro {macro_id} not found or has no code")
@@ -2636,7 +2878,7 @@ def simulation_recursive_blockly_parser(
 
 
 def simulate_task(request: HttpRequest) -> HttpResponse:
-    global _TASK_ABORT_REASON, _HW_DRIVE_REQUESTED
+    global _TASK_ABORT_REASON, _HW_DRIVE_REQUESTED, _RUN_OWNER_ID
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
@@ -2680,6 +2922,10 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                     SIMULATION_STOP_EVENT.clear()
                     _TASK_ABORT_REASON = None
                     _HW_DRIVE_REQUESTED = drive_hardware
+                    _RUN_OWNER_ID = request.user.id
+                    from backend.functions.vision_live import reset_voice, reset_confirm
+                    reset_voice()  # drop any word heard before this run started
+                    reset_confirm()  # drop any confirm press from before this run started
                     _set_world_paused(False)
                     reset_simulation_world()
 
@@ -2702,6 +2948,7 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                         _set_world_paused(True)
                 finally:
                     _HW_DRIVE_REQUESTED = False
+                    _RUN_OWNER_ID = None
                     _SIM_RUN_LOCK.release()
             else:
                 return invalid_request_method()
