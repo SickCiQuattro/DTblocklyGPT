@@ -29,7 +29,9 @@ except ImportError:
 
 # Rough parameter count (in billions) parsed from an Ollama tag, used only
 # for the model-size vs accuracy curve. Not meaningful for cloud models.
-_SIZE_RE = re.compile(r":(\d+(?:\.\d+)?)b(?:-|$)")
+# Matches both the "b" (billions, e.g. qwen2.5:3b) and "m" (millions, e.g.
+# granite4:350m) suffixes Ollama tags use for sub-1B models.
+_SIZE_RE = re.compile(r":(\d+(?:\.\d+)?)([bm])(?:-|$)")
 
 
 def load_results(paths):
@@ -173,6 +175,8 @@ def report_size_vs_accuracy(all_results, out_dir):
         if not m:
             continue
         size_b = float(m.group(1))
+        if m.group(2) == "m":
+            size_b /= 1000
         acc = _pass_rate(results)
         points.append((size_b, acc, spec))
         print(f"  {spec}: {size_b:g}B -> {acc:.1f}% pass rate")

@@ -88,7 +88,7 @@ def test_move_target_failure_aborts(monkeypatch):
 
     assert result is False
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "robot arm error" in simulate._TASK_ABORT_REASON
+    assert "rejected the last move command" in simulate._TASK_ABORT_REASON
     mock_bridge.stop.assert_called_once()
 
 
@@ -104,7 +104,7 @@ def test_move_target_unreachable_aborts(monkeypatch):
 
     assert result is False
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "unreachable" in simulate._TASK_ABORT_REASON
+    assert "Lost connection" in simulate._TASK_ABORT_REASON
 
 
 def test_sim_mode_untouched(monkeypatch):
@@ -152,7 +152,7 @@ def test_verify_hw_arrival_timeout_aborts(monkeypatch):
 
     assert result is False
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "twin divergence" in simulate._TASK_ABORT_REASON
+    assert "didn't reach the position" in simulate._TASK_ABORT_REASON
 
 
 # ── simulate._verify_hw_grasp ────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ def test_verify_hw_grasp_missed(monkeypatch):
 
     assert result is False
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "missed grasp" in simulate._TASK_ABORT_REASON
+    assert "closed on empty air" in simulate._TASK_ABORT_REASON
 
 
 def test_verify_hw_grasp_success(monkeypatch):
@@ -207,7 +207,7 @@ def test_find_object_timeout_aborts(monkeypatch):
 
     assert result is False
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "not detected" in simulate._TASK_ABORT_REASON
+    assert "Couldn't find 'flask'" in simulate._TASK_ABORT_REASON
     mock_bridge.notify.assert_any_call(
         "/api/human-step-timeout", {"condition": "object", "value": "flask"}
     )

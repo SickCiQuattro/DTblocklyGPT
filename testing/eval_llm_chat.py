@@ -386,7 +386,14 @@ def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_cal
     try:
         task = json.loads(task_raw) if isinstance(task_raw, str) else (task_raw or [])
     except Exception:
-        task = []
+        try:
+            # Some models (observed: gemini-3.5-flash-lite) intermittently
+            # double-escape quotes inside this string (\"type\" instead of
+            # "type"). One extra unescape pass recovers an otherwise-valid
+            # payload before giving up — matches the same fix in chat.py.
+            task = json.loads(task_raw.replace('\\"', '"'))
+        except Exception:
+            task = []
 
     warnings = []
     if isinstance(task, list) and task:

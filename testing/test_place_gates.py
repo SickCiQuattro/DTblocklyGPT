@@ -5,13 +5,14 @@ Run:
 
 Covers the fake-place fix: when IK fails during a place, the object must
 NOT be detached from the gripper and snapped to the target slot — that was
-the silent "place succeeded" lie the physical session found (docs/cobotta-
-physical-session-2026-07-07.md §7). Real object/location SDFs ("flask",
-"collector") are used as-is (same pattern as test_grasp_planner.py) — only
-network/ROS calls and the specific IK step under test are mocked.
+a silent "place succeeded" lie found on the physical arm. Real
+object/location SDFs ("tube", "collector") are used as-is (same pattern as
+test_grasp_planner.py) — only network/ROS calls and the specific IK step
+under test are mocked.
 """
 import sys
 import os
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -73,10 +74,10 @@ def _mock_ros(monkeypatch):
 def test_place_approach_ik_fail_aborts_no_snap(monkeypatch):
     monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: None)
 
-    simulate.simulate_ros_place(picked_obj_name="flask", objectsOfUser=None, location_name="collector")
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "approach IK failed" in simulate._TASK_ABORT_REASON
+    assert "no safe path found" in simulate._TASK_ABORT_REASON
     simulate.detach_object_from_gripper.assert_not_called()
     simulate.set_object_world_pose.assert_not_called()
     simulate._persist_placed_object.assert_not_called()
@@ -87,10 +88,10 @@ def test_place_descent_ik_fail_aborts_no_snap(monkeypatch):
     monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: [0.0] * 6)
     monkeypatch.setattr(simulate, "build_vertical_ik_path", lambda *a, **kw: None)
 
-    simulate.simulate_ros_place(picked_obj_name="flask", objectsOfUser=None, location_name="collector")
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "descent IK failed" in simulate._TASK_ABORT_REASON
+    assert "no safe path found" in simulate._TASK_ABORT_REASON
     simulate.detach_object_from_gripper.assert_not_called()
     simulate.set_object_world_pose.assert_not_called()
     simulate._persist_placed_object.assert_not_called()
@@ -102,12 +103,33 @@ def test_place_fk_guard_fail_aborts_no_snap(monkeypatch):
     # Force the post-descent FK residual over tolerance.
     monkeypatch.setattr(simulate, "fk_position_error", lambda *a, **kw: (simulate.IK_POS_TOL * 10, 0.0))
 
-    simulate.simulate_ros_place(picked_obj_name="flask", objectsOfUser=None, location_name="collector")
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "FK guard" in simulate._TASK_ABORT_REASON
+    assert "didn't reach the spot precisely enough" in simulate._TASK_ABORT_REASON
     simulate.detach_object_from_gripper.assert_not_called()
     simulate.set_object_world_pose.assert_not_called()
+    simulate._persist_placed_object.assert_not_called()
+
+
+def test_place_snap_to_slot_fail_aborts_no_persist(monkeypatch):
+    """Regression: snap-to-slot used to be best-effort (log and continue) —
+    a failed teleport after the weld is already released left the object's
+    real position unknown, while _persist_placed_object still spawned a
+    fresh entity at the intended slot as if the teleport had succeeded —
+    the same "fake place" class of bug this file's pick/place IK gates were
+    built to close."""
+    monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: [0.0] * 6)
+    monkeypatch.setattr(simulate, "build_vertical_ik_path", lambda *a, **kw: [[0.0] * 6])
+    monkeypatch.setattr(simulate, "fk_position_error", lambda *a, **kw: (0.0, 0.0))
+    monkeypatch.setattr(simulate, "get_sdf_dimensions", lambda *a, **kw: (0.02, 0.02, 0.0))
+    monkeypatch.setattr(simulate, "set_object_world_pose", MagicMock(return_value=False))
+
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
+
+    assert simulate.SIMULATION_STOP_EVENT.is_set()
+    assert "check the workcell" in simulate._TASK_ABORT_REASON
+    simulate.detach_object_from_gripper.assert_called_once()  # already released, can't undo
     simulate._persist_placed_object.assert_not_called()
 
 
@@ -118,7 +140,7 @@ def test_place_success_path_does_snap(monkeypatch):
     monkeypatch.setattr(simulate, "fk_position_error", lambda *a, **kw: (0.0, 0.0))
     monkeypatch.setattr(simulate, "get_sdf_dimensions", lambda *a, **kw: (0.02, 0.02, 0.0))
 
-    simulate.simulate_ros_place(picked_obj_name="flask", objectsOfUser=None, location_name="collector")
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
 
     assert not simulate.SIMULATION_STOP_EVENT.is_set()
     assert simulate._TASK_ABORT_REASON is None
@@ -145,10 +167,10 @@ def test_place_transit_ik_fail_aborts_no_snap(monkeypatch):
     _set_pick_context()
     monkeypatch.setattr(simulate, "build_cartesian_ik_path", lambda *a, **kw: None)
 
-    simulate.simulate_ros_place(picked_obj_name="flask", objectsOfUser=None, location_name="collector")
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "transit IK failed" in simulate._TASK_ABORT_REASON
+    assert "no safe path found" in simulate._TASK_ABORT_REASON
     simulate.detach_object_from_gripper.assert_not_called()
     simulate.set_object_world_pose.assert_not_called()
     simulate._persist_placed_object.assert_not_called()
@@ -162,10 +184,10 @@ def test_pick_fk_guard_fail_aborts_no_weld(monkeypatch):
     monkeypatch.setattr(simulate, "fk_position_error", lambda *a, **kw: (simulate.IK_POS_TOL * 10, 0.0))
     monkeypatch.setattr(simulate, "debug_fk", lambda *a, **kw: None)
 
-    simulate.simulate_ros_pick(obj=None, sdf_name="flask")
+    simulate.simulate_ros_pick(obj=None, sdf_name="tube")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "FK guard" in simulate._TASK_ABORT_REASON
+    assert "didn't reach the object precisely enough" in simulate._TASK_ABORT_REASON
     simulate.set_object_world_pose.assert_not_called()
     simulate.attach_object_to_gripper.assert_not_called()
 
@@ -173,10 +195,10 @@ def test_pick_fk_guard_fail_aborts_no_weld(monkeypatch):
 def test_pick_approach_ik_fail_aborts(monkeypatch):
     monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: None)
 
-    simulate.simulate_ros_pick(obj=None, sdf_name="flask")
+    simulate.simulate_ros_pick(obj=None, sdf_name="tube")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "approach IK failed" in simulate._TASK_ABORT_REASON
+    assert "no safe path found" in simulate._TASK_ABORT_REASON
     simulate.set_object_world_pose.assert_not_called()
 
 
@@ -190,13 +212,44 @@ def test_pick_weld_unverified_aborts(monkeypatch):
     monkeypatch.setattr(simulate, "get_sdf_dimensions", lambda *a, **kw: (0.02, 0.02, 0.0))
     monkeypatch.setattr(simulate, "attach_object_to_gripper", MagicMock(return_value=False))
 
-    simulate.simulate_ros_pick(obj=None, sdf_name="flask")
+    simulate.simulate_ros_pick(obj=None, sdf_name="tube")
 
     assert simulate.SIMULATION_STOP_EVENT.is_set()
-    assert "weld failed" in simulate._TASK_ABORT_REASON
+    assert "didn't attach to the gripper" in simulate._TASK_ABORT_REASON
     # smooth_move fires once for the pre-attach approach; the finger-close
     # call that would follow a verified weld must never happen.
     assert simulate.smooth_move.call_count == 1
+
+
+# ── _h_pick: malformed OBJECT data must not crash ───────────────────────────
+
+def test_pick_with_object_data_missing_id_does_not_crash(monkeypatch):
+    """Regression: `_h_pick` used to index `object_data["id"]` unguarded —
+    a valid OBJECT payload missing the `id` key (same reachable shape as the
+    already-fixed WHEN/repeat/wait cases: a hand-built block or an LLM
+    proposal that only fills in `name`) raised KeyError, swallowed by the
+    parser's blanket except, truncating the chain. Now `.get("id")` returns
+    None, the objectsOfUser lookup misses, and _h_pick falls back to the
+    payload's `name` — same class of fix as _h_place/_h_processing."""
+    monkeypatch.setattr(simulate, "get_sdf_dimensions", lambda *a, **kw: (0.02, 0.02, 0.0))
+    monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: None)  # fail fast
+    monkeypatch.setattr(simulate, "debug_fk", lambda *a, **kw: None)
+    simulate._spawned_in_world.clear()
+
+    mock_objects = MagicMock()
+    mock_objects.filter.return_value.first.return_value = None  # no DB match — falls back to name
+
+    code = {
+        "type": "pick_block",
+        "inputs": {
+            "OBJECT": {"block": {"data": json.dumps({"name": "tube"})}},  # no "id"
+        },
+    }
+    simulate.simulation_recursive_blockly_parser(code, mock_objects, [], [], simulate_event=True)
+
+    assert simulate.SIMULATION_STOP_EVENT.is_set()
+    assert "no safe path found" in simulate._TASK_ABORT_REASON
+    simulate._spawned_in_world.clear()
 
 
 # ── attach_object_to_gripper: state-topic parsing (real implementation) ──────
@@ -244,7 +297,7 @@ def test_persist_placed_object_deletes_then_creates(monkeypatch):
 
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", record)
 
-    ok = _real_persist_placed_object("flask", 1.0, 2.0, 3.0, yaw=0.0)
+    ok = _real_persist_placed_object("tube", 1.0, 2.0, 3.0, yaw=0.0)
 
     assert ok is True
     assert len(calls) == 2
@@ -257,8 +310,8 @@ def test_persist_placed_object_deletes_then_creates(monkeypatch):
 def test_persist_placed_object_increments_across_calls(monkeypatch):
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", lambda *a, **kw: True)
 
-    _real_persist_placed_object("flask", 0, 0, 0)
-    _real_persist_placed_object("flask", 0, 0, 0)
+    _real_persist_placed_object("tube", 0, 0, 0)
+    _real_persist_placed_object("tube", 0, 0, 0)
 
     assert simulate._placed_in_world == ["placed_1", "placed_2"]
 
@@ -271,7 +324,7 @@ def test_persist_placed_object_skips_spawn_on_delete_failure(monkeypatch):
         return "remove" not in cmd  # delete fails, would-be create succeeds
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", record)
 
-    ok = _real_persist_placed_object("flask", 0, 0, 0)
+    ok = _real_persist_placed_object("tube", 0, 0, 0)
 
     assert ok is False
     assert len(calls) == 1  # never reached the create call

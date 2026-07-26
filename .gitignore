@@ -25,3 +25,7 @@ DesignSystem/
 docs/
 yoloe-11s-seg.pt
 mobileclip_blt.ts
+
+# superseded/regenerable LLM eval benchmark artifacts (the consolidated result files themselves stay tracked)
+testing/out/_archive/
+testing/out/charts/

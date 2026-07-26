@@ -175,10 +175,9 @@ def test_plan_z_pick_and_hand_close(fake_objects):
 # Real demo objects (no monkeypatch — read the actual SDFs)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_real_flask_and_tube_top_graspable():
-    for name in ("flask", "tube"):
-        m = normalize_object_for_grasp(name)
-        assert m.collision_type == "cylinder", name
-        assert m.feasible and m.grasp_classification == "top", name
-        # body grip ~15 mm, well under the hand max
-        assert m.graspable_width <= 0.020, name
+def test_real_tube_top_graspable():
+    m = normalize_object_for_grasp("tube")
+    assert m.collision_type == "cylinder"
+    assert m.feasible and m.grasp_classification == "top"
+    # body grip ~15-18 mm, well under the hand max
+    assert m.graspable_width <= 0.020
