@@ -47,6 +47,7 @@ import {
 } from 'lucide-react'
 
 import { BlockState as State } from 'utils/blocklyTypes'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { type BlockViewMode } from '../utils/useViewSettings'
 import { applyBlockViewMode } from '../utils/viewModePresentation'
@@ -144,7 +145,7 @@ const getPreviewCategoryBadgeMeta = (
     case 'logic_not_block':
       return { label: 'Conditions', Icon: ScanEye }
     case 'macro_task_block':
-      return { label: 'Saved Tasks', Icon: Workflow }
+      return { label: UI_TEXT.savedTasks, Icon: Workflow }
     case 'when_block':
     case 'when_otherwise_block':
       // Conditionals branch on a condition — a fork, not a loop.
@@ -176,9 +177,9 @@ const getPreviewCategoryBadgeMeta = (
   )
     return { label: fallbackCategoryName ?? 'Library', Icon: Box }
   if (hint.includes('tasks') || hint.includes('macro'))
-    return { label: fallbackCategoryName ?? 'Saved Tasks', Icon: Pointer }
+    return { label: fallbackCategoryName ?? UI_TEXT.savedTasks, Icon: Pointer }
 
-  return { label: fallbackCategoryName ?? 'Toolbox', Icon: null }
+  return { label: fallbackCategoryName ?? UI_TEXT.toolbox, Icon: null }
 }
 
 // ─── COLOUR HELPERS ───────────────────────────────────────────────────────────

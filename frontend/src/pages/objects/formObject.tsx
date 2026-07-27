@@ -114,6 +114,9 @@ export const FormObject = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -138,12 +141,16 @@ export const FormObject = ({
       url: endpoints.home.libraries.getCartesianPosition,
       method: MethodHTTP.POST,
       body: { robot: Number(robot) },
-    }).then((response) => {
-      if (typeof response?.position?.Z === 'number') {
-        void setFieldValue('height', response.position.Z)
-        toast.success('Height acquired')
-      }
     })
+      .then((response) => {
+        if (typeof response?.position?.Z === 'number') {
+          void setFieldValue('height', response.position.Z)
+          toast.success('Height acquired')
+        }
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure.
+      })
   }
 
   const handleGetPhoto = (
@@ -170,14 +177,18 @@ export const FormObject = ({
       url: endpoints.home.libraries.getPhoto,
       method: MethodHTTP.POST,
       body: { robot: Number(robot) },
-    }).then((response) => {
-      if (response) {
-        void setFieldValue('photo', response.photo || '')
-        void setFieldValue('contour', response.contour || '')
-        void setFieldValue('shape', response.shape || '')
-        toast.success('Photo acquired')
-      }
     })
+      .then((response) => {
+        if (response) {
+          void setFieldValue('photo', response.photo || '')
+          void setFieldValue('contour', response.contour || '')
+          void setFieldValue('shape', response.shape || '')
+          toast.success('Photo acquired')
+        }
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure.
+      })
   }
 
   return (
@@ -216,7 +227,13 @@ export const FormObject = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form noValidate onSubmit={handleSubmit}>
+        <form
+          noValidate
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault()
+          }}
+        >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={2}>
               <Stack spacing={1}>
@@ -225,14 +242,19 @@ export const FormObject = ({
                   value={values.name || ''}
                   name="name"
                   label="Name"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   disabled={!!forcedName}
                   error={Boolean(touched.name && errors.name)}
+                  aria-invalid={Boolean(touched.name && errors.name)}
+                  aria-describedby={
+                    touched.name && errors.name ? 'helper-text-name' : undefined
+                  }
                   title="Name of the object"
                 />
                 {touched.name && errors.name && (
-                  <FormHelperText error id="helper-text-name">
+                  <FormHelperText error role="alert" id="helper-text-name">
                     {errors.name}
                   </FormHelperText>
                 )}
@@ -350,6 +372,12 @@ export const FormObject = ({
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.robot && errors.robot)}
+                    aria-invalid={Boolean(touched.robot && errors.robot)}
+                    aria-describedby={
+                      touched.robot && errors.robot
+                        ? 'helper-text-robot'
+                        : undefined
+                    }
                     title="Robot used to acquire height and photo"
                   >
                     {dataMyRobots?.map((myRobot) => (
@@ -359,7 +387,7 @@ export const FormObject = ({
                     ))}
                   </Select>
                   {touched.robot && errors.robot && (
-                    <FormHelperText error id="helper-text-robot">
+                    <FormHelperText error role="alert" id="helper-text-robot">
                       {errors.robot}
                     </FormHelperText>
                   )}

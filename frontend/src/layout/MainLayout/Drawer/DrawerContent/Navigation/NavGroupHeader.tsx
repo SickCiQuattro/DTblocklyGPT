@@ -11,10 +11,10 @@ interface NavGroupHeaderProps {
 }
 
 export const NavGroupHeader = ({ title, drawerOpen }: NavGroupHeaderProps) => {
-  if (!drawerOpen || !title) {
-    // Reserve the exact same height when collapsed (or unlabeled groups), and
-    // draw a short hairline so adjacent groups read as separate regions at the
-    // icon-only width (Gestalt: common region).
+  if (!drawerOpen) {
+    // Collapsed rail: draw a short hairline so adjacent icon-only groups
+    // still read as separate regions (Gestalt: common region) — there's no
+    // label at this width for any group, titled or not.
     return (
       <Box
         aria-hidden
@@ -28,6 +28,13 @@ export const NavGroupHeader = ({ title, drawerOpen }: NavGroupHeaderProps) => {
         <Divider sx={{ width: 24, borderColor: 'divider' }} />
       </Box>
     )
+  }
+
+  if (!title) {
+    // Expanded, single-item group with no heading: reserve the same height
+    // (so toggling the rail never shifts items vertically) but no divider —
+    // unlike the collapsed rail, there's nothing here for it to separate.
+    return <Box aria-hidden sx={{ height: NAV_GROUP_HEADER_HEIGHT }} />
   }
 
   return (

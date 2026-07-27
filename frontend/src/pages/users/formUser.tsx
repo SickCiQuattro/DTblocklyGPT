@@ -62,6 +62,9 @@ export const FormUser = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -114,13 +117,20 @@ export const FormUser = ({
                   value={values.username || ''}
                   name="username"
                   label="Username"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.username && errors.username)}
+                  aria-invalid={Boolean(touched.username && errors.username)}
+                  aria-describedby={
+                    touched.username && errors.username
+                      ? 'helper-text-username'
+                      : undefined
+                  }
                   title="Username of the user account"
                 />
                 {touched.username && errors.username && (
-                  <FormHelperText error id="helper-text-username">
+                  <FormHelperText error role="alert" id="helper-text-username">
                     {errors.username}
                   </FormHelperText>
                 )}
@@ -136,10 +146,16 @@ export const FormUser = ({
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.email && errors.email)}
+                  aria-invalid={Boolean(touched.email && errors.email)}
+                  aria-describedby={
+                    touched.email && errors.email
+                      ? 'helper-text-email'
+                      : undefined
+                  }
                   title="Email of the user account"
                 />
                 {touched.email && errors.email && (
-                  <FormHelperText error id="helper-text-email">
+                  <FormHelperText error role="alert" id="helper-text-email">
                     {errors.email}
                   </FormHelperText>
                 )}
@@ -174,16 +190,25 @@ export const FormUser = ({
             <Grid size={4}>
               <Stack spacing={1}>
                 <FormControl fullWidth>
-                  <InputLabel id="role-label">Role</InputLabel>
+                  <InputLabel id="role-label" required>
+                    Role
+                  </InputLabel>
                   <Select
                     labelId="role-label"
                     id="role"
                     value={values.role || ''}
                     label="Role"
                     name="role"
+                    required
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.role && errors.role)}
+                    aria-invalid={Boolean(touched.role && errors.role)}
+                    aria-describedby={
+                      touched.role && errors.role
+                        ? 'helper-text-role'
+                        : undefined
+                    }
                     title="Select the role of the user account. Managers can also create and edit user accounts and robots in the fleet"
                   >
                     {dataRoles?.map((role) => (
@@ -193,7 +218,7 @@ export const FormUser = ({
                     ))}
                   </Select>
                   {touched.role && errors.role && (
-                    <FormHelperText error id="helper-text-role">
+                    <FormHelperText error role="alert" id="helper-text-role">
                       {errors.role}
                     </FormHelperText>
                   )}

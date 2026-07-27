@@ -16,13 +16,26 @@ export type TaskState = {
   codeOpen: boolean
   isSaving: boolean
   saveTriggered: boolean
+  // Rename-only save — distinct from saveTriggered, which also
+  // (re)publishes the whole workspace when it happens to pass conformance.
+  // A rename must never have that side effect (see Header/index.tsx).
+  renameTriggered: boolean
   discardTriggered: boolean
   // One-shot flag for the StatusBar's "Saved ✓" flash — distinct from
   // lastSaved itself, which is also seeded from the task's own
   // last_modified on load/task-switch (see task-workspace/index.tsx) and
   // must NOT flash the checkmark just because it changed.
   savedFlash: boolean
+  // A save (autosave or manual) failed and hasn't been superseded by a
+  // successful one yet. Autosave failures show no toast (they'd fire every
+  // 2s while the connection is down), so the StatusBar is the only
+  // persistent signal a first-timer has that their latest edits aren't saved.
+  saveError: boolean
   workspaceReady: boolean
+  // Readable reasons the workspace isn't ready (useConformance's
+  // formattedIssues) — mirrored here so Header/index.tsx can show the count
+  // next to Save without needing the live Blockly workspace instance itself.
+  conformanceIssues: string[]
   chatPosition: 'left' | 'right'
   robotPanelWidth: 'standard' | 'wide'
 }
@@ -45,9 +58,12 @@ export const initialState: TaskState = {
   codeOpen: false,
   isSaving: false,
   saveTriggered: false,
+  renameTriggered: false,
   discardTriggered: false,
   savedFlash: false,
+  saveError: false,
   workspaceReady: false,
+  conformanceIssues: [],
   chatPosition:
     (typeof window !== 'undefined'
       ? (localStorage.getItem('chatPosition') as 'left' | 'right')
@@ -107,14 +123,23 @@ const taskSlice = createSlice({
     triggerSave(state, action: PayloadAction<boolean>) {
       state.saveTriggered = action.payload
     },
+    triggerRename(state, action: PayloadAction<boolean>) {
+      state.renameTriggered = action.payload
+    },
     triggerDiscard(state, action: PayloadAction<boolean>) {
       state.discardTriggered = action.payload
     },
     triggerSavedFlash(state, action: PayloadAction<boolean>) {
       state.savedFlash = action.payload
     },
+    setSaveError(state, action: PayloadAction<boolean>) {
+      state.saveError = action.payload
+    },
     setWorkspaceReady(state, action: PayloadAction<boolean>) {
       state.workspaceReady = action.payload
+    },
+    setConformanceIssues(state, action: PayloadAction<string[]>) {
+      state.conformanceIssues = action.payload
     },
     setLastSaved(state, action: PayloadAction<string | null>) {
       state.lastSaved = action.payload
@@ -147,9 +172,12 @@ export const {
   toggleCode,
   setSaving,
   triggerSave,
+  triggerRename,
   triggerDiscard,
   triggerSavedFlash,
+  setSaveError,
   setWorkspaceReady,
+  setConformanceIssues,
   setLastSaved,
   toggleChatPosition,
   toggleRobotPanelWidth,

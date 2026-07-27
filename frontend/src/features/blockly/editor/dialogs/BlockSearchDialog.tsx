@@ -74,14 +74,14 @@ export const BlockSearchDialog = ({
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      aria-label="Search blocks"
+      aria-label="Search for a step"
       slotProps={{ paper: { elevation: 0, sx: { ...MENU_PAPER_SX, mt: -10 } } }}
     >
       <DialogContent sx={{ p: 1.5 }}>
         <TextField
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search a block to add…"
+          placeholder="Search for a step to add…"
           size="small"
           fullWidth
           autoFocus

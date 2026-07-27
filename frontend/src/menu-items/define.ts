@@ -4,10 +4,9 @@ import { MenuItem } from 'menu-items/types'
 
 // MAPPING REFERENCE:
 // - Internal variable/import name: define
-// - External user-facing group label: BUILD
+// - No group label — a single-item group ("Tasks") doesn't need a heading.
 export const define: MenuItem = {
   id: 'studio',
-  title: 'BUILD',
   type: 'group',
   children: [
     {

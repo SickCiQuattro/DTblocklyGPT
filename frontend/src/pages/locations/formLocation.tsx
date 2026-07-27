@@ -28,7 +28,25 @@ import { endpoints } from 'services/endpoints'
 import { MessageText, MessageTextMaxLength } from 'utils/messages'
 import { MyRobotType } from 'pages/myrobots/types'
 
-import { LocationDetailType } from './types'
+import { LocationDetailType, CartesianPositionType } from './types'
+
+/** "X: 120mm · Y: 45mm · Z: 200mm" — readable stand-in for the raw
+ * {X,Y,Z,RX,RY,RZ,FIG} JSON an operator has no reason to parse by eye. */
+const formatPositionSummary = (raw: string): string | null => {
+  try {
+    const p = JSON.parse(raw) as Partial<CartesianPositionType>
+    if (
+      typeof p.X !== 'number' ||
+      typeof p.Y !== 'number' ||
+      typeof p.Z !== 'number'
+    ) {
+      return null
+    }
+    return `X: ${Math.round(p.X)}mm · Y: ${Math.round(p.Y)}mm · Z: ${Math.round(p.Z)}mm`
+  } catch {
+    return null
+  }
+}
 
 interface FormLocationProps {
   dataLocation: LocationDetailType | undefined
@@ -65,6 +83,7 @@ export const FormLocation = ({
   const [searchParams] = useSearchParams()
   const [addKeyword, setAddKeyword] = React.useState<string>('')
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
+  const [showRawPosition, setShowRawPosition] = React.useState(false)
   const forcedName = searchParams.get('forcedName')
 
   const onSubmit = (
@@ -103,6 +122,9 @@ export const FormLocation = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -132,12 +154,16 @@ export const FormLocation = ({
       url: endpoints.home.libraries.getJointPosition,
       method: MethodHTTP.POST,
       body: { robot: Number(robot) },
-    }).then((response) => {
-      if (response?.position) {
-        void setFieldValue('position', JSON.stringify(response.position))
-        toast.success('Position acquired')
-      }
     })
+      .then((response) => {
+        if (response?.position) {
+          void setFieldValue('position', JSON.stringify(response.position))
+          toast.success('Position acquired')
+        }
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure.
+      })
   }
 
   return (
@@ -171,7 +197,13 @@ export const FormLocation = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form noValidate onSubmit={handleSubmit}>
+        <form
+          noValidate
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault()
+          }}
+        >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={2}>
               <Stack spacing={1}>
@@ -180,14 +212,19 @@ export const FormLocation = ({
                   value={values.name || ''}
                   name="name"
                   label="Name"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   disabled={!!forcedName}
                   error={Boolean(touched.name && errors.name)}
+                  aria-invalid={Boolean(touched.name && errors.name)}
+                  aria-describedby={
+                    touched.name && errors.name ? 'helper-text-name' : undefined
+                  }
                   title="Name of the location"
                 />
                 {touched.name && errors.name && (
-                  <FormHelperText error id="helper-text-name">
+                  <FormHelperText error role="alert" id="helper-text-name">
                     {errors.name}
                   </FormHelperText>
                 )}
@@ -308,6 +345,12 @@ export const FormLocation = ({
                       void setFieldValue('position', '')
                     }}
                     error={Boolean(touched.robot && errors.robot)}
+                    aria-invalid={Boolean(touched.robot && errors.robot)}
+                    aria-describedby={
+                      touched.robot && errors.robot
+                        ? 'helper-text-robot'
+                        : undefined
+                    }
                     title="Robot used to acquire position and photo"
                   >
                     {dataMyRobots?.map((myRobot) => (
@@ -317,7 +360,7 @@ export const FormLocation = ({
                     ))}
                   </Select>
                   {touched.robot && errors.robot && (
-                    <FormHelperText error id="helper-text-robot">
+                    <FormHelperText error role="alert" id="helper-text-robot">
                       {errors.robot}
                     </FormHelperText>
                   )}
@@ -348,19 +391,42 @@ export const FormLocation = ({
             </Grid>
             <Grid size={8}>
               <Stack spacing={1}>
-                <TextField
-                  id="position"
-                  value={values.position || ''}
-                  name="position"
-                  label="Position"
-                  onBlur={handleBlur}
-                  onChange={handleChange}
-                  disabled
-                  error={Boolean(touched.position && errors.position)}
-                  title="Position acquired from the robot"
-                />
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'flex-end' }}
+                >
+                  <TextField
+                    id="position"
+                    value={
+                      values.position &&
+                      !showRawPosition &&
+                      formatPositionSummary(values.position)
+                        ? formatPositionSummary(values.position)
+                        : values.position || ''
+                    }
+                    name="position"
+                    label="Position"
+                    onBlur={handleBlur}
+                    onChange={handleChange}
+                    disabled
+                    error={Boolean(touched.position && errors.position)}
+                    title="Position acquired from the robot"
+                    fullWidth
+                  />
+                  {values.position &&
+                    formatPositionSummary(values.position) && (
+                      <Button
+                        size="small"
+                        onClick={() => setShowRawPosition((v) => !v)}
+                        sx={{ whiteSpace: 'nowrap', mb: 0.5 }}
+                      >
+                        {showRawPosition ? 'Summary' : 'Raw data'}
+                      </Button>
+                    )}
+                </Stack>
                 {touched.position && errors.position && (
-                  <FormHelperText error id="helper-text-position">
+                  <FormHelperText error role="alert" id="helper-text-position">
                     {errors.position}
                   </FormHelperText>
                 )}

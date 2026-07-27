@@ -241,6 +241,10 @@ export const BlocklyWorkspace = ({
     <div
       ref={blocklyDivRef}
       id="blocklyDiv"
+      // The "Skip to blocks workspace" link (BlocklyEditor.tsx) targets this
+      // id — without tabIndex, a plain div can't receive focus, so the link
+      // would scroll here but leave keyboard focus behind on the page.
+      tabIndex={-1}
       style={{ width: '100%', height: '100%', position: 'relative' }}
     />
   )

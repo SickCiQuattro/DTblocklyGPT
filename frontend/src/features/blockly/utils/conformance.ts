@@ -176,12 +176,24 @@ export const computeConformance = (
 
   // ── Rule 2: multiple flows (error) ───────────────────────────────────────
   // If there are multiple disconnected top-level blocks, the workspace is
-  // ambiguous. We enforce a single flow to consider the task 'ready'.
+  // ambiguous. We enforce a single flow to consider the task 'ready' — but
+  // still scan every flow for unresolved shadows (Rule 3) instead of
+  // stopping here: otherwise connecting the flows just reveals a second
+  // round of errors that were always there, one fix at a time.
   if (topBlocks.length > 1) {
-    return buildResult(
-      [{ type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length }],
-      [],
-    )
+    const errors: ConformanceIssue[] = [
+      { type: 'MULTIPLE_FLOWS', severity: 'error', count: topBlocks.length },
+    ]
+    for (const top of topBlocks) {
+      const flowRoot =
+        top.type === START_BLOCK_TYPE ? (top.getNextBlock() ?? top) : top
+      if (isUnresolvedShadow(flowRoot)) {
+        errors.push(toShadowIssue(flowRoot))
+      } else {
+        errors.push(...collectUnresolvedShadows(flowRoot))
+      }
+    }
+    return buildResult(errors, [])
   }
 
   // ── Rule 3: unresolved shadow blocks in the main flow ────────────────────

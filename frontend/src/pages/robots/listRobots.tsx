@@ -56,6 +56,7 @@ const ListRobots = () => {
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { data, error, mutate, isLoading } = useSWR<RobotType[], Error>({
@@ -70,16 +71,21 @@ const ListRobots = () => {
   }
 
   const handleDelete = (id: number) => {
-    void fetchApi({
+    return fetchApi({
       url: endpoints.home.management.robot,
       method: MethodHTTP.DELETE,
       body: { id },
-    }).then(() => {
-      toast.success(MessageText.success)
-      void mutate()
-      const remaining = (data?.length ?? 1) - 1
-      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
+      .then(() => {
+        toast.success(MessageText.success)
+        void mutate()
+        const remaining = (data?.length ?? 1) - 1
+        if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const downloadQRCode = (id: number) => {
@@ -113,7 +119,7 @@ const ListRobots = () => {
   return (
     <MainCard
       title="Robots Fleet"
-      subtitle="Here you can see the list of the Robots defined in the fleet."
+      subtitle="Here you can view and manage the Robots defined in the fleet."
     >
       <Stack
         direction="row"
@@ -153,13 +159,13 @@ const ListRobots = () => {
           <Table size="small" aria-label="robots table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Detail</ColHead>
-                <ColHead>QR</ColHead>
                 <ColHead>Name</ColHead>
                 <ColHead>Model</ColHead>
                 <ColHead>IP</ColHead>
                 <ColHead>Port</ColHead>
                 <ColHead>Camera IP</ColHead>
+                <ColHead>Detail</ColHead>
+                <ColHead>QR</ColHead>
                 <ColHead>Operations</ColHead>
               </TableRow>
             </TableHead>
@@ -177,7 +183,7 @@ const ListRobots = () => {
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <Stack spacing={1} sx={{ alignItems: 'center' }}>
-                      <Typography variant="body2" color="error.main">
+                      <Typography variant="body2" color="error.dark">
                         Couldn&apos;t load the robot fleet. Check your
                         connection and try again.
                       </Typography>
@@ -190,14 +196,34 @@ const ListRobots = () => {
               ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No robots found in the fleet.
-                    </Typography>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No robots found in the fleet.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                      >
+                        Add Robot to Fleet
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((row) => (
                   <TableRow key={row.id} hover>
+                    <TableCell sx={{ py: 1, fontWeight: 500 }}>
+                      {row.name}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      {RobotModel[row.model]}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.ip}</TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.port}</TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.cameraip}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
                         onClick={() => handleDetail(row.id)}
@@ -220,15 +246,6 @@ const ListRobots = () => {
                         <QrCode size={18} />
                       </IconButton>
                     </TableCell>
-                    <TableCell sx={{ py: 1, fontWeight: 500 }}>
-                      {row.name}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>
-                      {RobotModel[row.model]}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>{row.ip}</TableCell>
-                    <TableCell sx={{ py: 1 }}>{row.port}</TableCell>
-                    <TableCell sx={{ py: 1 }}>{row.cameraip}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
                         color="error"
@@ -265,11 +282,16 @@ const ListRobots = () => {
       </div>
       <ConfirmDialog
         open={deleteId !== null}
+        loading={isDeleting}
         message="Delete this robot? This can't be undone."
         confirmLabel="Delete"
         onConfirm={() => {
-          if (deleteId !== null) handleDelete(deleteId)
-          setDeleteId(null)
+          if (deleteId === null) return
+          setIsDeleting(true)
+          void handleDelete(deleteId).finally(() => {
+            setIsDeleting(false)
+            setDeleteId(null)
+          })
         }}
         onCancel={() => setDeleteId(null)}
       />

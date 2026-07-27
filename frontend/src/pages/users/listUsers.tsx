@@ -62,6 +62,8 @@ const ListUsers = () => {
     id: number
     isActive: boolean
   } | null>(null)
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
+  const [isTogglingActive, setIsTogglingActive] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -75,25 +77,35 @@ const ListUsers = () => {
   }
 
   const handleDisable = (id: number, updatedActive: boolean) => {
-    void fetchApi({
+    return fetchApi({
       url: endpoints.home.management.user,
       method: MethodHTTP.DELETE,
       body: {
         id,
         active: updatedActive,
       },
-    }).then(() => {
-      toast.success(MessageText.success)
-      void mutate()
     })
+      .then(() => {
+        toast.success(MessageText.success)
+        void mutate()
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const handleResetPassword = (id: number) => {
-    void fetchApi({
+    return fetchApi({
       url: endpoints.home.management.resetPassword,
       method: MethodHTTP.POST,
       body: { id },
-    }).then(() => toast.success(MessageText.success))
+    })
+      .then(() => toast.success(MessageText.success))
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const handleAdd = () => {
@@ -110,7 +122,7 @@ const ListUsers = () => {
   return (
     <MainCard
       title="User Accounts"
-      subtitle="Here you can see the list of the defined User Accounts."
+      subtitle="Here you can view and manage the defined User Accounts."
     >
       <Stack
         direction="row"
@@ -150,13 +162,13 @@ const ListUsers = () => {
           <Table size="small" aria-label="users table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Detail</ColHead>
                 <ColHead>Username</ColHead>
                 <ColHead>Email</ColHead>
                 <ColHead>Role</ColHead>
                 <ColHead>Last Login</ColHead>
                 <ColHead>Date Joined</ColHead>
                 <ColHead>Active</ColHead>
+                <ColHead>Detail</ColHead>
                 <ColHead>Operations</ColHead>
               </TableRow>
             </TableHead>
@@ -174,7 +186,7 @@ const ListUsers = () => {
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <Stack spacing={1} sx={{ alignItems: 'center' }}>
-                      <Typography variant="body2" color="error.main">
+                      <Typography variant="body2" color="error.dark">
                         Couldn&apos;t load user accounts. Check your connection
                         and try again.
                       </Typography>
@@ -187,25 +199,25 @@ const ListUsers = () => {
               ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No user accounts found.
-                    </Typography>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No user accounts found.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                      >
+                        Add User Account
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((row) => (
                   <TableRow key={row.id} hover>
-                    <TableCell sx={{ py: 1 }}>
-                      <IconButton
-                        onClick={() => handleDetail(row.id)}
-                        color="primary"
-                        aria-label="detail"
-                        title="View user details"
-                        size="small"
-                      >
-                        <Eye size={18} />
-                      </IconButton>
-                    </TableCell>
                     <TableCell sx={{ py: 1, fontWeight: 500 }}>
                       {row.username}
                     </TableCell>
@@ -226,6 +238,17 @@ const ListUsers = () => {
                       ) : (
                         <XCircle size={16} color={slate[400]} />
                       )}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <IconButton
+                        onClick={() => handleDetail(row.id)}
+                        color="primary"
+                        aria-label="detail"
+                        title="View user details"
+                        size="small"
+                      >
+                        <Eye size={18} />
+                      </IconButton>
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <Stack direction="row" spacing={1}>
@@ -292,17 +315,23 @@ const ListUsers = () => {
       </Paper>
       <ConfirmDialog
         open={resetPasswordId !== null}
+        loading={isResettingPassword}
         message="Reset this user's password? They'll need to set a new one."
         confirmLabel="Reset"
         tone="default"
         onConfirm={() => {
-          if (resetPasswordId !== null) handleResetPassword(resetPasswordId)
-          setResetPasswordId(null)
+          if (resetPasswordId === null) return
+          setIsResettingPassword(true)
+          void handleResetPassword(resetPasswordId).finally(() => {
+            setIsResettingPassword(false)
+            setResetPasswordId(null)
+          })
         }}
         onCancel={() => setResetPasswordId(null)}
       />
       <ConfirmDialog
         open={disableTarget !== null}
+        loading={isTogglingActive}
         message={
           disableTarget?.isActive
             ? "Disable this user? They won't be able to log in."
@@ -311,10 +340,14 @@ const ListUsers = () => {
         confirmLabel={disableTarget?.isActive ? 'Disable' : 'Enable'}
         tone={disableTarget?.isActive ? 'danger' : 'default'}
         onConfirm={() => {
-          if (disableTarget) {
-            handleDisable(disableTarget.id, !disableTarget.isActive)
-          }
-          setDisableTarget(null)
+          if (!disableTarget) return
+          setIsTogglingActive(true)
+          void handleDisable(disableTarget.id, !disableTarget.isActive).finally(
+            () => {
+              setIsTogglingActive(false)
+              setDisableTarget(null)
+            },
+          )
         }}
         onCancel={() => setDisableTarget(null)}
       />

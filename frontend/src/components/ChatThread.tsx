@@ -423,6 +423,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     return (
       <div
         className="assistant-bubble-premium"
+        role="status"
+        aria-live="polite"
+        aria-label="Copilot is typing"
         style={{
           margin: '8px 0',
           width: '74px',
@@ -437,7 +440,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           justifyContent: 'center',
         }}
       >
-        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+        <div
+          aria-hidden="true"
+          style={{ display: 'flex', gap: '5px', alignItems: 'center' }}
+        >
           <span className="typing-dot" />
           <span className="typing-dot" />
           <span className="typing-dot" />
@@ -448,6 +454,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
   return (
     <Box
+      // Collapsed to width:0 rather than unmounted — inert keeps its
+      // contents out of the tab order and the accessibility tree while
+      // collapsed, not just visually clipped.
+      inert={!chatOpen}
       sx={{
         position: 'relative',
         width: chatOpen ? width : 0,
@@ -575,8 +585,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           <Tooltip
             title={
               contextualHelpEnabled
-                ? 'Contextual help: on — proactively analyzes workspace issues (uses tokens)'
-                : 'Contextual help: off — no automatic analysis'
+                ? 'Proactive analysis: on — Copilot automatically reviews workspace issues (uses tokens)'
+                : 'Proactive analysis: off — no automatic review'
             }
             placement="bottom"
           >
@@ -585,8 +595,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               size="small"
               aria-label={
                 contextualHelpEnabled
-                  ? 'Turn off contextual help'
-                  : 'Turn on contextual help'
+                  ? 'Turn off proactive analysis'
+                  : 'Turn on proactive analysis'
               }
               sx={{
                 color: contextualHelpEnabled

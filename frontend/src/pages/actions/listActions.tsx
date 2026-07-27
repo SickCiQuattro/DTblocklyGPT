@@ -58,6 +58,7 @@ const ListActions = () => {
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -83,16 +84,21 @@ const ListActions = () => {
   }
 
   const handleDelete = (id: number) => {
-    void fetchApi<unknown, { id: number }>({
+    return fetchApi<unknown, { id: number }>({
       url: endpoints.home.libraries.action,
       method: MethodHTTP.DELETE,
       body: { id },
-    }).then(() => {
-      toast.success(MessageText.success)
-      void mutate()
-      const remaining = (data?.length ?? 1) - 1
-      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
+      .then(() => {
+        toast.success(MessageText.success)
+        void mutate()
+        const remaining = (data?.length ?? 1) - 1
+        if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const handleAdd = () => {
@@ -108,7 +114,7 @@ const ListActions = () => {
 
   return (
     <MainCard
-      title="Skills List"
+      title="Skills"
       subtitle="Here you can view and manage defined Skills."
     >
       <Stack
@@ -146,14 +152,14 @@ const ListActions = () => {
         <TableContainer
           sx={{ maxHeight: 'calc(100vh - 280px)', overflow: 'auto' }}
         >
-          <Table size="small" aria-label="actions table">
+          <Table size="small" aria-label="skills table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Detail</ColHead>
                 <ColHead>Name</ColHead>
                 <ColHead>Owner</ColHead>
                 <ColHead>Shared</ColHead>
                 <ColHead>Keywords</ColHead>
+                <ColHead>Detail</ColHead>
                 <ColHead>Operations</ColHead>
               </TableRow>
             </TableHead>
@@ -171,7 +177,7 @@ const ListActions = () => {
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Stack spacing={1} sx={{ alignItems: 'center' }}>
-                      <Typography variant="body2" color="error.main">
+                      <Typography variant="body2" color="error.dark">
                         Couldn&apos;t load skills. Check your connection and try
                         again.
                       </Typography>
@@ -184,26 +190,25 @@ const ListActions = () => {
               ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No skills found. Create your first skill.
-                    </Typography>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No skills found. Create your first skill.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                      >
+                        Add Skill
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((row) => (
                   <TableRow key={row.id} hover>
-                    <TableCell sx={{ py: 1 }}>
-                      <IconButton
-                        onClick={() => handleDetail(row.id)}
-                        color="primary"
-                        aria-label="detail"
-                        disabled={!canManageAction(row.owner)}
-                        title="View skill details"
-                        size="small"
-                      >
-                        <Eye size={18} />
-                      </IconButton>
-                    </TableCell>
                     <TableCell sx={{ py: 1, fontWeight: 500 }}>
                       {row.name}
                     </TableCell>
@@ -232,9 +237,29 @@ const ListActions = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
+                        onClick={() => handleDetail(row.id)}
+                        color="primary"
+                        aria-label="detail"
+                        disabled={!canManageAction(row.owner)}
+                        title={
+                          canManageAction(row.owner)
+                            ? 'View skill details'
+                            : 'Shared by another user — only they can view or edit it'
+                        }
+                        size="small"
+                      >
+                        <Eye size={18} />
+                      </IconButton>
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <IconButton
                         color="error"
                         disabled={!canManageAction(row.owner)}
-                        title="Delete this skill"
+                        title={
+                          canManageAction(row.owner)
+                            ? 'Delete this skill'
+                            : 'Shared by another user — only they can delete it'
+                        }
                         aria-label="Delete this skill"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
@@ -264,11 +289,16 @@ const ListActions = () => {
       </Paper>
       <ConfirmDialog
         open={deleteId !== null}
+        loading={isDeleting}
         message="Delete this skill? This can't be undone."
         confirmLabel="Delete"
         onConfirm={() => {
-          if (deleteId !== null) handleDelete(deleteId)
-          setDeleteId(null)
+          if (deleteId === null) return
+          setIsDeleting(true)
+          void handleDelete(deleteId).finally(() => {
+            setIsDeleting(false)
+            setDeleteId(null)
+          })
         }}
         onCancel={() => setDeleteId(null)}
       />

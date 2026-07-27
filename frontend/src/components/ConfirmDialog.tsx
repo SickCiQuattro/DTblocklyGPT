@@ -1,5 +1,6 @@
 import {
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,15 +24,21 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   /** 'danger' (default) for destructive actions (terracotta accent), 'default' for neutral confirms (primary indigo). */
   tone?: 'danger' | 'default'
-  /** Default true. Set false for high-stakes irreversible actions (e.g. real robot motion) so
-   * Enter/autofocus can't accidentally trigger the confirm button — focus lands on Cancel instead. */
+  /** Defaults to false for 'danger' tone, true for 'default' — a destructive dialog shouldn't
+   * autofocus its own confirm button and fire on a stray Enter. Pass explicitly to override. */
   confirmOnEnter?: boolean
+  /** Set while the confirmed action is in flight — shows a spinner on Confirm,
+   * disables both buttons, and blocks closing via backdrop/Escape so the
+   * dialog can't be dismissed mid-delete with no feedback either way. */
+  loading?: boolean
 }
 
+// .dark, not .main — .main fails WCAG 1.4.3 with white text (accent 3.70:1,
+// primary 4.47:1); .dark clears it (4.62:1 / 6.29:1).
 const confirmButtonSx = (tone: 'danger' | 'default') => (theme: Theme) => ({
   textTransform: 'none' as const,
   backgroundColor:
-    tone === 'danger' ? theme.palette.accent.main : theme.palette.primary.main,
+    tone === 'danger' ? theme.palette.accent.dark : theme.palette.primary.dark,
   color:
     tone === 'danger'
       ? theme.palette.accent.contrastText
@@ -42,8 +49,8 @@ const confirmButtonSx = (tone: 'danger' | 'default') => (theme: Theme) => ({
   '&:hover': {
     backgroundColor:
       tone === 'danger'
-        ? theme.palette.accent.dark
-        : theme.palette.primary.dark,
+        ? theme.palette.accent.darker
+        : theme.palette.primary.darker,
   },
 })
 
@@ -73,13 +80,23 @@ export const ConfirmDialog = ({
   title = 'Confirm',
   confirmLabel = 'Confirm',
   tone = 'danger',
-  confirmOnEnter = true,
+  confirmOnEnter = tone !== 'danger',
+  loading = false,
 }: ConfirmDialogProps) => (
   <Dialog
     open={open}
-    onClose={onCancel}
+    onClose={loading ? undefined : onCancel}
     onKeyDown={(e) => {
-      if (confirmOnEnter && e.key === 'Enter') {
+      // Only step in when Enter lands outside our own buttons — a focused
+      // Cancel/Confirm button already activates on Enter natively, and
+      // intervening there would preventDefault the button's own click and
+      // fire onConfirm instead, even with focus on Cancel.
+      if (
+        !loading &&
+        confirmOnEnter &&
+        e.key === 'Enter' &&
+        (e.target as HTMLElement).tagName !== 'BUTTON'
+      ) {
         e.preventDefault()
         onConfirm()
       }
@@ -102,6 +119,7 @@ export const ConfirmDialog = ({
         variant="text"
         disableElevation
         autoFocus={!confirmOnEnter}
+        disabled={loading}
         onClick={onCancel}
         sx={cancelButtonSx}
       >
@@ -112,7 +130,11 @@ export const ConfirmDialog = ({
         disableElevation
         disableFocusRipple
         autoFocus={confirmOnEnter}
+        disabled={loading}
         onClick={onConfirm}
+        startIcon={
+          loading ? <CircularProgress size={14} color="inherit" /> : undefined
+        }
         sx={confirmButtonSx(tone)}
       >
         {confirmLabel}

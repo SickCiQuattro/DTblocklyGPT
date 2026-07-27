@@ -224,9 +224,9 @@
 .custom-dashed-shadow-workspace text.blocklyText {
   /* Solid, not the 0.85-alpha the path/border use — composited over the
      near-white canvas (#FAFAFB), 0.85 alpha reads at ~3.5:1, below the
-     4.5:1 AA text needs (docs/analisi-sistema/p4-2-audit-frontend.md §D2.1).
-     Hex is also 1-2% darker than the block-fill value for the same reason:
-     that one was tuned against pure white, this canvas is very slightly darker. */
+     4.5:1 AA contrast text needs. Hex is also 1-2% darker than the
+     block-fill value for the same reason: that one was tuned against pure
+     white, this canvas is very slightly darker. */
   fill: #00853D !important;
   font-weight: 700 !important;
   font-size: 13px !important;

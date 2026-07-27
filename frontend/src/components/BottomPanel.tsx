@@ -12,7 +12,10 @@ import { panel as panelTokens } from './digitalTwin/panelTokens'
 const tokens = ThemeOption()
 const PANEL_BG = panelTokens.bg
 const PANEL_TEXT = '#A9B2C3'
-const PANEL_ACCENT = tokens.primary.main
+// primary.main is only 4.33:1 on PANEL_BG (fails AA) — primary.400
+// (panelTokens.primaryLight, same value used for the same reason on the
+// robot panel) clears 6.49:1.
+const PANEL_ACCENT = panelTokens.primaryLight
 const TERMINAL_GREEN = tokens.success.light
 const TERMINAL_NUMBER = tokens.info.light
 const TERMINAL_KEYWORD = tokens.warning.light
@@ -53,6 +56,10 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
 
   return (
     <Box
+      // Collapsed to height:0 rather than unmounted (keeps state across
+      // toggles) — inert keeps its contents out of the tab order and the
+      // accessibility tree while collapsed, not just visually clipped.
+      inert={!open}
       sx={{
         height: open ? (isExpanded ? '55vh' : '24vh') : 0,
         minHeight: open ? (isExpanded ? '55vh' : '24vh') : 0,
@@ -85,7 +92,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             color: PANEL_ACCENT,
           }}
         >
-          Task Logic (JSON)
+          Task Code
         </Typography>
         <Tooltip title={isExpanded ? 'Minimize panel' : 'Maximize panel'}>
           <IconButton

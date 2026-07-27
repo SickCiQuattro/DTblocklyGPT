@@ -84,7 +84,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
           <span
             style={{
               fontSize: '11px',
-              color: theme.palette.primary.main,
+              color: theme.palette.primary.darker,
               opacity: 0.8,
             }}
           >

@@ -82,7 +82,13 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
               Copilot
             </span>
           </div>
-          <span style={{ fontSize: '11px', color: accent, opacity: 0.8 }}>
+          <span
+            style={{
+              fontSize: '11px',
+              color: theme.palette.success.darker,
+              opacity: 0.8,
+            }}
+          >
             {time}
           </span>
         </div>

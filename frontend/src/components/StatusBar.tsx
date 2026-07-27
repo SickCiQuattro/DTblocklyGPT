@@ -6,6 +6,7 @@ import { Code } from 'lucide-react'
 
 import { useAppSelector } from 'store/reducers'
 import { toggleCode, triggerSavedFlash } from 'store/reducers/task'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 export const StatusBar: React.FC = () => {
   const theme = useTheme()
@@ -13,8 +14,12 @@ export const StatusBar: React.FC = () => {
   const lastSaved = useAppSelector((state) => state.task.lastSaved)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
   const savedFlash = useAppSelector((state) => state.task.savedFlash)
+  const saveError = useAppSelector((state) => state.task.saveError)
   const isSimulationRunning = useAppSelector(
     (state) => state.simulation.isRunning,
+  )
+  const executionTarget = useAppSelector(
+    (state) => state.simulation.executionTarget,
   )
 
   // Brief "Saved ✓" flash driven by a dedicated one-shot Redux flag, fired
@@ -69,32 +74,45 @@ export const StatusBar: React.FC = () => {
           }}
         />
         <Typography
+          aria-live="polite"
           sx={{
             fontFamily: 'inherit',
             fontSize: '0.74rem',
             fontWeight: 500,
           }}
         >
-          {isSimulationRunning ? 'Simulation running' : 'Simulation idle'}
+          {isSimulationRunning
+            ? executionTarget === 'real'
+              ? UI_TEXT.robotRunning
+              : UI_TEXT.simulationRunning
+            : UI_TEXT.idle}
         </Typography>
       </Box>
 
       {/* Center: Last saved timestamp, brief success flash on save */}
       <Box>
         <Typography
+          role={saveError ? 'alert' : undefined}
+          aria-live={saveError ? undefined : 'polite'}
           sx={{
             fontFamily: 'inherit',
             fontSize: justSaved ? '0.8rem' : '0.74rem',
-            fontWeight: justSaved ? 700 : 500,
-            color: justSaved ? 'success.dark' : 'inherit',
+            fontWeight: justSaved || saveError ? 700 : 500,
+            color: saveError
+              ? 'error.dark'
+              : justSaved
+                ? 'success.dark'
+                : 'inherit',
             transition: 'color 0.6s ease, font-size 0.3s ease',
           }}
         >
-          {justSaved
-            ? 'Saved ✓'
-            : lastSaved
-              ? `Saved at ${lastSaved}`
-              : 'Draft not saved'}
+          {saveError
+            ? 'Save failed — check your connection'
+            : justSaved
+              ? 'Saved ✓'
+              : lastSaved
+                ? `Saved at ${lastSaved}`
+                : UI_TEXT.unsavedChanges}
         </Typography>
       </Box>
 

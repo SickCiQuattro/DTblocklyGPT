@@ -55,6 +55,7 @@ const ListMyRobots = () => {
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -68,16 +69,21 @@ const ListMyRobots = () => {
   }
 
   const handleDelete = (id: number) => {
-    void fetchApi({
+    return fetchApi({
       url: endpoints.home.libraries.myRobot,
       method: MethodHTTP.DELETE,
       body: { id },
-    }).then(() => {
-      toast.success(MessageText.success)
-      void mutate()
-      const remaining = (data?.length ?? 1) - 1
-      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
+      .then(() => {
+        toast.success(MessageText.success)
+        void mutate()
+        const remaining = (data?.length ?? 1) - 1
+        if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const handleAdd = () => {
@@ -94,7 +100,7 @@ const ListMyRobots = () => {
   return (
     <MainCard
       title="My Robot"
-      subtitle="Here you can see the personal robot defined for your profile."
+      subtitle="Here you can view and manage the personal robot defined for your profile."
     >
       <Stack
         direction="row"
@@ -134,9 +140,9 @@ const ListMyRobots = () => {
           <Table size="small" aria-label="myrobots table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Detail</ColHead>
                 <ColHead>Name</ColHead>
                 <ColHead>Robot</ColHead>
+                <ColHead>Detail</ColHead>
                 <ColHead>Operations</ColHead>
               </TableRow>
             </TableHead>
@@ -154,7 +160,7 @@ const ListMyRobots = () => {
                 <TableRow>
                   <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
                     <Stack spacing={1} sx={{ alignItems: 'center' }}>
-                      <Typography variant="body2" color="error.main">
+                      <Typography variant="body2" color="error.dark">
                         Couldn&apos;t load robots. Check your connection and try
                         again.
                       </Typography>
@@ -167,14 +173,30 @@ const ListMyRobots = () => {
               ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No robots found for your profile. Add one to get started.
-                    </Typography>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No robots found for your profile. Add one to get
+                        started.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                      >
+                        Add Robot
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((row) => (
                   <TableRow key={row.id} hover>
+                    <TableCell sx={{ py: 1, fontWeight: 500 }}>
+                      {row.name}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>{row.robot_name}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
                         onClick={() => handleDetail(row.id)}
@@ -186,10 +208,6 @@ const ListMyRobots = () => {
                         <Eye size={18} />
                       </IconButton>
                     </TableCell>
-                    <TableCell sx={{ py: 1, fontWeight: 500 }}>
-                      {row.name}
-                    </TableCell>
-                    <TableCell sx={{ py: 1 }}>{row.robot_name}</TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
                         color="error"
@@ -223,11 +241,16 @@ const ListMyRobots = () => {
       </Paper>
       <ConfirmDialog
         open={deleteId !== null}
+        loading={isDeleting}
         message="Delete this robot? This can't be undone."
         confirmLabel="Delete"
         onConfirm={() => {
-          if (deleteId !== null) handleDelete(deleteId)
-          setDeleteId(null)
+          if (deleteId === null) return
+          setIsDeleting(true)
+          void handleDelete(deleteId).finally(() => {
+            setIsDeleting(false)
+            setDeleteId(null)
+          })
         }}
         onCancel={() => setDeleteId(null)}
       />

@@ -58,6 +58,7 @@ const ListObjects = () => {
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
@@ -83,16 +84,21 @@ const ListObjects = () => {
   }
 
   const handleDelete = (id: number) => {
-    void fetchApi({
+    return fetchApi({
       url: endpoints.home.libraries.object,
       method: MethodHTTP.DELETE,
       body: { id },
-    }).then(() => {
-      toast.success(MessageText.success)
-      void mutate()
-      const remaining = (data?.length ?? 1) - 1
-      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
+      .then(() => {
+        toast.success(MessageText.success)
+        void mutate()
+        const remaining = (data?.length ?? 1) - 1
+        if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure — this only
+        // stops it becoming an unhandled promise rejection.
+      })
   }
 
   const handleAdd = () => {
@@ -108,7 +114,7 @@ const ListObjects = () => {
 
   return (
     <MainCard
-      title="Objects List"
+      title="Objects"
       subtitle="Here you can view and manage defined Objects."
     >
       <Stack
@@ -149,11 +155,11 @@ const ListObjects = () => {
           <Table size="small" aria-label="objects table">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <ColHead>Detail</ColHead>
                 <ColHead>Name</ColHead>
                 <ColHead>Owner</ColHead>
                 <ColHead>Shared</ColHead>
                 <ColHead>Keywords</ColHead>
+                <ColHead>Detail</ColHead>
                 <ColHead>Operations</ColHead>
               </TableRow>
             </TableHead>
@@ -171,7 +177,7 @@ const ListObjects = () => {
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Stack spacing={1} sx={{ alignItems: 'center' }}>
-                      <Typography variant="body2" color="error.main">
+                      <Typography variant="body2" color="error.dark">
                         Couldn&apos;t load objects. Check your connection and
                         try again.
                       </Typography>
@@ -184,26 +190,25 @@ const ListObjects = () => {
               ) : paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No objects found. Create your first object.
-                    </Typography>
+                    <Stack spacing={1.5} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No objects found. Create your first object.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        startIcon={<Plus size={16} />}
+                        onClick={handleAdd}
+                      >
+                        Add Object
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ) : (
                 paginated.map((row) => (
                   <TableRow key={row.id} hover>
-                    <TableCell sx={{ py: 1 }}>
-                      <IconButton
-                        onClick={() => handleDetail(row.id)}
-                        color="primary"
-                        aria-label="detail"
-                        disabled={!canManageObject(row.owner)}
-                        title="View object details"
-                        size="small"
-                      >
-                        <Eye size={18} />
-                      </IconButton>
-                    </TableCell>
                     <TableCell sx={{ py: 1, fontWeight: 500 }}>
                       {row.name}
                     </TableCell>
@@ -232,9 +237,29 @@ const ListObjects = () => {
                     </TableCell>
                     <TableCell sx={{ py: 1 }}>
                       <IconButton
+                        onClick={() => handleDetail(row.id)}
+                        color="primary"
+                        aria-label="detail"
+                        disabled={!canManageObject(row.owner)}
+                        title={
+                          canManageObject(row.owner)
+                            ? 'View object details'
+                            : 'Shared by another user — only they can view or edit it'
+                        }
+                        size="small"
+                      >
+                        <Eye size={18} />
+                      </IconButton>
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <IconButton
                         color="error"
                         disabled={!canManageObject(row.owner)}
-                        title="Delete this object"
+                        title={
+                          canManageObject(row.owner)
+                            ? 'Delete this object'
+                            : 'Shared by another user — only they can delete it'
+                        }
                         aria-label="Delete this object"
                         onClick={() => setDeleteId(row.id)}
                         size="small"
@@ -264,11 +289,16 @@ const ListObjects = () => {
       </Paper>
       <ConfirmDialog
         open={deleteId !== null}
+        loading={isDeleting}
         message="Delete this object? This can't be undone."
         confirmLabel="Delete"
         onConfirm={() => {
-          if (deleteId !== null) handleDelete(deleteId)
-          setDeleteId(null)
+          if (deleteId === null) return
+          setIsDeleting(true)
+          void handleDelete(deleteId).finally(() => {
+            setIsDeleting(false)
+            setDeleteId(null)
+          })
         }}
         onCancel={() => setDeleteId(null)}
       />

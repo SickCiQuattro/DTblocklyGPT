@@ -89,6 +89,12 @@ export const FormAction = ({
   const [addKeyword, setAddKeyword] = React.useState<string>('')
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null)
+  // Which points show raw {j1..j6, hand} joint data instead of the "Point N
+  // saved" summary — joint angles aren't spatially meaningful to read, so
+  // that's the default and this is opt-in per row.
+  const [expandedPoints, setExpandedPoints] = React.useState<Set<number>>(
+    new Set(),
+  )
   const forcedName = searchParams.get('forcedName')
 
   const onSubmit = (
@@ -127,6 +133,9 @@ export const FormAction = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -159,14 +168,18 @@ export const FormAction = ({
       url: endpoints.home.libraries.getJointPosition,
       method: MethodHTTP.POST,
       body: { robot: Number(robot) },
-    }).then((response) => {
-      if (response?.position) {
-        const pointObj = parsePointsField(point)
-        const newArray = [...pointObj.points, response.position]
-        void setFieldValue('points', stringifyPointsField(newArray))
-        toast.success('Point acquired')
-      }
     })
+      .then((response) => {
+        if (response?.position) {
+          const pointObj = parsePointsField(point)
+          const newArray = [...pointObj.points, response.position]
+          void setFieldValue('points', stringifyPointsField(newArray))
+          toast.success('Point acquired')
+        }
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure.
+      })
   }
 
   const handleDelete = (
@@ -215,7 +228,13 @@ export const FormAction = ({
         const parsedPoints = parsePointsField(values.points)
 
         return (
-          <form noValidate onSubmit={handleSubmit}>
+          <form
+            noValidate
+            onSubmit={handleSubmit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.preventDefault()
+            }}
+          >
             <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
               <Grid size={2}>
                 <Stack spacing={1}>
@@ -224,14 +243,21 @@ export const FormAction = ({
                     value={values.name || ''}
                     name="name"
                     label="Name"
+                    required
                     onBlur={handleBlur}
                     onChange={handleChange}
                     disabled={!!forcedName}
                     error={Boolean(touched.name && errors.name)}
+                    aria-invalid={Boolean(touched.name && errors.name)}
+                    aria-describedby={
+                      touched.name && errors.name
+                        ? 'helper-text-name'
+                        : undefined
+                    }
                     title="Name of the skill"
                   />
                   {touched.name && errors.name && (
-                    <FormHelperText error id="helper-text-name">
+                    <FormHelperText error role="alert" id="helper-text-name">
                       {errors.name}
                     </FormHelperText>
                   )}
@@ -417,6 +443,12 @@ export const FormAction = ({
                         void setFieldValue('position', '')
                       }}
                       error={Boolean(touched.robot && errors.robot)}
+                      aria-invalid={Boolean(touched.robot && errors.robot)}
+                      aria-describedby={
+                        touched.robot && errors.robot
+                          ? 'helper-text-robot'
+                          : undefined
+                      }
                       title="Robot to use to acquire height and points"
                     >
                       {dataMyRobots?.map((myRobot) => (
@@ -426,7 +458,7 @@ export const FormAction = ({
                       ))}
                     </Select>
                     {touched.robot && errors.robot && (
-                      <FormHelperText error id="helper-text-robot">
+                      <FormHelperText error role="alert" id="helper-text-robot">
                         {errors.robot}
                       </FormHelperText>
                     )}
@@ -461,15 +493,36 @@ export const FormAction = ({
                   <React.Fragment
                     key={`${Math.random()}-${JSON.stringify(point)}`}
                   >
-                    <Grid size={10}>
+                    <Grid size={8}>
                       <Stack spacing={1}>
                         <TextField
                           id={`point-${index}`}
-                          value={JSON.stringify(point)}
+                          value={
+                            expandedPoints.has(index)
+                              ? JSON.stringify(point)
+                              : `Point ${index + 1} saved`
+                          }
                           name={`point-${index}`}
                           label={`Point ${index + 1}`}
                           disabled
                         />
+                      </Stack>
+                    </Grid>
+                    <Grid size={2}>
+                      <Stack spacing={1}>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setExpandedPoints((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(index)) next.delete(index)
+                              else next.add(index)
+                              return next
+                            })
+                          }
+                        >
+                          {expandedPoints.has(index) ? 'Summary' : 'Raw data'}
+                        </Button>
                       </Stack>
                     </Grid>
                     <Grid size={2}>

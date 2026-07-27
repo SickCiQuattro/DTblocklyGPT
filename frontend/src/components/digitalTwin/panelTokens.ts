@@ -20,8 +20,8 @@ export const panel = {
 
   text: '#E2E8F0',
   textDim: '#94A3B8',
-  muted: '#64748B',
-  faint: '#475569',
+  // Was #64748B (4.07:1 on panel.bg, fails AA) — lightened to clear 4.5:1.
+  muted: '#70819A',
   border: '#334155',
 
   // Neutral chrome ladder for dark surfaces (bg tints + hairline borders).

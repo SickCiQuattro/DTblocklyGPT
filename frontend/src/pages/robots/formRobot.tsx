@@ -62,6 +62,9 @@ export const FormRobot = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -84,15 +87,19 @@ export const FormRobot = ({
       }
       return
     }
-    fetchApi({
+    void fetchApi({
       url: endpoints.home.libraries.pingIp,
       method: MethodHTTP.POST,
       body: { ip, port },
-    }).then((response) => {
-      if (response) {
-        toast.success('IP available')
-      }
     })
+      .then((response) => {
+        if (response) {
+          toast.success('IP available')
+        }
+      })
+      .catch(() => {
+        // fetchApi already surfaces a toast for the failure.
+      })
   }
 
   return (
@@ -148,13 +155,18 @@ export const FormRobot = ({
                   value={values.name || ''}
                   name="name"
                   label="Name"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.name && errors.name)}
+                  aria-invalid={Boolean(touched.name && errors.name)}
+                  aria-describedby={
+                    touched.name && errors.name ? 'helper-text-name' : undefined
+                  }
                   title="Name of the robot"
                 />
                 {touched.name && errors.name && (
-                  <FormHelperText error id="helper-text-name">
+                  <FormHelperText error role="alert" id="helper-text-name">
                     {errors.name}
                   </FormHelperText>
                 )}
@@ -163,16 +175,25 @@ export const FormRobot = ({
             <Grid size={2}>
               <Stack spacing={1}>
                 <FormControl fullWidth>
-                  <InputLabel id="model-label">Model</InputLabel>
+                  <InputLabel id="model-label" required>
+                    Model
+                  </InputLabel>
                   <Select
                     labelId="model-label"
                     id="model"
                     value={values.model || ''}
                     label="Model"
                     name="model"
+                    required
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.model && errors.model)}
+                    aria-invalid={Boolean(touched.model && errors.model)}
+                    aria-describedby={
+                      touched.model && errors.model
+                        ? 'helper-text-model'
+                        : undefined
+                    }
                     title="Model of the robot"
                   >
                     {Object.entries(RobotModel).map(([k, v]) => (
@@ -182,7 +203,7 @@ export const FormRobot = ({
                     ))}
                   </Select>
                   {touched.model && errors.model && (
-                    <FormHelperText error id="helper-text-model">
+                    <FormHelperText error role="alert" id="helper-text-model">
                       {errors.model}
                     </FormHelperText>
                   )}
@@ -199,6 +220,7 @@ export const FormRobot = ({
                   value={values.ip || ''}
                   name="ip"
                   label="IP"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   title="IP address of the robot"
@@ -208,9 +230,13 @@ export const FormRobot = ({
                     },
                   }}
                   error={Boolean(touched.ip && errors.ip)}
+                  aria-invalid={Boolean(touched.ip && errors.ip)}
+                  aria-describedby={
+                    touched.ip && errors.ip ? 'helper-text-ip' : undefined
+                  }
                 />
                 {touched.ip && errors.ip && (
-                  <FormHelperText error id="helper-text-ip">
+                  <FormHelperText error role="alert" id="helper-text-ip">
                     {errors.ip}
                   </FormHelperText>
                 )}
@@ -225,6 +251,7 @@ export const FormRobot = ({
                   name="port"
                   label="Port"
                   type="number"
+                  required
                   slotProps={{
                     htmlInput: {
                       min: 0,
@@ -235,10 +262,14 @@ export const FormRobot = ({
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.port && errors.port)}
+                  aria-invalid={Boolean(touched.port && errors.port)}
+                  aria-describedby={
+                    touched.port && errors.port ? 'helper-text-port' : undefined
+                  }
                   title="Port of the address to connect to the robot"
                 />
                 {touched.port && errors.port && (
-                  <FormHelperText error id="helper-text-port">
+                  <FormHelperText error role="alert" id="helper-text-port">
                     {errors.port}
                   </FormHelperText>
                 )}
@@ -272,6 +303,7 @@ export const FormRobot = ({
                   value={values.cameraip || ''}
                   name="cameraip"
                   label="Camera IP"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   slotProps={{
@@ -280,10 +312,16 @@ export const FormRobot = ({
                     },
                   }}
                   error={Boolean(touched.cameraip && errors.cameraip)}
+                  aria-invalid={Boolean(touched.cameraip && errors.cameraip)}
+                  aria-describedby={
+                    touched.cameraip && errors.cameraip
+                      ? 'helper-text-cameraip'
+                      : undefined
+                  }
                   title="IP address of the camera of the robot"
                 />
                 {touched.cameraip && errors.cameraip && (
-                  <FormHelperText error id="helper-text-cameraip">
+                  <FormHelperText error role="alert" id="helper-text-cameraip">
                     {errors.cameraip}
                   </FormHelperText>
                 )}

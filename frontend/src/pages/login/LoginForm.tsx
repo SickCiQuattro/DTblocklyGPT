@@ -11,6 +11,7 @@ import {
   OutlinedInput,
   Stack,
   TextField,
+  Typography,
 } from '@mui/material'
 import { string as YupString, object as YupObject } from 'yup'
 import { Formik } from 'formik'
@@ -32,10 +33,6 @@ export interface UserLoginInterface {
   versionServer: string
 }
 
-interface LoginFormProps {
-  setResetPassword: (value: boolean) => void
-}
-
 interface LoginFormValues {
   username: string
   password: string
@@ -48,14 +45,14 @@ interface LoginResponse {
   group: USER_GROUP
 }
 
-export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
+export const LoginForm = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
   const onSubmit = (
     values: LoginFormValues,
-    { setErrors, setStatus, setSubmitting }: FormikHelpers<LoginFormValues>,
+    { setStatus, setSubmitting }: FormikHelpers<LoginFormValues>,
   ) => {
     void fetchApi<LoginResponse, LoginFormValues>({
       url: endpoints.auth.login,
@@ -71,19 +68,16 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
           setStatus({ success: true })
           return
         }
-        setStatus({ success: false })
-
-        if (authError) {
-          setErrors({
-            username: MessageText.invalidCredentials,
-            password: MessageText.invalidCredentials,
-          })
-          return
-        }
-        setErrors({
-          username: MessageText.noConnection,
-          password: MessageText.noConnection,
+        // One form-level message, not the same text duplicated under both
+        // fields — the failure is the username/password combination, not
+        // either field individually.
+        setStatus({
+          success: false,
+          formError: MessageText.invalidCredentials,
         })
+      })
+      .catch(() => {
+        setStatus({ success: false, formError: MessageText.noConnection })
       })
       .finally(() => {
         setSubmitting(false)
@@ -109,6 +103,7 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
         handleChange,
         handleSubmit,
         isSubmitting,
+        status,
         touched,
         values,
       }) => (
@@ -117,7 +112,9 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
             <Stack spacing={1}>
               <TextField
                 id="username-login"
-                type="username"
+                type="text"
+                autoComplete="username"
+                required
                 value={values.username}
                 name="username"
                 label="Username"
@@ -125,10 +122,17 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
                 onChange={handleChange}
                 fullWidth
                 error={Boolean(touched.username && errors.username)}
+                aria-invalid={Boolean(touched.username && errors.username)}
+                aria-describedby={
+                  touched.username && errors.username
+                    ? 'helper-text-username-login'
+                    : undefined
+                }
               />
               {touched.username && errors.username && (
                 <FormHelperText
                   error
+                  role="alert"
                   id="helper-text-username-login"
                   style={{ marginTop: 3 }}
                 >
@@ -146,7 +150,15 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
                 </InputLabel>
                 <OutlinedInput
                   fullWidth
+                  required
+                  autoComplete="current-password"
                   error={Boolean(touched.password && errors.password)}
+                  aria-invalid={Boolean(touched.password && errors.password)}
+                  aria-describedby={
+                    touched.password && errors.password
+                      ? 'helper-text-password-login'
+                      : undefined
+                  }
                   id="password-login"
                   type={showPassword ? 'text' : 'password'}
                   value={values.password}
@@ -175,6 +187,7 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
                 {touched.password && errors.password && (
                   <FormHelperText
                     error
+                    role="alert"
                     id="helper-text-password-login"
                     style={{ margin: 0, marginTop: 3 }}
                   >
@@ -183,6 +196,11 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
                 )}
               </FormControl>
             </Stack>
+            {status?.success === false && status.formError && (
+              <FormHelperText error role="alert" sx={{ textAlign: 'center' }}>
+                {status.formError}
+              </FormHelperText>
+            )}
             <Button
               disableElevation
               disabled={isSubmitting}
@@ -204,17 +222,9 @@ export const LoginForm = ({ setResetPassword }: LoginFormProps) => {
             >
               {isSubmitting ? 'Signing in…' : 'Login'}
             </Button>
-            <Button
-              fullWidth
-              size="small"
-              variant="text"
-              color="primary"
-              onClick={() => setResetPassword(true)}
-              disabled
-              sx={{ display: 'none' }}
-            >
-              Forgot the password?
-            </Button>
+            <Typography variant="body2" color="text.secondary" align="center">
+              Forgot your password? Ask your administrator to reset it.
+            </Typography>
           </Stack>
         </form>
       )}

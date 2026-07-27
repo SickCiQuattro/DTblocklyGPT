@@ -7,6 +7,8 @@
  * runtime so the accordion can render independently of workspace lifecycle.
  */
 
+import { UI_TEXT } from 'constants/uiVocabulary'
+
 import { blockDescriptionsByType, blocksColours } from '../blocks'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -288,15 +290,15 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
   {
     key: 'macro-tasks',
     // MAPPING REFERENCE:
-    // - Category key: 'macro-tasks' ➔ User-facing accordion name: 'Saved Tasks' (corresponds to nested task workflows)
-    name: 'Saved Tasks',
+    // - Category key: 'macro-tasks' ➔ User-facing accordion name: UI_TEXT.savedTasks (corresponds to nested task workflows)
+    name: UI_TEXT.savedTasks,
     colour: blocksColours.macroTasks,
     blocks: [
       {
         type: 'macro_task_block',
         // MAPPING REFERENCE:
-        // - Block type: 'macro_task_block' ➔ User-facing label: 'Saved Task'
-        label: 'Saved Task',
+        // - Block type: 'macro_task_block' ➔ User-facing label: UI_TEXT.savedTask
+        label: UI_TEXT.savedTask,
         colour: blocksColours.macroTasks,
         dynamic: true,
       },

@@ -43,6 +43,7 @@ import {
   RECOGNIZED_GESTURES,
   RECOGNIZED_VOICE_COMMANDS,
 } from 'constants/recognitionRegistry'
+import { UI_TEXT } from 'constants/uiVocabulary'
 import { endpoints } from 'services/endpoints'
 import { MethodHTTP, fetchApi } from 'services/api'
 import {
@@ -316,14 +317,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (!wasRunning || simulation.isRunning) return
     if (simulation.message === 'Simulation stopped') return
     setRunResult({
-      ok: simulation.message === 'Simulation completed',
+      ok: simulation.message === UI_TEXT.simulationCompleted,
       text:
-        simulation.message === 'Simulation completed'
-          ? 'Task completed successfully'
+        simulation.message === UI_TEXT.simulationCompleted
+          ? executionTarget === 'real'
+            ? UI_TEXT.taskCompletedOnRobot
+            : UI_TEXT.simulationCompleted
           : simulation.message,
     })
     const t = setTimeout(() => setRunResult(null), 5000)
     return () => clearTimeout(t)
+    // executionTarget is read for its value at completion time, not as a
+    // re-run trigger — the selector is disabled for the whole run, so it
+    // can't change out from under this effect.
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [simulation.isRunning, simulation.message])
 
   // A fresh run starts with an empty feed again — without this the "Starting
@@ -372,7 +379,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const runTask = async (driveHardware: boolean) => {
     if (!taskId || !canRun) return
     setErrorBanner(null) // clear any abort banner left over from a previous run
-    dispatch(startSimAction())
+    dispatch(startSimAction(driveHardware ? 'real' : 'sim'))
     try {
       await fetchApi({
         url: endpoints.task.simulate,
@@ -460,16 +467,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }, [simOpen])
 
-  // Esc closes the panel, matching the close button.
+  // Esc closes the panel, matching the close button — but not while the
+  // real-robot confirm dialog is open on top of it: MUI's Dialog already
+  // handles Escape itself (closing just the dialog), and without this guard
+  // the same keypress also closed the whole panel underneath it.
   useEffect(() => {
     if (!simOpen) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
+      if (e.key === 'Escape' && !confirmRealRun) handleClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [simOpen])
+  }, [simOpen, confirmRealRun])
 
   // Only a fully published task can drive sim or robot. A task that is still a
   // draft — or published_with_draft (edits pending) — must not run, because the
@@ -511,7 +521,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     preflightIssues.push({
       text:
         taskStatus === 'published_with_draft'
-          ? 'Unpublished changes — use Save & Publish in the top bar to run them.'
+          ? `${UI_TEXT.unpublishedChanges} — use Save & Publish in the top bar to run them.`
           : 'This task is a draft — use Save & Publish in the top bar to run it.',
     })
   }
@@ -544,7 +554,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       role="dialog"
       aria-modal="false"
       aria-labelledby="digital-twin-title"
-      aria-hidden={!simOpen}
+      // inert, not aria-hidden — aria-hidden alone left this panel's
+      // (still-mounted, still-focusable) buttons reachable by Tab while
+      // hidden, which is an ARIA violation; inert also removes them from
+      // the tab order.
+      inert={!simOpen}
       tabIndex={-1}
       sx={{
         position: 'fixed',
@@ -666,8 +680,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           overflowY: 'auto',
         }}
       >
+        {/* One banner at a time — error > timeout > notify > run result, so a
+            new one never buries an older, higher-priority one underneath it. */}
         {/* ── Run-result banner (transient) ── */}
-        {runResult && (
+        {runResult && !errorBanner && !isTimeout && !notifyBanner && (
           <Box
             role="status"
             aria-live="polite"
@@ -701,7 +717,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         )}
 
         {/* ── Notify banner (transient) ── */}
-        {notifyBanner && (
+        {notifyBanner && !errorBanner && !isTimeout && (
           <Box
             role="status"
             aria-live="polite"
@@ -759,7 +775,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         )}
 
         {/* ── Timeout warning ── */}
-        {isTimeout && (
+        {isTimeout && !errorBanner && (
           <Box
             role="status"
             aria-live="polite"
@@ -953,7 +969,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   >
                     <Camera size={28} color={panel.border} />
                     <Typography
-                      sx={{ fontSize: '0.78rem', color: panel.faint }}
+                      sx={{ fontSize: '0.78rem', color: panel.textDim }}
                     >
                       Start a simulation to see the robot here
                     </Typography>
@@ -1149,7 +1165,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                             ? panel.successLight
                             : gestureActive
                               ? panel.primaryLight
-                              : panel.faint,
+                              : panel.textDim,
                         }}
                       >
                         {activeGesture || 'NONE'}
@@ -1284,8 +1300,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     Object detection
                   </Typography>
                   <Typography sx={{ fontSize: '0.62rem', color: panel.muted }}>
-                    Runs YOLO on the webcam feed here — never affects real task
-                    runs (those use the robot camera only)
+                    Looks for objects in this webcam feed — never affects real
+                    task runs (those use the robot camera only)
                   </Typography>
                 </Box>
                 <Tooltip
@@ -1383,7 +1399,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   }}
                 >
                   <Camera size={28} color={panel.border} />
-                  <Typography sx={{ fontSize: '0.78rem', color: panel.faint }}>
+                  <Typography
+                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                  >
                     Turn on the camera above to test gesture &amp; object
                     recognition
                   </Typography>
@@ -1571,12 +1589,26 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     '&:hover .MuiOutlinedInput-notchedOutline': {
                       borderColor: panel.selectBorderHover,
                     },
+                    // The global Mui-focused override (OutlinedInput.ts) sets
+                    // a light-theme indigo border + boxShadow meant for a
+                    // white field — without overriding it here too, clicking
+                    // into this one dark-panel select flashed that light
+                    // styling on top of the dark surface.
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      border: `1px solid ${panel.primaryLight}`,
+                    },
+                    '&.Mui-focused': {
+                      boxShadow: `0 0 0 2px ${panel.primaryTint(0.25)}`,
+                    },
                     '.MuiSvgIcon-root': { color: panel.textDim },
                   }}
                 >
                   <InputLabel
                     id="dt-camera-label"
-                    sx={{ color: panel.textDim }}
+                    sx={{
+                      color: panel.textDim,
+                      '&.Mui-focused': { color: panel.primaryLight },
+                    }}
                   >
                     Camera source
                   </InputLabel>
@@ -1585,10 +1617,38 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     label="Camera source"
                     value={webcam.selectedDeviceId}
                     onChange={(e) => webcam.selectDevice(e.target.value)}
-                    sx={{ color: panel.text, fontSize: '0.82rem' }}
+                    sx={{
+                      color: panel.text,
+                      fontSize: '0.82rem',
+                      '& .MuiSelect-select': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      },
+                    }}
+                    slotProps={{
+                      paper: {
+                        sx: {
+                          bgcolor: panel.bg,
+                          border: `1px solid ${panel.hairlineStrong}`,
+                          '& .MuiMenuItem-root': {
+                            color: panel.text,
+                            fontSize: '0.82rem',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                          },
+                          '& .MuiMenuItem-root:hover': {
+                            bgcolor: panel.hover,
+                          },
+                          '& .MuiMenuItem-root.Mui-selected': {
+                            bgcolor: panel.primaryTint(0.18),
+                          },
+                        },
+                      },
+                    }}
                   >
                     {webcam.devices.map((d) => (
-                      <MenuItem key={d.deviceId} value={d.deviceId}>
+                      <MenuItem key={d.deviceId} value={d.deviceId} title={d.label}>
                         {d.label}
                       </MenuItem>
                     ))}
@@ -1680,8 +1740,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Stack>
 
                 <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
-                  Objects are detected via the robot's camera (YOLO) — see the
-                  object catalog in the docs for the full list.
+                  The robot's camera looks for objects here.
                 </Typography>
               </Box>
             </Box>
@@ -1715,7 +1774,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <Hand
                     size={13}
-                    color={gestureActive ? panel.primaryLight : panel.faint}
+                    color={gestureActive ? panel.primaryLight : panel.textDim}
                   />
                   <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
                     Gesture
@@ -1725,7 +1784,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   sx={{
                     fontSize: '0.78rem',
                     fontWeight: 600,
-                    color: gestureActive ? panel.primaryFaint : panel.faint,
+                    color: gestureActive ? panel.primaryFaint : panel.textDim,
                     fontFamily: "'Geist Mono', monospace",
                   }}
                 >
@@ -1762,7 +1821,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   <Eye
                     size={13}
                     color={
-                      activeDetections.length > 0 ? panel.success : panel.faint
+                      activeDetections.length > 0
+                        ? panel.success
+                        : panel.textDim
                     }
                   />
                   <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
@@ -1776,7 +1837,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     color:
                       activeDetections.length > 0
                         ? panel.successLight
-                        : panel.faint,
+                        : panel.textDim,
                     fontFamily: "'Geist Mono', monospace",
                   }}
                 >
@@ -1811,7 +1872,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <Mic
                     size={13}
-                    color={voice.word ? panel.primaryLight : panel.faint}
+                    color={voice.word ? panel.primaryLight : panel.textDim}
                   />
                   <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
                     Voice
@@ -1821,7 +1882,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   sx={{
                     fontSize: '0.78rem',
                     fontWeight: 600,
-                    color: voice.word ? panel.primaryFaint : panel.faint,
+                    color: voice.word ? panel.primaryFaint : panel.textDim,
                     fontFamily: "'Geist Mono', monospace",
                   }}
                 >
@@ -1857,7 +1918,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 sx={{
                   fontFamily: "'Geist Mono', monospace",
                   fontSize: '0.68rem',
-                  color: panel.faint,
+                  color: panel.textDim,
                   marginBottom: '3px',
                   letterSpacing: '0.05em',
                 }}
@@ -1884,7 +1945,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
             <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
               <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
-                Run in:
+                Mode:
               </Typography>
               <SegmentedControl
                 dark
@@ -1895,12 +1956,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 options={[
                   {
                     value: 'sim',
-                    label: 'Simulation',
+                    label: UI_TEXT.simulate,
                     icon: <MonitorPlay size={13} />,
                   },
                   {
                     value: 'real',
-                    label: 'Real robot',
+                    label: UI_TEXT.runOnRobot,
                     icon: <Cpu size={13} />,
                   },
                 ]}
@@ -2082,8 +2143,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             {simulation.isRunning
               ? 'Stop'
               : executionTarget === 'real'
-                ? 'Run on Robot'
-                : 'Run simulation'}
+                ? UI_TEXT.runOnRobot
+                : UI_TEXT.startSimulation}
           </Button>
           {executionTarget === 'real' && (
             <Typography
@@ -2170,7 +2231,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         open={confirmRealRun}
         title="Run on the real robot?"
         message="The physical arm will move for real, not just in the simulation. Before confirming: make sure the area around the robot is clear. If anything looks wrong once it starts, use the red e-stop button on the teach pendant — that stops the arm immediately."
-        confirmLabel="Run on robot"
+        confirmLabel={UI_TEXT.runOnRobot}
         tone="danger"
         confirmOnEnter={false}
         onConfirm={confirmAndRun}

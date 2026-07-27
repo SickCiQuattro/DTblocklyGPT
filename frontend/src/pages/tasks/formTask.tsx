@@ -146,14 +146,19 @@ export const FormTask = ({ data, backFunction }: FormTaskProps) => {
                 value={values.name}
                 name="name"
                 label="Name"
+                required
                 onBlur={handleBlur}
                 onChange={handleChange}
                 error={Boolean(touched.name && errors.name)}
+                aria-invalid={Boolean(touched.name && errors.name)}
+                aria-describedby={
+                  touched.name && errors.name ? 'helper-text-name' : undefined
+                }
                 title="Name of the task"
                 fullWidth
               />
               {touched.name && errors.name && (
-                <FormHelperText error id="helper-text-name">
+                <FormHelperText error role="alert" id="helper-text-name">
                   {errors.name}
                 </FormHelperText>
               )}

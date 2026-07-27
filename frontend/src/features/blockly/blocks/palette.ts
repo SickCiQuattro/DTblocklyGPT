@@ -12,14 +12,13 @@
  * Keys are semantic category names; values are used by both the block
  * renderer (Blockly JSON definitions) and the React toolbox sidebar.
  *
- * WCAG AA fix (2026-07-25, docs/analisi-sistema/p4-2-audit-frontend.md §D2,
- * "Proposta A"): white block text needs 4.5:1 against the fill. 6 of the 8
- * original colours failed (2 of those failed even the 3:1 UI-component
+ * WCAG AA fix: white block text needs 4.5:1 contrast against the fill. 6 of
+ * the 8 original colours failed (2 of those failed even the 3:1 UI-component
  * floor) — same hue/saturation, luminosity lowered until each cleared 4.5:1.
  * `start`/`robotActions` were already compliant and are unchanged. This does
- * NOT improve colour separability for deuteranopia (measured slightly worse,
- * same doc) — icon + plain-language text remain the required redundant
- * channel (WCAG 1.4.1), not colour alone.
+ * NOT improve colour separability for deuteranopia (measured slightly worse
+ * under simulation) — icon + plain-language text remain the required
+ * redundant channel (WCAG 1.4.1), not colour alone.
  */
 export const blocksColours = {
   /** Logic/Control flow blocks (repeat, when, loop) */

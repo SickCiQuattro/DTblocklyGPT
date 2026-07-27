@@ -9,6 +9,9 @@ import {
   Button,
   CircularProgress,
   Tooltip,
+  Popover,
+  Stack,
+  Box,
 } from '@mui/material'
 import AppBar from '@mui/material/AppBar'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
@@ -20,6 +23,7 @@ import {
   MessageSquare,
   Play,
   RotateCcw,
+  AlertTriangle,
 } from 'lucide-react'
 
 import { useAppSelector } from 'store/reducers'
@@ -27,6 +31,7 @@ import {
   setTaskName,
   toggleSim,
   triggerSave,
+  triggerRename,
   triggerDiscard,
   toggleChat,
 } from 'store/reducers/task'
@@ -34,6 +39,7 @@ import { TaskStatusChip } from 'components/TaskStatusChip'
 import { modKey } from 'components/KeycapHint'
 import { ConfirmDialog } from 'components/ConfirmDialog'
 import { drawerWidth } from 'utils/constants'
+import { UI_TEXT } from 'constants/uiVocabulary'
 import {
   RAIL_CLOSED_WIDTH,
   railTransition,
@@ -60,6 +66,11 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const workspaceReady = useAppSelector((state) => state.task.workspaceReady)
+  const conformanceIssues = useAppSelector(
+    (state) => state.task.conformanceIssues,
+  )
+  const [issuesAnchorEl, setIssuesAnchorEl] =
+    React.useState<HTMLElement | null>(null)
 
   // Exactly one of Save/Run is ever the filled (primary) button. Run only
   // takes over once there is truly nothing left to do: the task is already
@@ -71,17 +82,43 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const [isEditing, setIsEditing] = React.useState(false)
   const [localName, setLocalName] = React.useState(activeTaskName)
   const [discardConfirmOpen, setDiscardConfirmOpen] = React.useState(false)
+  // Escape sets isEditing false directly (see handleCancelEditName), which
+  // unmounts the InputBase — some browsers fire a blur on unmount, which
+  // would otherwise re-trigger handleSaveName right after a cancel.
+  const skipBlurSaveRef = React.useRef(false)
 
   React.useEffect(() => {
     setLocalName(activeTaskName)
   }, [activeTaskName])
 
+  // The actual discard happens in task-workspace/index.tsx's
+  // discardTriggered listener (isSaving flips true while it's in flight) —
+  // auto-close the confirm dialog once that finishes instead of closing it
+  // immediately on click, so the loading state below has time to show.
+  const wasSavingRef = React.useRef(false)
+  React.useEffect(() => {
+    if (wasSavingRef.current && !isSaving) setDiscardConfirmOpen(false)
+    wasSavingRef.current = isSaving
+  }, [isSaving])
+
   const handleSaveName = () => {
+    if (skipBlurSaveRef.current) {
+      skipBlurSaveRef.current = false
+      return
+    }
     setIsEditing(false)
     if (localName.trim() && localName !== activeTaskName) {
       dispatch(setTaskName(localName.trim()))
-      dispatch(triggerSave(true))
+      // Rename-only — must not go through triggerSave, which also
+      // (re)publishes the whole workspace when it happens to pass
+      // conformance (see store/reducers/task.ts).
+      dispatch(triggerRename(true))
     }
+  }
+
+  const handleCancelEditName = () => {
+    setLocalName(activeTaskName)
+    setIsEditing(false)
   }
 
   const iconBackColor = 'grey.100'
@@ -117,7 +154,13 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               onChange={(e) => setLocalName(e.target.value)}
               onBlur={handleSaveName}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveName()
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  skipBlurSaveRef.current = true
+                  handleCancelEditName()
+                }
               }}
               autoFocus
               sx={{
@@ -154,6 +197,64 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {!workspaceReady && conformanceIssues.length > 0 && (
+          <>
+            <Tooltip title="Why this task isn't ready to publish">
+              <Button
+                size="small"
+                onClick={(e) => setIssuesAnchorEl(e.currentTarget)}
+                startIcon={<AlertTriangle size={14} />}
+                aria-label={`${conformanceIssues.length} issue${conformanceIssues.length !== 1 ? 's' : ''} to fix before publishing`}
+                sx={{
+                  height: theme.spacing(3.75),
+                  minWidth: 0,
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  px: 1.25,
+                  color: 'warning.darker',
+                  bgcolor: 'warning.lighter',
+                  border: '1px solid',
+                  borderColor: 'warning.light',
+                  '&:hover': { bgcolor: 'warning.light' },
+                }}
+              >
+                {conformanceIssues.length}
+              </Button>
+            </Tooltip>
+            <Popover
+              open={!!issuesAnchorEl}
+              anchorEl={issuesAnchorEl}
+              onClose={() => setIssuesAnchorEl(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              slotProps={{ paper: { sx: { mt: 0.5, maxWidth: 420 } } }}
+            >
+              <Stack spacing={1} sx={{ p: 1.5 }}>
+                {conformanceIssues.map((issue, i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px',
+                    }}
+                  >
+                    <AlertTriangle
+                      size={13}
+                      style={{
+                        flexShrink: 0,
+                        marginTop: 2,
+                        color: theme.palette.warning.dark,
+                      }}
+                    />
+                    <Typography sx={{ fontSize: '0.8rem' }}>{issue}</Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Popover>
+          </>
+        )}
         <Tooltip title={chatOpen ? 'Close Copilot' : 'Ask Copilot for help'}>
           <Button
             variant="text"
@@ -204,7 +305,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               },
             }}
           >
-            Discard draft
+            {UI_TEXT.discardUnpublishedChanges}
           </Button>
         )}
         <Tooltip
@@ -252,15 +353,19 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             {workspaceReady ? 'Save & Publish' : 'Save draft'}
           </Button>
         </Tooltip>
-        <Tooltip title="Open the robot panel to simulate or run">
+        <Tooltip
+          title={
+            simOpen
+              ? 'Close the robot panel'
+              : 'Open the robot panel to simulate or run'
+          }
+        >
           <Button
             variant={isRunPrimary ? 'contained' : 'outlined'}
             color="primary"
             size="small"
             startIcon={<Play size={14} />}
-            onClick={() => {
-              if (!simOpen) dispatch(toggleSim())
-            }}
+            onClick={() => dispatch(toggleSim())}
             sx={{
               height: theme.spacing(3.75),
               borderRadius: '8px',
@@ -286,12 +391,10 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
         </Tooltip>
         <ConfirmDialog
           open={discardConfirmOpen}
-          message="Discard this draft? Your unpublished changes will be lost and the task will revert to its last published version."
+          loading={isSaving}
+          message="Discard these unpublished changes? They'll be lost and the task will revert to its last published version."
           confirmLabel="Discard"
-          onConfirm={() => {
-            setDiscardConfirmOpen(false)
-            dispatch(triggerDiscard(true))
-          }}
+          onConfirm={() => dispatch(triggerDiscard(true))}
           onCancel={() => setDiscardConfirmOpen(false)}
         />
       </div>

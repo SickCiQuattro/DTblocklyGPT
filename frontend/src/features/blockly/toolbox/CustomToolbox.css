@@ -59,7 +59,8 @@
 }
 
 .custom-toolbox__header-subtitle {
-  color: #94A3B8;
+  /* was #94A3B8 (2.56:1 on white, fails AA) — matches theme text.secondary */
+  color: #5A6270;
   font-size: 0.63rem;
   line-height: 1.25;
   font-weight: 500;
@@ -105,7 +106,7 @@
 
 /* Hide the scrollbar track but keep functionality */
 .custom-toolbox__scroll::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 .custom-toolbox__scroll::-webkit-scrollbar-track {
   background: transparent;
@@ -197,10 +198,12 @@
   gap: 6px;
   max-height: 260px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
 }
 
 .toolbox-category__body::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 
 .toolbox-category__body::-webkit-scrollbar-track {
@@ -316,6 +319,11 @@
   cursor: grabbing;
   transform: translateY(0);
   box-shadow: 0 1px 2px rgba(99, 102, 241, 0.05);
+}
+
+.toolbox-pill:focus-visible {
+  outline: 2px solid #6366F1;
+  outline-offset: 2px;
 }
 
 .toolbox-pill__label {

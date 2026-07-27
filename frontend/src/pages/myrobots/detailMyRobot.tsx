@@ -1,5 +1,5 @@
 import React from 'react'
-import { CircularProgress, Typography } from '@mui/material'
+import { Button, CircularProgress, Stack, Typography } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
@@ -8,6 +8,7 @@ import { MainCard } from 'components/MainCard'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { RobotType } from 'pages/robots/types'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { FormMyRobot } from './formMyRobot'
 import { MyRobotDetailType } from './types'
@@ -17,10 +18,13 @@ const DetailMyRobot = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const insertMode = id === 'add'
-  const { data: dataMyRobot, isLoading: isLoadingMyRobot } = useSWR<
-    MyRobotDetailType,
-    Error
-  >(
+  useDocumentTitle(insertMode ? 'Add My Robot' : 'My Robot Detail')
+  const {
+    data: dataMyRobot,
+    error: myRobotError,
+    isLoading: isLoadingMyRobot,
+    mutate: mutateMyRobot,
+  } = useSWR<MyRobotDetailType, Error>(
     !insertMode
       ? { url: endpoints.home.libraries.myRobot, body: { id } }
       : null,
@@ -40,6 +44,12 @@ const DetailMyRobot = () => {
 
   const isLoading = isLoadingRobots || isLoadingMyRobot
   const data = dataRobots && dataMyRobot
+  const loadError = !insertMode && !isLoadingMyRobot && !!myRobotError
+  const notFound =
+    !insertMode &&
+    !isLoadingMyRobot &&
+    !myRobotError &&
+    dataMyRobot === undefined
 
   const subtitle = insertMode
     ? 'Here you can define the details of your personal robot. Hover over fields to see their descriptions.'
@@ -53,9 +63,17 @@ const DetailMyRobot = () => {
       backTitle="Return to My Robot"
     >
       {isLoading && !insertMode && <CircularProgress />}
-      {data === null && (
-        <Typography>My Robot with ID {id} not found</Typography>
+      {loadError && (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 4 }}>
+          <Typography variant="body2" color="error.dark">
+            Couldn&apos;t load this robot. Check your connection and try again.
+          </Typography>
+          <Button size="small" onClick={() => mutateMyRobot()}>
+            Retry
+          </Button>
+        </Stack>
       )}
+      {notFound && <Typography>My Robot with ID {id} not found</Typography>}
       {(data || insertMode) && (
         <FormMyRobot
           dataMyRobot={dataMyRobot}

@@ -1,4 +1,4 @@
-import { List, Typography } from '@mui/material'
+import { List } from '@mui/material'
 
 import { useAppSelector } from 'store/reducers'
 import { MenuItem } from 'menu-items/types'
@@ -13,23 +13,11 @@ interface NavGroupProps {
 export const NavGroup = ({ item }: NavGroupProps) => {
   const drawerOpen = useAppSelector((state) => state.menu.drawerOpen)
 
-  const navCollapse = item.children?.map((menuItem) => {
-    switch (menuItem.type) {
-      case 'item':
-        return <NavItem key={menuItem.id} item={menuItem} level={1} />
-      default:
-        return (
-          <Typography
-            key={menuItem.id}
-            variant="h6"
-            color="error"
-            align="center"
-          >
-            Fix - Group Collapse or Items
-          </Typography>
-        )
-    }
-  })
+  // A group's children are always leaf 'item' entries — nested groups aren't
+  // part of the menu data today.
+  const navCollapse = item.children
+    ?.filter((menuItem) => menuItem.type === 'item')
+    .map((menuItem) => <NavItem key={menuItem.id} item={menuItem} level={1} />)
 
   return (
     <>

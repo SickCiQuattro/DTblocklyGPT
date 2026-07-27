@@ -38,6 +38,7 @@ import {
 
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
 import { accent } from 'themes/theme'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 export interface ContextMenuAction {
   id: number
@@ -406,7 +407,7 @@ export const installContextMenuBridge = ({
         }
 
         const inlineOption = {
-          text: 'Break into steps',
+          text: UI_TEXT.breakSavedTaskIntoSteps,
           enabled: isEnabled,
           scope: {
             block: sourceBlock,

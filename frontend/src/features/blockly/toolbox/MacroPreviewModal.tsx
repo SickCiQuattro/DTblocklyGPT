@@ -22,6 +22,7 @@ import { X } from 'lucide-react'
 import { abstractToBlockly } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { type AbstractStep } from 'pages/tasks/types'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { BlocklyViewerWithControls } from '../workspace'
 import { isValidBlockState, parseJson } from '../utils/serialization'
@@ -211,7 +212,7 @@ export const MacroPreviewModal = ({
                 textOverflow: 'ellipsis',
               }}
             >
-              Saved Task: {macroName}
+              {UI_TEXT.savedTask}: {macroName}
             </Typography>
             <Typography
               component="p"

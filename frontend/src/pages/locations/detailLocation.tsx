@@ -1,6 +1,6 @@
 import React from 'react'
-import { CircularProgress, Typography } from '@mui/material'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
 
@@ -8,6 +8,7 @@ import { MainCard } from 'components/MainCard'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MyRobotType } from 'pages/myrobots/types'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { FormLocation } from './formLocation'
 import { LocationDetailType } from './types'
@@ -16,26 +17,22 @@ const DetailLocation = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const [searchParams] = useSearchParams()
-  const returnGraphic = searchParams.get('returnGraphic')
   const insertMode = id === 'add'
-  const { data: dataLocation, isLoading: isLoadingLocation } = useSWR<
-    LocationDetailType,
-    Error
-  >(
+  useDocumentTitle(insertMode ? 'Add Location' : 'Location Detail')
+  const {
+    data: dataLocation,
+    error: locationError,
+    isLoading: isLoadingLocation,
+    mutate: mutateLocation,
+  } = useSWR<LocationDetailType, Error>(
     !insertMode
       ? { url: endpoints.home.libraries.location, body: { id } }
       : null,
   )
 
   const backFunction = () => {
-    if (returnGraphic) {
-      void navigate(`/graphic/${returnGraphic}`)
-      void dispatch(activeItem('graphic'))
-    } else {
-      void dispatch(activeItem('locations'))
-      void navigate('/locations')
-    }
+    void dispatch(activeItem('locations'))
+    void navigate('/locations')
   }
 
   const { data: dataMyRobots, isLoading: isLoadingMyRobots } = useSWR<
@@ -47,6 +44,12 @@ const DetailLocation = () => {
 
   const isLoading = isLoadingLocation || isLoadingMyRobots
   const data = dataLocation && dataMyRobots
+  const loadError = !insertMode && !isLoadingLocation && !!locationError
+  const notFound =
+    !insertMode &&
+    !isLoadingLocation &&
+    !locationError &&
+    dataLocation === undefined
 
   const subtitle = insertMode
     ? 'Here you can define the details of the Location. Hover over fields to see their descriptions.'
@@ -57,14 +60,21 @@ const DetailLocation = () => {
       title={insertMode ? 'Add Location' : 'Location Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle={
-        returnGraphic ? 'Return to the task graphic' : 'Return to Locations'
-      }
+      backTitle="Return to Locations"
     >
       {isLoading && !insertMode && <CircularProgress />}
-      {data === null && (
-        <Typography>Location with ID {id} not found</Typography>
+      {loadError && (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 4 }}>
+          <Typography variant="body2" color="error.dark">
+            Couldn&apos;t load this location. Check your connection and try
+            again.
+          </Typography>
+          <Button size="small" onClick={() => mutateLocation()}>
+            Retry
+          </Button>
+        </Stack>
       )}
+      {notFound && <Typography>Location with ID {id} not found</Typography>}
       {(data || insertMode) && (
         <FormLocation
           dataLocation={dataLocation}

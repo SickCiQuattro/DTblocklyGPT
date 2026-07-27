@@ -73,6 +73,9 @@ export const FormMyRobot = ({
         toast.success(MessageText.success)
         backFunction()
       })
+      .catch(() => {
+        setStatus({ success: false })
+      })
       .finally(() => {
         setSubmitting(false)
       })
@@ -107,7 +110,13 @@ export const FormMyRobot = ({
         setFieldError,
         setFieldTouched,
       }) => (
-        <form noValidate onSubmit={handleSubmit}>
+        <form
+          noValidate
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.preventDefault()
+          }}
+        >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
             <Grid size={8}>
               <Stack spacing={1}>
@@ -116,13 +125,18 @@ export const FormMyRobot = ({
                   value={values.name || ''}
                   name="name"
                   label="Name"
+                  required
                   onBlur={handleBlur}
                   onChange={handleChange}
                   error={Boolean(touched.name && errors.name)}
+                  aria-invalid={Boolean(touched.name && errors.name)}
+                  aria-describedby={
+                    touched.name && errors.name ? 'helper-text-name' : undefined
+                  }
                   title="Name of your personal robot"
                 />
                 {touched.name && errors.name && (
-                  <FormHelperText error id="helper-text-name">
+                  <FormHelperText error role="alert" id="helper-text-name">
                     {errors.name}
                   </FormHelperText>
                 )}
@@ -131,16 +145,25 @@ export const FormMyRobot = ({
             <Grid size={4}>
               <Stack spacing={1}>
                 <FormControl fullWidth>
-                  <InputLabel id="robot-label">Robot</InputLabel>
+                  <InputLabel id="robot-label" required>
+                    Robot
+                  </InputLabel>
                   <Select
                     labelId="robot-label"
                     id="robot"
                     value={values.robot || ''}
                     label="Robot"
                     name="robot"
+                    required
                     onBlur={handleBlur}
                     onChange={handleChange}
                     error={Boolean(touched.robot && errors.robot)}
+                    aria-invalid={Boolean(touched.robot && errors.robot)}
+                    aria-describedby={
+                      touched.robot && errors.robot
+                        ? 'helper-text-robot'
+                        : undefined
+                    }
                     title="Select the robot from the fleet that will be used as your personal robot"
                   >
                     {dataRobots?.map((robot) => (
@@ -150,7 +173,7 @@ export const FormMyRobot = ({
                     ))}
                   </Select>
                   {touched.robot && errors.robot && (
-                    <FormHelperText error id="helper-text-robot">
+                    <FormHelperText error role="alert" id="helper-text-robot">
                       {errors.robot}
                     </FormHelperText>
                   )}

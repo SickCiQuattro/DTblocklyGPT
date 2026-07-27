@@ -19,6 +19,8 @@ import {
   Typography,
 } from '@mui/material'
 
+import { UI_TEXT } from 'constants/uiVocabulary'
+
 interface InlineTaskDialogProps {
   /** Whether the dialog is currently visible. */
   open: boolean
@@ -47,7 +49,7 @@ export const InlineTaskDialog = ({
       paper: { elevation: 0, sx: { p: 1.5, maxWidth: 400 } },
     }}
   >
-    <DialogTitle sx={{ pb: 1 }}>Break into steps</DialogTitle>
+    <DialogTitle sx={{ pb: 1 }}>{UI_TEXT.breakSavedTaskIntoSteps}</DialogTitle>
     <DialogContent>
       <Typography
         variant="body2"

@@ -709,29 +709,16 @@ export const BlocklyEditor = ({
     [],
   )
 
-  // Ctrl/Cmd+K block-search insertion: create the block (with default shadow
-  // placeholders, like the toolbox drag) and connect it to the chain end.
-  const handleInsertBlock = useCallback(
-    (item: ShadowPickerItem) => {
+  // Shared by Ctrl/Cmd+K search-insert and the toolbox pills' Enter/Space
+  // activation (the keyboard equivalent of a pointer drag): create the block
+  // and connect it to the end of the start chain.
+  const insertStepBlockAtEnd = useCallback(
+    (state: State) => {
       const workspace = workspaceRef.current
-      const blockType = item.blockType
-      if (!workspace || !blockType) return
-
-      const ghost = GHOST_INPUT_MAP[blockType]
-      const inputs = ghost
-        ? Object.fromEntries(
-            Object.entries(ghost)
-              .filter(([key]) => key !== '__next__')
-              .map(([name, def]) => [
-                name,
-                { shadow: { type: def.type, fields: { name: def.label } } },
-              ]),
-          )
-        : undefined
+      if (!workspace || workspace.options.readOnly) return
 
       Blockly.Events.setGroup(true)
       try {
-        const state: State = { type: blockType, ...(inputs ? { inputs } : {}) }
         const newBlock = Blockly.serialization.blocks.append(state, workspace, {
           recordUndo: true,
         }) as Blockly.BlockSvg
@@ -755,6 +742,48 @@ export const BlocklyEditor = ({
       syncHistoryState(workspace)
     },
     [syncWorkspacePresentation, syncHistoryState],
+  )
+
+  const buildShadowInputs = (blockType: string) => {
+    const ghost = GHOST_INPUT_MAP[blockType]
+    if (!ghost) return undefined
+    return Object.fromEntries(
+      Object.entries(ghost)
+        .filter(([key]) => key !== '__next__')
+        .map(([name, def]) => [
+          name,
+          { shadow: { type: def.type, fields: { name: def.label } } },
+        ]),
+    )
+  }
+
+  const handleInsertBlock = useCallback(
+    (item: ShadowPickerItem) => {
+      const blockType = item.blockType
+      if (!blockType) return
+      const inputs = buildShadowInputs(blockType)
+      insertStepBlockAtEnd({ type: blockType, ...(inputs ? { inputs } : {}) })
+    },
+    [insertStepBlockAtEnd],
+  )
+
+  // Keyboard equivalent of dragging a toolbox pill (dragProxy.ts) onto the
+  // canvas — same state shape (fields/data for dynamic Object/Location/Skill
+  // pills included), but appended at the chain end instead of dropped at a
+  // pointer position.
+  const handleInsertToolboxItem = useCallback(
+    (item: ToolboxBlockItem) => {
+      const inputs = buildShadowInputs(item.type)
+      const hasFields = !!item.fields && Object.keys(item.fields).length > 0
+      const hasData = typeof item.data === 'string' && item.data.length > 0
+      insertStepBlockAtEnd({
+        type: item.type,
+        ...(hasFields ? { fields: item.fields } : {}),
+        ...(hasData ? { data: item.data } : {}),
+        ...(inputs ? { inputs } : {}),
+      })
+    },
+    [insertStepBlockAtEnd],
   )
 
   const executeDeleteAll = useCallback(
@@ -1538,6 +1567,7 @@ export const BlocklyEditor = ({
               : undefined
           }
           onBlockPointerDown={handleBlockPointerDown}
+          onBlockActivate={handleInsertToolboxItem}
           macroDetailsById={macroDetailsById}
         />
       )}
@@ -1561,14 +1591,14 @@ export const BlocklyEditor = ({
               lives inside the toolbox header. */}
           {onViewSettingsChange && viewSettings?.toolboxCollapsed && (
             <div className="workspace-controls-group workspace-controls-group--top-left">
-              <Tooltip title="Expand blocks sidebar">
+              <Tooltip title="Show toolbox">
                 <IconButton
                   className="workspace-control-button"
                   size="small"
                   onClick={() =>
                     onViewSettingsChange({ toolboxCollapsed: false })
                   }
-                  aria-label="Expand blocks sidebar"
+                  aria-label="Show toolbox"
                 >
                   <PanelLeft size={18} />
                 </IconButton>
@@ -1848,7 +1878,7 @@ export const BlocklyEditor = ({
             <ListItemIcon>
               <Search size={16} />
             </ListItemIcon>
-            <ListItemText primary="Add block" />
+            <ListItemText primary="Add a step" />
             <KeycapHint sx={{ ml: 3 }}>{ADD_BLOCK_SHORTCUT}</KeycapHint>
           </MenuItem>
           <MenuItem
@@ -1984,6 +2014,13 @@ export const BlocklyEditor = ({
                     { value: 'minimal', label: 'Minimal' },
                   ]}
                 />
+                <Typography
+                  sx={{ mt: 0.5, fontSize: 11, color: 'text.secondary' }}
+                >
+                  How much text shows on each block — Complete shows icons and
+                  filled-in values, Essential drops the icons, Minimal drops
+                  both.
+                </Typography>
               </Box>
 
               <SettingSwitch
@@ -2004,7 +2041,7 @@ export const BlocklyEditor = ({
 
               <SettingSwitch
                 label="Show start block"
-                caption="Hiding the start block disables orphan highlighting."
+                caption="Hiding the start block also stops highlighting steps that aren't connected to the program."
                 checked={viewSettings.showStartBlock}
                 onChange={(value) =>
                   onViewSettingsChange({ showStartBlock: value })

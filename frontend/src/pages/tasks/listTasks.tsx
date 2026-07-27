@@ -43,7 +43,7 @@ import { SegmentedControl } from 'components/SegmentedControl'
 import { KeycapHint, modKey } from 'components/KeycapHint'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
-import { activeItem, openDrawer } from 'store/reducers/menu'
+import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage } from 'utils/constants'
 import { formatDateTimeShortFrontend } from 'utils/date'
@@ -55,6 +55,7 @@ import { ActionListType } from 'pages/actions/types'
 import { UserLoginInterface } from 'pages/login/LoginForm'
 import { Theme as ThemeOption } from 'themes/theme'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { TaskType } from './types'
 import { AnalyzeTaskModal } from './analyzeTaskModal'
@@ -91,22 +92,29 @@ const TaskRowActions = ({
   setAnalyzingTask,
   handleDelete,
   handleDiscard,
+  referenceDataError,
 }: {
   row: TaskType
   canManage: boolean
   handleOpenDetails: (id: number) => void
   setAnalyzeModalVisible: (v: boolean) => void
   setAnalyzingTask: (t: TaskType) => void
-  handleDelete: (id: number) => void
-  handleDiscard: (id: number) => void
+  handleDelete: (id: number) => Promise<unknown>
+  handleDiscard: (id: number) => Promise<unknown>
+  referenceDataError: boolean
 }) => {
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDiscarding, setIsDiscarding] = useState(false)
   const open = Boolean(anchorEl)
-  const isPublishedWithDraft =
-    (row as any).status?.toLowerCase() === 'published_with_draft'
+  const rowStatus = (row as any).status?.toLowerCase()
+  const isPublishedWithDraft = rowStatus === 'published_with_draft'
+  // published_with_draft still runs (its last published version) — only a
+  // task that was never published can't run at all.
+  const canRunOnRobot = rowStatus === 'published' || isPublishedWithDraft
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
@@ -123,19 +131,30 @@ const TaskRowActions = ({
       sx={{ alignItems: 'center' }}
       onClick={(e) => e.stopPropagation()}
     >
-      <Tooltip title="Run on the real robot">
-        <IconButton
-          sx={{ width: 40, height: 40, color: 'success.dark' }}
-          onClick={() =>
-            navigate(`/task/${row.id}`, {
-              state: { autoOpenRobot: true, executionTarget: 'real' },
-            })
-          }
-          id={`btn-run-task-${row.id}`}
-          aria-label="run on the real robot"
-        >
-          <Play size={17} />
-        </IconButton>
+      <Tooltip
+        title={
+          canRunOnRobot
+            ? 'Run on the real robot'
+            : 'This task is a draft — publish it first to run it'
+        }
+      >
+        {/* span wrapper: a disabled IconButton alone won't fire the
+            Tooltip's hover events */}
+        <span>
+          <IconButton
+            sx={{ width: 40, height: 40, color: 'success.dark' }}
+            disabled={!canRunOnRobot}
+            onClick={() =>
+              navigate(`/task/${row.id}`, {
+                state: { autoOpenRobot: true, executionTarget: 'real' },
+              })
+            }
+            id={`btn-run-task-${row.id}`}
+            aria-label="run on the real robot"
+          >
+            <Play size={17} />
+          </IconButton>
+        </span>
       </Tooltip>
 
       <Tooltip title="More actions">
@@ -162,6 +181,11 @@ const TaskRowActions = ({
             handleOpenDetails(row.id)
           }}
           disabled={!canManage}
+          title={
+            canManage
+              ? undefined
+              : "Shared by another user — you can't edit this task"
+          }
         >
           <ListItemIcon>
             <Eye size={15} />
@@ -176,6 +200,12 @@ const TaskRowActions = ({
         <MenuItem
           onClick={() => {
             handleClose()
+            if (referenceDataError) {
+              toast.error(
+                "Couldn't load objects/locations/skills/robots — check for problems needs them and your connection dropped. Try again.",
+              )
+              return
+            }
             setAnalyzeModalVisible(true)
             setAnalyzingTask(row)
           }}
@@ -200,6 +230,11 @@ const TaskRowActions = ({
               setDiscardConfirmOpen(true)
             }}
             disabled={!canManage}
+            title={
+              canManage
+                ? undefined
+                : "Shared by another user — you can't manage this task"
+            }
           >
             <ListItemIcon>
               <Undo2 size={15} style={{ color: tokenPalette.warning.dark }} />
@@ -207,7 +242,7 @@ const TaskRowActions = ({
             <ListItemText
               primary={
                 <Typography sx={{ fontSize: '0.85rem' }}>
-                  Discard draft
+                  {UI_TEXT.discardUnpublishedChanges}
                 </Typography>
               }
             />
@@ -223,14 +258,19 @@ const TaskRowActions = ({
             setDeleteConfirmOpen(true)
           }}
           disabled={!canManage}
-          sx={{ color: 'error.main' }}
+          sx={{ color: 'error.dark' }}
+          title={
+            canManage
+              ? undefined
+              : "Shared by another user — you can't delete this task"
+          }
         >
           <ListItemIcon>
-            <Trash2 size={15} color="red" />
+            <Trash2 size={15} color={tokenPalette.error.dark} />
           </ListItemIcon>
           <ListItemText
             primary={
-              <Typography sx={{ fontSize: '0.85rem', color: 'error.main' }}>
+              <Typography sx={{ fontSize: '0.85rem', color: 'error.dark' }}>
                 Delete
               </Typography>
             }
@@ -240,25 +280,33 @@ const TaskRowActions = ({
 
       <ConfirmDialog
         open={deleteConfirmOpen}
+        loading={isDeleting}
         message="Delete this task? This can't be undone."
         confirmLabel="Delete"
         onConfirm={() => {
-          setDeleteConfirmOpen(false)
-          handleClose()
-          handleDelete(row.id)
+          setIsDeleting(true)
+          void handleDelete(row.id).finally(() => {
+            setIsDeleting(false)
+            setDeleteConfirmOpen(false)
+            handleClose()
+          })
         }}
         onCancel={() => setDeleteConfirmOpen(false)}
       />
 
       <ConfirmDialog
         open={discardConfirmOpen}
-        title="Discard draft?"
-        message="Discard this draft? Your unpublished changes will be lost and the task will revert to its last published version."
+        loading={isDiscarding}
+        title={`${UI_TEXT.discardUnpublishedChanges}?`}
+        message="They'll be lost and the task will revert to its last published version."
         confirmLabel="Discard"
         onConfirm={() => {
-          setDiscardConfirmOpen(false)
-          handleClose()
-          handleDiscard(row.id)
+          setIsDiscarding(true)
+          void handleDiscard(row.id).finally(() => {
+            setIsDiscarding(false)
+            setDiscardConfirmOpen(false)
+            handleClose()
+          })
         }}
         onCancel={() => setDiscardConfirmOpen(false)}
       />
@@ -375,7 +423,7 @@ const TaskCard = ({
             }}
           >
             {row.shared ? (
-              <Share2 size={13} color={tokenPalette.success.main} />
+              <Share2 size={13} color={tokenPalette.success.darker} />
             ) : (
               <Lock size={13} color={tokenPalette.slate[500]} />
             )}
@@ -384,7 +432,7 @@ const TaskCard = ({
                 fontSize: '0.68rem',
                 fontWeight: 600,
                 color: row.shared
-                  ? tokenPalette.success.main
+                  ? tokenPalette.success.darker
                   : tokenPalette.slate[500],
               }}
             >
@@ -462,18 +510,39 @@ const ListTasks = () => {
     { revalidateOnFocus: true, revalidateOnMount: true },
   )
 
-  const { data: dataMyRobots } = useSWR<MyRobotType[], Error>({
+  const { data: dataMyRobots, error: myRobotsError } = useSWR<
+    MyRobotType[],
+    Error
+  >({
     url: endpoints.home.libraries.myRobots,
   })
-  const { data: dataObjects } = useSWR<ObjectListType[], Error>({
+  const { data: dataObjects, error: objectsError } = useSWR<
+    ObjectListType[],
+    Error
+  >({
     url: endpoints.home.libraries.objects,
   })
-  const { data: dataLocations } = useSWR<LocationListType[], Error>({
+  const { data: dataLocations, error: locationsError } = useSWR<
+    LocationListType[],
+    Error
+  >({
     url: endpoints.home.libraries.locations,
   })
-  const { data: dataActions } = useSWR<ActionListType[], Error>({
+  const { data: dataActions, error: actionsError } = useSWR<
+    ActionListType[],
+    Error
+  >({
     url: endpoints.home.libraries.actions,
   })
+  // "Check for problems" needs all four of these to give a meaningful
+  // result — silently opening it with some dropdowns empty (previously
+  // unhandled errors here) looks like a bug, not a connectivity issue.
+  const referenceDataError = !!(
+    myRobotsError ||
+    objectsError ||
+    locationsError ||
+    actionsError
+  )
 
   const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
   const [analyzingTask, setAnalyzingTask] = useState<TaskType | null>(null)
@@ -501,7 +570,7 @@ const ListTasks = () => {
   }
 
   const handleDelete = (id: number) => {
-    fetchApi({
+    return fetchApi({
       url: endpoints.home.libraries.task,
       method: MethodHTTP.DELETE,
       body: { id },
@@ -517,18 +586,17 @@ const ListTasks = () => {
     // No manual .catch — same as handleDelete above: fetchApi already toasts
     // every failure path (services/api.ts), a second toast here would just
     // stack a redundant one behind it.
-    fetchApi({
+    return fetchApi({
       url: endpoints.task.discardDraft,
       method: MethodHTTP.POST,
       body: { id },
     }).then(() => {
-      toast.success('Draft discarded successfully')
+      toast.success('Unpublished changes discarded')
       mutate()
     })
   }
 
   const handleAdd = () => {
-    dispatch(openDrawer(false))
     navigate('/task/new')
   }
 
@@ -598,6 +666,7 @@ const ListTasks = () => {
     setAnalyzingTask,
     handleDelete,
     handleDiscard,
+    referenceDataError,
   }
 
   return (
@@ -611,20 +680,20 @@ const ListTasks = () => {
         </Typography>
       </Box>
 
-      {/* ── Toolbar ── */}
+      {/* ── Toolbar ──
+          No standalone row counter here — it would be a third count on
+          screen at once alongside the welcome-back summary above and the
+          per-status numbers on the filter tabs below. */}
       <Stack
         direction="row"
         sx={{
           mb: 2.5,
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           gap: 1.5,
           flexWrap: 'wrap',
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          {filteredRows.length} task{filteredRows.length !== 1 ? 's' : ''}
-        </Typography>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
           <OutlinedInput
             inputRef={searchInputRef}
@@ -658,8 +727,11 @@ const ListTasks = () => {
             }}
             options={[
               { value: 'all', label: `All ${rows.length}` },
-              { value: 'draft', label: `Draft ${draftCount}` },
-              { value: 'published', label: `Published ${publishedCount}` },
+              { value: 'draft', label: `${UI_TEXT.draft} ${draftCount}` },
+              {
+                value: 'published',
+                label: `${UI_TEXT.published} ${publishedCount}`,
+              },
             ]}
           />
           <Button
@@ -704,7 +776,7 @@ const ListTasks = () => {
         </Box>
       ) : tasksError ? (
         <Stack spacing={1.5} sx={{ alignItems: 'center', py: 7 }}>
-          <Typography variant="body2" color="error.main">
+          <Typography variant="body2" color="error.dark">
             Couldn&apos;t load tasks. Check your connection and try again.
           </Typography>
           <Button size="small" onClick={() => mutate()}>

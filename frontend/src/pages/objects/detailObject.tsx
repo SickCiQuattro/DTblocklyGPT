@@ -1,6 +1,6 @@
 import React from 'react'
-import { CircularProgress, Typography } from '@mui/material'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Button, CircularProgress, Stack, Typography } from '@mui/material'
+import { useNavigate, useParams } from 'react-router-dom'
 import useSWR from 'swr'
 import { useDispatch } from 'react-redux'
 
@@ -8,6 +8,7 @@ import { MainCard } from 'components/MainCard'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MyRobotType } from 'pages/myrobots/types'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 import { FormObject } from './formObject'
 import { ObjectDetailType } from './types'
@@ -17,20 +18,19 @@ const DetailObject = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const insertMode = id === 'add'
-  const [searchParams] = useSearchParams()
-  const returnGraphic = searchParams.get('returnGraphic')
-  const { data: dataObject, isLoading: isLoadingObject } = useSWR<
-    ObjectDetailType,
-    Error
-  >(!insertMode ? { url: endpoints.home.libraries.object, body: { id } } : null)
+  useDocumentTitle(insertMode ? 'Add Object' : 'Object Detail')
+  const {
+    data: dataObject,
+    error: objectError,
+    isLoading: isLoadingObject,
+    mutate: mutateObject,
+  } = useSWR<ObjectDetailType, Error>(
+    !insertMode ? { url: endpoints.home.libraries.object, body: { id } } : null,
+  )
 
   const backFunction = () => {
-    if (returnGraphic) {
-      void navigate(`/graphic/${returnGraphic}`)
-    } else {
-      void dispatch(activeItem('objects'))
-      void navigate('/objects')
-    }
+    void dispatch(activeItem('objects'))
+    void navigate('/objects')
   }
 
   const { data: dataMyRobots, isLoading: isLoadingMyRobots } = useSWR<
@@ -42,6 +42,9 @@ const DetailObject = () => {
 
   const isLoading = isLoadingObject || isLoadingMyRobots
   const data = dataObject && dataMyRobots
+  const loadError = !insertMode && !isLoadingObject && !!objectError
+  const notFound =
+    !insertMode && !isLoadingObject && !objectError && dataObject === undefined
 
   const subtitle = insertMode
     ? 'Here you can define the details of the Object. Hover over fields to see their descriptions.'
@@ -52,12 +55,20 @@ const DetailObject = () => {
       title={insertMode ? 'Add Object' : 'Object Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle={
-        returnGraphic ? 'Return to the task graphic' : 'Return to Objects'
-      }
+      backTitle="Return to Objects"
     >
       {isLoading && !insertMode && <CircularProgress />}
-      {data === null && <Typography>Object with ID {id} not found</Typography>}
+      {loadError && (
+        <Stack spacing={1.5} sx={{ alignItems: 'center', py: 4 }}>
+          <Typography variant="body2" color="error.dark">
+            Couldn&apos;t load this object. Check your connection and try again.
+          </Typography>
+          <Button size="small" onClick={() => mutateObject()}>
+            Retry
+          </Button>
+        </Stack>
+      )}
+      {notFound && <Typography>Object with ID {id} not found</Typography>}
       {(data || insertMode) && (
         <FormObject
           dataObject={dataObject}

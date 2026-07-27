@@ -44,5 +44,9 @@ export const importWorkspaceJson = (
   if (!parsed || typeof parsed !== 'object' || !('blocks' in parsed)) {
     throw new Error('Not a valid Blockly workspace file')
   }
-  Blockly.serialization.workspaces.load(parsed, workspace)
+  // recordUndo: true — otherwise Ctrl+Z can't undo an import, and a bad
+  // import silently replaces the whole workspace with no way back.
+  Blockly.serialization.workspaces.load(parsed, workspace, {
+    recordUndo: true,
+  })
 }

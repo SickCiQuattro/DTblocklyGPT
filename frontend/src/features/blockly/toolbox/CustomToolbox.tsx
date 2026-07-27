@@ -55,6 +55,8 @@ interface CustomToolboxProps {
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
+  /** Keyboard equivalent of dragging a pill — Enter/Space on a focused pill. */
+  onBlockActivate: (item: ToolboxBlockItem) => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -139,7 +141,11 @@ const resolveDynamicBlocks = (
               detail?.code != null ? JSON.stringify(detail.code) : undefined,
             description: summary,
             inputs: 'None',
-            outputs: 'Sequence Execution',
+            // Same as every other step block ("Repeat times", "Pick up",
+            // ...) — it runs, it doesn't hand back data. "Sequence
+            // Execution" was the only block in the toolbox describing
+            // itself in implementation terms instead of this plain "None".
+            outputs: 'None',
           })
         })
         break
@@ -186,7 +192,15 @@ const BlockPill: React.FC<{
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
-}> = ({ item, categoryName, categoryColour, blockViewMode, onPointerDown }) => {
+  onActivate: (item: ToolboxBlockItem) => void
+}> = ({
+  item,
+  categoryName,
+  categoryColour,
+  blockViewMode,
+  onPointerDown,
+  onActivate,
+}) => {
   const theme = useTheme()
   return (
     <BlockPreviewTooltip
@@ -202,7 +216,14 @@ const BlockPill: React.FC<{
           borderLeft: `3px solid ${item.colour}`,
         }}
         onPointerDown={(e) => onPointerDown(e, item)}
-        aria-label={item.label}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return
+          e.preventDefault()
+          onActivate(item)
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Add ${item.label} to the task`}
       >
         <span className="toolbox-pill__label">{item.label}</span>
       </div>
@@ -249,6 +270,7 @@ const CategoryPanel: React.FC<{
     e: React.PointerEvent<HTMLDivElement>,
     item: ToolboxBlockItem,
   ) => void
+  onBlockActivate: (item: ToolboxBlockItem) => void
 }> = ({
   category,
   pills,
@@ -256,6 +278,7 @@ const CategoryPanel: React.FC<{
   expanded,
   onChange,
   onBlockPointerDown,
+  onBlockActivate,
 }) => {
   const theme = useTheme()
   const isObjectsPositionsCategory = category.key === 'objects-positions'
@@ -364,6 +387,7 @@ const CategoryPanel: React.FC<{
                 categoryColour={category.colour}
                 blockViewMode={blockViewMode}
                 onPointerDown={onBlockPointerDown}
+                onActivate={onBlockActivate}
               />
             ))}
             {/* Space */}
@@ -388,6 +412,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   onRootRefChange,
   onCollapse,
   onBlockPointerDown,
+  onBlockActivate,
   macroDetailsById,
 }) => {
   const theme = useTheme()
@@ -465,11 +490,11 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
         </div>
 
         {onCollapse && !isDeleting && (
-          <Tooltip title="Collapse blocks sidebar">
+          <Tooltip title="Hide toolbox">
             <IconButton
               size="small"
               onClick={onCollapse}
-              aria-label="Collapse blocks sidebar"
+              aria-label="Hide toolbox"
               sx={{
                 flexShrink: 0,
                 width: 30,
@@ -508,6 +533,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
               expanded={expandedKey === category.key}
               onChange={handleAccordionChange}
               onBlockPointerDown={onBlockPointerDown}
+              onBlockActivate={onBlockActivate}
             />
           )
         })}

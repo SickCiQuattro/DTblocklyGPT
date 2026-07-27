@@ -7,10 +7,12 @@ import {
 } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { Box, CircularProgress, Typography } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import useSWR, { useSWRConfig } from 'swr'
 import dayjs from 'dayjs'
 import { toast } from 'react-toastify'
 import * as Blockly from 'blockly/core'
+import { Blocks } from 'lucide-react'
 
 import { useAppSelector } from 'store/reducers'
 import {
@@ -18,9 +20,12 @@ import {
   setSaving,
   setLastSaved,
   triggerSave,
+  triggerRename,
   triggerDiscard,
   triggerSavedFlash,
+  setSaveError,
   setWorkspaceReady,
+  setConformanceIssues,
   toggleChat,
   toggleSim,
 } from 'store/reducers/task'
@@ -54,6 +59,7 @@ const isBlockState = (value: unknown): value is State =>
   typeof (value as { type?: unknown }).type === 'string'
 
 export const UnifiedWorkspace = () => {
+  const theme = useTheme()
   const { id } = useParams()
   const navigate = useNavigate()
   const dispatch = useDispatch()
@@ -84,6 +90,7 @@ export const UnifiedWorkspace = () => {
   const discardTriggered = useAppSelector(
     (state) => state.task.discardTriggered,
   )
+  const renameTriggered = useAppSelector((state) => state.task.renameTriggered)
   const chatPosition =
     useAppSelector((state) => state.task.chatPosition) || 'right'
 
@@ -310,15 +317,18 @@ export const UnifiedWorkspace = () => {
   }, [initialDataTask, editorDataTask])
 
   // Conformance tracking
-  const { isReady } = useConformance(
+  const { isReady, issues, formattedIssues } = useConformance(
     workspace,
     viewSettings.blockViewMode === 'complete',
   )
+  const isCanvasEmpty = issues.some((i) => i.type === 'EMPTY_WORKSPACE')
 
-  // Sync workspace readiness to Redux
+  // Sync workspace readiness + why-not-ready to Redux — Header/index.tsx
+  // shows the issue count next to Save without needing the live workspace.
   useEffect(() => {
     dispatch(setWorkspaceReady(isReady))
-  }, [isReady, dispatch])
+    dispatch(setConformanceIssues(formattedIssues))
+  }, [isReady, formattedIssues, dispatch])
 
   // Save / Publish pipeline matching the original Graphic logic
   const saveTaskToBackend = useCallback(
@@ -407,6 +417,7 @@ export const UnifiedWorkspace = () => {
         void mutate({ url: endpoints.home.libraries.tasks })
         dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
         dispatch(triggerSavedFlash(true))
+        dispatch(setSaveError(false))
 
         if (!id && targetId) {
           // If it was a newly created task, navigate to the correct URL path
@@ -422,6 +433,9 @@ export const UnifiedWorkspace = () => {
         }
       } catch (err) {
         console.error('Failed to save task:', err)
+        // Autosave failures show no toast (would fire every 2s while the
+        // connection is down) — this flag is the only persistent signal.
+        dispatch(setSaveError(true))
         if (!isAutoSave) {
           toast.error(
             isPublish ? 'Failed to publish task' : 'Failed to save draft',
@@ -488,6 +502,50 @@ export const UnifiedWorkspace = () => {
     return () => document.removeEventListener('keydown', onKey)
   }, [dispatch])
 
+  // Rename-only trigger listener — a header title edit updates just the
+  // name metadata. It must never go through saveTaskToBackend/triggerSave,
+  // which also (re)publishes the whole workspace whenever it happens to
+  // pass conformance — a rename shouldn't have that side effect.
+  useEffect(() => {
+    if (renameTriggered) {
+      dispatch(triggerRename(false)) // Reset immediately to prevent multiple triggers
+      if (id && taskData && taskData.name !== activeTaskName) {
+        fetchApi({
+          url: endpoints.home.libraries.task,
+          method: MethodHTTP.PUT,
+          body: { ...taskData, name: activeTaskName },
+        })
+          .then(async () => {
+            const updatedTask = await mutateTask()
+            if (updatedTask) {
+              dispatch(
+                setActiveTask({
+                  id: updatedTask.id.toString(),
+                  name: updatedTask.name,
+                  status: updatedTask.status,
+                }),
+              )
+            }
+            void mutate({ url: endpoints.home.libraries.tasks })
+            dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
+            dispatch(triggerSavedFlash(true))
+          })
+          .catch((err) => {
+            console.error('Failed to rename task:', err)
+            toast.error('Failed to rename task')
+          })
+      }
+    }
+  }, [
+    renameTriggered,
+    id,
+    taskData,
+    activeTaskName,
+    dispatch,
+    mutateTask,
+    mutate,
+  ])
+
   // Discard draft trigger listener
   useEffect(() => {
     if (discardTriggered) {
@@ -541,7 +599,7 @@ export const UnifiedWorkspace = () => {
       >
         <CircularProgress color="primary" />
         <Typography variant="body2" color="text.secondary">
-          Loading Visual Programming Workspace...
+          Loading your task…
         </Typography>
       </Box>
     )
@@ -581,6 +639,34 @@ export const UnifiedWorkspace = () => {
             order: chatPosition === 'left' ? 2 : 1,
           }}
         >
+          {/* Empty canvas explains itself instead of just sitting blank. Why
+              "Save" isn't "Save & Publish" yet (useConformance's issues)
+              shows next to Save in the header instead of here — see
+              Header/index.tsx. */}
+          {isCanvasEmpty && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 1,
+                pointerEvents: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '10px',
+                textAlign: 'center',
+              }}
+            >
+              <Blocks size={32} color={theme.palette.slate[400]} />
+              <Typography variant="body2" color="text.secondary">
+                Drag a block from the toolbox to start,
+                <br />
+                or ask Copilot to build it for you.
+              </Typography>
+            </Box>
+          )}
           <BlocklyEditor
             onWorkspaceReady={setWorkspace}
             dataLocations={dataLocations}

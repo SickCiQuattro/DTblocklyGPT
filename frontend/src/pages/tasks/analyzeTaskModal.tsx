@@ -275,10 +275,12 @@ export const AnalyzeTaskModal = ({
                           component="li"
                           key={idx}
                           sx={{
+                            // .main fails AA as text on this light bg (error
+                            // 3.61:1, warning 2.06:1) — .dark/.darker clear it.
                             color:
                               issue.type === 'error'
-                                ? 'error.main'
-                                : 'warning.main',
+                                ? 'error.dark'
+                                : 'warning.darker',
                             fontSize: '0.85rem',
                           }}
                         >

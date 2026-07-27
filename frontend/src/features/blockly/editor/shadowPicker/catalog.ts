@@ -13,6 +13,7 @@
 
 import { TaskType } from 'pages/tasks/types'
 import { slate } from 'themes/theme'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { normalizeKeywords } from '../../utils/keywords'
 import { blocksColours } from '../../blocks/palette'
@@ -249,8 +250,8 @@ export const buildSequencePickerItems = (
       keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
       blockType: 'macro_task_block' as const,
       // MAPPING REFERENCE:
-      // - Category key: 'macro-tasks' ➔ User-facing picker group: 'Saved Tasks'
-      group: 'Saved Tasks',
+      // - Category key: 'macro-tasks' ➔ User-facing picker group: UI_TEXT.savedTasks
+      group: UI_TEXT.savedTasks,
       // Signal to the picker UI that this item has a stable published workspace.
       isMacroReady: true,
     }))
@@ -412,7 +413,7 @@ export const getDotColour = (group: string): string => {
       return blocksColours.humanActions
     case 'Task Flow':
       return blocksColours.logicControl
-    case 'Saved Tasks':
+    case UI_TEXT.savedTasks:
       return blocksColours.macroTasks
     default:
       return slate[400]
