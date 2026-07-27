@@ -103,36 +103,38 @@ def _goto_hover(x_rel, y_rel, z_pick, z_hover, grasp_yaw):
     sim.smooth_move(q_hover, sim.ROS_OPEN_GRIPPER, duration_s=1.5)
 
 
-def _slot_offset(slot):
-    rack = calibration.LOCATION_PROFILES.get("tube_rack", {})
-    offsets = rack.get("slot_y_offsets", [0.0])
+def _slot_offset(slot, rack, label):
+    offsets = rack.get("slot_xy_offsets", [(0.0, 0.0)])
     if slot >= len(offsets):
         print(f"slot {slot} not calibrated yet — only {len(offsets)} slot(s) in "
-              f"LOCATION_PROFILES['tube_rack']['slot_y_offsets']. Jog there and use "
-              f"`read` first, then add the value to calibration.py.")
+              f"{label}['slot_xy_offsets']. Jog there and use `read` first, "
+              f"then add the value to calibration.py.")
         sys.exit(1)
-    return offsets[slot], rack.get("grasp_yaw", 0.0)
+    dx, dy = offsets[slot]
+    return dx, dy, rack.get("grasp_yaw", 0.0)
 
 
 def cmd_goto_pick(args):
-    y_offset, grasp_yaw = _slot_offset(args.slot)
+    dx, dy, grasp_yaw = _slot_offset(args.slot, calibration.PICK_RACK_PROFILE, "PICK_RACK_PROFILE")
+    x_rel = calibration.DEFAULT_PICK_X_REL + dx
+    y_rel = calibration.DEFAULT_PICK_Y_REL + dy
     model = sim.normalize_object_for_grasp("tube")
-    plan = sim.plan_pick_for_object(model, calibration.DEFAULT_PICK_X_REL,
-                                     calibration.DEFAULT_PICK_Y_REL + y_offset)
+    plan = sim.plan_pick_for_object(model, x_rel, y_rel)
     if not plan.feasible:
         print(f"tube grasp plan infeasible: {plan.reason}"); sys.exit(1)
-    _goto_hover(calibration.DEFAULT_PICK_X_REL, calibration.DEFAULT_PICK_Y_REL + y_offset,
-                plan.z_pick, args.z_hover, grasp_yaw)
+    _goto_hover(x_rel, y_rel, plan.z_pick, args.z_hover, grasp_yaw)
 
 
 def cmd_goto_place(args):
-    y_offset, grasp_yaw = _slot_offset(args.slot)
+    rack = calibration.LOCATION_PROFILES.get("tube_rack", {})
+    dx, dy, grasp_yaw = _slot_offset(args.slot, rack, "LOCATION_PROFILES['tube_rack']")
+    x_rel = calibration.DEFAULT_PLACE_X_REL + dx
+    y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
     # Place z reference: same table + rack-height convention as simulate_ros_place,
     # good enough for a hover point (not an actual place).
     loc_height = sim.resolve_location_metrics("tube_rack")
     z_place = calibration.PICK_Z_REF_OFFSET + loc_height + 0.02
-    _goto_hover(calibration.DEFAULT_PLACE_X_REL, calibration.DEFAULT_PLACE_Y_REL + y_offset,
-                z_place, args.z_hover, grasp_yaw)
+    _goto_hover(x_rel, y_rel, z_place, args.z_hover, grasp_yaw)
 
 
 def cmd_goto_guide(args):
@@ -176,6 +178,11 @@ def main():
     sub.add_parser("goto-guide", help="replay the saved near-table rack-alignment pose")
 
     args = parser.parse_args()
+
+    # Required alongside DRIVE_HARDWARE (env) for _hw_drive_active() to be
+    # true — without it every real-arm call in simulate.py silently no-ops
+    # and only the Gazebo twin moves.
+    sim._HW_DRIVE_REQUESTED = True
 
     if args.selftest:
         selftest()

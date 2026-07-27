@@ -32,6 +32,7 @@ import numpy as np
 # OpenCV hue range is 0-179; red wraps around the origin.
 COLOR_BINS = {
     "red": ((0, 10), (170, 179)),
+    "orange": ((11, 19),),
     "yellow": ((20, 35),),
     "green": ((40, 85),),
     "blue": ((95, 130),),

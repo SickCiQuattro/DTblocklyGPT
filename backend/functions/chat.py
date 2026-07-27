@@ -992,7 +992,7 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
         # Echoed back from the snapshot, not authored fresh by the LLM (the
         # AbstractStep schema above doesn't document this shape) — light
         # presence check only, no existence check against the macro library
-        # (validate_step isn't handed one; see docs/analisi-sistema).
+        # (validate_step isn't handed the macro list to check against).
         if not step.get("macroId"):
             warnings.append({
                 "severity": "warning",

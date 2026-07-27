@@ -43,6 +43,7 @@ from backend.functions.calibration import (
     SAFE_INTERMEDIATE_POSE,
     SCAN_POSE,
     LOCATION_PROFILES,
+    PICK_RACK_PROFILE,
     CONDITION_TIMEOUT_S,
     PICK_Z_FINE_TUNE,
     HW_VERIFY_TOL_DEG,
@@ -63,12 +64,12 @@ _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 # Default off — sim stack unchanged when unset.
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
-# Macro-call recursion cap. No DAG cycle detection exists at publish time
-# (see docs/analisi-sistema/p0-3-blockly-editor.md) — a macro cycle (A calls
-# B calls A) is creatable from the UI today, and without this cap it would
-# recurse until Python's own RecursionError, which the parser's blanket
-# except swallows silently, truncating the task with only a log line. This
-# turns that into an explicit, reported _abort_task instead.
+# Macro-call recursion cap. No DAG cycle detection exists at publish time,
+# so a macro cycle (A calls B calls A) is creatable from the UI today, and
+# without this cap it would recurse until Python's own RecursionError, which
+# the parser's blanket except swallows silently, truncating the task with
+# only a log line. This turns that into an explicit, reported _abort_task
+# instead.
 MAX_MACRO_DEPTH = int(os.getenv("MAX_MACRO_DEPTH", "10"))
 
 # Per-request switch, set by simulate_task() from the "driveHardware" body key.
@@ -100,7 +101,7 @@ def _hw_drive_active() -> bool:
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
     """Convert a Gazebo gripper joint value (metres, per finger) to the Cobotta
     hand aperture scale (~0-30). The +0.015 m re-centres the Gazebo zero and the
-    ×2000 scales metres to the controller's native units."""
+    x2000 scales metres to the controller's native units."""
     return (gazebo_hand_value + 0.015) * 2000
 
 
@@ -151,8 +152,8 @@ def _abort_task(reason: str, detail: str | None = None):
     that the two diverged), and tell the frontend why.
 
     `reason` is shown to the operator verbatim — plain language (what
-    happened + what to do next), no engineering jargon (docs/ui-glossary.md).
-    It becomes the persistent error banner in the robot panel and the
+    happened + what to do next), no engineering jargon. It becomes the
+    persistent error banner in the robot panel and the
     HTTP error message. `detail`, when given, is the technical version
     (function names, coordinates, exception text) and stays in the server
     log only — never sent to the frontend.
@@ -388,8 +389,7 @@ def _heuristic_seed_j235(z_rel: float) -> tuple:
     A single fixed seed (45/70/45) converges reliably near its own height but
     drifts into rejected local minima as the target height moves away from it
     (ikpy's IK is a local solve from the seed) — this is why the gantry-transit
-    height band failed non-monotonically (see docs/cobotta-physical-session-
-    2026-07-07.md §7).
+    height band used to fail non-monotonically on the physical arm.
 
     Anchors are empirically verified (offline grid search over j2/j3/j5, both
     the default pick and place XY sites), not hand-picked from first
@@ -425,13 +425,20 @@ def solve_gazebo_ik(x_rel, y_rel, z_rel, grasp_yaw=0.0, seed_joints=None):
     def _make_seed(seed):
         pos = [0.0] * len(COBOTTA_CHAIN.links)
         if seed is not None:
+            # joint6 is NOT taken from the seed: orientation_mode="Z" below only
+            # constrains the approach vector, leaving wrist roll (joint6) a free
+            # DOF that ikpy's local solver just holds near its seed value — a
+            # seeded joint6 silently overrides grasp_yaw and the arm never
+            # actually rotates, even though the caller's grasp_yaw is logged
+            # and used elsewhere (weld orientation, etc.), because the seed
+            # was closer to 0 than to the requested yaw.
             seed_map = {
                 'joint1': math.radians(seed[0]),
                 'joint2': math.radians(seed[1]),
                 'joint3': math.radians(seed[2]),
                 'joint4': math.radians(seed[3]),
                 'joint5': math.radians(seed[4]),
-                'joint6': math.radians(seed[5]),
+                'joint6': grasp_yaw,
             }
             for i, link in enumerate(COBOTTA_CHAIN.links):
                 if link.name in seed_map:
@@ -1490,7 +1497,7 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
                 detail="pick vertical approach IK path failed",
             )
             return
-        send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.20)
+        send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.30)
 
         # 3. Rampa verticale finale al punto di pick
         final_path = build_vertical_ik_path(
@@ -1504,7 +1511,9 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             )
             return
 
-        send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.30)
+        # Slow — this is the window where an operator may need to nudge the
+        # tube into the fingers by hand if the rack's play left it off-centre.
+        send_waypoints(final_path, ROS_OPEN_GRIPPER, dt=0.45)
         pick_joints = final_path[-1]
         debug_fk(pick_joints, label="Pick Point")
 
@@ -1554,7 +1563,8 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             print("[GRASP] Attach skipped (do_attach=False: spawn failed or disabled)")
 
         # Close fingers for the visual grip — object already welded, contact now harmless.
-        smooth_move(pick_joints, hand_close, duration_s=0.7)
+        # Slow (was 0.7s): gives an operator time to help seat the tube by hand if needed.
+        smooth_move(pick_joints, hand_close, duration_s=1.5)
         _interruptible_sleep(0.3)
 
         # Real arm only: fingers fully closed with nothing between them means the
@@ -1640,17 +1650,18 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         hand_close = int(max(0.0, min(30.0, width_mm - 0.5)))
 
         # Target coordinates (slot cycling for multi-slot locations)
-        x_rel = DEFAULT_PLACE_X_REL
         safe_loc_name = location_name.replace(" ", "_").lower()
         slot_cfg = LOCATION_PROFILES.get(safe_loc_name)
         if slot_cfg:
             slot_idx = getattr(simulation_recursive_blockly_parser, "place_slot_index", 0)
-            offsets = slot_cfg["slot_y_offsets"]
-            y_offset = offsets[slot_idx % len(offsets)]
-            y_rel = DEFAULT_PLACE_Y_REL + y_offset
+            offsets = slot_cfg["slot_xy_offsets"]
+            dx, dy = offsets[slot_idx % len(offsets)]
+            x_rel = DEFAULT_PLACE_X_REL + dx
+            y_rel = DEFAULT_PLACE_Y_REL + dy
             simulation_recursive_blockly_parser.place_slot_index = slot_idx + 1
-            print(f"[SIMULATOR] Slot {slot_idx % len(offsets)}: y_rel={y_rel:.3f}")
+            print(f"[SIMULATOR] Slot {slot_idx % len(offsets)}: x_rel={x_rel:.3f} y_rel={y_rel:.3f}")
         else:
+            x_rel = DEFAULT_PLACE_X_REL
             y_rel = DEFAULT_PLACE_Y_REL
 
         loc_height = resolve_location_metrics(location_name)
@@ -1817,8 +1828,7 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             # but continuing would let _persist_placed_object spawn a fresh
             # entity at snap_x/y/z as if the teleport succeeded, reporting a
             # confident "placed" when reality is unknown. Abort instead of
-            # letting the place finish as if nothing happened (see CLAUDE.md's
-            # abort-machinery philosophy).
+            # letting the place finish as if nothing happened.
             _abort_task(
                 f"Lost track of '{picked_obj_name}' after releasing it — check the workcell "
                 "before running again.",
@@ -2054,6 +2064,10 @@ def _detections_match(state: dict, coco_class: str, color: str = None) -> bool:
     accepted = {coco_class}
     if coco_class in ("bottle", "cup"):
         accepted.add("cap")
+    if coco_class == "test tube":
+        # YOLOE labels the uncapped tube "beaker", not "test tube" — same
+        # object, no cap silhouette to key off (2026-07-27 live camera test).
+        accepted.add("beaker")
     for detection in state.get("detections", []):
         if detection.get("class") not in accepted:
             continue
@@ -2567,10 +2581,10 @@ def simulation_recursive_blockly_parser(
                 if _condition_contains_find(confirm_event):
                     _move_to_scan_pose()
                 # The return value used to be discarded here: a confirm that
-                # timed out (or, after the A1 fix, a malformed nested AND/OR
-                # confirm) still notified human-step-complete and let the
-                # task proceed — the exact failure a human confirm step
-                # exists to prevent (e.g. placing a never-verified item).
+                # timed out (or a malformed nested AND/OR confirm) still
+                # notified human-step-complete and let the task proceed —
+                # the exact failure a human confirm step exists to prevent
+                # (e.g. placing a never-verified item).
                 confirmed = _eval_condition_tree(confirm_event, simulate_event)
                 if not confirmed:
                     _abort_task(
@@ -2616,20 +2630,23 @@ def simulation_recursive_blockly_parser(
             _, _, obj_min_z = get_sdf_dimensions(safe_sdf_name)
             z_rest = TABLE_TOP_Z_ABS - obj_min_z
 
-            # Pick source is always the tube rack — cycle its slots the same way
-            # place already does (LOCATION_PROFILES["tube_rack"]["slot_y_offsets"]),
+            # Pick source is always the tube rack — cycle its slots
+            # (PICK_RACK_PROFILE["slot_xy_offsets"], separate from the place
+            # rack's LOCATION_PROFILES entry: on the real cell the two are
+            # approached from different headings and do NOT share offsets),
             # so consecutive picks in one run take from different holes.
             pick_grasp_yaw = None
             spawn_x, spawn_y = OBJECT_SPAWN_X, OBJECT_SPAWN_Y
-            rack_cfg = LOCATION_PROFILES.get("tube_rack")
+            rack_cfg = PICK_RACK_PROFILE
             if rack_cfg:
                 slot_idx = getattr(simulation_recursive_blockly_parser, "pick_slot_index", 0)
-                offsets = rack_cfg["slot_y_offsets"]
-                y_offset = offsets[slot_idx % len(offsets)]
-                spawn_y = OBJECT_SPAWN_Y + y_offset
+                offsets = rack_cfg["slot_xy_offsets"]
+                dx, dy = offsets[slot_idx % len(offsets)]
+                spawn_x = OBJECT_SPAWN_X + dx
+                spawn_y = OBJECT_SPAWN_Y + dy
                 pick_grasp_yaw = rack_cfg.get("grasp_yaw", 0.0)
                 simulation_recursive_blockly_parser.pick_slot_index = slot_idx + 1
-                print(f"[SIMULATOR] Pick slot {slot_idx % len(offsets)}: spawn_y={spawn_y:.3f} yaw={pick_grasp_yaw:.3f}")
+                print(f"[SIMULATOR] Pick slot {slot_idx % len(offsets)}: spawn_x={spawn_x:.3f} spawn_y={spawn_y:.3f} yaw={pick_grasp_yaw:.3f}")
 
             cmd = (
                 'gz service -s /world/worldCobotta/create '

@@ -354,8 +354,12 @@ def humanStepTimeout():
 @bp.route("/notify", methods=["POST"])
 def notifyAction():
     data = request.get_json(silent=True) or {}
+    # "notify" (default) is a benign notify_action_block message; simulate.py's
+    # _abort_task sends "error" so the frontend can render a task-stopped
+    # banner distinctly (persistent, not the auto-dismissing informational
+    # style) instead of both looking identical to the operator.
     flask_pub.publish_step_status({
-        "status": "notify",
+        "status": data.get("status", "notify"),
         "description": data.get("description", ""),
         "timestamp": time.time(),
     })
