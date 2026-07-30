@@ -76,6 +76,43 @@ def test_encoder_success_resets_fail_count(node):
     assert node._hw_ok is True
 
 
+# ── recovery: the timer must retry a reconnect once _hw_ok is False (W3.2) ──
+# Before this fix, nothing ever retried the b-CAP connection once _hw_ok went
+# False: _move_target_cb refused to even attempt a move while _hw_ok was
+# False, so the exception its own reconnect-and-retry logic needs never
+# happened — a transient link drop disabled the real arm until the node was
+# restarted.
+
+def test_timer_reconnects_once_hw_marked_down(node, monkeypatch):
+    node._hw_ok = False
+    node._encoder_fail_count = cn.ENCODER_FAIL_THRESHOLD
+    node._last_reconnect_attempt = 0.0
+    # _connect_locked() rebuilds self.m_bcapclient via the (mocked) bcapclient
+    # class — a fresh instance with no side effects means the reconnect
+    # sequence runs clean and succeeds.
+    monkeypatch.setattr(cn, "bcapclient", MagicMock(return_value=MagicMock()))
+
+    node._publish_real_joint_state()
+
+    assert node._hw_ok is True
+    assert node._encoder_fail_count == 0
+
+
+def test_timer_reconnect_attempt_is_rate_limited(node, monkeypatch):
+    node._hw_ok = False
+    node._last_reconnect_attempt = 0.0
+    monkeypatch.setattr(cn, "bcapclient", MagicMock(side_effect=RuntimeError("still down")))
+
+    node._publish_real_joint_state()
+    first_attempt_ts = node._last_reconnect_attempt
+    assert first_attempt_ts != 0.0
+    assert node._hw_ok is False  # reconnect failed, as configured above
+
+    node._publish_real_joint_state()  # immediately again — must be skipped
+
+    assert node._last_reconnect_attempt == first_attempt_ts
+
+
 # ── malformed CurJnt response guard (F5) ─────────────────────────────────────
 
 def test_encoder_short_response_does_not_raise(node):

@@ -150,7 +150,10 @@ def test_gesture_stale_replay_does_not_satisfy_new_step(monkeypatch):
     """A gesture cached from before the step started must not satisfy it —
     same stale-replay class fixed on voice."""
     stale_report_time = time.monotonic()
-    time.sleep(0.05)  # the step's entry_time will be measurably after this
+    # Comfortably above GESTURE_FRESHNESS_SLOP_S (0.02s, a clock-skew
+    # tolerance, not a "how stale counts as stale" threshold) — this must
+    # stay unambiguously outside that margin, not just barely past it.
+    time.sleep(0.3)
 
     def fake_get_vision_state():
         return {

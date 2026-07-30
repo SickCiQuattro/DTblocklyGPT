@@ -30,6 +30,13 @@ DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 # TABLE_TOP_Z_ABS / PICK_Z_REF_OFFSET invariant asserted below.
 ROBOT_BASE_Z: float = 1.05
 
+# Geometry of the shared tube rack (ros2_ws/Cobotta/locations/tube_rack/model.sdf
+# — one model serves both the pick and place ends). Physical properties of the
+# rack itself, so not profile-dependent. testing/test_twin_parity.py asserts
+# both against the SDF, which is the actual source of truth for the mesh.
+RACK_RIM_H: float = 0.035          # wall height above the table
+RACK_SLOT_INNER_W: float = 0.02063  # slot interior; wider objects can't go in one
+
 # Gazebo-tuned baseline — also the template the real profile is built from.
 _SIM_PROFILE = {
     "URDF_GAZEBO_Z_OFFSET": 0.085,
@@ -49,19 +56,43 @@ _SIM_PROFILE = {
     "DEFAULT_PLACE_Y_REL": -0.21,
     "SAFE_INTERMEDIATE_POSE": [51.56, 20.05, 87.08, 0.0, 48.70, 0.0],
     "SCAN_POSE": [0.0, 30.0, 70.0, 0.0, 80.0, 0.0],
+    # Both rack profiles below describe ONE physical object — the 4-slot rack in
+    # ros2_ws/Cobotta/locations/tube_rack/model.sdf, used at both ends of the
+    # cell. Pitch 22.23mm, slot 0 at the profile's own reference point, taken
+    # from the real cell's measured PICK_RACK_PROFILE offsets so the twin
+    # reproduces the rack that actually exists rather than a placeholder. They
+    # differ only in axis, which is a consequence of how the model is oriented:
+    # the pick rack is included unrotated (slots along X), the place rack is
+    # spawned with yaw +90° by _h_place (slots along Y).
+    # Until 2026-07-30 the sim had 3 slots at 27mm on the Y axis for both,
+    # matching neither the real profile (4 slots) nor any model in the world.
     "LOCATION_PROFILES": {
         # grasp_yaw (rad): gripper rotation for rack pick/place, in case fingers
         # need to turn 90° (math.pi/2) to clear adjacent tubes. 0.0 = untested
         # default — tune on real hardware if fingers hit a neighboring slot.
-        "tube_rack": {"slot_xy_offsets": [(0.0, 0.0), (0.0, 0.027), (0.0, -0.027)],
-                      "grasp_yaw": 0.0},
+        "tube_rack": {
+            "slot_xy_offsets": [
+                (0.0, 0.0),
+                (0.0, 0.02223),
+                (0.0, 0.04447),
+                (0.0, 0.06670),
+            ],
+            "grasp_yaw": 0.0,
+        },
     },
     # Pick has no "location" block (it's always the rack) so it can't share
     # LOCATION_PROFILES by name — and on the real cell its offsets are NOT the
     # same as the place rack's (see _REAL_PROFILE override), so it needs its
     # own profile rather than reusing "tube_rack".
-    "PICK_RACK_PROFILE": {"slot_xy_offsets": [(0.0, 0.0), (0.0, 0.027), (0.0, -0.027)],
-                          "grasp_yaw": 0.0},
+    "PICK_RACK_PROFILE": {
+        "slot_xy_offsets": [
+            (0.0, 0.0),
+            (0.02223, -0.00040),
+            (0.04447, -0.00080),
+            (0.06670, -0.00120),
+        ],
+        "grasp_yaw": 0.0,
+    },
     "CONDITION_TIMEOUT_S": 30,
     "SPAWN_SETTLE_THRESHOLD_M": 0.001,
     "PICK_Z_FINE_TUNE": 0.0,
@@ -84,6 +115,14 @@ _SIM_PROFILE = {
 # re-measurement after the cell is moved).
 _REAL_PROFILE = {
     **_SIM_PROFILE,
+    # Measured 2026-07-29 with testing/calibrate_rack.py `read`, jogged by
+    # hand to the real pick point after the SCAN_POSE correction moved where
+    # the arm needs to reach for the object to stay in frame. All rack-slot
+    # offsets (PICK_RACK_PROFILE, LOCATION_PROFILES) are relative to this
+    # point, so moving it shifts every slot together — re-verify slot 3 (the
+    # only independently-measured non-zero slot) if picks still miss.
+    "DEFAULT_PICK_X_REL": -0.0430,
+    "DEFAULT_PICK_Y_REL": -0.2985,
     # Real-cell only: the wrist-mounted Canon camera looks straight down at
     # the sim SCAN_POSE's J5=80 (near-vertical wrist pitch), so YOLO only
     # ever sees the top face of an object (e.g. a tube reads as a circle,
@@ -103,24 +142,35 @@ _REAL_PROFILE = {
     # more than tilt — still needs work (framing/centering, maybe exposure)
     # before all rack slots are reliably recognized; not a validated final
     # pose yet.
-    "SCAN_POSE": [0.90, -62.54, 141.04, -1.45, 57.77, -1.97],
-    # Measured 2026-07-21 with testing/calibrate_rack.py `read`: slot 0 = the
-    # fixed single-object point (exact by definition), slot 3 = jogged
-    # carefully by hand and read back (GET /api/actual-joints-real -> FK).
-    # Slots 1/2 are NOT independently measured — linearly interpolated
-    # between 0 and 3 (evenly-spaced rack holes assumed; re-measure 1/2
-    # directly with `read` if a real pick/place misses).
     #
+    # 2026-07-29 CORRECTION: the jogged pose above had J2=-62.54 (limit -60)
+    # and J3=141.04 (limit 140) — both outside JOINT_LIMITS_DEG
+    # (cobotta_utils.py). The pendant allowed the physical jog, but /api/
+    # move-target's Flask layer silently CLAMPS out-of-range joints (does not
+    # reject), so every real run stopped ~2.5-3° short of the commanded pose
+    # and the twin-divergence safety check (tol 2.0°) aborted almost
+    # immediately after the scan move. Pulled J2/J3 back inside the limits
+    # with a 2° margin — NOT re-verified against the camera yet (framing may
+    # have shifted slightly from the validated pose above); re-run
+    # testing/scan_recognition_check.py before trusting recognition again.
+    "SCAN_POSE": [0.90, -58.0, 138.0, -1.45, 57.77, -1.97],
     # Pick and place offsets are NOT the same rack orientation/approach —
     # pick is dominantly X (rack lies ~left-to-right in front of the arm),
     # place is dominantly Y — hence two separate profiles below instead of
     # sharing one like the sim placeholder does.
+    #
+    # Re-measured 2026-07-29 with testing/calibrate_rack.py `read`, after
+    # DEFAULT_PICK_X_REL/Y_REL moved for the SCAN_POSE correction: slot 0 =
+    # the fixed single-object point (exact by definition), slot 3 = jogged
+    # by hand and read back. Slots 1/2 are NOT independently measured —
+    # linearly interpolated between 0 and 3 (evenly-spaced rack holes
+    # assumed; re-measure 1/2 directly with `read` if a real pick misses).
     "PICK_RACK_PROFILE": {
         "slot_xy_offsets": [
             (0.0, 0.0),
-            (0.02553, 0.00080),
-            (0.05107, 0.00160),
-            (0.07660, 0.00240),
+            (0.02223, -0.00040),
+            (0.04447, -0.00080),
+            (0.06670, -0.00120),
         ],
         # Measured 2026-07-21: fingers don't clear adjacent tubes at yaw=0 —
         # confirmed on hardware a 90° rotation is required to pick from the
@@ -129,6 +179,16 @@ _REAL_PROFILE = {
         "grasp_yaw": math.pi / 2,
     },
     "LOCATION_PROFILES": {
+        # UNRESOLVED (noted 2026-07-30, needs the arm to settle): the pick and
+        # place racks are the SAME physical object, so these offsets should have
+        # the same pitch as PICK_RACK_PROFILE above — but they don't: 20.17mm
+        # here vs 22.23mm there, a 6mm disagreement by slot 3. Both were derived
+        # the same way (slot 0 and slot 3 measured, 1/2 interpolated), so at
+        # least one of the two slot-3 readings is off. Left exactly as measured
+        # rather than averaged: an invented number on the physical cell is worse
+        # than a known-suspect measured one. Re-measure slot 3 at BOTH ends with
+        # testing/calibrate_rack.py `read` at the next hardware session and make
+        # the two pitches agree. The sim profile uses 22.23mm for both.
         "tube_rack": {
             "slot_xy_offsets": [
                 (0.0, 0.0),

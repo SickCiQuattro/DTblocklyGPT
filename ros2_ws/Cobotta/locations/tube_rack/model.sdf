@@ -1,13 +1,39 @@
 <?xml version="1.0" ?>
 <sdf version="1.5">
   <!--
-    3-slot test tube rack.
-    Origin = centre of middle slot.
-    Slots along model-X: x ∈ {-0.027, 0, +0.027}  (27 mm pitch)
-    Slot interior: 22 × 22 mm, depth 35 mm.
-    Total height: 45 mm (base 10 mm + walls 35 mm).
-    Spawned with yaw +90°, so model-X aligns to robot Y-axis.
-    Robot-relative slot Y: {-0.237, -0.210, -0.183} (from LOCATION_SPAWN_Y = -1.41)
+    Red 4-slot test tube rack. ONE geometry, used at BOTH ends of the cell:
+
+      * pick side  — included statically by worldCobotta.sdf at the pick point,
+                     no rotation, so model-X runs along the world/robot X axis.
+      * place side — spawned by _h_place (simulate.py) from this same file with
+                     yaw +90°, so model-X maps to the robot Y axis.
+
+    Keep it that way: the two racks are physically the same object in the real
+    cell, and duplicating the geometry is how the sim twin drifts away from it.
+
+    ORIGIN = CENTRE OF SLOT 0 (not the middle of the rack — the previous 3-slot
+    version used the middle slot, which only has a well-defined centre for an
+    odd slot count). This makes placing the model trivial: its pose IS the
+    pick/place point, and slot i sits at model-X = i * 0.02223, matching
+    slot_xy_offsets in calibration.py with no extra bookkeeping.
+
+    Slots: 4, pitch 22.23 mm (from the real cell's measured PICK_RACK_PROFILE
+    offsets), interior 20.63 x 22 mm, walls 1.6 mm, wall height 35 mm.
+    Fits an 18 mm tube with ~1.3 mm clearance per side. Anything wider than
+    ~20 mm does NOT fit — same as the real rack, whose 22.23 mm hole pitch
+    imposes the identical limit.
+
+    FLOOR IS DELIBERATELY ONLY 0.5 mm THICK. The tube is meant to rest
+    essentially on the table top, so that pick grasp heights (computed from
+    PICK_Z_REF_OFFSET + the object's own grasp_center_offset, which never
+    consult this file) stay valid inside the rack. A thicker floor would lift
+    every tube by its thickness and silently bias every grasp. It can't be
+    removed entirely: get_location_profile() in simulate.py derives
+    floor_height/is_container by scanning this SDF's collisions for a thin
+    horizontal plate, and with no floor at all a place would fall back to the
+    "hover above the rim" branch and drop objects from 35 mm up. 0.5 mm is
+    also below SPAWN_SETTLE_THRESHOLD_M (1 mm), so a tube spawned at table
+    level doesn't register as having moved when it settles onto the floor.
   -->
   <model name="tube_rack">
     <static>true</static>
@@ -15,92 +41,101 @@
     <link name="link">
       <pose>0 0 0 0 0 0</pose>
 
-      <!-- Base plate -->
-      <collision name="col_base">
-        <pose>0 0 0.005 0 0 0</pose>
-        <geometry><box><size>0.086 0.032 0.010</size></box></geometry>
+      <!-- Token floor — see header note on why this is 0.5 mm and not thicker
+           or absent. Spans the full rack footprint, centred between the outer
+           walls (x = 0.033345). -->
+      <collision name="col_floor">
+        <pose>0.033345 0 0.00025 0 0 0</pose>
+        <geometry><box><size>0.09052 0.027 0.0005</size></box></geometry>
         <surface>
           <contact><ode><kp>1000000</kp><kd>100</kd><max_vel>0.1</max_vel><min_depth>0.001</min_depth></ode></contact>
           <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
         </surface>
       </collision>
-      <visual name="vis_base">
-        <pose>0 0 0.005 0 0 0</pose>
-        <geometry><box><size>0.086 0.032 0.010</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+      <visual name="vis_floor">
+        <pose>0.033345 0 0.00025 0 0 0</pose>
+        <geometry><box><size>0.09052 0.027 0.0005</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Transverse dividing walls (4 walls create 3 slots) -->
-      <!-- Wall at x = -0.0405 (left outer) -->
+      <!-- Transverse dividing walls: 5 walls create 4 slots. Wall k sits
+           between slot k-1 and slot k, at x = k * 0.02223 - 0.011115. -->
       <collision name="col_wall_0">
-        <pose>-0.0405 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
+        <pose>-0.011115 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_wall_0">
-        <pose>-0.0405 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>-0.011115 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Wall at x = -0.0135 (left inner) -->
       <collision name="col_wall_1">
-        <pose>-0.0135 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
+        <pose>0.011115 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_wall_1">
-        <pose>-0.0135 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>0.011115 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Wall at x = +0.0135 (right inner) -->
       <collision name="col_wall_2">
-        <pose>0.0135 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
+        <pose>0.033345 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_wall_2">
-        <pose>0.0135 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>0.033345 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Wall at x = +0.0405 (right outer) -->
       <collision name="col_wall_3">
-        <pose>0.0405 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
+        <pose>0.055575 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_wall_3">
-        <pose>0.0405 0 0.0275 0 0 0</pose>
-        <geometry><box><size>0.005 0.032 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>0.055575 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Front lateral wall (y = -0.0135) -->
+      <collision name="col_wall_4">
+        <pose>0.077805 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_4">
+        <pose>0.077805 0 0.0175 0 0 0</pose>
+        <geometry><box><size>0.0016 0.027 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
+      </visual>
+
+      <!-- Lateral walls, running the full length of the rack -->
       <collision name="col_side_front">
-        <pose>0 -0.0135 0.0275 0 0 0</pose>
-        <geometry><box><size>0.086 0.005 0.035</size></box></geometry>
+        <pose>0.033345 -0.0135 0.0175 0 0 0</pose>
+        <geometry><box><size>0.09052 0.005 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_side_front">
-        <pose>0 -0.0135 0.0275 0 0 0</pose>
-        <geometry><box><size>0.086 0.005 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>0.033345 -0.0135 0.0175 0 0 0</pose>
+        <geometry><box><size>0.09052 0.005 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
-      <!-- Back lateral wall (y = +0.0135) -->
       <collision name="col_side_back">
-        <pose>0 0.0135 0.0275 0 0 0</pose>
-        <geometry><box><size>0.086 0.005 0.035</size></box></geometry>
+        <pose>0.033345 0.0135 0.0175 0 0 0</pose>
+        <geometry><box><size>0.09052 0.005 0.035</size></box></geometry>
         <surface><contact><ode><kp>1000000</kp><kd>100</kd></ode></contact><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
       </collision>
       <visual name="vis_side_back">
-        <pose>0 0.0135 0.0275 0 0 0</pose>
-        <geometry><box><size>0.086 0.005 0.035</size></box></geometry>
-        <material><ambient>0.5 0.3 0.1 1</ambient><diffuse>0.5 0.3 0.1 1</diffuse></material>
+        <pose>0.033345 0.0135 0.0175 0 0 0</pose>
+        <geometry><box><size>0.09052 0.005 0.035</size></box></geometry>
+        <material><ambient>0.7 0.1 0.1 1</ambient><diffuse>0.7 0.1 0.1 1</diffuse></material>
       </visual>
 
     </link>

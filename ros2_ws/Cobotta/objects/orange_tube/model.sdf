@@ -10,7 +10,9 @@
       <inertial>
         <mass>0.010</mass>
         <inertia>
-          <!-- cylinder r=0.0075 l=0.11; floored to mass/1000=1e-5 for Gazebo stability -->
+          <!-- cylinder r=0.0075 l=0.13 (2026-07-29: body lengthened +20mm);
+               floored to mass/1000=1e-5 for Gazebo stability — the true
+               computed inertia at this size is still well under that floor. -->
           <ixx>1e-5</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
@@ -24,7 +26,7 @@
         <geometry>
           <cylinder>
             <radius>0.0075</radius>
-            <length>0.11</length>
+            <length>0.13</length>
           </cylinder>
         </geometry>
         <surface>
@@ -54,7 +56,7 @@
         <geometry>
           <cylinder>
             <radius>0.0075</radius>
-            <length>0.11</length>
+            <length>0.13</length>
           </cylinder>
         </geometry>
         <material>
@@ -63,15 +65,19 @@
         </material>
       </visual>
 
-      <!-- Cap: visual only, no collision — keeps grasp geometry identical to plain tube.
-           Slightly wider than the other caps (r=0.010 vs 0.009) — real orange tube has
-           a wider cap per user measurement. -->
+      <!-- Cap: visual only, no collision — keeps grasp geometry identical to plain tube
+           (grasp_center_offset/max_grasp_width in object.meta.json fully override the
+           grasp plan regardless of this cap's own size, so it is purely cosmetic).
+           2026-07-29: body lengthened +20mm (0.11->0.13) so the cap pose is raised by
+           half that (+10mm, cylinder is centered at the body's own origin) to stay at
+           the new top instead of sinking into the body. Cap made shorter/flatter
+           (l=0.012->0.009) and wider (r=0.010->0.012) per user render feedback. -->
       <visual name="visual_cap">
-        <pose>0 0 0.050 0 0 0</pose>
+        <pose>0 0 0.060 0 0 0</pose>
         <geometry>
           <cylinder>
-            <radius>0.010</radius>
-            <length>0.012</length>
+            <radius>0.012</radius>
+            <length>0.009</length>
           </cylinder>
         </geometry>
         <material>

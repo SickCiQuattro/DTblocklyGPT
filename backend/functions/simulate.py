@@ -5,6 +5,7 @@ from backend.block_types import (
     EventsItems,
     MacroItems,
 )
+import re
 import subprocess
 import logging
 from dataclasses import dataclass, field
@@ -44,6 +45,8 @@ from backend.functions.calibration import (
     SCAN_POSE,
     LOCATION_PROFILES,
     PICK_RACK_PROFILE,
+    RACK_RIM_H,
+    RACK_SLOT_INNER_W,
     CONDITION_TIMEOUT_S,
     PICK_Z_FINE_TUNE,
     HW_VERIFY_TOL_DEG,
@@ -64,6 +67,41 @@ _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 # Default off — sim stack unchanged when unset.
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
+# How many of a ramp's IK waypoints reach the real arm, at most (Gazebo always
+# gets the full path). Each waypoint sent to hardware is a discrete b-CAP PTP
+# that decelerates to a full stop, so a straight dense ramp (10-15 points)
+# played waypoint-by-waypoint reads as visibly stepped/jerky motion on the
+# physical robot — confirmed on physical hardware 2026-07-29. This is a CAP,
+# not a stride: a ramp of any length is thinned to at most this many hardware
+# calls, so "2" always means 2 stops regardless of how dense the Gazebo path
+# is (a stride would give a different stop count per ramp length — tried
+# first, replaced after the same hardware session showed 2-6 stops depending
+# on the segment instead of a consistent number). 1 = only the final point
+# (smoothest, least path tracking); raise toward the ramp's full length if a
+# rack/table clearance needs tighter tracking. The final waypoint of every
+# ramp is always included regardless (see _send_hw_path) — it is the one
+# FK/precision-critical point of the segment.
+HW_MAX_WAYPOINTS_PER_SEGMENT = int(os.getenv("HW_MAX_WAYPOINTS_PER_SEGMENT", "2"))
+
+# Gazebo's controllers run on sim time (use_sim_time: true in controllers.yaml)
+# while this process sleeps in wall time. The two only agree at real-time
+# factor 1.0 — with software rendering (kms_swrast, i.e. any machine without
+# working GPU acceleration) the RTF drops well below that, so sleeping a
+# trajectory's nominal duration returns while the twin is still animating. The
+# parser then starts the next block against an arm that has not arrived:
+# confirmed live 2026-07-30 as an operator-confirm prompt appearing while the
+# robot was visibly still moving through a pick. After the nominal sleep, the
+# move helpers now poll the twin's real joint feed until it reaches the
+# commanded pose.
+SIM_ARRIVAL_TOL_DEG = float(os.getenv("SIM_ARRIVAL_TOL_DEG", "1.5"))
+# Cap on the EXTRA wait beyond the nominal duration, so a stalled/absent joint
+# feed can never hang a run.
+SIM_ARRIVAL_MAX_EXTRA_S = float(os.getenv("SIM_ARRIVAL_MAX_EXTRA_S", "10.0"))
+# Secondary exit: per-joint movement between consecutive polls below this, for
+# this many samples in a row, means the arm has stopped — done waiting whether
+# or not it landed inside SIM_ARRIVAL_TOL_DEG.
+SIM_ARRIVAL_STILL_TOL_DEG = float(os.getenv("SIM_ARRIVAL_STILL_TOL_DEG", "0.05"))
+SIM_ARRIVAL_STILL_SAMPLES = int(os.getenv("SIM_ARRIVAL_STILL_SAMPLES", "5"))
 # Macro-call recursion cap. No DAG cycle detection exists at publish time,
 # so a macro cycle (A calls B calls A) is creatable from the UI today, and
 # without this cap it would recurse until Python's own RecursionError, which
@@ -71,6 +109,19 @@ MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
 # only a log line. This turns that into an explicit, reported _abort_task
 # instead.
 MAX_MACRO_DEPTH = int(os.getenv("MAX_MACRO_DEPTH", "10"))
+
+# Tolerance on the gesture stale-replay check (_wait_for_condition): the
+# bridge reports how long ago (in seconds) a gesture was seen, and this
+# process reconstructs "reported_at" from its own clock read taken just
+# before the request — two different clock reads of the same monotonic
+# clock, with real (if normally sub-millisecond) skew between them from
+# request/response overhead. A hard `>=` with zero tolerance occasionally
+# misclassified a gesture reported right at the start of the wait as stale
+# by a few milliseconds (confirmed flaky in test_gesture_recognition.py
+# under load, 2026-07-29). Kept well under 100ms on purpose — real stale
+# replays this exists to reject are seconds old, from a previous run/step,
+# so there is a wide safety margin without weakening that check.
+GESTURE_FRESHNESS_SLOP_S = 0.02
 
 # Per-request switch, set by simulate_task() from the "driveHardware" body key.
 # NOTE: single-process runserver only (same constraint as SIMULATION_STOP_EVENT
@@ -99,9 +150,18 @@ def _hw_drive_active() -> bool:
 
 
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
-    """Convert a Gazebo gripper joint value (metres, per finger) to the Cobotta
-    hand aperture scale (~0-30). The +0.015 m re-centres the Gazebo zero and the
-    x2000 scales metres to the controller's native units."""
+    """Convert a Gazebo gripper joint value (metres, per finger, joint_left/
+    joint_right) to the Cobotta hand aperture scale (0-30). Must stay the exact
+    algebraic inverse of convert_hand_cobotta_gazebo in cobotta_utils.py (ROS
+    side).
+
+    The Gazebo range is [-0.015, 0.0], from Cobotta.sdf.template — the model
+    Gazebo actually loads for physics. Do NOT re-derive it from the
+    joint_left/joint_right <limit> in cobotta_ik.urdf ([0, 0.01]): that file
+    only feeds robot_description/ikpy and its gripper limits do not describe
+    this joint. 2026-07-30: both conversions were rescaled to that URDF range
+    and the gripper stopped closing in the twin entirely (every command
+    clamped to the same end of the real range). Reverted."""
     return (gazebo_hand_value + 0.015) * 2000
 
 
@@ -144,6 +204,13 @@ _spawned_in_world: set = set()
 # mid-run, so a failed sweep can't cause a name collision on next spawn.
 _placed_in_world: list = []
 _placed_seq: int = 0
+# Guards _placed_in_world against the run thread (appending via
+# _persist_placed_object) and stop_simulation() (clearing it) racing on the
+# same list with no synchronization — a plain list append during a
+# concurrent reassignment can silently drop an entry, leaking that object in
+# Gazebo past STOP (W3.4). Deliberately its own lock, not _SIM_RUN_LOCK:
+# Stop must be able to interrupt a run that's still holding _SIM_RUN_LOCK.
+_PLACED_LOCK = threading.Lock()
 
 
 def _abort_task(reason: str, detail: str | None = None):
@@ -161,17 +228,22 @@ def _abort_task(reason: str, detail: str | None = None):
     Idempotent: only the first reason is kept if called more than once.
     """
     global _TASK_ABORT_REASON
-    if _TASK_ABORT_REASON is None:
+    is_first_call = _TASK_ABORT_REASON is None
+    if is_first_call:
         _TASK_ABORT_REASON = reason
     SIMULATION_STOP_EVENT.set()
     try:
         _bridge.stop()
     except Exception as e:
-        print(f"[ABORT] bridge stop failed: {e}")
+        logger.error("abort_bridge_stop_failed", extra={"reason": reason, "error": str(e)})
+        if is_first_call:
+            # The operator needs to know the soft-stop itself didn't land —
+            # the arm may still be moving (W2.6).
+            _TASK_ABORT_REASON += " (also: could not confirm the robot stopped — check it manually)"
     try:
         _bridge.notify("/api/notify", {"description": reason, "status": "error"})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("abort_notify_failed", extra={"error": str(e)})
     print(f"[ABORT] {reason}" + (f" — {detail}" if detail else ""))
 
 
@@ -273,8 +345,11 @@ def debug_fk(q_deg, label="FK"):
 
 def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
     try:
-        # Sanitize input to prevent directory traversal
-        safe_name = sdf_name.replace(" ", "_").lower()
+        # _safe_gz_entity_name rejects anything but [a-z0-9_] — besides being
+        # the shell-injection fix (W3.1), that also blocks '..'/'/' path
+        # traversal through this join, which .replace(" ", "_") alone (the
+        # previous "sanitize" here) did not.
+        safe_name = _safe_gz_entity_name(sdf_name) or ""
         sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", folder, safe_name, "model.sdf")
         if not os.path.exists(sdf_path):
             return None, None, 0.0
@@ -686,7 +761,7 @@ def normalize_object_for_grasp(sdf_name: str, obj=None) -> ObjectModel:
     """Build an ObjectModel from collision geometry, classify it, and apply an
     optional object.meta.json override. Geometry, not object name, decides the
     grasp — this subsumes the legacy flask/blue_cylinder special-case."""
-    safe_name = sdf_name.replace(" ", "_").lower()
+    safe_name = _safe_gz_entity_name(sdf_name) or ""
     parsed = _parse_object_collisions(safe_name)
     if parsed is None:
         return _infeasible_model(sdf_name, "no parseable collision geometry")
@@ -776,6 +851,24 @@ def normalize_object_for_grasp(sdf_name: str, obj=None) -> ObjectModel:
         feasible=feasible, reason=reason, source=source, proxy_used=proxy_used)
 
 
+def rack_lift_for_width(width_m: float) -> float:
+    """How far above the table an object of this width rests at the rack.
+
+    0.0 for anything that fits in a rack slot. For anything wider — the
+    medicine bottle at 23mm against a 20.63mm slot — it's the rack's rim
+    height: it can't go *in* a hole, so it sits *on top of* the rack, which is
+    what the operator does with it on the real cell. Since 2026-07-30 the pick
+    rack is a static model in worldCobotta.sdf, so this isn't cosmetic: an
+    object placed at slot coordinates without this lift is spawned inside the
+    rack walls and gets flung out by the physics engine on the first tick.
+
+    Applied to all three heights that must agree, or the twin lies: where the
+    object is spawned, where the gripper descends to grasp it, and where the
+    pick snap teleports it.
+    """
+    return 0.0 if width_m <= RACK_SLOT_INNER_W else RACK_RIM_H
+
+
 def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: float) -> PickPlan:
     """Synthesize TOP-grasp parameters from an ObjectModel. Keeps Phase-1 snap
     algebra: z_pick = PICK_Z_REF_OFFSET + grasp_center_offset (grasp point lands
@@ -793,7 +886,8 @@ def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: floa
             z_pick=0.0, tool_yaw=0.0, hand_close=0,
             grasp_center_offset=model.grasp_center_offset,
             feasible=False, reason=model.reason, planning_notes=notes)
-    z_pick = PICK_Z_REF_OFFSET + model.grasp_center_offset + PICK_Z_FINE_TUNE
+    z_pick = (PICK_Z_REF_OFFSET + model.grasp_center_offset + PICK_Z_FINE_TUNE
+              + rack_lift_for_width(model.graspable_width))
     hand_close = int(min(30, max(0, round(model.graspable_width * 1000.0 - GRIPPER_GRIP_CLEARANCE_MM))))
     return PickPlan(
         spawn_pose=(pick_x_rel, pick_y_rel), x_rel=pick_x_rel, y_rel=pick_y_rel,
@@ -837,7 +931,7 @@ def get_location_profile(sdf_name: str):
     For mesh-based locations (no box/cylinder primitives) returns (rim_h, None, False).
     """
     try:
-        safe_name = sdf_name.replace(" ", "_").lower()
+        safe_name = _safe_gz_entity_name(sdf_name) or ""
         sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "locations", safe_name, "model.sdf")
         if not os.path.exists(sdf_path):
             return None, None, False
@@ -891,7 +985,58 @@ def get_location_profile(sdf_name: str):
         return None, None, False
 
 
+def resolve_place_z(location_name: str, height_m: float) -> float:
+    """Compute the place-descent target Z (robot-frame) for an object of
+    `height_m` at `location_name` — the exact formula simulate_ros_place uses,
+    factored out so testing/calibrate_rack.py's `goto-place` measures the
+    same Z a real place actually targets instead of a separately-derived
+    approximation. The two diverged before this: calibrate_rack.py computed
+    a flat `PICK_Z_REF_OFFSET + loc_height + 0.02` hover height with no
+    container detection and no object-height-dependent grip offset, so an
+    operator's hover-height measurement was not the height a real place
+    would descend to (found 2026-07-29 after a hardware place mismatch).
+    """
+    safe_loc_name = location_name.replace(" ", "_").lower()
+    loc_height = resolve_location_metrics(location_name)
+    _, floor_height, is_container = get_location_profile(safe_loc_name)
+
+    if height_m > 0.04:
+        z_grip = max(height_m / 2.0, height_m - 0.03)
+    else:
+        z_grip = height_m / 2.0
+
+    if is_container and floor_height is not None:
+        return PICK_Z_REF_OFFSET + floor_height + 0.003 + z_grip
+    return PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
+
+
 # All block type identifiers: shared source of truth
+
+# Outer bound on every `gz`/bash subprocess call — the CLI commands already
+# self-bound via their own `--timeout`/`-d` flags (3-5s), so this is a hard
+# backstop for a genuinely hung process, not the normal-path latency. Without
+# it a stuck subprocess blocks the request thread AND _SIM_RUN_LOCK forever,
+# so no later run can ever start (W3.3).
+_SHELL_CMD_TIMEOUT_S = 8
+
+# Object/location names come from DB tables the operator can edit and are
+# interpolated, after normalization, straight into a `bash -c "gz ... --req
+# '...name: \"{name}\"...'"` string. Restricting the normalized name to this
+# charset (no quotes, `;`, `$()`, whitespace) means it cannot break out of
+# the surrounding shell/proto-text quoting — this is the actual fix, not
+# shlex.quote(): the vulnerable string is data nested inside an already-quoted
+# argument, not a standalone shell token, so shell-quoting it doesn't apply
+# here the way it would for a bare argv element (W3.1).
+_SAFE_GZ_NAME_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _safe_gz_entity_name(name: str) -> str | None:
+    """Normalize a DB object/location name into a Gazebo entity/SDF-folder
+    name, or None if it contains anything unsafe to interpolate into a shell
+    command. Callers must abort the task on None, not fall back to the
+    unsanitized name."""
+    safe = (name or "").replace(" ", "_").lower()
+    return safe if _SAFE_GZ_NAME_RE.match(safe) else None
 
 
 def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> bool:
@@ -909,12 +1054,14 @@ def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> boo
                 ["wsl", "-d", "Ubuntu-24.04", "bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=_SHELL_CMD_TIMEOUT_S,
             )
         elif platform.system() == "Linux":
             result = subprocess.run(
                 ["bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=_SHELL_CMD_TIMEOUT_S,
             )
         else:
             print("[SIMULATOR] Unsupported OS for launch_wsl_ros_command")
@@ -934,6 +1081,9 @@ def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> boo
                 print(f"[SIMULATOR] stdout: {stdout_out.strip()[:200]}")
                 return False
         return True
+    except subprocess.TimeoutExpired:
+        print(f"[SIMULATOR] launch_wsl_ros_command timed out after {_SHELL_CMD_TIMEOUT_S}s")
+        return False
     except Exception as e:
         print(f"[SIMULATOR] launch_wsl_ros_command exception: {e}")
         return False
@@ -953,17 +1103,22 @@ def _shell_output(command: str) -> str | None:
                 ["wsl", "-d", "Ubuntu-24.04", "bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=_SHELL_CMD_TIMEOUT_S,
             )
         elif platform.system() == "Linux":
             result = subprocess.run(
                 ["bash", "-c", command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                timeout=_SHELL_CMD_TIMEOUT_S,
             )
         else:
             print("[SIMULATOR] Unsupported OS for _shell_output")
             return None
         return result.stdout.decode(errors="replace")
+    except subprocess.TimeoutExpired:
+        print(f"[SIMULATOR] _shell_output timed out after {_SHELL_CMD_TIMEOUT_S}s")
+        return None
     except Exception as e:
         print(f"[SIMULATOR] _shell_output exception: {e}")
         return None
@@ -1036,7 +1191,6 @@ def simulate_ros_move(
     joint_5: float,
     joint_6: float,
     hand: float,
-    joint_abs: bool = False,
 ):
     ros_params = {
         "joint_1": joint_1,
@@ -1046,7 +1200,6 @@ def simulate_ros_move(
         "joint_5": joint_5,
         "joint_6": joint_6,
         "hand": hand,
-        "joint_abs": joint_abs,
     }
     try:
         _bridge.move_joints(ros_params)
@@ -1149,6 +1302,65 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
     return True
 
 
+def _wait_for_sim_arrival(target_joints, nominal_s):
+    """Sleep a move's nominal duration, then wait for the Gazebo twin to
+    actually reach the commanded pose.
+
+    Deliberately NOT a safety gate, unlike _verify_hw_arrival: it never aborts.
+    A missing or stalled joint feed just falls back to the nominal sleep that
+    was the whole wait before, so this can only ever make the parser wait
+    longer than it used to, never shorter. See SIM_ARRIVAL_TOL_DEG for why the
+    nominal sleep alone is not enough (sim time vs wall time).
+    """
+    _interruptible_sleep(nominal_s)
+    deadline = time.monotonic() + SIM_ARRIVAL_MAX_EXTRA_S
+    last_seen = None
+    prev = None
+    still_samples = 0
+    while time.monotonic() < deadline:
+        if SIMULATION_STOP_EVENT.is_set():
+            return
+        try:
+            actual = _bridge.get_actual_joints()
+        except Exception:
+            return  # no joint feed — nominal sleep already elapsed
+        # Fewer than 6 values means the feed isn't usable (or is a test double);
+        # don't burn the whole extra budget polling something that can't answer.
+        if not isinstance(actual, (list, tuple)) or len(actual) < 6:
+            return
+        last_seen = list(actual[:6])
+        if max(abs(t - a) for t, a in zip(target_joints, last_seen)) <= SIM_ARRIVAL_TOL_DEG:
+            return
+        # Settled-but-short: the controller can stop just outside the tolerance
+        # (or the pose is simply unreachable), in which case waiting out the
+        # whole budget buys nothing — the arm is no longer moving, which is the
+        # only thing the caller actually needs to know. Without this the run
+        # stalls for the full SIM_ARRIVAL_MAX_EXTRA_S per segment; seen live
+        # 2026-07-30 as two sim_arrival_timeouts adding ~20s to one pick.
+        if prev is not None and max(abs(p - a) for p, a in zip(prev, last_seen)) <= SIM_ARRIVAL_STILL_TOL_DEG:
+            still_samples += 1
+            if still_samples >= SIM_ARRIVAL_STILL_SAMPLES:
+                return
+        else:
+            still_samples = 0
+        prev = last_seen
+        time.sleep(0.1)
+    # Log the actual deltas, not just the fact of the timeout: a large delta
+    # means Gazebo never got there (RTF too low, budget too small), a small one
+    # means it stopped just outside tolerance. The two need opposite fixes and
+    # the bare event name couldn't tell them apart.
+    worst = (max(abs(t - a) for t, a in zip(target_joints, last_seen))
+             if last_seen else None)
+    logger.warning(
+        "sim_arrival_timeout",
+        extra={"target": list(target_joints), "last_seen": last_seen,
+               "worst_delta_deg": worst, "tol_deg": SIM_ARRIVAL_TOL_DEG},
+    )
+    print(f"[SIMULATOR] Twin didn't reach the commanded pose within "
+          f"{SIM_ARRIVAL_MAX_EXTRA_S}s — worst joint off by "
+          f"{worst if worst is None else round(worst, 2)}° (tol {SIM_ARRIVAL_TOL_DEG}°)")
+
+
 def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     """
     Interpolates movement from current state to target state with ease-in-out curve.
@@ -1166,7 +1378,7 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
         simulate_ros_move(*target_joints, hand)
         set_current_state(target_joints, hand)
         _send_hw_target(target_joints, hand)
-        _interruptible_sleep(duration_s)
+        _wait_for_sim_arrival(target_joints, duration_s)
         return
     steps = max(2, int(duration_s * hz))
     dt = duration_s / steps
@@ -1197,15 +1409,53 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     try:
         _bridge.move_path(waypoints)
     except Exception as e:
-        print(f"[SIMULATOR] Failed to send move-path: {e}")
+        # Don't record a target the simulated arm was never told to reach —
+        # every later IK seed and plan would trust a phantom pose (W2.1).
+        _abort_task("Lost connection to the simulator.", detail=f"move-path request failed: {e}")
+        return
 
     set_current_state(target_joints, hand)
     _send_hw_target(target_joints, hand)
-    _interruptible_sleep(duration_s)
+    _wait_for_sim_arrival(target_joints, duration_s)
+
+
+def _send_hw_path(joints_list, hand, max_points: int = None) -> bool:
+    """Forward a waypoint path to the real arm one verified PTP move at a
+    time — the bulk move-path POST used for Gazebo only carries the final pose
+    to hardware, which would collapse a multi-point descent into one point
+    (W1.4). Shared by send_waypoints and simulate_ros_action.
+
+    ``max_points`` caps the TOTAL number of hardware PTP calls for this
+    segment, evenly spaced, endpoints always included — see
+    HW_MAX_WAYPOINTS_PER_SEGMENT. This is a hard cap, not a stride: a longer
+    ramp is thinned harder so the stop count stays the same regardless of how
+    dense the Gazebo path is. Default None (every point) —
+    simulate_ros_action's Skill playback needs every recorded point to
+    reproduce the motion (e.g. an oscillating "shake"), where thinning would
+    flatten it; only send_waypoints' straight ramps opt into a cap.
+    """
+    if not joints_list:
+        return True
+    n = len(joints_list)
+    if max_points is None or max_points >= n:
+        indices = list(range(n))
+    elif max_points <= 1:
+        indices = [n - 1]
+    else:
+        step = (n - 1) / (max_points - 1)
+        indices = sorted({round(i * step) for i in range(max_points)})
+        indices[-1] = n - 1  # rounding can leave the last short of n-1
+    for i in indices:
+        if SIMULATION_STOP_EVENT.is_set():
+            return False
+        if not _send_hw_target(list(joints_list[i]), hand):
+            return False
+    return True
 
 
 def send_waypoints(joints_list, hand, dt):
-    """Send a pre-computed IK path as a single move-path POST (no interpolation)."""
+    """Send a pre-computed IK path to Gazebo as a single move-path POST, and to
+    the real arm (when driving hardware) as one verified move per waypoint."""
     if not joints_list or SIMULATION_STOP_EVENT.is_set():
         return
     waypoints = [
@@ -1219,10 +1469,17 @@ def send_waypoints(joints_list, hand, dt):
     try:
         _bridge.move_path(waypoints)
     except Exception as e:
-        print(f"[SIMULATOR] Failed to send move-path: {e}")
+        _abort_task("Lost connection to the simulator.", detail=f"move-path request failed: {e}")
+        return
     set_current_state(joints_list[-1], hand)
-    _send_hw_target(joints_list[-1], hand)
-    _interruptible_sleep(len(joints_list) * dt)
+    if _hw_drive_active():
+        _send_hw_path(joints_list, hand, max_points=HW_MAX_WAYPOINTS_PER_SEGMENT)
+        # _send_hw_path blocks on the real arm's encoders, but the twin runs on
+        # sim time and can still be behind — keep both in step before the next
+        # segment plans its IK from this pose.
+        _wait_for_sim_arrival(joints_list[-1], 0)
+    else:
+        _wait_for_sim_arrival(joints_list[-1], len(joints_list) * dt)
 
 
 def build_vertical_ik_path(x_rel, y_rel, z_start, z_end, grasp_yaw, seed_joints, n=10):
@@ -1447,8 +1704,14 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         model = normalize_object_for_grasp(sdf_name, obj)
         plan = plan_pick_for_object(model, x_rel, y_rel)
         if not plan.feasible:
-            print(f"[GRASP] infeasible: {plan.reason} — skipping pick for '{sdf_name}' "
-                  f"(type={model.collision_type}, width={model.graspable_width * 1000:.1f}mm)")
+            # W2.3: this used to just skip the pick — but a skipped pick left
+            # no signal for the PLACE block that follows, which would then
+            # detach/snap an object that was never actually grasped.
+            _abort_task(
+                f"Couldn't pick up '{sdf_name}' — it isn't shaped for the gripper.",
+                detail=f"pick infeasible: {plan.reason} "
+                       f"(type={model.collision_type}, width={model.graspable_width * 1000:.1f}mm)",
+            )
             return
         if obj_min_z is None:
             obj_min_z = model.min_z
@@ -1500,6 +1763,12 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         send_waypoints(vertical_path, ROS_OPEN_GRIPPER, dt=0.30)
 
         # 3. Rampa verticale finale al punto di pick
+        # n=6 (was briefly dropped to 2 while chasing hardware jerkiness —
+        # HW_MAX_WAYPOINTS_PER_SEGMENT now owns that trade-off on the
+        # hardware side only, so Gazebo keeps the denser path here, which
+        # matters most on this exact segment: the final approach to the
+        # grasp point, where an operator may need to see/nudge the tube into
+        # the fingers).
         final_path = build_vertical_ik_path(
             x_rel, y_rel, z_pregrasp, z_pick, grasp_yaw,
             seed_joints=vertical_path[-1], n=6
@@ -1540,7 +1809,8 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
             snap_y = ROBOT_BASE_Y + y_rel
             if obj_min_z is None:
                 _, _, obj_min_z = get_sdf_dimensions(sdf_name)
-            snap_z = TABLE_TOP_Z_ABS - (obj_min_z or 0.0) + PICK_Z_FINE_TUNE
+            snap_z = (TABLE_TOP_Z_ABS - (obj_min_z or 0.0) + PICK_Z_FINE_TUNE
+                      + rack_lift_for_width(model.graspable_width))
             print(f"[GRASP] snap pose x={snap_x:.4f} y={snap_y:.4f} z={snap_z:.4f} yaw={grasp_yaw:.4f}")
             if not set_object_world_pose(snap_x, snap_y, snap_z, yaw=grasp_yaw):
                 _abort_task(
@@ -1632,7 +1902,12 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         # Sync state from ROS. Abort if it fails — a stale IK seed risks
         # singularities / collisions on the descent.
         if not sync_current_state_from_ros():
-            print("[ROBOT] PLACE aborted: could not sync joint state from ROS")
+            # W2.3: this used to just return — the run then reported success
+            # with the object silently never placed.
+            _abort_task(
+                "Lost track of the robot arm's position — couldn't start the place.",
+                detail="PLACE: could not sync joint state from ROS",
+            )
             return
 
         # Retrieve picked object's metrics if available
@@ -1642,7 +1917,10 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
         height_m, width_m = resolve_object_metrics(obj, picked_obj_name)
         if height_m is None or width_m is None:
-            print(f"[ROBOT] PLACE aborted: could not resolve dimensions for '{picked_obj_name}'")
+            _abort_task(
+                f"Couldn't place '{picked_obj_name}' — its dimensions aren't known.",
+                detail=f"PLACE: could not resolve dimensions for '{picked_obj_name}'",
+            )
             return
         width_mm = width_m * 1000.0
 
@@ -1655,6 +1933,14 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
         if slot_cfg:
             slot_idx = getattr(simulation_recursive_blockly_parser, "place_slot_index", 0)
             offsets = slot_cfg["slot_xy_offsets"]
+            if slot_idx >= len(offsets):
+                # Wraps silently by design (a repeat() with more iterations
+                # than physical slots must not abort), but stacking two
+                # objects in the same slot is worth a loud warning, not just
+                # the quiet per-slot log line below.
+                print(f"[WARNING] PLACE: slot index {slot_idx} exceeds the "
+                      f"{len(offsets)} configured slot(s) for this location — "
+                      f"wrapping to slot {slot_idx % len(offsets)}, which may already hold an object.")
             dx, dy = offsets[slot_idx % len(offsets)]
             x_rel = DEFAULT_PLACE_X_REL + dx
             y_rel = DEFAULT_PLACE_Y_REL + dy
@@ -1664,23 +1950,16 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             x_rel = DEFAULT_PLACE_X_REL
             y_rel = DEFAULT_PLACE_Y_REL
 
+        # Z target — shared with testing/calibrate_rack.py's `goto-place` so
+        # the two can never diverge again (see resolve_place_z docstring).
+        # loc_height/floor_height/is_container are still needed below too,
+        # for the world-frame snap-to-slot Z (a separate computation from
+        # the robot-frame descent target resolve_place_z returns).
         loc_height = resolve_location_metrics(location_name)
-
-        # Container detection: lower object into interior rather than depositing on rim
+        z_place = resolve_place_z(location_name, height_m)
         _, floor_height, is_container = get_location_profile(safe_loc_name)
-
-        # Calculate dynamic grip Z offset
-        if height_m > 0.04:
-            z_grip = max(height_m / 2.0, height_m - 0.03)
-        else:
-            z_grip = height_m / 2.0
-
         if is_container and floor_height is not None:
-            # Place object 3 mm above the floor interior
-            z_place = PICK_Z_REF_OFFSET + floor_height + 0.003 + z_grip
             print(f"[SIMULATOR] Container place: floor={floor_height:.3f} z_place={z_place:.3f}")
-        else:
-            z_place = PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
         z_up = z_place + 0.12
 
         # Rack slots may need a rotated grasp to clear neighboring tubes — same
@@ -1812,7 +2091,15 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
             q_retreat = q_up
 
         # 3. Detach → snap object to slot → open gripper
-        detach_object_from_gripper()
+        if not detach_object_from_gripper():
+            # W2.5: the snap-to-slot below assumes the weld already let go —
+            # teleporting a still-welded object is undefined. Abort instead
+            # of continuing as if the detach had succeeded.
+            _abort_task(
+                f"Couldn't release '{picked_obj_name}' cleanly — check the gripper before continuing.",
+                detail="place detach failed (gz topic) — refusing to snap-to-slot on a still-welded object",
+            )
+            return
         _interruptible_sleep(0.1)
         # Snap-to-slot: teleport object to exact slot centre so it always lands in the hole.
         snap_x = ROBOT_BASE_X + x_rel
@@ -1861,7 +2148,7 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 def simulate_ros_action(action_points: list = []):
     """Play back a Skill's recorded waypoints on the Gazebo twin and, when
     hardware drive is active, on the real arm too (one verified PTP move per
-    waypoint via _send_hw_target — the plain move-path used elsewhere only
+    waypoint via _send_hw_path — the plain move-path used elsewhere only
     forwards the final pose to hardware, which would collapse an oscillating
     skill like "shake" into a single point). Gripper aperture is held at
     whatever the arm currently has, not forced open, so a sample carried
@@ -1872,43 +2159,40 @@ def simulate_ros_action(action_points: list = []):
             return
         sync_current_state_from_ros()
         _, cur_hand = get_current_state()
-        waypoints = []
-        for point in action_points:
-            waypoints.append({
-                "j1": point["j1"],
-                "j2": point["j2"],
-                "j3": point["j3"],
-                "j4": point["j4"],
-                "j5": point["j5"],
-                "j6": point["j6"],
-                "hand": cur_hand,
-                "dt": 1.0
-            })
+        joints_list = [
+            [point["j1"], point["j2"], point["j3"], point["j4"], point["j5"], point["j6"]]
+            for point in action_points
+        ]
+        waypoints = [
+            {"j1": j[0], "j2": j[1], "j3": j[2], "j4": j[3], "j5": j[4], "j6": j[5],
+             "hand": cur_hand, "dt": 1.0}
+            for j in joints_list
+        ]
         try:
             _bridge.move_path(waypoints)
         except Exception as e:
-            print(f"[SIMULATOR] Failed to send move-path: {e}")
+            _abort_task("Lost connection to the simulator.", detail=f"move-path request failed: {e}")
+            return
 
         if _hw_drive_active():
-            for point in action_points:
-                joints = [point["j1"], point["j2"], point["j3"], point["j4"], point["j5"], point["j6"]]
-                if not _send_hw_target(joints, cur_hand):
-                    return
+            if not _send_hw_path(joints_list, cur_hand):
+                return
         else:
             _interruptible_sleep(len(waypoints) * 1.0)
 
-        last = action_points[-1]
-        set_current_state(
-            [last["j1"], last["j2"], last["j3"], last["j4"], last["j5"], last["j6"]],
-            cur_hand,
-        )
+        set_current_state(joints_list[-1], cur_hand)
 
     except Exception as e:
         print(str(e))
 
 
 def reset_simulation_world():
+    global _LAST_HW_HAND_MM
     try:
+        # Also per-run state (W3.4) — otherwise _verify_hw_grasp's first call
+        # on a fresh run can read the previous run's gripper aperture instead
+        # of "no data yet".
+        _LAST_HW_HAND_MM = None
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
         delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
@@ -1916,6 +2200,20 @@ def reset_simulation_world():
         simulation_recursive_blockly_parser.place_slot_index = 0
         simulation_recursive_blockly_parser.pick_slot_index = 0
         _spawned_in_world.clear()
+
+        # Reset the last-pick context too (W3.4) — these are function
+        # attributes that otherwise survive across runs (this function only
+        # ever reset the slot counters above). Without this, a second run
+        # that places without picking first (or whose first pick fails
+        # before setting them) inherits the previous run's grasp yaw / hand
+        # aperture / carry pose instead of the "no pick context" defaults.
+        simulation_recursive_blockly_parser.last_pick_x = None
+        simulation_recursive_blockly_parser.last_pick_y = None
+        simulation_recursive_blockly_parser.last_pick_z_carry = None
+        simulation_recursive_blockly_parser.last_pick_grasp_yaw = None
+        simulation_recursive_blockly_parser.last_pick_hand_close = None
+        simulation_recursive_blockly_parser.last_pick_carry_joints = None
+        simulation_recursive_blockly_parser.last_picked_object = None
 
         # Detach before delete: removing a welded child without detaching first
         # can leave the plugin in a stale attached state across the next spawn.
@@ -1972,7 +2270,10 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     existing snap-to-slot: never aborts the task.
     """
     global _placed_seq
-    safe_sdf_name = sdf_name.replace(" ", "_").lower()
+    safe_sdf_name = _safe_gz_entity_name(sdf_name)
+    if safe_sdf_name is None:
+        print(f"[SIMULATOR] persist-placed: unsafe object name '{sdf_name}' — skipping persistence")
+        return False
     delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
     if not launch_wsl_ros_command(delete_object, expect_reply_true=True):
         print("[SIMULATOR] persist-placed: delete 'object' failed — skipping persistence")
@@ -1994,7 +2295,8 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     if not launch_wsl_ros_command(cmd, expect_reply_true=True):
         print(f"[SIMULATOR] persist-placed: spawn '{placed_name}' failed")
         return False
-    _placed_in_world.append(placed_name)
+    with _PLACED_LOCK:
+        _placed_in_world.append(placed_name)
     print(f"[SIMULATOR] Persisted placed object '{placed_name}' ({sdf_name}) at "
           f"x={x:.4f} y={y:.4f} z={z:.4f}")
     return True
@@ -2003,14 +2305,19 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
 def _delete_placed_objects():
     """Sweep every persisted placed_* entity (world reset / STOP)."""
     global _placed_in_world
-    for name in _placed_in_world:
+    # Snapshot-and-clear atomically so a concurrent _persist_placed_object
+    # append (run thread) can't be lost between the read and the reassign
+    # (W3.4) — the actual `gz` deletes run outside the lock since each can
+    # take seconds and shouldn't block a concurrent append.
+    with _PLACED_LOCK:
+        names, _placed_in_world = _placed_in_world, []
+    for name in names:
         cmd = (
             f'gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity '
             f'--reptype gz.msgs.Boolean --timeout 5000 --req \'type: MODEL, name: "{name}"\''
         )
         if not launch_wsl_ros_command(cmd):
             print(f"[SIMULATOR] sweep: delete '{name}' failed (may not exist)")
-    _placed_in_world = []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2067,6 +2374,10 @@ def _detections_match(state: dict, coco_class: str, color: str = None) -> bool:
     if coco_class == "test tube":
         # YOLOE labels the uncapped tube "beaker", not "test tube" — same
         # object, no cap silhouette to key off (2026-07-27 live camera test).
+        # This is a VISION VOCABULARY alias, unrelated to the "beaker"
+        # catalog object removed 2026-07-29 (seed_library.py) — keep this
+        # even though no object is literally named "beaker" anymore, or
+        # find_object on an uncapped tube stops matching real detections.
         accepted.add("beaker")
     for detection in state.get("detections", []):
         if detection.get("class") not in accepted:
@@ -2123,7 +2434,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 # satisfy this one. Permissive when the bridge omits the
                 # age field, to not break against an older bridge.
                 reported_at = poll_time - age if age is not None else None
-                is_fresh = reported_at is None or reported_at >= entry_time
+                is_fresh = reported_at is None or reported_at >= entry_time - GESTURE_FRESHNESS_SLOP_S
                 if state.get("gesture") == gesture and is_fresh:
                     detected = True
                     break
@@ -2295,6 +2606,75 @@ def _condition_contains_find(block: dict) -> bool:
     )
 
 
+def _condition_step_payload(condition_block: dict) -> dict | None:
+    """Extract {"condition": ..., "value": ...} for the human-step-start
+    countdown/self-view UI from a single (non-compound) condition block.
+
+    Returns None for AND/OR/NOT/timer — those don't map to one condition/
+    value pair the UI can show a countdown for. The condition still
+    evaluates and the task is unaffected either way; it just runs without
+    the live wait UI, same as before this fix existed.
+    """
+    ev_type = condition_block.get("type", "")
+    if ev_type == EventsItems.GESTURE.value:
+        return {"condition": "gesture",
+                "value": condition_block.get("fields", {}).get("GESTURE_TYPE", "THUMBS_UP")}
+    if ev_type == EventsItems.VOICE.value:
+        return {"condition": "voice",
+                "value": condition_block.get("fields", {}).get("VOICE_WORD", "YES")}
+    if ev_type == EventsItems.FIND.value:
+        try:
+            obj_data = loads(condition_block["inputs"]["OBJECT"]["block"]["data"])
+            return {"condition": "object", "value": obj_data.get("name", "")}
+        except (KeyError, TypeError, ValueError):
+            return None
+    if ev_type == EventsItems.HUMAN_FEEDBACK.value:
+        return {"condition": "human_feedback", "value": ""}
+    return None
+
+
+def _notify_condition_wait_start(condition_block: dict, simulate_event: bool):
+    """Tell the frontend a bare `when`/`repeat_until` condition wait is
+    starting — without this, only human_action blocks (which already wrap
+    _eval_condition_tree with their own human-step-start/-complete) drove the
+    countdown/self-view UI and the STATUS line; a bare `when(gesture, ...)`
+    left the operator's webcam running with nothing shown and no feedback
+    for the whole timeout (confirmed live, 2026-07-30 — the browser camera
+    turned on but the panel showed nothing, and the STATUS line never left
+    "Starting simulation"). Best-effort, like every other bridge notify here.
+
+    No-op in auto mode (simulate_event=True): _resolve_condition routes that
+    straight to _log_condition, which resolves synchronously with no real
+    wait — sending 'started' there with no guaranteed matching 'complete'
+    (skipped below whenever fulfilled comes back False) would leave the
+    frontend's human-step UI stuck showing a wait that isn't happening.
+    """
+    if simulate_event:
+        return
+    payload = _condition_step_payload(condition_block)
+    if payload is None:
+        return
+    try:
+        _bridge.notify(
+            "/api/human-step-start",
+            {**payload, "description": "", "timeout": CONDITION_TIMEOUT_S},
+        )
+    except Exception:
+        pass
+
+
+def _notify_condition_wait_complete(condition_block: dict, simulate_event: bool):
+    """Pair of _notify_condition_wait_start — only sent when a 'start' was
+    actually sent for this block (same simulate_event/compound-condition
+    gate), so a skipped 'start' never gets an unpaired 'complete'."""
+    if simulate_event or _condition_step_payload(condition_block) is None:
+        return
+    try:
+        _bridge.notify("/api/human-step-complete")
+    except Exception:
+        pass
+
+
 def _eval_condition_tree(block: dict, simulate_event: bool) -> bool:
     """Evaluate a condition block tree, handling AND/OR/NOT recursively.
 
@@ -2453,6 +2833,13 @@ def simulation_recursive_blockly_parser(
             except (KeyError, TypeError, ValueError) as exc:
                 print(f"[ERROR] Repeat: invalid/missing 'times' field, skipping loop entirely: {exc}")
                 times = 0
+            if times > MAX_LOOP_ITERATIONS:
+                # W4.1: unlike repeat_until, this field is a fixed count with
+                # no other backstop — a bad/huge value ran until the operator
+                # noticed and pressed Stop.
+                print(f"[WARNING] Repeat: {times} exceeds MAX_LOOP_ITERATIONS "
+                      f"({MAX_LOOP_ITERATIONS}) — capping")
+                times = MAX_LOOP_ITERATIONS
             print(f"[LOGIC] Repeat x{times}")
             for i in range(times):
                 if SIMULATION_STOP_EVENT.is_set():
@@ -2484,8 +2871,10 @@ def simulation_recursive_blockly_parser(
                 _recurse("DO")
                 if _condition_contains_find(condition_block):
                     _move_to_scan_pose()
+                _notify_condition_wait_start(condition_block, simulate_event)
                 _fulfilled = _eval_condition_tree(condition_block, simulate_event)
                 if _fulfilled:
+                    _notify_condition_wait_complete(condition_block, simulate_event)
                     print("[LOGIC] Repeat-Until: condition met, exiting loop")
                     break
                 delete_spawned_object_and_place()
@@ -2515,7 +2904,10 @@ def simulation_recursive_blockly_parser(
             if condition_block:
                 if _condition_contains_find(condition_block):
                     _move_to_scan_pose()
+                _notify_condition_wait_start(condition_block, simulate_event)
                 fulfilled = _eval_condition_tree(condition_block, simulate_event)
+                if fulfilled:
+                    _notify_condition_wait_complete(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
                 _interruptible_sleep(3)
@@ -2527,7 +2919,10 @@ def simulation_recursive_blockly_parser(
             if condition_block:
                 if _condition_contains_find(condition_block):
                     _move_to_scan_pose()
+                _notify_condition_wait_start(condition_block, simulate_event)
                 fulfilled = _eval_condition_tree(condition_block, simulate_event)
+                if fulfilled:
+                    _notify_condition_wait_complete(condition_block, simulate_event)
             if fulfilled:
                 _recurse("DO")
             else:
@@ -2625,10 +3020,21 @@ def simulation_recursive_blockly_parser(
                 delete_spawned_object_and_place()
             obj = objectsOfUser.filter(id=object_data.get("id")).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
-            safe_sdf_name = sdf_name.replace(" ", "_").lower()
+            safe_sdf_name = _safe_gz_entity_name(sdf_name)
+            if safe_sdf_name is None:
+                _abort_task(
+                    f"Can't pick up '{sdf_name}' — its name isn't valid for the simulator.",
+                    detail=f"PICK: object name '{sdf_name}' rejected by _safe_gz_entity_name",
+                )
+                return
             print(f"[ROBOT] PICK: {sdf_name}")
             _, _, obj_min_z = get_sdf_dimensions(safe_sdf_name)
-            z_rest = TABLE_TOP_Z_ABS - obj_min_z
+            # Objects too wide for a rack slot rest on top of the rack, not in
+            # it — spawning them at slot coordinates without this lift buries
+            # them in the (now static) rack walls. Same lift is applied to the
+            # grasp height and the pick snap, see rack_lift_for_width.
+            z_rest = (TABLE_TOP_Z_ABS - obj_min_z
+                      + rack_lift_for_width(normalize_object_for_grasp(safe_sdf_name).graspable_width))
 
             # Pick source is always the tube rack — cycle its slots
             # (PICK_RACK_PROFILE["slot_xy_offsets"], separate from the place
@@ -2636,14 +3042,37 @@ def simulation_recursive_blockly_parser(
             # approached from different headings and do NOT share offsets),
             # so consecutive picks in one run take from different holes.
             pick_grasp_yaw = None
+            # Arm IK target — profile-aware (DEFAULT_PICK_X_REL/Y_REL switches
+            # sim vs real-cell calibration, see calibration.py). Deliberately
+            # NOT derived from spawn_x/spawn_y below: those are Gazebo-world
+            # coordinates for the twin's visual object only. Before this fix,
+            # pick_x_rel/pick_y_rel were computed as spawn_x/y - ROBOT_BASE_X/Y
+            # (module-level constants here, never switched by DRIVE_HARDWARE),
+            # which silently ignored a real-cell recalibration of
+            # DEFAULT_PICK_X_REL/Y_REL — confirmed on physical hardware
+            # 2026-07-29 (calibrate_rack.py's calibrated target vs. the arm's
+            # actual pick point differed by ~17mm). In the sim profile these
+            # coincide exactly by construction (OBJECT_SPAWN_X/Y - ROBOT_BASE_X/Y
+            # == _SIM_PROFILE's DEFAULT_PICK_X_REL/Y_REL), so this changes
+            # nothing in Gazebo-only runs — only real hardware now reaches the
+            # calibrated point.
+            pick_x_rel, pick_y_rel = DEFAULT_PICK_X_REL, DEFAULT_PICK_Y_REL
             spawn_x, spawn_y = OBJECT_SPAWN_X, OBJECT_SPAWN_Y
             rack_cfg = PICK_RACK_PROFILE
             if rack_cfg:
                 slot_idx = getattr(simulation_recursive_blockly_parser, "pick_slot_index", 0)
                 offsets = rack_cfg["slot_xy_offsets"]
+                if slot_idx >= len(offsets):
+                    # Same silent-wrap concern as the place side: worth a
+                    # loud warning rather than only the quiet per-slot log.
+                    print(f"[WARNING] PICK: slot index {slot_idx} exceeds the "
+                          f"{len(offsets)} configured rack slot(s) — wrapping to slot "
+                          f"{slot_idx % len(offsets)}, which may already be empty/depleted.")
                 dx, dy = offsets[slot_idx % len(offsets)]
                 spawn_x = OBJECT_SPAWN_X + dx
                 spawn_y = OBJECT_SPAWN_Y + dy
+                pick_x_rel = DEFAULT_PICK_X_REL + dx
+                pick_y_rel = DEFAULT_PICK_Y_REL + dy
                 pick_grasp_yaw = rack_cfg.get("grasp_yaw", 0.0)
                 simulation_recursive_blockly_parser.pick_slot_index = slot_idx + 1
                 print(f"[SIMULATOR] Pick slot {slot_idx % len(offsets)}: spawn_x={spawn_x:.3f} spawn_y={spawn_y:.3f} yaw={pick_grasp_yaw:.3f}")
@@ -2656,10 +3085,6 @@ def simulation_recursive_blockly_parser(
                 f'pose: {{position: {{x: {spawn_x}, y: {spawn_y}, z: {z_rest}}}, '
                 'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
             )
-            # Pick aims at the KNOWN spawn XY (deterministic) — the deterministic
-            # hold below keeps the object there, so no physics-settle read is needed.
-            pick_x_rel = spawn_x - ROBOT_BASE_X
-            pick_y_rel = spawn_y - ROBOT_BASE_Y
             spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
             if not spawn_ok:
                 print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
@@ -2700,7 +3125,13 @@ def simulation_recursive_blockly_parser(
                 return
             location = locationsOfUser.filter(id=location_data.get("id")).first()
             sdf_name = location.name if location else location_data.get("name", "unknown")
-            safe_loc_sdf_name = sdf_name.replace(" ", "_").lower()
+            safe_loc_sdf_name = _safe_gz_entity_name(sdf_name)
+            if safe_loc_sdf_name is None:
+                _abort_task(
+                    f"Can't place at '{sdf_name}' — its name isn't valid for the simulator.",
+                    detail=f"PLACE: location name '{sdf_name}' rejected by _safe_gz_entity_name",
+                )
+                return
             print(f"[ROBOT] PLACE: {sdf_name}")
             loc_cmd = (
                 'gz service -s /world/worldCobotta/create '
@@ -2761,18 +3192,23 @@ def simulation_recursive_blockly_parser(
                 if all(k in pos for k in j_keys):
                     print(f"[ROBOT]   Using stored joint positions from DB for '{location_name}'")
                     target_q = [pos["j1"], pos["j2"], pos["j3"], pos["j4"], pos["j5"], pos["j6"]]
+                    # MOVE_TO is an arm command, not a gripper command — carry
+                    # the current aperture through to both sim and hardware
+                    # instead of guessing (W1.1: was open on hw, closed in sim).
+                    _, current_hand = get_current_state()
                     simulate_ros_move(
                         pos["j1"], pos["j2"], pos["j3"],
                         pos["j4"], pos["j5"], pos["j6"],
-                        ROS_OPEN_GRIPPER,
+                        current_hand,
                     )
-                    _send_hw_target(target_q, ROS_OPEN_GRIPPER)
+                    _send_hw_target(target_q, current_hand)
                     moved = True
 
             if not moved:
                 print(f"[ROBOT]   No joint data in DB for '{location_name}' → using default intermediate position")
-                simulate_ros_move(*SAFE_INTERMEDIATE_POSE, ROS_CLOSE_GRIPPER_WITH_OBJECT)
-                _send_hw_target(list(SAFE_INTERMEDIATE_POSE), ROS_OPEN_GRIPPER)
+                _, current_hand = get_current_state()
+                simulate_ros_move(*SAFE_INTERMEDIATE_POSE, current_hand)
+                _send_hw_target(list(SAFE_INTERMEDIATE_POSE), current_hand)
 
             _interruptible_sleep(2)
             _next()
@@ -2785,22 +3221,30 @@ def simulation_recursive_blockly_parser(
             else:
                 print("[ROBOT] Closing gripper")
                 hand_value = ROS_CLOSE_GRIPPER_WITH_OBJECT
-            # Send only the hand command, keeping arm at safe home (J3=90°)
-            simulate_ros_move(0, 0, 90, 0, 0, 0, hand_value, joint_abs=True)
+            # Gripper-only command — keep the arm where it currently is (W1.2:
+            # this used to fly the sim arm to a hardcoded home pose while the
+            # real arm stayed put, a full-pose divergence mid-carry).
+            current_joints, _ = get_current_state()
+            simulate_ros_move(*current_joints, hand_value)
+            set_current_state(current_joints, hand_value)
             _send_hw_target([], hand_value, hand_only=True)
             _interruptible_sleep(1)
             _next()
 
         def _h_open_gripper():
             print("[ROBOT] Opening gripper")
-            simulate_ros_move(0, 0, 90, 0, 0, 0, ROS_OPEN_GRIPPER, joint_abs=True)
+            current_joints, _ = get_current_state()
+            simulate_ros_move(*current_joints, ROS_OPEN_GRIPPER)
+            set_current_state(current_joints, ROS_OPEN_GRIPPER)
             _send_hw_target([], ROS_OPEN_GRIPPER, hand_only=True)
             _interruptible_sleep(1)
             _next()
 
         def _h_close_gripper():
             print("[ROBOT] Closing gripper")
-            simulate_ros_move(0, 0, 90, 0, 0, 0, ROS_CLOSE_GRIPPER_WITH_OBJECT, joint_abs=True)
+            current_joints, _ = get_current_state()
+            simulate_ros_move(*current_joints, ROS_CLOSE_GRIPPER_WITH_OBJECT)
+            set_current_state(current_joints, ROS_CLOSE_GRIPPER_WITH_OBJECT)
             _send_hw_target([], ROS_CLOSE_GRIPPER_WITH_OBJECT, hand_only=True)
             _interruptible_sleep(1)
             _next()
@@ -2891,7 +3335,17 @@ def simulation_recursive_blockly_parser(
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 
     except Exception as e:
-        print(f"[ERROR] simulation_recursive_blockly_parser: {e}")
+        # W2.4: this used to just print — the chain silently truncated here
+        # while simulate_task() still reported success_response() because
+        # _TASK_ABORT_REASON stayed None. Any handler bug now hard-aborts
+        # instead of masquerading as a clean run. block_type may not have been
+        # assigned yet if `code` itself was malformed, hence the safe lookup.
+        safe_block_type = code.get("type", "unknown") if isinstance(code, dict) else "unknown"
+        logger.exception("parser_handler_exception", extra={"block_type": safe_block_type})
+        _abort_task(
+            "The task stopped unexpectedly — check the server log for details.",
+            detail=f"simulation_recursive_blockly_parser: block_type={safe_block_type}: {e}",
+        )
 
 
 def simulate_task(request: HttpRequest) -> HttpResponse:

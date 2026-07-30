@@ -105,7 +105,7 @@ class TestCapRegion:
         frame[0:30, :] = BGR["blue"]  # cap zone painted blue
         roi = cap_region(frame, [10, 0, 90, 100])
         assert roi is not None
-        assert roi.shape[0] == 30  # top 30% of a 100px-tall bbox
+        assert roi.shape[0] == 35  # top 35% of a 100px-tall bbox
         assert classify_hsv(roi) == "blue"
 
     def test_degenerate_bbox_returns_none(self):
@@ -195,6 +195,21 @@ class TestNormalizeWhiteBalance:
         frame[80:120, 80:120] = BGR[color]
         corrected = normalize_white_balance(frame)
         assert classify_hsv(corrected[80:120, 80:120]) == color
+
+    def test_dominant_saturated_background_does_not_invert_matching_foreground(self):
+        """The exact regression found 2026-07-29 against the real camera: a
+        large, genuinely-red rack filling most of the frame (not a lighting
+        cast) biased the old whole-frame grey-world estimate hard enough to
+        flip a real red cap's hue toward cyan/blue (verified below: the OLD
+        formula gives hue=90 on this exact synthetic frame). The rack's own
+        saturated pixels must not count toward "what should be neutral" — a
+        red cap on a red-dominated frame must still read red after
+        correction."""
+        frame = np.full((200, 200, 3), (150, 150, 150), dtype=np.uint8)  # neutral strip
+        frame[40:200, :] = BGR["red"]  # dominant "rack" — 80% of the frame
+        frame[5:35, 5:35] = np.array((60, 60, 200), dtype=np.uint8)  # red "cap" in the neutral strip
+        corrected = normalize_white_balance(frame)
+        assert classify_hsv(corrected[5:35, 5:35]) == "red"
 
 
 class TestPointInBbox:

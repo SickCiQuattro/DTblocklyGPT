@@ -20,7 +20,7 @@ DEFAULT_BASE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip
 # inline call sites so timing characteristics do not change.
 _STATE_TIMEOUT = (0.5, 3.0)
 _MOVE_JOINTS_TIMEOUT = (0.3, 1.2)
-_MOVE_PATH_TIMEOUT = 5.0
+_MOVE_PATH_TIMEOUT = (0.5, 5.0)
 _MOVE_TARGET_TIMEOUT = (0.3, 60.0)
 _VISION_TIMEOUT = (0.3, 1.5)
 _NOTIFY_TIMEOUT = 5
@@ -86,7 +86,10 @@ class FlaskRosClient:
         return resp.json()
 
     def move_path(self, waypoints: list, retries: int = 1) -> None:
-        """POST /api/move-path with one bounded retry on transient failure."""
+        """POST /api/move-path with one bounded retry — only on a connection
+        failure (request never reached the server). A read timeout means the
+        server may already have accepted and started the trajectory; retrying
+        that would replay a real robot motion, so it is not retried (W2.2)."""
         last_exc = None
         for attempt in range(retries + 1):
             try:
@@ -97,7 +100,7 @@ class FlaskRosClient:
                 )
                 resp.raise_for_status()
                 return
-            except Exception as exc:
+            except requests.exceptions.ConnectionError as exc:
                 last_exc = exc
                 if attempt < retries:
                     time.sleep(_MOVE_PATH_RETRY_DELAY_S)
@@ -105,7 +108,8 @@ class FlaskRosClient:
 
     def stop(self) -> None:
         """POST /api/stop — cancel any in-flight path and halt the real arm."""
-        self._session.post(self._url("/api/stop"), timeout=_STOP_TIMEOUT)
+        resp = self._session.post(self._url("/api/stop"), timeout=_STOP_TIMEOUT)
+        resp.raise_for_status()
 
     def get_health(self) -> dict:
         """GET /api/health — aggregate status of bridge/gazebo/hardware/vision."""
@@ -117,4 +121,5 @@ class FlaskRosClient:
 
     def notify(self, path: str, payload: dict = None) -> None:
         """POST a step-status/notification payload to ``path`` (e.g. /api/notify)."""
-        self._session.post(self._url(path), json=payload, timeout=_NOTIFY_TIMEOUT)
+        resp = self._session.post(self._url(path), json=payload, timeout=_NOTIFY_TIMEOUT)
+        resp.raise_for_status()

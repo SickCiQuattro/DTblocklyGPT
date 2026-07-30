@@ -60,7 +60,7 @@ def _resolve_weights(name):
     return name
 
 
-def _run_model(weights, frame, conf, classes, cap_color_available, label, out_path):
+def _run_model(weights, frame, wb_frame, conf, classes, cap_color_available, label, out_path):
     """Load weights, infer once, print a report, save the annotated frame. Returns tube recall count."""
     from ultralytics import YOLO
 
@@ -87,8 +87,8 @@ def _run_model(weights, frame, conf, classes, cap_color_available, label, out_pa
             tube_classes = set(_TUBE_CLASSES) | (set(classes) if classes else set())
             if class_name in tube_classes and cap_color_available:
                 from cobotta_rest_api.cap_color import cap_region, classify_hsv, sample_background_hue
-                bg_hue = sample_background_hue(frame, xyxy)
-                color = classify_hsv(cap_region(frame, xyxy), background_hue=bg_hue)
+                bg_hue = sample_background_hue(wb_frame, xyxy)
+                color = classify_hsv(cap_region(wb_frame, xyxy), background_hue=bg_hue)
                 if color:
                     det["color"] = color
             detections.append(det)
@@ -113,6 +113,13 @@ def main():
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--user", default=DEFAULT_USER)
     parser.add_argument("--pass", dest="password", default=DEFAULT_PASS)
+    parser.add_argument("--image", default=None,
+                         help="Load a previously-saved raw frame instead of fetching from --url — "
+                              "lets you capture now and re-run recognition tests later without the "
+                              "camera/robot. Use --save-raw to capture one.")
+    parser.add_argument("--save-raw", default=None,
+                         help="Just fetch a snapshot from --url, save it here unmodified, and exit "
+                              "(no inference). Load it back later with --image.")
     parser.add_argument("--conf", type=float, default=0.35)
     parser.add_argument("--out", default="/tmp/scan_recognition_check.png",
                          help="Where to save the annotated frame")
@@ -126,23 +133,43 @@ def main():
     args = parser.parse_args()
     classes = [c.strip() for c in args.classes.split(",") if c.strip()] or None
 
-    print(f"Fetching snapshot from {args.url} ...")
-    frame = _grab(args.url, args.user, args.password)
+    if args.save_raw:
+        print(f"Fetching snapshot from {args.url} ...")
+        frame = _grab(args.url, args.user, args.password)
+        cv2.imwrite(args.save_raw, frame)
+        print(f"  saved raw frame to {args.save_raw} (no inference run)")
+        return
+
+    if args.image:
+        print(f"Loading saved frame from {args.image} ...")
+        frame = cv2.imread(args.image)
+        if frame is None:
+            print(f"  could not read {args.image}")
+            return
+    else:
+        print(f"Fetching snapshot from {args.url} ...")
+        frame = _grab(args.url, args.user, args.password)
     h, w = frame.shape[:2]
     print(f"  got {w}x{h} frame")
 
     try:
-        import cobotta_rest_api.cap_color  # noqa: F401
+        from cobotta_rest_api.cap_color import normalize_white_balance
+        # Cap-colour crops all come from this whitened copy — gray-world needs
+        # a large, roughly-neutral sample to estimate a cast from, which only
+        # the full frame gives. YOLO itself still sees the raw frame; bbox
+        # geometry is colour-independent. Matches vision_node._run_yolo.
+        wb_frame = normalize_white_balance(frame)
         cap_color_available = True
     except Exception as exc:
         print(f"  cap_color import failed ({exc}) — classes only, no cap colour")
+        wb_frame = frame
         cap_color_available = False
 
     base, ext = os.path.splitext(args.out)
-    _run_model(args.model, frame, args.conf, classes, cap_color_available,
+    _run_model(args.model, frame, wb_frame, args.conf, classes, cap_color_available,
                "A" if args.ab else "model", f"{base}_a{ext}" if args.ab else args.out)
     if args.ab:
-        _run_model(args.model2, frame, args.conf, classes, cap_color_available, "B", f"{base}_b{ext}")
+        _run_model(args.model2, frame, wb_frame, args.conf, classes, cap_color_available, "B", f"{base}_b{ext}")
 
 
 if __name__ == "__main__":

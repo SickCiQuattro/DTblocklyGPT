@@ -32,7 +32,10 @@ _ACTIVE_MODEL = os.getenv("VISION_MODEL", "yolov8n").strip().lower()
 # Pharma scenario — base object is a tube; "blue/red/green/yellow tube"
 # reaches this entry too, since parse_object_query strips the colour word
 # before calling to_coco_class. "test tube"/"provetta" kept for compat with
-# older saved tasks/workspaces that still use the pre-rename name.
+# older saved tasks/workspaces that still use the pre-rename name. "beaker"/
+# "sample bowl" kept too even though seed_library.py removed them from the
+# seeded catalog 2026-07-29 — this maps free-text names (chat/voice), not DB
+# rows, so an older saved task or a spoken/typed "beaker" still resolves.
 _PHARMA_STOCK = {
     "tube": "bottle",
     "test tube": "bottle",

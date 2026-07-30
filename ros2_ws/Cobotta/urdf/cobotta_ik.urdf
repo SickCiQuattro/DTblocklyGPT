@@ -437,6 +437,12 @@ denso_robot_descriptions/urdf/denso_robot.urdf.xacro | -->
             <state_interface name="effort"/>
         </joint>
         
+        <!-- Range della pinza: [-0.015, 0] come in Cobotta.sdf.template, che è
+             il modello che Gazebo carica per la fisica. NON allineare questi
+             due valori al <joint name="joint_left"/"joint_right"><limit> più
+             sopra in questo stesso file ([0, 0.01]): quel limite non descrive
+             la pinza reale e allinearlo qui fa troncare ogni comando allo
+             stesso estremo, con la pinza che non si chiude più (2026-07-30). -->
         <joint name="joint_left">
             <command_interface name="position">
                 <param name="min">-0.015</param>
@@ -446,7 +452,7 @@ denso_robot_descriptions/urdf/denso_robot.urdf.xacro | -->
             <state_interface name="velocity"/>
             <state_interface name="effort"/>
         </joint>
-        
+
         <joint name="joint_right">
             <command_interface name="position">
                 <param name="min">-0.015</param>

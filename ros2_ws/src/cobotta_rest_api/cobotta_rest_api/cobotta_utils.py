@@ -27,13 +27,21 @@ def convert_rad_to_grad(radians):
 
 def convert_hand_cobotta_gazebo(cobotta_hand_value):
     """
-    Converte valore hand Cobotta (0-30) in valore Gazebo
+    Converte valore hand Cobotta (0-30) in valore Gazebo.
 
-    Args:
-        cobotta_hand_value: Valore apertura pinza da Cobotta (0-30)
+    Target: [-0.015, 0.0] metri, il range dei giunti prismatici joint_left/
+    joint_right come dichiarato in Cobotta.sdf.template — che è il modello
+    che Gazebo carica davvero per la fisica (via .gen/Cobotta.sdf). Cobotta
+    30 (aperto) -> 0.0, Cobotta 0 (chiuso) -> -0.015.
 
-    Returns:
-        Valore per Gazebo
+    NON usare i limiti di joint_left/joint_right in cobotta_ik.urdf come
+    riferimento: quel file serve solo a robot_description/ikpy e il suo
+    <joint><limit> per questi due giunti dice [0, 0.01], che con la fisica
+    della pinza non c'entra nulla. 2026-07-30: preso per buono quel valore,
+    questa formula è stata riscritta in cobotta_hand_value/3000 per centrare
+    [0, 0.01] — ogni comando è finito fuori dal range reale ed è stato
+    troncato allo stesso estremo per open E close, quindi la pinza ha
+    smesso del tutto di chiudersi nel gemello. Formula ripristinata.
     """
     return cobotta_hand_value / 2000 - 0.015
 

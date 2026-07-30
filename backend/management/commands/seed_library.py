@@ -8,16 +8,18 @@ Usage:
                                                                # and skills to the pharma set, then seed
 
 Catalog (owner-scoped, shared=True):
-  Objects (9): tube + blue/red/green/yellow tube (glass cylinder,
-    Ø15x100mm, 10g — coloured cap classified by cap_color.py; colours are
-    exactly red/yellow/green/blue, that HSV bin set is hardcoded elsewhere
-    and cannot be extended without touching cap_color.py too), medicine
-    bottle (Ø22x80mm, YOLO 'bottle'), beaker (Ø26x35mm, YOLO 'cup'), sample
-    bowl (Ø60x30mm, YOLO 'bowl' — wider than MAX_GRIP_WIDTH_MM=30mm, so the
-    grasp planner marks it infeasible on purpose; it's a vision/find_object
-    target only, no seeded task ever picks it). Renamed in place from
+  Objects (5): tube + blue/green/yellow tube (glass cylinder, Ø15x100mm,
+    10g — coloured cap classified by cap_color.py; that HSV bin set
+    (red/yellow/green/blue) is hardcoded there and cannot be extended
+    without touching cap_color.py too — it still supports red even though
+    no catalog object has a red cap anymore, see below), medicine bottle
+    (Ø22x80mm, YOLO 'bottle'). Renamed in place from
     'test tube'/'blue test tube'/etc — RENAME_OBJECTS keeps referencing
     task workspaces (they store the object id, name is a display fallback).
+    `red tube`/`beaker`/`sample bowl` were removed 2026-07-29 (unused/
+    redundant demo props, and `sample bowl` existed only to demonstrate an
+    infeasible-width object — see REMOVED_OBJECTS for DB cleanup of rows
+    seeded by an older version of this command).
   Locations (4): tube rack (3-slot rack), collection rack (taught pose,
     ex 'collector' — renamed in place on --reset to keep the pose),
     waste bin (ex 'box'), sample tray (ex 'plate').
@@ -26,10 +28,9 @@ Catalog (owner-scoped, shared=True):
     previously had zero waypoints — a no-op; --reset synthesizes an
     oscillating-wrist sequence from Inspect sample's first, already-taught,
     reachable pose).
-  Tasks (8, published): Sort tubes by colour, Fill the tube rack,
+  Tasks (7, published): Sort tubes by colour, Fill the tube rack,
     Shake and check sample, Dispose failed sample, Verify and store
-    medicine, Restock the tube rack, Dispose after voice approval,
-    Report oversized sample.
+    medicine, Restock the tube rack, Dispose after voice approval.
 
 Every object/location name maps 1:1 to a Gazebo SDF folder under
 ros2_ws/Cobotta/{objects,locations}/<name.replace(' ', '_').lower()>/ — keep
@@ -55,19 +56,27 @@ OBJECTS = [
      "keywords": ["provetta", "tube", "vial"]},
     {"name": "blue tube", **_TUBE_DIMS,
      "keywords": ["provetta blu", "blue tube", "blue cap"]},
-    {"name": "red tube", **_TUBE_DIMS,
-     "keywords": ["provetta rossa", "red tube", "red cap"]},
     {"name": "green tube", **_TUBE_DIMS,
      "keywords": ["provetta verde", "green tube", "green cap"]},
     {"name": "yellow tube", **_TUBE_DIMS,
      "keywords": ["provetta gialla", "yellow tube", "yellow cap"]},
-    {"name": "medicine bottle", "height": 0.08, "obj_width": 22, "obj_length": 22,
+    # obj_width 23 matches object.meta.json's max_grasp_width (0.023) — the
+    # value pick planning actually uses; was 22 (a stale, never-fixed
+    # mismatch, predating the 2026-07-29 render change below).
+    {"name": "medicine bottle", "height": 0.08, "obj_width": 23, "obj_length": 23,
      "weight": 20, "force": 1, "keywords": ["flacone", "bottle", "vial"]},
-    {"name": "beaker", "height": 0.035, "obj_width": 26, "obj_length": 26,
-     "weight": 15, "force": 1, "keywords": ["becher", "cup", "glass"]},
-    {"name": "sample bowl", "height": 0.03, "obj_width": 60, "obj_length": 60,
-     "weight": 30, "force": 1, "keywords": ["ciotola", "bowl", "dish"]},
 ]
+
+# Objects removed from the catalog 2026-07-29 (red tube: redundant demo prop
+# once yellow tube covers the same "waits for a coloured tube" task; beaker:
+# redundant demo prop, replaced by medicine bottle in "Dispose after voice
+# approval"; sample bowl: existed only to demonstrate an infeasible-width
+# object, and no other object in the catalog is wide enough to replace it —
+# "Report oversized sample" was removed rather than reassigned). --reset
+# deletes any owner row still seeded under these names by an older run of
+# this command, and warns (does not silently drop) about tasks that
+# referenced them.
+REMOVED_OBJECTS = ["red tube", "beaker", "sample bowl"]
 
 LOCATIONS = [
     {"name": "tube rack", "keywords": ["portaprovette", "rack", "tube rack"]},
@@ -123,6 +132,7 @@ class Command(BaseCommand):
         if options["reset"]:
             self._reset(owner)
 
+        self._cleanup_removed_objects(owner)
         self._rename_objects(owner)
         self._fix_double_encoded_positions(owner)
         objs = self._seed_objects(owner)
@@ -174,6 +184,34 @@ class Command(BaseCommand):
         removed, _ = Action.objects.filter(owner=owner).exclude(name__in=keep_actions).delete()
         if removed:
             self.stdout.write(f"  Removed {removed} obsolete skill row(s)")
+
+    def _cleanup_removed_objects(self, owner):
+        """Delete any owner row still seeded under a REMOVED_OBJECTS name by
+        an older run of this command. --reset already wipes every owner
+        object/task unconditionally, so this is a no-op there — it only
+        matters for the idempotent (non-reset) upsert path, which otherwise
+        never touches rows for names dropped from OBJECTS, leaving them in
+        the DB forever with no warning. Warns about (does not silently hide)
+        any task still referencing the object's id — a cheap substring check
+        on the serialized workspace, not a structural block walk, since this
+        only needs to flag the operator, not guarantee zero false negatives.
+        """
+        for name in REMOVED_OBJECTS:
+            obj = Object.objects.filter(owner=owner, name=name).first()
+            if not obj:
+                continue
+            needle = f'"id": {obj.id}'
+            referencing = [
+                t.name for t in Task.objects.filter(owner=owner)
+                if needle in json.dumps(t.published_workspace or t.draft_workspace or {})
+            ]
+            if referencing:
+                self.stderr.write(
+                    f"  WARNING: removing object '{name}' (id={obj.id}) still referenced by "
+                    f"task(s): {', '.join(referencing)} — those tasks will fail to resolve it."
+                )
+            obj.delete()
+            self.stdout.write(f"  Removed obsolete object: {name}")
 
     def _rename_objects(self, owner):
         # In-place rename (not delete+recreate) so referencing task workspaces
@@ -316,18 +354,17 @@ class Command(BaseCommand):
             }]
 
         tube = objs["tube"]
-        blue_tt, red_tt, green_tt = objs["blue tube"], objs["red tube"], objs["green tube"]
+        blue_tt, yellow_tt, green_tt = objs["blue tube"], objs["yellow tube"], objs["green tube"]
         tube_rack, collection_rack, waste_bin = locs["tube rack"], locs["collection rack"], locs["waste bin"]
         inspect, shake = acts["Inspect sample"], acts["Shake sample"]
-        medicine, beaker, bowl = objs["medicine bottle"], objs["beaker"], objs["sample bowl"]
+        medicine = objs["medicine bottle"]
 
         tasks = [
             {
                 "name": "Sort tubes by colour",
-                "description": "Watches the camera and sorts blue, red and green tubes into the tube rack.",
+                "description": "Watches the camera and sorts blue and green tubes into the tube rack.",
                 "workspace": workspace(
                     when(find(blue_tt), pick(blue_tt), place(tube_rack)),
-                    when(find(red_tt), pick(red_tt), place(tube_rack)),
                     when(find(green_tt), pick(green_tt), place(tube_rack)),
                 ),
             },
@@ -345,10 +382,10 @@ class Command(BaseCommand):
             },
             {
                 "name": "Dispose failed sample",
-                "description": "Waits for a red tube, moves it to the waste bin and notifies the operator.",
+                "description": "Waits for a yellow tube, moves it to the waste bin and notifies the operator.",
                 "workspace": workspace(
                     when(
-                        find(red_tt), pick(red_tt), place(waste_bin),
+                        find(yellow_tt), pick(yellow_tt), place(waste_bin),
                         notify("Failed sample moved to the waste bin — load a fresh tube."),
                     ),
                 ),
@@ -374,20 +411,10 @@ class Command(BaseCommand):
             },
             {
                 "name": "Dispose after voice approval",
-                "description": "Picks up the beaker and waits for a spoken 'yes' before placing it in the waste bin.",
+                "description": "Picks up the medicine bottle and waits for a spoken 'yes' before placing it in the waste bin.",
                 "workspace": workspace(
-                    pick(beaker),
+                    pick(medicine),
                     when(voice("YES"), place(waste_bin)),
-                ),
-            },
-            {
-                "name": "Report oversized sample",
-                "description": "Watches for the sample bowl and notifies the operator to move it manually — it is too wide for the gripper.",
-                "workspace": workspace(
-                    when(
-                        find(bowl),
-                        notify("Sample bowl detected — move it manually, it is too wide for the gripper"),
-                    ),
                 ),
             },
         ]

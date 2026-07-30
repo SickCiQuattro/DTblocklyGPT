@@ -50,7 +50,7 @@ MIN_BLOB_AREA_PX = 100
 MAX_BLOB_AREA_FRACTION = 0.05
 
 # Fraction of a tube bbox (from the top) where the cap sits.
-CAP_REGION_FRACTION = 0.3
+CAP_REGION_FRACTION = 0.35
 
 # How far outside the bbox to sample the local background (and how thick a
 # ring), and how close a cap_region hue has to be to that background hue to
@@ -61,6 +61,19 @@ BACKGROUND_HUE_TOLERANCE = 12
 # a background with almost no saturated pixels has nothing worth excluding.
 MIN_BACKGROUND_SATURATED_PX = 10
 
+# normalize_white_balance: pixels this saturated or more are excluded from
+# the grey-mean estimate. NOT a low number — measured 2026-07-29 against the
+# real camera: the "neutral" wall itself sits at S~80-100 under this rig's
+# warm cast (median 91), while the red rack sits at S~150-220 (median 165).
+# A textbook-low threshold (e.g. 60) excludes the wall too, leaves too
+# little data, and silently falls back to the uncorrected whole-frame
+# estimate — this value is picked to sit between the two clusters instead.
+# If fewer than WB_MIN_NEUTRAL_FRACTION of the frame is left after
+# excluding, fall back to the whole frame rather than estimating from too
+# little data.
+WB_SAT_THRESHOLD = 110
+WB_MIN_NEUTRAL_FRACTION = 0.05
+
 
 def normalize_white_balance(bgr_frame):
     """Gray-world white balance: scale each channel so its mean matches the
@@ -68,10 +81,27 @@ def normalize_white_balance(bgr_frame):
     tungsten light) before HSV classification sees it. Neutral on already-
     balanced input (Gazebo renders), which is why it's safe to always apply.
 
+    The grey-mean estimate is taken only from low-saturation pixels
+    (background/wall), excluding anything as saturated as WB_SAT_THRESHOLD
+    or more. Gray-world assumes the frame averages to neutral grey — a
+    large genuinely-coloured object (e.g. the red tube rack filling much of
+    the frame) breaks that assumption and gets read as a "cast" needing
+    correction, over-suppressing its channel and flipping real red objects
+    toward cyan/blue (found testing against the real camera, 2026-07-29).
+    Excluding saturated pixels from the estimate keeps the correction based
+    on what's actually neutral, not on a big saturated foreground object.
+    Falls back to the whole frame if too little low-saturation area exists
+    to estimate from (e.g. a fully saturated synthetic scene).
+
     Assumes a non-empty frame — callers already guard None/empty before
     reaching this point (see classify_hsv, detect_cap_blobs).
     """
-    means = bgr_frame.reshape(-1, 3).mean(axis=0)
+    pixels = bgr_frame.reshape(-1, 3)
+    sat = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2HSV)[:, :, 1].reshape(-1)
+    neutral = pixels[sat < WB_SAT_THRESHOLD]
+    if neutral.shape[0] < WB_MIN_NEUTRAL_FRACTION * pixels.shape[0]:
+        neutral = pixels
+    means = neutral.mean(axis=0)
     if (means <= 1e-6).any():
         return bgr_frame
     gain = means.mean() / means

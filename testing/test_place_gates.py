@@ -69,6 +69,48 @@ def _mock_ros(monkeypatch):
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", MagicMock(return_value=True))
 
 
+# ── place: preconditions that used to `return` without aborting (W2.3) ──────
+# These used to just print+return, so the run reported success_response()
+# with the object silently never placed — the same "fake place" class of bug
+# the IK/FK gates below were built to close, just earlier in the function.
+
+def test_place_sync_failure_aborts(monkeypatch):
+    monkeypatch.setattr(simulate, "sync_current_state_from_ros", lambda: False)
+
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
+
+    assert simulate.SIMULATION_STOP_EVENT.is_set()
+    assert "Lost track of the robot arm" in simulate._TASK_ABORT_REASON
+    simulate.detach_object_from_gripper.assert_not_called()
+
+
+def test_place_unresolved_dimensions_aborts(monkeypatch):
+    monkeypatch.setattr(simulate, "resolve_object_metrics", lambda *a, **kw: (None, None))
+
+    simulate.simulate_ros_place(picked_obj_name="unknown_thing", objectsOfUser=None, location_name="collector")
+
+    assert simulate.SIMULATION_STOP_EVENT.is_set()
+    assert "dimensions aren't known" in simulate._TASK_ABORT_REASON
+    simulate.detach_object_from_gripper.assert_not_called()
+
+
+def test_place_detach_failure_aborts_before_snap(monkeypatch):
+    """W2.5: the snap-to-slot teleport assumes the weld already let go — a
+    failed detach must abort instead of teleporting a still-welded object."""
+    monkeypatch.setattr(simulate, "solve_gazebo_ik", lambda *a, **kw: [0.0] * 6)
+    monkeypatch.setattr(simulate, "build_vertical_ik_path", lambda *a, **kw: [[0.0] * 6])
+    monkeypatch.setattr(simulate, "fk_position_error", lambda *a, **kw: (0.0, 0.0))
+    monkeypatch.setattr(simulate, "get_sdf_dimensions", lambda *a, **kw: (0.02, 0.02, 0.0))
+    monkeypatch.setattr(simulate, "detach_object_from_gripper", MagicMock(return_value=False))
+
+    simulate.simulate_ros_place(picked_obj_name="tube", objectsOfUser=None, location_name="collector")
+
+    assert simulate.SIMULATION_STOP_EVENT.is_set()
+    assert "release" in simulate._TASK_ABORT_REASON
+    simulate.set_object_world_pose.assert_not_called()
+    simulate._persist_placed_object.assert_not_called()
+
+
 # ── place: no pick context (simpler precondition — has_pick_context=False) ──
 
 def test_place_approach_ik_fail_aborts_no_snap(monkeypatch):

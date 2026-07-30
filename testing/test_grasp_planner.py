@@ -181,3 +181,71 @@ def test_real_tube_top_graspable():
     assert m.feasible and m.grasp_classification == "top"
     # body grip ~15-18 mm, well under the hand max
     assert m.graspable_width <= 0.020
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# object.meta.json values tuned on physical hardware 2026-07-29 — pinned so a
+# future accidental edit (SDF or meta) is caught immediately rather than
+# silently drifting back toward the pre-tuning behaviour these fixed:
+# - yellow/green tube: cap was sticking to the open gripper on release: the
+#   grasp width described the CAP's diameter (~19mm), not the 15mm body, and
+#   GRIPPER_GRIP_CLEARANCE_MM=4mm on a soft cap left 4mm of crush — widened by
+#   1mm to reduce that crush.
+# - tube: grasp height raised 2mm per user feedback after physical testing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("name,expected_width_mm", [("yellow_tube", 20), ("green_tube", 20)])
+def test_tuned_tube_cap_grasp_width(name, expected_width_mm):
+    import json
+    meta_path = os.path.join(
+        os.path.dirname(__file__), "..", "ros2_ws", "Cobotta", "objects", name, "object.meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    assert round(meta["max_grasp_width"] * 1000) == expected_width_mm
+
+
+def test_tuned_tube_grasp_height():
+    import json
+    meta_path = os.path.join(
+        os.path.dirname(__file__), "..", "ros2_ws", "Cobotta", "objects", "tube", "object.meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    assert abs(meta["grasp_center_offset"][2] - 0.0686) < 1e-6
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SDF <-> object.meta.json coherence, every object with a meta sidecar — a
+# loose sanity net (this asset family deliberately grasps near a cap/neck
+# well above the collision body's own top surface, so this can't assert an
+# exact geometric relationship) meant to catch the class of mistake "SDF
+# changed, meta.json forgotten" (a wildly wrong value, e.g. a stray decimal
+# point), not to constrain legitimate per-object calibration.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _all_meta_object_names():
+    objects_dir = os.path.join(os.path.dirname(__file__), "..", "ros2_ws", "Cobotta", "objects")
+    return sorted(
+        name for name in os.listdir(objects_dir)
+        if os.path.isfile(os.path.join(objects_dir, name, "object.meta.json"))
+    )
+
+
+@pytest.mark.parametrize("name", _all_meta_object_names())
+def test_object_meta_sanity(name):
+    import json
+    meta_path = os.path.join(
+        os.path.dirname(__file__), "..", "ros2_ws", "Cobotta", "objects", name, "object.meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    assert "grasp_center_offset" in meta and "max_grasp_width" in meta
+    offset_z = meta["grasp_center_offset"][2]
+    width_m = meta["max_grasp_width"]
+
+    # Catches a stray decimal point / unit mixup (e.g. mm written where m is
+    # expected) without constraining the neck/cap-height convention some of
+    # these objects legitimately use.
+    assert 0 < offset_z < 0.15, f"{name}: grasp_center_offset z={offset_z} looks implausible"
+    assert 0 < width_m <= simulate.MAX_GRIP_WIDTH_MM / 1000.0, (
+        f"{name}: max_grasp_width={width_m} exceeds the gripper's own MAX_GRIP_WIDTH_MM "
+        "(the pick would be classified infeasible)")

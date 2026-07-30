@@ -123,5 +123,61 @@ def test_find_object_with_unresolved_object_slot_does_not_crash(monkeypatch):
     assert simulate.SIMULATION_STOP_EVENT.is_set()  # find_object hard-aborts on timeout (by design)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Bare `when(condition, ...)` human-step-start/-complete (W: 2026-07-30)
+# ─────────────────────────────────────────────────────────────────────────────
+# Confirmed live: a bare when(gesture_detected) gave zero UI feedback for its
+# whole timeout — only human_action blocks wrapped _eval_condition_tree with
+# their own human-step-start/-complete; a bare `when` never did, so the
+# operator's webcam turned on with nothing shown in the panel, and the STATUS
+# line stayed frozen on "Starting simulation" the whole wait.
+
+def test_when_block_live_condition_sends_human_step_start_and_complete(monkeypatch):
+    mock_bridge = MagicMock()
+    mock_bridge.get_vision_state.return_value = {"gesture": "THUMBS_UP", "gesture_age_s": 0.0}
+    monkeypatch.setattr(simulate, "_bridge", mock_bridge)
+
+    condition_block = {
+        "type": EventsItems.GESTURE.value,
+        "fields": {"GESTURE_TYPE": "THUMBS_UP"},
+    }
+    code = {
+        "type": "when_block",
+        "inputs": {"WHEN": {"block": condition_block}, "DO": {"block": _notify_action("did it")}},
+    }
+
+    simulate.simulation_recursive_blockly_parser(code, [], [], [], simulate_event=False)
+
+    mock_bridge.notify.assert_any_call(
+        "/api/human-step-start",
+        {"condition": "gesture", "value": "THUMBS_UP", "description": "",
+         "timeout": simulate.CONDITION_TIMEOUT_S},
+    )
+    mock_bridge.notify.assert_any_call("/api/human-step-complete")
+
+
+def test_when_block_auto_mode_does_not_send_human_step_events(monkeypatch):
+    """Auto mode (simulate_event=True) resolves the condition instantly via
+    _log_condition — sending 'started' there could leave the frontend stuck
+    showing a wait that was never real (no guaranteed 'complete' when the
+    condition resolves False)."""
+    mock_bridge = MagicMock()
+    monkeypatch.setattr(simulate, "_bridge", mock_bridge)
+
+    condition_block = {
+        "type": EventsItems.GESTURE.value,
+        "fields": {"GESTURE_TYPE": "THUMBS_UP"},
+    }
+    code = {
+        "type": "when_block",
+        "inputs": {"WHEN": {"block": condition_block}, "DO": {"block": _notify_action("did it")}},
+    }
+
+    simulate.simulation_recursive_blockly_parser(code, [], [], [], simulate_event=True)
+
+    for call in mock_bridge.notify.call_args_list:
+        assert call.args[0] not in ("/api/human-step-start", "/api/human-step-complete")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

@@ -1,6 +1,7 @@
 import json
 import signal
 import threading
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -19,6 +20,11 @@ from my_robot_interfaces.srv import MoveTarget
 # long enough to not flag a single transient b-CAP hiccup, short enough that
 # a genuinely dead link is caught well before the next move attempt.
 ENCODER_FAIL_THRESHOLD = 3
+
+# How often the encoder timer retries a b-CAP reconnect once the link is
+# marked down. Frequent enough to recover promptly from a transient drop,
+# not so frequent it hammers the socket every 100ms while genuinely offline.
+HW_RECONNECT_INTERVAL_S = 2.0
 
 
 class HardwareControl(Node):
@@ -87,6 +93,11 @@ class HardwareControl(Node):
         # was the only thing that would notice — but it only logged a warning
         # and kept ticking forever, so _hw_ok stayed True with a dead link.
         self._encoder_fail_count = 0
+        # Rate-limits the timer's reconnect attempts once _hw_ok goes False
+        # (W3.2) — without this, a link drop disabled the arm permanently:
+        # _move_target_cb refuses to even try a move while _hw_ok is False,
+        # so nothing ever generated the exception its own retry logic needs.
+        self._last_reconnect_attempt = 0.0
 
         self._enable_hardware = enable_hardware
         if enable_hardware:
@@ -124,7 +135,11 @@ class HardwareControl(Node):
         # from the physical robot (not the Gazebo twin). Separate topic so it does
         # not collide with the sim's joint_state_broadcaster on /joint_states.
         self._real_pub = self.create_publisher(JointState, "/cobotta/joint_states_real", 10)
-        if enable_hardware and self._hw_ok:
+        # Not gated on self._hw_ok (W3.2): the timer is also what retries the
+        # b-CAP connection once the link is down, including when the initial
+        # connect above failed — without the timer running, nothing would ever
+        # attempt a reconnect at all.
+        if enable_hardware:
             self.create_timer(0.1, self._publish_real_joint_state,
                               callback_group=ReentrantCallbackGroup())
 
@@ -396,6 +411,33 @@ class HardwareControl(Node):
 
     # ── encoder feedback (closed loop) ─────────────────────────────────────────
 
+    def _try_reconnect_from_timer(self):
+        """Retry the b-CAP connection while the link is marked down (W3.2).
+
+        Called from the encoder timer instead of the old bare early-return —
+        without this, ENCODER_FAIL_THRESHOLD consecutive failures (~0.3s)
+        disabled the real arm until the node was restarted: _move_target_cb
+        refuses to even attempt a move while _hw_ok is False, so nothing else
+        ever generated the exception its own reconnect-and-retry needs.
+        Rate-limited so a genuinely offline link doesn't get hammered every
+        100ms, and non-blocking on the lock so it never fights an in-flight
+        move for the socket.
+        """
+        now = time.monotonic()
+        if now - self._last_reconnect_attempt < HW_RECONNECT_INTERVAL_S:
+            return
+        self._last_reconnect_attempt = now
+        if not self._bcap_lock.acquire(blocking=False):
+            return
+        try:
+            self.get_logger().info("cobotta_node: encoder timer retrying b-CAP reconnect ...")
+            self._connect_locked()
+            if self._hw_ok:
+                self._encoder_fail_count = 0
+                self.get_logger().info("cobotta_node: b-CAP link recovered")
+        finally:
+            self._bcap_lock.release()
+
     def _publish_real_joint_state(self):
         """Read the arm's encoders (CurJnt) and publish them as /cobotta/joint_states_real.
 
@@ -403,7 +445,10 @@ class HardwareControl(Node):
         and reads on the next tick. The arm is idle between moves — exactly when the app
         needs a fresh real seed for the next IK solve.
         """
-        if not self._hw_ok or not self._bcap_lock.acquire(blocking=False):
+        if not self._hw_ok:
+            self._try_reconnect_from_timer()
+            return
+        if not self._bcap_lock.acquire(blocking=False):
             return
         try:
             cur = self.m_bcapclient.robot_execute(self.HRobot, "CurJnt")

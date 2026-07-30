@@ -14,11 +14,17 @@ calibration.py reads it at import time):
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-pick --slot 0
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-place --slot 1
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-guide
+    poetry run python testing/calibrate_rack.py verify-coords          # read-only, no hardware needed
     poetry run python testing/calibrate_rack.py --selftest   # offline, no hardware
 
 `read`/`goto-*` never move blind: goto-pick/goto-place stop at a hover height
 above the grasp point (never at grasp height), goto-guide only replays a pose
-you already jogged and confirmed by eye. Keep the teach-pendant e-stop in reach.
+you already jogged and confirmed by eye. `verify-coords` never moves anything
+at all (pure IK/FK arithmetic) — run it first, before touching the arm, to
+catch a coordinate-formula drift between this tool and the real pick/place
+code in one pass (see resolve_place_z's docstring in simulate.py for the
+specific place-Z divergence this was built to catch, found 2026-07-29).
+Keep the teach-pendant e-stop in reach for every command that does move.
 """
 import argparse
 import os
@@ -130,11 +136,66 @@ def cmd_goto_place(args):
     dx, dy, grasp_yaw = _slot_offset(args.slot, rack, "LOCATION_PROFILES['tube_rack']")
     x_rel = calibration.DEFAULT_PLACE_X_REL + dx
     y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
-    # Place z reference: same table + rack-height convention as simulate_ros_place,
-    # good enough for a hover point (not an actual place).
-    loc_height = sim.resolve_location_metrics("tube_rack")
-    z_place = calibration.PICK_Z_REF_OFFSET + loc_height + 0.02
+    # Same formula simulate_ros_place uses (container detection + the
+    # object-height-dependent grip offset included) — this used to be a
+    # simpler, separately-derived approximation that didn't match what a
+    # real place actually targets (found 2026-07-29). --height lets you
+    # check a different object than the default tube (0.10m).
+    z_place = sim.resolve_place_z("tube_rack", args.height)
     _goto_hover(x_rel, y_rel, z_place, args.z_hover, grasp_yaw)
+
+
+def _verify_row(slot, x_rel, y_rel, z, yaw):
+    q = sim.solve_gazebo_ik(x_rel, y_rel, z, yaw)
+    if not q:
+        print(f"{slot:<6}{x_rel:>9.4f}{y_rel:>9.4f}{z:>9.4f}{yaw:>8.3f}{'FAIL':>7}{'--':>12}")
+        return
+    x2, y2, z2 = _tcp_rel(q)
+    err_mm = ((x2 - x_rel) ** 2 + (y2 - y_rel) ** 2 + (z2 - z) ** 2) ** 0.5 * 1000
+    print(f"{slot:<6}{x_rel:>9.4f}{y_rel:>9.4f}{z:>9.4f}{yaw:>8.3f}{'OK':>7}{err_mm:>12.2f}")
+
+
+def cmd_verify_coords(args):
+    """Read-only, no hardware and no movement (pure IK/FK arithmetic): prints
+    the exact x_rel/y_rel/z every pick and place slot targets in real
+    execution (_h_pick/simulate_ros_place), plus the IK solution and its FK
+    round-trip error. Run this BEFORE moving the real arm to catch a
+    coordinate-formula drift between this tool and the real pick/place code
+    in one pass, instead of discovering it one slot at a time on hardware —
+    see resolve_place_z's docstring (simulate.py) for the specific
+    place-Z divergence this exists to catch (found 2026-07-29)."""
+    header = f"{'slot':<6}{'x_rel':>9}{'y_rel':>9}{'z':>9}{'yaw':>8}{'IK':>7}{'FK err(mm)':>12}"
+
+    print(f"-- PICK ({args.pick_object}) — same formula as _h_pick/simulate_ros_pick --")
+    print(header)
+    model = sim.normalize_object_for_grasp(args.pick_object)
+    pick_offsets = calibration.PICK_RACK_PROFILE.get("slot_xy_offsets", [(0.0, 0.0)])
+    pick_yaw = calibration.PICK_RACK_PROFILE.get("grasp_yaw", 0.0)
+    for slot, (dx, dy) in enumerate(pick_offsets):
+        x_rel = calibration.DEFAULT_PICK_X_REL + dx
+        y_rel = calibration.DEFAULT_PICK_Y_REL + dy
+        plan = sim.plan_pick_for_object(model, x_rel, y_rel)
+        if not plan.feasible:
+            print(f"{slot:<6} infeasible: {plan.reason}")
+            continue
+        _verify_row(slot, x_rel, y_rel, plan.z_pick, pick_yaw)
+
+    print(f"\n-- PLACE (tube_rack, height={args.height}m) — same formula as simulate_ros_place --")
+    print(header)
+    rack = calibration.LOCATION_PROFILES.get("tube_rack", {})
+    place_offsets = rack.get("slot_xy_offsets", [(0.0, 0.0)])
+    place_yaw = rack.get("grasp_yaw", 0.0)
+    z_place = sim.resolve_place_z("tube_rack", args.height)
+    for slot, (dx, dy) in enumerate(place_offsets):
+        x_rel = calibration.DEFAULT_PLACE_X_REL + dx
+        y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
+        _verify_row(slot, x_rel, y_rel, z_place, place_yaw)
+
+    if calibration.DEFAULT_PLACE_X_REL == calibration._SIM_PROFILE["DEFAULT_PLACE_X_REL"] and calibration.DRIVE_HARDWARE:
+        print("\n!! DRIVE_HARDWARE=1 but DEFAULT_PLACE_X_REL/Y_REL still equal the sim profile's "
+              "value — the real cell's place point has never been measured (see calibration.py "
+              "_REAL_PROFILE comment). The place coordinates above are a sim guess, not a "
+              "calibrated real-cell target.")
 
 
 def cmd_goto_guide(args):
@@ -174,19 +235,37 @@ def main():
     p_place = sub.add_parser("goto-place", help="hover above a place slot (gripper open)")
     p_place.add_argument("--slot", type=int, default=0)
     p_place.add_argument("--z-hover", type=float, default=0.03)
+    p_place.add_argument(
+        "--height", type=float, default=0.10,
+        help="object height in metres, for the place Z formula (default: plain tube, 0.10m)")
 
     sub.add_parser("goto-guide", help="replay the saved near-table rack-alignment pose")
 
-    args = parser.parse_args()
+    p_verify = sub.add_parser(
+        "verify-coords",
+        help="read-only, no movement: print every pick/place slot's target x/y/z + IK/FK check")
+    p_verify.add_argument("--pick-object", default="tube")
+    p_verify.add_argument(
+        "--height", type=float, default=0.10,
+        help="object height in metres, for the place Z formula (default: plain tube, 0.10m)")
 
-    # Required alongside DRIVE_HARDWARE (env) for _hw_drive_active() to be
-    # true — without it every real-arm call in simulate.py silently no-ops
-    # and only the Gazebo twin moves.
-    sim._HW_DRIVE_REQUESTED = True
+    args = parser.parse_args()
 
     if args.selftest:
         selftest()
         return
+    if args.command == "verify-coords":
+        # Pure IK/FK arithmetic — no bridge/hardware call at all, so unlike
+        # every other command here it must not require DRIVE_HARDWARE.
+        cmd_verify_coords(args)
+        return
+
+    # Required alongside DRIVE_HARDWARE (env) for _hw_drive_active() to be
+    # true — without it every real-arm call in simulate.py silently no-ops
+    # and only the Gazebo twin moves. Only set for commands that actually
+    # touch the bridge/hardware (everything below).
+    sim._HW_DRIVE_REQUESTED = True
+
     if args.command == "read":
         cmd_read(args)
     elif args.command == "goto-pick":

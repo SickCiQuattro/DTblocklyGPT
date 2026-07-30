@@ -218,6 +218,30 @@
       </uri>
     </include>
     
+    <!-- Pick-side tube rack. Same model file the place side spawns
+         (locations/tube_rack) — the two racks are one physical object in the
+         real cell, so they must not become two geometries here.
+
+         Included statically instead of spawned per run: the pick rack never
+         changes, and every create/remove cycle is a chance to hit the
+         "physics entity ptr ... does not exist" errors the object spawns
+         already produce.
+
+         Pose = the pick point itself, because the model's origin is the
+         centre of slot 0: x = ROBOT_BASE_X + DEFAULT_PICK_X_REL = -9.0 + -0.05,
+         y = ROBOT_BASE_Y + DEFAULT_PICK_Y_REL = -1.2 + -0.28,
+         z = TABLE_TOP_Z_ABS. No rotation, so model-X runs along robot X and
+         slot i lands on PICK_RACK_PROFILE's slot_xy_offsets[i] (calibration.py).
+         Keep this pose in sync with those constants. -->
+    <include>
+      <name>PickTubeRack</name>
+      <static>true</static>
+      <pose>-9.05 -1.48 1.0134 0 0 0</pose>
+      <uri>
+        model://locations/tube_rack/model.sdf
+      </uri>
+    </include>
+
     <model name="SimpleTable">
       <static>true</static>
       <!-- Top = ROBOT_BASE_Z + PICK_Z_REF_OFFSET (calibration.py) = 1.05 - 0.0366 = 1.0134.

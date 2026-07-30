@@ -74,6 +74,51 @@ def test_move_target_success_returns_dict():
     assert result == {"ok": True, "message": ""}
 
 
+# ── FlaskRosClient.move_path: retry must not replay an already-accepted
+# trajectory (W2.2) ──────────────────────────────────────────────────────────
+
+def test_move_path_retries_on_connection_error():
+    """The request never reached the server — safe to retry."""
+    session = MagicMock()
+    ok_resp = MagicMock()
+    ok_resp.raise_for_status.return_value = None
+    session.post.side_effect = [requests.exceptions.ConnectionError("refused"), ok_resp]
+
+    client = FlaskRosClient(session=session)
+    client.move_path([{"j1": 0.0}])  # must not raise
+
+    assert session.post.call_count == 2
+
+
+def test_move_path_does_not_retry_on_read_timeout():
+    """A read timeout means the server may already have started the
+    trajectory — retrying would replay a real robot motion, so this must
+    raise immediately instead of resubmitting."""
+    session = MagicMock()
+    session.post.side_effect = requests.exceptions.ReadTimeout("timed out")
+
+    client = FlaskRosClient(session=session)
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        client.move_path([{"j1": 0.0}])
+
+    assert session.post.call_count == 1
+
+
+def test_move_path_does_not_retry_on_http_error():
+    """A 4xx/5xx from raise_for_status is a definite server-side outcome —
+    also not a transport failure, so also not retried."""
+    session = MagicMock()
+    resp = MagicMock()
+    resp.raise_for_status.side_effect = requests.exceptions.HTTPError("500")
+    session.post.return_value = resp
+
+    client = FlaskRosClient(session=session)
+    with pytest.raises(requests.exceptions.HTTPError):
+        client.move_path([{"j1": 0.0}])
+
+    assert session.post.call_count == 1
+
+
 # ── simulate._send_hw_target ────────────────────────────────────────────────────
 
 def test_move_target_failure_aborts(monkeypatch):
