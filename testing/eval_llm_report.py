@@ -137,7 +137,7 @@ def report_cost(all_results):
         priced = [r["cost_usd"] for r in results if r.get("cost_usd") is not None]
         if not results:
             continue
-        if spec.startswith("ollama:"):
+        if spec.startswith("ollama"):
             print(f"  {spec}: $0.00 (local, no API cost)")
         elif priced:
             avg = statistics.mean(priced)
@@ -151,7 +151,7 @@ def report_tokens_per_sec(all_results):
     print("LOCAL MODEL THROUGHPUT (tokens/sec, completion tokens only)")
     print("=" * 70)
     for spec, results in all_results.items():
-        if not spec.startswith("ollama:"):
+        if not spec.startswith("ollama"):
             continue
         rates = []
         for r in results:
@@ -169,7 +169,7 @@ def report_size_vs_accuracy(all_results, out_dir):
     print("=" * 70)
     points = []  # (size_b, accuracy, label)
     for spec, results in all_results.items():
-        if not spec.startswith("ollama:"):
+        if not spec.startswith("ollama"):
             continue
         m = _SIZE_RE.search(spec)
         if not m:

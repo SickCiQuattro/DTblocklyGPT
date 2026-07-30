@@ -22,6 +22,7 @@ per-case, per-run results for testing/eval_llm_report.py.
 import argparse
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -184,10 +185,19 @@ class OllamaNativeProvider:
             arguments = tool_calls[0]["function"]["arguments"]
             raw_arguments = arguments if isinstance(arguments, dict) else json.loads(arguments or "{}")
         else:
+            content = msg.get("content") or "{}"
             try:
-                raw_arguments = json.loads(msg.get("content") or "{}")
+                raw_arguments = json.loads(content)
             except Exception:
-                raw_arguments = {}
+                try:
+                    # Some models (observed: qwen2.5:14b) answer with prose
+                    # plus a ```json ... ``` fenced block instead of a bare
+                    # JSON object or a real tool call — mirrors the same
+                    # fallback in chat.py's LLMProvider.complete().
+                    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
+                    raw_arguments = json.loads(fenced.group(1)) if fenced else {}
+                except Exception:
+                    raw_arguments = {}
 
         usage = SimpleNamespace(prompt_tokens=data.get("prompt_eval_count"), completion_tokens=data.get("eval_count"))
         return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage))
