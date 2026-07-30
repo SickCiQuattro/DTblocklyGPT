@@ -135,6 +135,7 @@ COST_PER_MTOK = {
     "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
     "gpt-5-nano": {"input": 0.05, "output": 0.40},
     "gpt-5-mini": {"input": 0.25, "output": 2.00},
+    "gpt-5.4-nano": {"input": 0.20, "output": 1.25},
     # legacy reference, kept for comparison if someone benchmarks the old default
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
 }

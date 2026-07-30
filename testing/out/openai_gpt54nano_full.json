@@ -13,7 +13,7 @@
       "latency_ms": 1698.526074998881,
       "prompt_tokens": 5447,
       "completion_tokens": 82,
-      "cost_usd": null,
+      "cost_usd": 0.0011919,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -35,7 +35,7 @@
       "latency_ms": 1752.3803839994798,
       "prompt_tokens": 5448,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.0012283500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -57,7 +57,7 @@
       "latency_ms": 1639.9460449993057,
       "prompt_tokens": 5453,
       "completion_tokens": 131,
-      "cost_usd": null,
+      "cost_usd": 0.0012543500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -78,7 +78,7 @@
       "latency_ms": 2149.4269390004774,
       "prompt_tokens": 5456,
       "completion_tokens": 158,
-      "cost_usd": null,
+      "cost_usd": 0.0012887,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -99,7 +99,7 @@
       "latency_ms": 2071.162694999657,
       "prompt_tokens": 5454,
       "completion_tokens": 145,
-      "cost_usd": null,
+      "cost_usd": 0.00127205,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -120,7 +120,7 @@
       "latency_ms": 2395.0835799987544,
       "prompt_tokens": 5453,
       "completion_tokens": 157,
-      "cost_usd": null,
+      "cost_usd": 0.0012868500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -141,7 +141,7 @@
       "latency_ms": 1933.315541000411,
       "prompt_tokens": 5451,
       "completion_tokens": 119,
-      "cost_usd": null,
+      "cost_usd": 0.00123895,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -162,7 +162,7 @@
       "latency_ms": 1404.0268690005178,
       "prompt_tokens": 5446,
       "completion_tokens": 119,
-      "cost_usd": null,
+      "cost_usd": 0.00123795,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -181,7 +181,7 @@
       "latency_ms": 1839.196709001044,
       "prompt_tokens": 5487,
       "completion_tokens": 95,
-      "cost_usd": null,
+      "cost_usd": 0.00121615,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -203,7 +203,7 @@
       "latency_ms": 1957.0800719993713,
       "prompt_tokens": 5465,
       "completion_tokens": 172,
-      "cost_usd": null,
+      "cost_usd": 0.001308,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -224,7 +224,7 @@
       "latency_ms": 1489.727475998734,
       "prompt_tokens": 5490,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.001248,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -245,7 +245,7 @@
       "latency_ms": 1436.3488180006243,
       "prompt_tokens": 5449,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.00120105,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -267,7 +267,7 @@
       "latency_ms": 1767.1396860005189,
       "prompt_tokens": 5446,
       "completion_tokens": 100,
-      "cost_usd": null,
+      "cost_usd": 0.0012142000000000001,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -286,7 +286,7 @@
       "latency_ms": 1612.046709000424,
       "prompt_tokens": 5453,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.0012443500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -308,7 +308,7 @@
       "latency_ms": 1198.253176000435,
       "prompt_tokens": 5446,
       "completion_tokens": 71,
-      "cost_usd": null,
+      "cost_usd": 0.00117795,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -327,7 +327,7 @@
       "latency_ms": 1032.3592010008724,
       "prompt_tokens": 5481,
       "completion_tokens": 45,
-      "cost_usd": null,
+      "cost_usd": 0.00115245,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -346,7 +346,7 @@
       "latency_ms": 1278.214821999427,
       "prompt_tokens": 5464,
       "completion_tokens": 87,
-      "cost_usd": null,
+      "cost_usd": 0.00120155,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -368,7 +368,7 @@
       "latency_ms": 1599.911694000184,
       "prompt_tokens": 5449,
       "completion_tokens": 114,
-      "cost_usd": null,
+      "cost_usd": 0.0012323,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -390,7 +390,7 @@
       "latency_ms": 1645.1816120006697,
       "prompt_tokens": 5451,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.0012289500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -412,7 +412,7 @@
       "latency_ms": 1915.449931000694,
       "prompt_tokens": 5458,
       "completion_tokens": 145,
-      "cost_usd": null,
+      "cost_usd": 0.00127285,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -433,7 +433,7 @@
       "latency_ms": 1657.8616219994728,
       "prompt_tokens": 5462,
       "completion_tokens": 138,
-      "cost_usd": null,
+      "cost_usd": 0.0012649,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -454,7 +454,7 @@
       "latency_ms": 2048.710054001276,
       "prompt_tokens": 5458,
       "completion_tokens": 158,
-      "cost_usd": null,
+      "cost_usd": 0.0012891,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -475,7 +475,7 @@
       "latency_ms": 1840.4302210001333,
       "prompt_tokens": 5457,
       "completion_tokens": 133,
-      "cost_usd": null,
+      "cost_usd": 0.0012576500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -496,7 +496,7 @@
       "latency_ms": 1584.866952000084,
       "prompt_tokens": 5456,
       "completion_tokens": 127,
-      "cost_usd": null,
+      "cost_usd": 0.00124995,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -517,7 +517,7 @@
       "latency_ms": 1585.4354929997498,
       "prompt_tokens": 5448,
       "completion_tokens": 133,
-      "cost_usd": null,
+      "cost_usd": 0.0012558500000000002,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -536,7 +536,7 @@
       "latency_ms": 1634.3827079999755,
       "prompt_tokens": 5490,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.001248,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -558,7 +558,7 @@
       "latency_ms": 1696.8029700001352,
       "prompt_tokens": 5465,
       "completion_tokens": 128,
-      "cost_usd": null,
+      "cost_usd": 0.001253,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -579,7 +579,7 @@
       "latency_ms": 1578.3359870001732,
       "prompt_tokens": 5496,
       "completion_tokens": 127,
-      "cost_usd": null,
+      "cost_usd": 0.00125795,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -600,7 +600,7 @@
       "latency_ms": 1568.1049329996313,
       "prompt_tokens": 5459,
       "completion_tokens": 109,
-      "cost_usd": null,
+      "cost_usd": 0.00122805,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -622,7 +622,7 @@
       "latency_ms": 1578.9881580003566,
       "prompt_tokens": 5448,
       "completion_tokens": 109,
-      "cost_usd": null,
+      "cost_usd": 0.0012258500000000001,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -641,7 +641,7 @@
       "latency_ms": 1217.5593199990544,
       "prompt_tokens": 5481,
       "completion_tokens": 51,
-      "cost_usd": null,
+      "cost_usd": 0.00115995,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -660,7 +660,7 @@
       "latency_ms": 1455.7864679991326,
       "prompt_tokens": 5466,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.0012044500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -682,7 +682,7 @@
       "latency_ms": 1520.042611999088,
       "prompt_tokens": 5448,
       "completion_tokens": 105,
-      "cost_usd": null,
+      "cost_usd": 0.00122085,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -704,7 +704,7 @@
       "latency_ms": 1858.4649750009703,
       "prompt_tokens": 5445,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.00123275,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -723,7 +723,7 @@
       "latency_ms": 1643.2189919996745,
       "prompt_tokens": 5445,
       "completion_tokens": 98,
-      "cost_usd": null,
+      "cost_usd": 0.0012115,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -742,7 +742,7 @@
       "latency_ms": 1721.5389550001419,
       "prompt_tokens": 5451,
       "completion_tokens": 119,
-      "cost_usd": null,
+      "cost_usd": 0.00123895,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -761,7 +761,7 @@
       "latency_ms": 1668.7241540003015,
       "prompt_tokens": 5447,
       "completion_tokens": 98,
-      "cost_usd": null,
+      "cost_usd": 0.0012119000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -782,7 +782,7 @@
       "latency_ms": 1724.8850710002444,
       "prompt_tokens": 5453,
       "completion_tokens": 128,
-      "cost_usd": null,
+      "cost_usd": 0.0012506000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -803,7 +803,7 @@
       "latency_ms": 2146.693796999898,
       "prompt_tokens": 5451,
       "completion_tokens": 140,
-      "cost_usd": null,
+      "cost_usd": 0.0012652,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -824,7 +824,7 @@
       "latency_ms": 2096.822585999689,
       "prompt_tokens": 5461,
       "completion_tokens": 191,
-      "cost_usd": null,
+      "cost_usd": 0.00133095,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -845,7 +845,7 @@
       "latency_ms": 1791.146296000079,
       "prompt_tokens": 5451,
       "completion_tokens": 137,
-      "cost_usd": null,
+      "cost_usd": 0.0012614500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -866,7 +866,7 @@
       "latency_ms": 1939.8599569994985,
       "prompt_tokens": 5448,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012333500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -888,7 +888,7 @@
       "latency_ms": 2811.21879300008,
       "prompt_tokens": 5451,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124645,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -910,7 +910,7 @@
       "latency_ms": 1932.1873049993883,
       "prompt_tokens": 5458,
       "completion_tokens": 147,
-      "cost_usd": null,
+      "cost_usd": 0.0012753500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -931,7 +931,7 @@
       "latency_ms": 1697.53412800128,
       "prompt_tokens": 5458,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.0012416,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -955,7 +955,7 @@
       "latency_ms": 1750.8762739998929,
       "prompt_tokens": 5449,
       "completion_tokens": 134,
-      "cost_usd": null,
+      "cost_usd": 0.0012573,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -974,7 +974,7 @@
       "latency_ms": 1453.7458979993971,
       "prompt_tokens": 5448,
       "completion_tokens": 102,
-      "cost_usd": null,
+      "cost_usd": 0.0012171,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -996,7 +996,7 @@
       "latency_ms": 1920.918903000711,
       "prompt_tokens": 5449,
       "completion_tokens": 140,
-      "cost_usd": null,
+      "cost_usd": 0.0012648,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1018,7 +1018,7 @@
       "latency_ms": 1890.4094659992552,
       "prompt_tokens": 5460,
       "completion_tokens": 145,
-      "cost_usd": null,
+      "cost_usd": 0.00127325,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1041,7 +1041,7 @@
       "latency_ms": 1743.8804729990807,
       "prompt_tokens": 5447,
       "completion_tokens": 87,
-      "cost_usd": null,
+      "cost_usd": 0.00119815,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1063,7 +1063,7 @@
       "latency_ms": 1567.6475759992172,
       "prompt_tokens": 5448,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.0012346000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1085,7 +1085,7 @@
       "latency_ms": 1489.3744130004052,
       "prompt_tokens": 5453,
       "completion_tokens": 118,
-      "cost_usd": null,
+      "cost_usd": 0.0012381000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1106,7 +1106,7 @@
       "latency_ms": 1880.8527220007818,
       "prompt_tokens": 5456,
       "completion_tokens": 159,
-      "cost_usd": null,
+      "cost_usd": 0.00128995,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1127,7 +1127,7 @@
       "latency_ms": 1734.6271440001146,
       "prompt_tokens": 5454,
       "completion_tokens": 148,
-      "cost_usd": null,
+      "cost_usd": 0.0012758,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1148,7 +1148,7 @@
       "latency_ms": 1861.894724999729,
       "prompt_tokens": 5453,
       "completion_tokens": 154,
-      "cost_usd": null,
+      "cost_usd": 0.0012831000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1169,7 +1169,7 @@
       "latency_ms": 1675.6557919998158,
       "prompt_tokens": 5451,
       "completion_tokens": 117,
-      "cost_usd": null,
+      "cost_usd": 0.00123645,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1190,7 +1190,7 @@
       "latency_ms": 1640.6800719996681,
       "prompt_tokens": 5446,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.00124295,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -1209,7 +1209,7 @@
       "latency_ms": 1410.4021269995428,
       "prompt_tokens": 5487,
       "completion_tokens": 88,
-      "cost_usd": null,
+      "cost_usd": 0.0012074000000000002,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -1231,7 +1231,7 @@
       "latency_ms": 1720.093360001556,
       "prompt_tokens": 5465,
       "completion_tokens": 133,
-      "cost_usd": null,
+      "cost_usd": 0.00125925,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -1252,7 +1252,7 @@
       "latency_ms": 1444.383853000545,
       "prompt_tokens": 5490,
       "completion_tokens": 91,
-      "cost_usd": null,
+      "cost_usd": 0.00121175,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1273,7 +1273,7 @@
       "latency_ms": 1332.4253339997085,
       "prompt_tokens": 5449,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.00120105,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1295,7 +1295,7 @@
       "latency_ms": 1421.0699859995657,
       "prompt_tokens": 5446,
       "completion_tokens": 104,
-      "cost_usd": null,
+      "cost_usd": 0.0012192000000000001,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -1314,7 +1314,7 @@
       "latency_ms": 1648.7743759989826,
       "prompt_tokens": 5453,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.0012406000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1336,7 +1336,7 @@
       "latency_ms": 1305.695614000797,
       "prompt_tokens": 5446,
       "completion_tokens": 50,
-      "cost_usd": null,
+      "cost_usd": 0.0011517,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -1355,7 +1355,7 @@
       "latency_ms": 1234.620477000135,
       "prompt_tokens": 5481,
       "completion_tokens": 46,
-      "cost_usd": null,
+      "cost_usd": 0.0011537000000000001,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -1374,7 +1374,7 @@
       "latency_ms": 1446.7283400008455,
       "prompt_tokens": 5464,
       "completion_tokens": 103,
-      "cost_usd": null,
+      "cost_usd": 0.0012215499999999998,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1396,7 +1396,7 @@
       "latency_ms": 1939.1337860015483,
       "prompt_tokens": 5449,
       "completion_tokens": 86,
-      "cost_usd": null,
+      "cost_usd": 0.0011972999999999999,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1418,7 +1418,7 @@
       "latency_ms": 1545.8571379986097,
       "prompt_tokens": 5451,
       "completion_tokens": 90,
-      "cost_usd": null,
+      "cost_usd": 0.0012027000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1440,7 +1440,7 @@
       "latency_ms": 1463.2260789985594,
       "prompt_tokens": 5458,
       "completion_tokens": 107,
-      "cost_usd": null,
+      "cost_usd": 0.00122535,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1461,7 +1461,7 @@
       "latency_ms": 1981.9993179989979,
       "prompt_tokens": 5462,
       "completion_tokens": 173,
-      "cost_usd": null,
+      "cost_usd": 0.0013086500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1482,7 +1482,7 @@
       "latency_ms": 1670.8351349989243,
       "prompt_tokens": 5458,
       "completion_tokens": 131,
-      "cost_usd": null,
+      "cost_usd": 0.0012553500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1503,7 +1503,7 @@
       "latency_ms": 2155.884412000887,
       "prompt_tokens": 5457,
       "completion_tokens": 174,
-      "cost_usd": null,
+      "cost_usd": 0.0013089,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1524,7 +1524,7 @@
       "latency_ms": 1936.859553999966,
       "prompt_tokens": 5456,
       "completion_tokens": 137,
-      "cost_usd": null,
+      "cost_usd": 0.00126245,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1545,7 +1545,7 @@
       "latency_ms": 1885.0779459990008,
       "prompt_tokens": 5448,
       "completion_tokens": 133,
-      "cost_usd": null,
+      "cost_usd": 0.0012558500000000002,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -1564,7 +1564,7 @@
       "latency_ms": 1785.313860000315,
       "prompt_tokens": 5490,
       "completion_tokens": 121,
-      "cost_usd": null,
+      "cost_usd": 0.00124925,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -1586,7 +1586,7 @@
       "latency_ms": 1852.9116649988282,
       "prompt_tokens": 5465,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.001238,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -1607,7 +1607,7 @@
       "latency_ms": 1630.5510800011689,
       "prompt_tokens": 5496,
       "completion_tokens": 122,
-      "cost_usd": null,
+      "cost_usd": 0.0012517000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1628,7 +1628,7 @@
       "latency_ms": 1637.4288909992174,
       "prompt_tokens": 5459,
       "completion_tokens": 129,
-      "cost_usd": null,
+      "cost_usd": 0.00125305,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1650,7 +1650,7 @@
       "latency_ms": 1997.7579330006847,
       "prompt_tokens": 5448,
       "completion_tokens": 142,
-      "cost_usd": null,
+      "cost_usd": 0.0012671000000000002,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -1669,7 +1669,7 @@
       "latency_ms": 1259.5615459995315,
       "prompt_tokens": 5481,
       "completion_tokens": 81,
-      "cost_usd": null,
+      "cost_usd": 0.00119745,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -1688,7 +1688,7 @@
       "latency_ms": 1567.8752210005769,
       "prompt_tokens": 5466,
       "completion_tokens": 113,
-      "cost_usd": null,
+      "cost_usd": 0.00123445,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1710,7 +1710,7 @@
       "latency_ms": 1577.3214000000735,
       "prompt_tokens": 5448,
       "completion_tokens": 109,
-      "cost_usd": null,
+      "cost_usd": 0.0012258500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1734,7 +1734,7 @@
       "latency_ms": 1266.1622680006985,
       "prompt_tokens": 5445,
       "completion_tokens": 92,
-      "cost_usd": null,
+      "cost_usd": 0.001204,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1755,7 +1755,7 @@
       "latency_ms": 1879.7023909992276,
       "prompt_tokens": 5445,
       "completion_tokens": 114,
-      "cost_usd": null,
+      "cost_usd": 0.0012315,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -1774,7 +1774,7 @@
       "latency_ms": 1714.9703399991267,
       "prompt_tokens": 5451,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.0012352,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1796,7 +1796,7 @@
       "latency_ms": 1729.8392339998827,
       "prompt_tokens": 5447,
       "completion_tokens": 105,
-      "cost_usd": null,
+      "cost_usd": 0.00122065,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1817,7 +1817,7 @@
       "latency_ms": 1571.8940289989405,
       "prompt_tokens": 5453,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124685,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1838,7 +1838,7 @@
       "latency_ms": 1806.863802999942,
       "prompt_tokens": 5451,
       "completion_tokens": 140,
-      "cost_usd": null,
+      "cost_usd": 0.0012652,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1859,7 +1859,7 @@
       "latency_ms": 1940.4789519994665,
       "prompt_tokens": 5461,
       "completion_tokens": 166,
-      "cost_usd": null,
+      "cost_usd": 0.0012997,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1880,7 +1880,7 @@
       "latency_ms": 1723.8121280006453,
       "prompt_tokens": 5451,
       "completion_tokens": 138,
-      "cost_usd": null,
+      "cost_usd": 0.0012627,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1901,7 +1901,7 @@
       "latency_ms": 2171.1703830005717,
       "prompt_tokens": 5448,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012333500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1923,7 +1923,7 @@
       "latency_ms": 1733.1826999998157,
       "prompt_tokens": 5451,
       "completion_tokens": 112,
-      "cost_usd": null,
+      "cost_usd": 0.0012302,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1945,7 +1945,7 @@
       "latency_ms": 1841.8576649983152,
       "prompt_tokens": 5458,
       "completion_tokens": 149,
-      "cost_usd": null,
+      "cost_usd": 0.00127785,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1966,7 +1966,7 @@
       "latency_ms": 1825.0883820001036,
       "prompt_tokens": 5458,
       "completion_tokens": 147,
-      "cost_usd": null,
+      "cost_usd": 0.0012753500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -1990,7 +1990,7 @@
       "latency_ms": 1843.674612000541,
       "prompt_tokens": 5449,
       "completion_tokens": 142,
-      "cost_usd": null,
+      "cost_usd": 0.0012672999999999999,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -2009,7 +2009,7 @@
       "latency_ms": 1754.0350660001423,
       "prompt_tokens": 5448,
       "completion_tokens": 77,
-      "cost_usd": null,
+      "cost_usd": 0.0011858500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2031,7 +2031,7 @@
       "latency_ms": 1734.020720999979,
       "prompt_tokens": 5449,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.0012460499999999998,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2052,7 +2052,7 @@
       "latency_ms": 1816.4714979993732,
       "prompt_tokens": 5460,
       "completion_tokens": 143,
-      "cost_usd": null,
+      "cost_usd": 0.00127075,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2075,7 +2075,7 @@
       "latency_ms": 1565.413002999776,
       "prompt_tokens": 5447,
       "completion_tokens": 90,
-      "cost_usd": null,
+      "cost_usd": 0.0012019,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2097,7 +2097,7 @@
       "latency_ms": 2343.658465999397,
       "prompt_tokens": 5448,
       "completion_tokens": 118,
-      "cost_usd": null,
+      "cost_usd": 0.0012371,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2119,7 +2119,7 @@
       "latency_ms": 1842.3505749997275,
       "prompt_tokens": 5453,
       "completion_tokens": 121,
-      "cost_usd": null,
+      "cost_usd": 0.00124185,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2140,7 +2140,7 @@
       "latency_ms": 2042.3429990005388,
       "prompt_tokens": 5456,
       "completion_tokens": 155,
-      "cost_usd": null,
+      "cost_usd": 0.00128495,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2161,7 +2161,7 @@
       "latency_ms": 1568.1820099998731,
       "prompt_tokens": 5454,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124705,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2182,7 +2182,7 @@
       "latency_ms": 2455.531191000773,
       "prompt_tokens": 5453,
       "completion_tokens": 159,
-      "cost_usd": null,
+      "cost_usd": 0.00128935,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2203,7 +2203,7 @@
       "latency_ms": 1741.8498129991349,
       "prompt_tokens": 5451,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.00124395,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2224,7 +2224,7 @@
       "latency_ms": 1829.6640980006487,
       "prompt_tokens": 5446,
       "completion_tokens": 135,
-      "cost_usd": null,
+      "cost_usd": 0.00125795,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -2243,7 +2243,7 @@
       "latency_ms": 1394.9037630009116,
       "prompt_tokens": 5487,
       "completion_tokens": 92,
-      "cost_usd": null,
+      "cost_usd": 0.0012124000000000002,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -2265,7 +2265,7 @@
       "latency_ms": 1659.5194809997338,
       "prompt_tokens": 5465,
       "completion_tokens": 129,
-      "cost_usd": null,
+      "cost_usd": 0.00125425,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -2286,7 +2286,7 @@
       "latency_ms": 1512.6365649994113,
       "prompt_tokens": 5490,
       "completion_tokens": 93,
-      "cost_usd": null,
+      "cost_usd": 0.00121425,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2307,7 +2307,7 @@
       "latency_ms": 1269.8670839999977,
       "prompt_tokens": 5449,
       "completion_tokens": 90,
-      "cost_usd": null,
+      "cost_usd": 0.0012023,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2329,7 +2329,7 @@
       "latency_ms": 3353.1057039999723,
       "prompt_tokens": 5446,
       "completion_tokens": 104,
-      "cost_usd": null,
+      "cost_usd": 0.0012192000000000001,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2348,7 +2348,7 @@
       "latency_ms": 2175.9119689995714,
       "prompt_tokens": 5453,
       "completion_tokens": 130,
-      "cost_usd": null,
+      "cost_usd": 0.0012531,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2370,7 +2370,7 @@
       "latency_ms": 1132.6499589995365,
       "prompt_tokens": 5446,
       "completion_tokens": 50,
-      "cost_usd": null,
+      "cost_usd": 0.0011517,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -2389,7 +2389,7 @@
       "latency_ms": 1381.3580530004401,
       "prompt_tokens": 5481,
       "completion_tokens": 62,
-      "cost_usd": null,
+      "cost_usd": 0.0011737,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -2408,7 +2408,7 @@
       "latency_ms": 1574.3827639998926,
       "prompt_tokens": 5464,
       "completion_tokens": 85,
-      "cost_usd": null,
+      "cost_usd": 0.00119905,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2430,7 +2430,7 @@
       "latency_ms": 1563.730702000612,
       "prompt_tokens": 5449,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.0012347999999999999,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2452,7 +2452,7 @@
       "latency_ms": 1570.410690999779,
       "prompt_tokens": 5451,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012339500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2474,7 +2474,7 @@
       "latency_ms": 1897.990227000264,
       "prompt_tokens": 5458,
       "completion_tokens": 134,
-      "cost_usd": null,
+      "cost_usd": 0.0012591000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2495,7 +2495,7 @@
       "latency_ms": 2103.3429309991334,
       "prompt_tokens": 5462,
       "completion_tokens": 170,
-      "cost_usd": null,
+      "cost_usd": 0.0013049000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2516,7 +2516,7 @@
       "latency_ms": 1936.9179360000999,
       "prompt_tokens": 5458,
       "completion_tokens": 158,
-      "cost_usd": null,
+      "cost_usd": 0.0012891,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2537,7 +2537,7 @@
       "latency_ms": 2018.9730510010122,
       "prompt_tokens": 5457,
       "completion_tokens": 157,
-      "cost_usd": null,
+      "cost_usd": 0.00128765,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2558,7 +2558,7 @@
       "latency_ms": 1664.540355999634,
       "prompt_tokens": 5456,
       "completion_tokens": 134,
-      "cost_usd": null,
+      "cost_usd": 0.0012587,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2579,7 +2579,7 @@
       "latency_ms": 2015.1472610014025,
       "prompt_tokens": 5448,
       "completion_tokens": 149,
-      "cost_usd": null,
+      "cost_usd": 0.00127585,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -2598,7 +2598,7 @@
       "latency_ms": 1656.3696670000354,
       "prompt_tokens": 5490,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00125425,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -2620,7 +2620,7 @@
       "latency_ms": 1955.7232159986597,
       "prompt_tokens": 5465,
       "completion_tokens": 138,
-      "cost_usd": null,
+      "cost_usd": 0.0012655,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -2641,7 +2641,7 @@
       "latency_ms": 1711.9090200012579,
       "prompt_tokens": 5496,
       "completion_tokens": 101,
-      "cost_usd": null,
+      "cost_usd": 0.00122545,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2662,7 +2662,7 @@
       "latency_ms": 2086.2388080004166,
       "prompt_tokens": 5459,
       "completion_tokens": 130,
-      "cost_usd": null,
+      "cost_usd": 0.0012542999999999999,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2684,7 +2684,7 @@
       "latency_ms": 2079.1040469994186,
       "prompt_tokens": 5448,
       "completion_tokens": 98,
-      "cost_usd": null,
+      "cost_usd": 0.0012121000000000002,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2703,7 +2703,7 @@
       "latency_ms": 1915.372709001531,
       "prompt_tokens": 5481,
       "completion_tokens": 57,
-      "cost_usd": null,
+      "cost_usd": 0.00116745,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -2722,7 +2722,7 @@
       "latency_ms": 1572.3207120008738,
       "prompt_tokens": 5466,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012369500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2744,7 +2744,7 @@
       "latency_ms": 2156.522801000392,
       "prompt_tokens": 5448,
       "completion_tokens": 105,
-      "cost_usd": null,
+      "cost_usd": 0.00122085,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2766,7 +2766,7 @@
       "latency_ms": 1248.6474939996697,
       "prompt_tokens": 5445,
       "completion_tokens": 83,
-      "cost_usd": null,
+      "cost_usd": 0.00119275,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2785,7 +2785,7 @@
       "latency_ms": 1674.5641929992416,
       "prompt_tokens": 5445,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.00120025,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2804,7 +2804,7 @@
       "latency_ms": 1824.206070999935,
       "prompt_tokens": 5451,
       "completion_tokens": 100,
-      "cost_usd": null,
+      "cost_usd": 0.0012152,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2823,7 +2823,7 @@
       "latency_ms": 1632.233518999783,
       "prompt_tokens": 5447,
       "completion_tokens": 79,
-      "cost_usd": null,
+      "cost_usd": 0.00118815,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -2842,7 +2842,7 @@
       "latency_ms": 1618.034343000545,
       "prompt_tokens": 5453,
       "completion_tokens": 132,
-      "cost_usd": null,
+      "cost_usd": 0.0012556000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2863,7 +2863,7 @@
       "latency_ms": 2008.8796010004444,
       "prompt_tokens": 5451,
       "completion_tokens": 148,
-      "cost_usd": null,
+      "cost_usd": 0.0012752,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2884,7 +2884,7 @@
       "latency_ms": 2029.806483998982,
       "prompt_tokens": 5461,
       "completion_tokens": 191,
-      "cost_usd": null,
+      "cost_usd": 0.00133095,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2905,7 +2905,7 @@
       "latency_ms": 1817.9543669994018,
       "prompt_tokens": 5451,
       "completion_tokens": 142,
-      "cost_usd": null,
+      "cost_usd": 0.0012677,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2926,7 +2926,7 @@
       "latency_ms": 1537.3265880007239,
       "prompt_tokens": 5448,
       "completion_tokens": 93,
-      "cost_usd": null,
+      "cost_usd": 0.00120585,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2948,7 +2948,7 @@
       "latency_ms": 1580.6364410000242,
       "prompt_tokens": 5451,
       "completion_tokens": 109,
-      "cost_usd": null,
+      "cost_usd": 0.00122645,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2970,7 +2970,7 @@
       "latency_ms": 1851.524462999805,
       "prompt_tokens": 5458,
       "completion_tokens": 145,
-      "cost_usd": null,
+      "cost_usd": 0.00127285,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -2991,7 +2991,7 @@
       "latency_ms": 1681.1691200000496,
       "prompt_tokens": 5458,
       "completion_tokens": 124,
-      "cost_usd": null,
+      "cost_usd": 0.0012466,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3015,7 +3015,7 @@
       "latency_ms": 1597.5851559996954,
       "prompt_tokens": 5449,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.00124355,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -3034,7 +3034,7 @@
       "latency_ms": 1571.074776000387,
       "prompt_tokens": 5448,
       "completion_tokens": 100,
-      "cost_usd": null,
+      "cost_usd": 0.0012146000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3056,7 +3056,7 @@
       "latency_ms": 1494.9570909993781,
       "prompt_tokens": 5449,
       "completion_tokens": 124,
-      "cost_usd": null,
+      "cost_usd": 0.0012448,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3077,7 +3077,7 @@
       "latency_ms": 1754.478086000745,
       "prompt_tokens": 5460,
       "completion_tokens": 154,
-      "cost_usd": null,
+      "cost_usd": 0.0012845,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3102,7 +3102,7 @@
       "latency_ms": 1389.2793909999455,
       "prompt_tokens": 5447,
       "completion_tokens": 105,
-      "cost_usd": null,
+      "cost_usd": 0.00122065,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3124,7 +3124,7 @@
       "latency_ms": 1604.7274470001867,
       "prompt_tokens": 5448,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012333500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3146,7 +3146,7 @@
       "latency_ms": 3375.3553010010364,
       "prompt_tokens": 5453,
       "completion_tokens": 132,
-      "cost_usd": null,
+      "cost_usd": 0.0012556000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3167,7 +3167,7 @@
       "latency_ms": 1760.2501359997405,
       "prompt_tokens": 5456,
       "completion_tokens": 157,
-      "cost_usd": null,
+      "cost_usd": 0.00128745,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3188,7 +3188,7 @@
       "latency_ms": 1744.9906889996782,
       "prompt_tokens": 5454,
       "completion_tokens": 128,
-      "cost_usd": null,
+      "cost_usd": 0.0012508,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3209,7 +3209,7 @@
       "latency_ms": 2113.086112000019,
       "prompt_tokens": 5453,
       "completion_tokens": 154,
-      "cost_usd": null,
+      "cost_usd": 0.0012831000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3230,7 +3230,7 @@
       "latency_ms": 1645.7897189993673,
       "prompt_tokens": 5451,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.0012352,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3251,7 +3251,7 @@
       "latency_ms": 1405.9237479996227,
       "prompt_tokens": 5446,
       "completion_tokens": 116,
-      "cost_usd": null,
+      "cost_usd": 0.0012342,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -3270,7 +3270,7 @@
       "latency_ms": 1171.5520739999192,
       "prompt_tokens": 5487,
       "completion_tokens": 79,
-      "cost_usd": null,
+      "cost_usd": 0.00119615,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -3292,7 +3292,7 @@
       "latency_ms": 1474.8238649990526,
       "prompt_tokens": 5465,
       "completion_tokens": 114,
-      "cost_usd": null,
+      "cost_usd": 0.0012355,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -3313,7 +3313,7 @@
       "latency_ms": 1542.53884299942,
       "prompt_tokens": 5490,
       "completion_tokens": 90,
-      "cost_usd": null,
+      "cost_usd": 0.0012105,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3334,7 +3334,7 @@
       "latency_ms": 1351.8531780009653,
       "prompt_tokens": 5449,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.00122855,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3356,7 +3356,7 @@
       "latency_ms": 1331.9812829995499,
       "prompt_tokens": 5446,
       "completion_tokens": 76,
-      "cost_usd": null,
+      "cost_usd": 0.0011842,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -3375,7 +3375,7 @@
       "latency_ms": 2045.2202079995914,
       "prompt_tokens": 5453,
       "completion_tokens": 121,
-      "cost_usd": null,
+      "cost_usd": 0.00124185,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3397,7 +3397,7 @@
       "latency_ms": 1002.0133880007052,
       "prompt_tokens": 5446,
       "completion_tokens": 46,
-      "cost_usd": null,
+      "cost_usd": 0.0011467,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -3416,7 +3416,7 @@
       "latency_ms": 1246.4148859999113,
       "prompt_tokens": 5481,
       "completion_tokens": 48,
-      "cost_usd": null,
+      "cost_usd": 0.0011562,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -3435,7 +3435,7 @@
       "latency_ms": 2153.3683729994664,
       "prompt_tokens": 5464,
       "completion_tokens": 85,
-      "cost_usd": null,
+      "cost_usd": 0.00119905,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3457,7 +3457,7 @@
       "latency_ms": 2791.2577199986117,
       "prompt_tokens": 5449,
       "completion_tokens": 91,
-      "cost_usd": null,
+      "cost_usd": 0.00120355,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3479,7 +3479,7 @@
       "latency_ms": 1680.615683000724,
       "prompt_tokens": 5451,
       "completion_tokens": 121,
-      "cost_usd": null,
+      "cost_usd": 0.00124145,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3501,7 +3501,7 @@
       "latency_ms": 3609.137366000141,
       "prompt_tokens": 5458,
       "completion_tokens": 133,
-      "cost_usd": null,
+      "cost_usd": 0.0012578500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3522,7 +3522,7 @@
       "latency_ms": 1847.6632130004873,
       "prompt_tokens": 5462,
       "completion_tokens": 141,
-      "cost_usd": null,
+      "cost_usd": 0.00126865,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3543,7 +3543,7 @@
       "latency_ms": 1829.710182000781,
       "prompt_tokens": 5458,
       "completion_tokens": 156,
-      "cost_usd": null,
+      "cost_usd": 0.0012866000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3564,7 +3564,7 @@
       "latency_ms": 1748.9911049997318,
       "prompt_tokens": 5457,
       "completion_tokens": 158,
-      "cost_usd": null,
+      "cost_usd": 0.0012889000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3585,7 +3585,7 @@
       "latency_ms": 1738.0954249983915,
       "prompt_tokens": 5456,
       "completion_tokens": 129,
-      "cost_usd": null,
+      "cost_usd": 0.00125245,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3606,7 +3606,7 @@
       "latency_ms": 1431.438296000124,
       "prompt_tokens": 5448,
       "completion_tokens": 131,
-      "cost_usd": null,
+      "cost_usd": 0.00125335,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -3625,7 +3625,7 @@
       "latency_ms": 1736.5007629996398,
       "prompt_tokens": 5490,
       "completion_tokens": 101,
-      "cost_usd": null,
+      "cost_usd": 0.00122425,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -3647,7 +3647,7 @@
       "latency_ms": 1836.7022809998161,
       "prompt_tokens": 5465,
       "completion_tokens": 136,
-      "cost_usd": null,
+      "cost_usd": 0.001263,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -3668,7 +3668,7 @@
       "latency_ms": 1586.5247670008102,
       "prompt_tokens": 5496,
       "completion_tokens": 104,
-      "cost_usd": null,
+      "cost_usd": 0.0012292,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3689,7 +3689,7 @@
       "latency_ms": 1482.5568390006083,
       "prompt_tokens": 5459,
       "completion_tokens": 129,
-      "cost_usd": null,
+      "cost_usd": 0.00125305,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3711,7 +3711,7 @@
       "latency_ms": 2237.057084999833,
       "prompt_tokens": 5448,
       "completion_tokens": 149,
-      "cost_usd": null,
+      "cost_usd": 0.00127585,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3733,7 +3733,7 @@
       "latency_ms": 2295.0530459984293,
       "prompt_tokens": 5481,
       "completion_tokens": 53,
-      "cost_usd": null,
+      "cost_usd": 0.00116245,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -3752,7 +3752,7 @@
       "latency_ms": 2182.6920349994907,
       "prompt_tokens": 5466,
       "completion_tokens": 119,
-      "cost_usd": null,
+      "cost_usd": 0.0012419500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3774,7 +3774,7 @@
       "latency_ms": 1435.1771759993426,
       "prompt_tokens": 5448,
       "completion_tokens": 84,
-      "cost_usd": null,
+      "cost_usd": 0.0011946,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3796,7 +3796,7 @@
       "latency_ms": 1475.1867279992439,
       "prompt_tokens": 5445,
       "completion_tokens": 95,
-      "cost_usd": null,
+      "cost_usd": 0.00120775,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3817,7 +3817,7 @@
       "latency_ms": 1845.6083559995022,
       "prompt_tokens": 5445,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.00124275,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3839,7 +3839,7 @@
       "latency_ms": 1635.9747980004613,
       "prompt_tokens": 5451,
       "completion_tokens": 113,
-      "cost_usd": null,
+      "cost_usd": 0.00123145,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -3858,7 +3858,7 @@
       "latency_ms": 1344.4907180000882,
       "prompt_tokens": 5447,
       "completion_tokens": 70,
-      "cost_usd": null,
+      "cost_usd": 0.0011769,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3879,7 +3879,7 @@
       "latency_ms": 1920.5929019990435,
       "prompt_tokens": 5453,
       "completion_tokens": 151,
-      "cost_usd": null,
+      "cost_usd": 0.00127935,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3900,7 +3900,7 @@
       "latency_ms": 1629.3604849997791,
       "prompt_tokens": 5451,
       "completion_tokens": 137,
-      "cost_usd": null,
+      "cost_usd": 0.0012614500000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3921,7 +3921,7 @@
       "latency_ms": 1906.8142090000038,
       "prompt_tokens": 5461,
       "completion_tokens": 183,
-      "cost_usd": null,
+      "cost_usd": 0.00132095,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3942,7 +3942,7 @@
       "latency_ms": 1472.7099279989488,
       "prompt_tokens": 5451,
       "completion_tokens": 135,
-      "cost_usd": null,
+      "cost_usd": 0.00125895,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3963,7 +3963,7 @@
       "latency_ms": 1239.6197360012593,
       "prompt_tokens": 5448,
       "completion_tokens": 93,
-      "cost_usd": null,
+      "cost_usd": 0.00120585,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -3985,7 +3985,7 @@
       "latency_ms": 1746.8266420000873,
       "prompt_tokens": 5451,
       "completion_tokens": 112,
-      "cost_usd": null,
+      "cost_usd": 0.0012302,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4007,7 +4007,7 @@
       "latency_ms": 1728.071829998953,
       "prompt_tokens": 5458,
       "completion_tokens": 136,
-      "cost_usd": null,
+      "cost_usd": 0.0012616,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4028,7 +4028,7 @@
       "latency_ms": 2160.8897389996855,
       "prompt_tokens": 5458,
       "completion_tokens": 153,
-      "cost_usd": null,
+      "cost_usd": 0.00128285,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4052,7 +4052,7 @@
       "latency_ms": 1934.501015000933,
       "prompt_tokens": 5449,
       "completion_tokens": 153,
-      "cost_usd": null,
+      "cost_usd": 0.00128105,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -4071,7 +4071,7 @@
       "latency_ms": 1433.2546909990924,
       "prompt_tokens": 5448,
       "completion_tokens": 95,
-      "cost_usd": null,
+      "cost_usd": 0.0012083500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4093,7 +4093,7 @@
       "latency_ms": 1505.3731620009785,
       "prompt_tokens": 5449,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.0012397999999999999,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4114,7 +4114,7 @@
       "latency_ms": 1970.127943000989,
       "prompt_tokens": 5460,
       "completion_tokens": 139,
-      "cost_usd": null,
+      "cost_usd": 0.00126575,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4137,7 +4137,7 @@
       "latency_ms": 1842.6480070011166,
       "prompt_tokens": 5447,
       "completion_tokens": 88,
-      "cost_usd": null,
+      "cost_usd": 0.0011994,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4159,7 +4159,7 @@
       "latency_ms": 1456.5153500007,
       "prompt_tokens": 5448,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012333500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4181,7 +4181,7 @@
       "latency_ms": 3151.3768270015134,
       "prompt_tokens": 5453,
       "completion_tokens": 131,
-      "cost_usd": null,
+      "cost_usd": 0.0012543500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4202,7 +4202,7 @@
       "latency_ms": 1940.6671540000389,
       "prompt_tokens": 5456,
       "completion_tokens": 153,
-      "cost_usd": null,
+      "cost_usd": 0.00128245,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4223,7 +4223,7 @@
       "latency_ms": 2250.2138929994544,
       "prompt_tokens": 5454,
       "completion_tokens": 147,
-      "cost_usd": null,
+      "cost_usd": 0.00127455,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4244,7 +4244,7 @@
       "latency_ms": 1599.0265420005016,
       "prompt_tokens": 5453,
       "completion_tokens": 152,
-      "cost_usd": null,
+      "cost_usd": 0.0012806000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4265,7 +4265,7 @@
       "latency_ms": 1778.25558099903,
       "prompt_tokens": 5451,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124645,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4286,7 +4286,7 @@
       "latency_ms": 2869.9030589996255,
       "prompt_tokens": 5446,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124545,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -4305,7 +4305,7 @@
       "latency_ms": 1298.3484169999429,
       "prompt_tokens": 5487,
       "completion_tokens": 77,
-      "cost_usd": null,
+      "cost_usd": 0.00119365,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -4327,7 +4327,7 @@
       "latency_ms": 1870.7746459986083,
       "prompt_tokens": 5465,
       "completion_tokens": 122,
-      "cost_usd": null,
+      "cost_usd": 0.0012455,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -4348,7 +4348,7 @@
       "latency_ms": 1566.5690450005059,
       "prompt_tokens": 5490,
       "completion_tokens": 123,
-      "cost_usd": null,
+      "cost_usd": 0.00125175,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4369,7 +4369,7 @@
       "latency_ms": 1922.0786450005107,
       "prompt_tokens": 5449,
       "completion_tokens": 114,
-      "cost_usd": null,
+      "cost_usd": 0.0012323,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4391,7 +4391,7 @@
       "latency_ms": 1652.2519430000102,
       "prompt_tokens": 5446,
       "completion_tokens": 108,
-      "cost_usd": null,
+      "cost_usd": 0.0012242,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -4410,7 +4410,7 @@
       "latency_ms": 1615.3454520008381,
       "prompt_tokens": 5453,
       "completion_tokens": 109,
-      "cost_usd": null,
+      "cost_usd": 0.00122685,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4432,7 +4432,7 @@
       "latency_ms": 1246.6853379992244,
       "prompt_tokens": 5446,
       "completion_tokens": 48,
-      "cost_usd": null,
+      "cost_usd": 0.0011492,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -4451,7 +4451,7 @@
       "latency_ms": 1052.7393069987738,
       "prompt_tokens": 5481,
       "completion_tokens": 60,
-      "cost_usd": null,
+      "cost_usd": 0.0011712,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -4470,7 +4470,7 @@
       "latency_ms": 1567.6904809988628,
       "prompt_tokens": 5464,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.00120405,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4492,7 +4492,7 @@
       "latency_ms": 1566.910633999214,
       "prompt_tokens": 5449,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.00122855,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4514,7 +4514,7 @@
       "latency_ms": 1576.2661199987633,
       "prompt_tokens": 5451,
       "completion_tokens": 113,
-      "cost_usd": null,
+      "cost_usd": 0.00123145,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4536,7 +4536,7 @@
       "latency_ms": 1577.320709999185,
       "prompt_tokens": 5458,
       "completion_tokens": 132,
-      "cost_usd": null,
+      "cost_usd": 0.0012566,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4557,7 +4557,7 @@
       "latency_ms": 1885.923615000138,
       "prompt_tokens": 5462,
       "completion_tokens": 168,
-      "cost_usd": null,
+      "cost_usd": 0.0013024,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4578,7 +4578,7 @@
       "latency_ms": 1798.6920139992435,
       "prompt_tokens": 5458,
       "completion_tokens": 129,
-      "cost_usd": null,
+      "cost_usd": 0.0012528500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4599,7 +4599,7 @@
       "latency_ms": 2071.733762000804,
       "prompt_tokens": 5457,
       "completion_tokens": 172,
-      "cost_usd": null,
+      "cost_usd": 0.0013064,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4620,7 +4620,7 @@
       "latency_ms": 1405.4249199998594,
       "prompt_tokens": 5456,
       "completion_tokens": 125,
-      "cost_usd": null,
+      "cost_usd": 0.00124745,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4641,7 +4641,7 @@
       "latency_ms": 2353.577435000261,
       "prompt_tokens": 5448,
       "completion_tokens": 160,
-      "cost_usd": null,
+      "cost_usd": 0.0012896000000000001,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -4660,7 +4660,7 @@
       "latency_ms": 1471.7330540006515,
       "prompt_tokens": 5490,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.00123675,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [
@@ -4682,7 +4682,7 @@
       "latency_ms": 2240.6702160005807,
       "prompt_tokens": 5465,
       "completion_tokens": 113,
-      "cost_usd": null,
+      "cost_usd": 0.00123425,
       "got_intent": "evaluate",
       "got_task_modified": false,
       "got_types": [
@@ -4703,7 +4703,7 @@
       "latency_ms": 1512.6203609997901,
       "prompt_tokens": 5496,
       "completion_tokens": 104,
-      "cost_usd": null,
+      "cost_usd": 0.0012292,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4724,7 +4724,7 @@
       "latency_ms": 2534.8224850004044,
       "prompt_tokens": 5459,
       "completion_tokens": 127,
-      "cost_usd": null,
+      "cost_usd": 0.00125055,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4746,7 +4746,7 @@
       "latency_ms": 1588.226133999342,
       "prompt_tokens": 5448,
       "completion_tokens": 155,
-      "cost_usd": null,
+      "cost_usd": 0.0012833500000000002,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -4765,7 +4765,7 @@
       "latency_ms": 1298.5471130014048,
       "prompt_tokens": 5481,
       "completion_tokens": 94,
-      "cost_usd": null,
+      "cost_usd": 0.0012137,
       "got_intent": "analyze",
       "got_task_modified": false,
       "got_types": [],
@@ -4784,7 +4784,7 @@
       "latency_ms": 2045.6687610003428,
       "prompt_tokens": 5466,
       "completion_tokens": 96,
-      "cost_usd": null,
+      "cost_usd": 0.0012132,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4806,7 +4806,7 @@
       "latency_ms": 1687.7378979988862,
       "prompt_tokens": 5448,
       "completion_tokens": 103,
-      "cost_usd": null,
+      "cost_usd": 0.0012183500000000002,
       "got_intent": "modify",
       "got_task_modified": false,
       "got_types": [],
@@ -4825,7 +4825,7 @@
       "latency_ms": 1482.8627520000737,
       "prompt_tokens": 5445,
       "completion_tokens": 97,
-      "cost_usd": null,
+      "cost_usd": 0.00121025,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4846,7 +4846,7 @@
       "latency_ms": 1635.5818200008798,
       "prompt_tokens": 5445,
       "completion_tokens": 120,
-      "cost_usd": null,
+      "cost_usd": 0.001239,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4868,7 +4868,7 @@
       "latency_ms": 1532.9627730006905,
       "prompt_tokens": 5451,
       "completion_tokens": 117,
-      "cost_usd": null,
+      "cost_usd": 0.00123645,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4892,7 +4892,7 @@
       "latency_ms": 2026.323885000238,
       "prompt_tokens": 5447,
       "completion_tokens": 78,
-      "cost_usd": null,
+      "cost_usd": 0.0011869,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4913,7 +4913,7 @@
       "latency_ms": 1899.0794719993573,
       "prompt_tokens": 5453,
       "completion_tokens": 128,
-      "cost_usd": null,
+      "cost_usd": 0.0012506000000000001,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4934,7 +4934,7 @@
       "latency_ms": 1767.2818469982303,
       "prompt_tokens": 5451,
       "completion_tokens": 131,
-      "cost_usd": null,
+      "cost_usd": 0.00125395,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4955,7 +4955,7 @@
       "latency_ms": 2097.21082300166,
       "prompt_tokens": 5461,
       "completion_tokens": 187,
-      "cost_usd": null,
+      "cost_usd": 0.00132595,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4976,7 +4976,7 @@
       "latency_ms": 1594.7499659996538,
       "prompt_tokens": 5451,
       "completion_tokens": 140,
-      "cost_usd": null,
+      "cost_usd": 0.0012652,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -4997,7 +4997,7 @@
       "latency_ms": 1582.798229999753,
       "prompt_tokens": 5448,
       "completion_tokens": 115,
-      "cost_usd": null,
+      "cost_usd": 0.0012333500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5019,7 +5019,7 @@
       "latency_ms": 1483.880321999095,
       "prompt_tokens": 5451,
       "completion_tokens": 89,
-      "cost_usd": null,
+      "cost_usd": 0.00120145,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5041,7 +5041,7 @@
       "latency_ms": 1666.0698560008314,
       "prompt_tokens": 5458,
       "completion_tokens": 140,
-      "cost_usd": null,
+      "cost_usd": 0.0012666,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5062,7 +5062,7 @@
       "latency_ms": 1853.6891019994073,
       "prompt_tokens": 5458,
       "completion_tokens": 146,
-      "cost_usd": null,
+      "cost_usd": 0.0012741000000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5086,7 +5086,7 @@
       "latency_ms": 1595.4490359999909,
       "prompt_tokens": 5449,
       "completion_tokens": 135,
-      "cost_usd": null,
+      "cost_usd": 0.00125855,
       "got_intent": "explain",
       "got_task_modified": false,
       "got_types": [],
@@ -5105,7 +5105,7 @@
       "latency_ms": 1552.4814359996526,
       "prompt_tokens": 5448,
       "completion_tokens": 111,
-      "cost_usd": null,
+      "cost_usd": 0.0012283500000000002,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5127,7 +5127,7 @@
       "latency_ms": 1564.3026199995802,
       "prompt_tokens": 5449,
       "completion_tokens": 124,
-      "cost_usd": null,
+      "cost_usd": 0.0012448,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
@@ -5148,7 +5148,7 @@
       "latency_ms": 1672.8523440015124,
       "prompt_tokens": 5460,
       "completion_tokens": 156,
-      "cost_usd": null,
+      "cost_usd": 0.001287,
       "got_intent": "modify",
       "got_task_modified": true,
       "got_types": [
