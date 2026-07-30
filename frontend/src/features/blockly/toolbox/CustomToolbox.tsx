@@ -25,6 +25,7 @@ import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskDetailType, TaskType } from 'pages/tasks/types'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { buildEntityData } from '../utils/keywords'
 import { type BlockViewMode } from '../utils/useViewSettings'
@@ -450,7 +451,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
               className="custom-toolbox__header-label"
               style={isDeleting ? { color: theme.palette.accent.dark } : {}}
             >
-              {isDeleting ? 'DELETE ZONE' : 'TOOLBOX'}
+              {isDeleting ? 'DELETE ZONE' : UI_TEXT.toolbox.toUpperCase()}
             </span>
 
             {/*isDeleting && (

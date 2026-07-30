@@ -5,7 +5,7 @@
  * insert the chosen one at the end of the program. Reuses the shadow-picker
  * catalog so names/groups stay in sync with the rest of the editor.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Dialog,
@@ -44,6 +44,8 @@ export const BlockSearchDialog = ({
   macros,
 }: BlockSearchDialogProps) => {
   const [query, setQuery] = useState('')
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const highlightedRef = useRef<HTMLDivElement>(null)
 
   // Reset the query each time the palette opens.
   useEffect(() => {
@@ -57,9 +59,24 @@ export const BlockSearchDialog = ({
     [items, query],
   )
 
+  // Query changing reshuffles `filtered` — the previous highlighted index
+  // would otherwise point at an unrelated (or out-of-bounds) result.
+  useEffect(() => {
+    setHighlightedIndex(0)
+  }, [query])
+
+  useEffect(() => {
+    highlightedRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [highlightedIndex])
+
+  // Carry each item's flat index through grouping so keyboard nav (which
+  // walks the flat, filtered/ranked order) and the grouped display agree on
+  // which one is "highlighted".
   const grouped = useMemo(() => {
-    const out: Record<string, ShadowPickerItem[]> = {}
-    for (const item of filtered) (out[item.group ?? 'Other'] ??= []).push(item)
+    const out: Record<string, { item: ShadowPickerItem; index: number }[]> = {}
+    filtered.forEach((item, index) => {
+      ;(out[item.group ?? 'Other'] ??= []).push({ item, index })
+    })
     return out
   }, [filtered])
 
@@ -86,7 +103,18 @@ export const BlockSearchDialog = ({
           fullWidth
           autoFocus
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && filtered[0]) handleSelect(filtered[0])
+            if (filtered.length === 0) return
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setHighlightedIndex((i) => (i + 1) % filtered.length)
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setHighlightedIndex(
+                (i) => (i - 1 + filtered.length) % filtered.length,
+              )
+            } else if (e.key === 'Enter' && filtered[highlightedIndex]) {
+              handleSelect(filtered[highlightedIndex])
+            }
           }}
           slotProps={{
             input: {
@@ -117,10 +145,13 @@ export const BlockSearchDialog = ({
                 {group}
               </ListSubheader>
               <List dense disablePadding>
-                {groupItems.map((item) => (
+                {groupItems.map(({ item, index }) => (
                   <ListItemButton
                     key={`${item.group}-${item.id}-${item.name}`}
+                    ref={index === highlightedIndex ? highlightedRef : null}
+                    selected={index === highlightedIndex}
                     onClick={() => handleSelect(item)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
                     sx={{ borderRadius: 1.5, py: 0.5 }}
                   >
                     <Box

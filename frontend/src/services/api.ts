@@ -40,6 +40,14 @@ interface FetchApiParamsInterface<TBody extends object = object> {
    * default there aborts the request client-side while the backend keeps
    * running to completion, which the UI then misreports as a crash. */
   timeout?: number
+  /** Cancels the request when the signal aborts (e.g. an in-flight
+   * /api/task/simulate/ POST when the operator hits Stop). */
+  signal?: AbortSignal
+  /** HTTP statuses that resolve to `response.payload` everywhere else in the
+   * app (202/400/409 — see the switch below) but should instead reject for
+   * this call. Use for callers that would otherwise treat a rejected
+   * request (e.g. 409 "a simulation is already running") as a completed one. */
+  rethrowOn?: number[]
 }
 
 export const fetchApi = async <
@@ -50,6 +58,8 @@ export const fetchApi = async <
   body = {} as TBody,
   method = MethodHTTP.GET,
   timeout,
+  signal,
+  rethrowOn,
 }: FetchApiParamsInterface<TBody>): Promise<TResponse> => {
   const apiParameters = method === MethodHTTP.GET ? body : {}
   const apiData = method !== MethodHTTP.GET ? body : {}
@@ -59,6 +69,7 @@ export const fetchApi = async <
     data: apiData,
     params: apiParameters,
     ...(timeout !== undefined ? { timeout } : {}),
+    ...(signal !== undefined ? { signal } : {}),
   }
 
   const hasRecords = (
@@ -80,12 +91,15 @@ export const fetchApi = async <
       if (error.response) {
         const err = new Error(error.response.data?.message || 'No connection')
         err.name = error.response.status.toString()
+        const rethrow = rethrowOn?.includes(error.response.status) ?? false
         switch (error.response.status) {
           case 202:
             // Breaking changes
+            if (rethrow) break
             return error.response.data.payload as TResponse
           case 400:
             toast.error(err.message)
+            if (rethrow) break
             return error.response.data.payload as TResponse
           case 401:
             toast.error(err.message)
@@ -99,6 +113,7 @@ export const fetchApi = async <
           case 409:
             // DAG cycle
             toast.error(err.message)
+            if (rethrow) break
             return error.response.data.payload as TResponse
           case 500:
             toast.error(err.message)

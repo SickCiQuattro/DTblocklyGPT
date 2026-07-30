@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Typography,
@@ -51,6 +51,8 @@ import {
   stopSimulation as stopSimAction,
   setSimulationCompleted,
   setSimulationError,
+  setSimulationProgress,
+  setSimulationMessage,
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
@@ -59,12 +61,44 @@ import {
   highlightExecutingBlock,
   clearExecutingHighlights,
 } from 'features/blockly/utils/blockHighlight'
+import { blockMetaByType } from 'features/blockly/toolbox/toolboxRegistry'
 import { SegmentedControl } from 'components/SegmentedControl'
 import { ConfirmDialog } from 'components/ConfirmDialog'
 
 import { panel } from './digitalTwin/panelTokens'
 
-const MJPEG_URL = '/camera/stream?topic=/camera/image_raw&type=mjpeg'
+// STATUS label for a running block. Uses the toolbox's own type→label map so
+// the status line says what the palette says ("Execute skill", not
+// "processing_block") — the two diverge deliberately and must not be
+// re-derived here. Falls back to a de-underscored type for anything not in
+// the palette (e.g. hidden blocks that still execute from saved tasks).
+const humanizeBlockType = (blockType?: string): string => {
+  if (!blockType) return 'Running…'
+  const meta = blockMetaByType[blockType]
+  if (meta) return meta.label
+  return blockType.replace(/_block$/, '').replace(/_/g, ' ')
+}
+
+// Shared by every Switch in this panel. MUI's Switch only themes its checked
+// state here (see checked-state sx at each call site) — off-state falls back
+// to the default light-theme thumb/track (solid white circle), which stands
+// out against this panel's dark surface. This covers the off state instead.
+const panelSwitchOffSx = {
+  '& .MuiSwitch-switchBase': { color: panel.textDim },
+  '& .MuiSwitch-track': { backgroundColor: panel.hairlineStrong },
+  '& .Mui-disabled': { color: `${panel.muted} !important` },
+  '& .Mui-disabled + .MuiSwitch-track': {
+    backgroundColor: `${panel.hairline} !important`,
+  },
+} as const
+
+// Default only resolves through the Vite dev-server proxy (vite.config.mts)
+// to web_video_server:8080 — a production build served from Django under
+// /static/ has no /camera route, so this needs an absolute override there
+// (W4.4).
+const MJPEG_URL =
+  import.meta.env.VITE_CAMERA_STREAM_URL ||
+  '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 
 interface DigitalTwinPanelProps {
   taskId: string
@@ -121,6 +155,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // First-MJPEG-frame gate: without this, the video area sits empty (no
   // feedback at all) for however long Gazebo takes to spin up after Run.
   const [feedFrameLoaded, setFeedFrameLoaded] = useState(false)
+  // Distinguishes "stream dead" from "Gazebo still booting" — without this
+  // the spinner below spins forever if web_video_server/the Vite camera
+  // proxy is down, indistinguishable from a slow-starting simulation (W4.4).
+  const [feedError, setFeedError] = useState(false)
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [confirmSending, setConfirmSending] = useState(false)
@@ -132,6 +170,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     text: string
   } | null>(null)
   const wasRunningRef = useRef(false)
+  // Aborts the in-flight /api/task/simulate/ POST on Stop or unmount — without
+  // it the 600s request outlives the Stop click and later overwrites the
+  // "stopped" status with a stale completed/error result (W3.5).
+  const runAbortRef = useRef<AbortController | null>(null)
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>(
     initialExecutionTarget ?? 'sim',
   )
@@ -153,6 +195,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     objectDetection,
     humanStep,
     blockStep,
+    blockStepsCompleted,
     connected,
   } = useRosEvents()
   const webcam = useWebcamVision()
@@ -171,6 +214,68 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }, [blockStep, workspace])
 
+  // Live progress feedback — block_step 'end' events already exist
+  // server-side (_notify_block_step in simulate.py) but nothing consumed
+  // them into simulation.progress/message before, so the STATUS line sat
+  // frozen on "Starting…" for the whole run, which can legitimately take
+  // minutes (W4.3). Capped short of 100 — a step count is a lower bound on
+  // total steps (loops repeat the same block id), not an exact fraction, so
+  // it must not claim completion before setSimulationCompleted does.
+  // Counted in useRosEvents, not here: under the polling transport a whole
+  // burst of block_step events collapses into one re-render carrying only the
+  // last one, so counting effect firings silently dropped most steps — and
+  // whenever the surviving event was a 'start' it dropped the update
+  // altogether, leaving STATUS on "Starting simulation…" for the whole run
+  // (confirmed live 2026-07-30). blockStepsCompleted is monotonic across
+  // runs, hence the per-run baseline.
+  const stepsBaselineRef = useRef(0)
+  useEffect(() => {
+    if (simulation.isRunning) stepsBaselineRef.current = blockStepsCompleted
+    // blockStepsCompleted intentionally omitted: the baseline must be sampled
+    // when the run starts, not re-sampled on every step (that would pin it to
+    // the live value and make progress permanently 0).
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [simulation.isRunning])
+  // Driven by ANY block_step, not only 'end'. Requiring 'end' meant a run
+  // whose events all arrived as 'start' (or whose only surviving event in a
+  // polled burst was a 'start') never moved the STATUS line off "Starting
+  // simulation…" — indistinguishable from a run that never began. The step
+  // COUNT still comes from completed steps; the label comes from whatever is
+  // executing right now, so the line moves as soon as anything arrives.
+  useEffect(() => {
+    if (!simulation.isRunning || !blockStep) return
+    const steps = blockStepsCompleted - stepsBaselineRef.current
+    const label = humanizeBlockType(blockStep.blockType)
+    dispatch(
+      setSimulationProgress({
+        progress: Math.min(95, steps * 5),
+        message: steps > 0 ? `${label} — ${steps} done` : label,
+      }),
+    )
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+  }, [blockStep, blockStepsCompleted, simulation.isRunning])
+
+  // A condition wait (when_block on gesture/voice/confirm/find_object) can
+  // legitimately hold the STATUS line frozen for its whole timeout (up to
+  // 30s+): when_block itself never emits a block_step (only actions do), so
+  // if the condition never resolves, nothing in the effect above ever fires
+  // and the operator sees "Starting simulation…" the entire time even though
+  // the robot is genuinely waiting on them. human_step 'started' already
+  // carries condition/value for exactly this wait — surface it on the same
+  // STATUS line instead of only in the separate countdown overlay.
+  useEffect(() => {
+    if (!simulation.isRunning || humanStep?.status !== 'started') return
+    const label =
+      humanStep.condition === 'gesture'
+        ? `Waiting for gesture "${humanStep.value}"…`
+        : humanStep.condition === 'voice'
+          ? `Waiting for voice command "${humanStep.value}"…`
+          : humanStep.condition === 'object'
+            ? `Waiting to find "${humanStep.value}"…`
+            : 'Waiting for operator confirmation…'
+    dispatch(setSimulationMessage(label))
+  }, [humanStep, simulation.isRunning, dispatch])
+
   // Safety-net cleanup when the run stops (the last block's `end` also clears).
   // Kept separate so `isRunning` isn't a dependency of the per-step effect.
   useEffect(() => {
@@ -183,12 +288,24 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // live run asks for (never both by default) and which preflight note to
   // show. find_object is deliberately excluded: it's always the robot
   // camera (vision_node), never the operator's browser webcam.
-  const taskNeedsCameraLive = !!workspace
-    ?.getAllBlocks(false)
-    .some((b) => b.type === 'gesture_block')
-  const taskNeedsVoiceLive = !!workspace
-    ?.getAllBlocks(false)
-    .some((b) => b.type === 'voice_command_block')
+  // Memoized on [workspace, simulation.isRunning] rather than recomputed
+  // every render: this component re-renders at several Hz during a live run
+  // (socket events, webcam polling, countdown ticks), and each recompute was
+  // a full tree walk. isRunning is in the key so the value is still fresh
+  // exactly when runNeedsRef below freezes it — that effect fires on the
+  // same dependency (W4.5).
+  const taskNeedsCameraLive = useMemo(
+    () =>
+      !!workspace?.getAllBlocks(false).some((b) => b.type === 'gesture_block'),
+    [workspace, simulation.isRunning],
+  )
+  const taskNeedsVoiceLive = useMemo(
+    () =>
+      !!workspace
+        ?.getAllBlocks(false)
+        .some((b) => b.type === 'voice_command_block'),
+    [workspace, simulation.isRunning],
+  )
 
   // Freeze what a run needs at the moment it starts: `workspace` is the live
   // editor (draft) canvas, still mutable while a run is in flight (toolbox
@@ -309,34 +426,37 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
   // Run-result banner: without this, a run silently flips back to idle with
   // no feedback (the peak-end payoff of the whole flow), see peer message
-  // text below. Skip the user's own "Simulation stopped" — that's already
-  // self-evident from having just pressed Stop.
+  // text below. Skip the user's own "Simulation/Run stopped" — that's
+  // already self-evident from having just pressed Stop. The reducer
+  // (simulation.ts) already picks target-specific wording ("Task completed
+  // on robot" vs "Simulation completed"), so simulation.message itself is
+  // the final display text — no need to re-derive it from executionTarget.
   useEffect(() => {
     const wasRunning = wasRunningRef.current
     wasRunningRef.current = simulation.isRunning
     if (!wasRunning || simulation.isRunning) return
-    if (simulation.message === 'Simulation stopped') return
+    if (
+      simulation.message === 'Simulation stopped' ||
+      simulation.message === 'Run stopped'
+    )
+      return
     setRunResult({
-      ok: simulation.message === UI_TEXT.simulationCompleted,
-      text:
-        simulation.message === UI_TEXT.simulationCompleted
-          ? executionTarget === 'real'
-            ? UI_TEXT.taskCompletedOnRobot
-            : UI_TEXT.simulationCompleted
-          : simulation.message,
+      ok:
+        simulation.message === UI_TEXT.simulationCompleted ||
+        simulation.message === UI_TEXT.taskCompletedOnRobot,
+      text: simulation.message,
     })
     const t = setTimeout(() => setRunResult(null), 5000)
     return () => clearTimeout(t)
-    // executionTarget is read for its value at completion time, not as a
-    // re-run trigger — the selector is disabled for the whole run, so it
-    // can't change out from under this effect.
-    // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [simulation.isRunning, simulation.message])
 
   // A fresh run starts with an empty feed again — without this the "Starting
   // simulation…" spinner would only ever show on the very first run.
   useEffect(() => {
-    if (simulation.isRunning) setFeedFrameLoaded(false)
+    if (simulation.isRunning) {
+      setFeedFrameLoaded(false)
+      setFeedError(false)
+    }
   }, [simulation.isRunning])
 
   // Auto-completing a gesture/voice wait makes no sense once the arm is
@@ -380,6 +500,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (!taskId || !canRun) return
     setErrorBanner(null) // clear any abort banner left over from a previous run
     dispatch(startSimAction(driveHardware ? 'real' : 'sim'))
+    const controller = new AbortController()
+    runAbortRef.current = controller
     try {
       await fetchApi({
         url: endpoints.task.simulate,
@@ -394,11 +516,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         // seconds, so the 60s default aborts client-side well before a real
         // run finishes and misreports it as a crash.
         timeout: 600000,
+        signal: controller.signal,
+        // A 400/409 (e.g. "a simulation is already running") means the run
+        // was rejected, not completed — must not fall into the try's success
+        // path below (W2.7).
+        rethrowOn: [400, 409],
       })
-      dispatch(setSimulationCompleted())
+      if (!controller.signal.aborted) dispatch(setSimulationCompleted())
     } catch (error: any) {
+      if (controller.signal.aborted) return // Stop already set the UI state
       console.error('Error running task:', error)
       dispatch(setSimulationError(error?.message || 'Error running task'))
+    } finally {
+      if (runAbortRef.current === controller) runAbortRef.current = null
     }
   }
 
@@ -437,6 +567,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }
 
   const stopSimulation = () => {
+    runAbortRef.current?.abort()
     dispatch(stopSimAction())
     // stop_simulation() halts the parser, Gazebo, and — if a hardware run is
     // in flight — the real arm via the halt channel. Optimistic: the UI
@@ -455,6 +586,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     )
   }
   const handleClose = () => dispatch(toggleSim())
+
+  // Cancel any in-flight run request if the panel unmounts mid-run (e.g. the
+  // operator navigates to a different task) — otherwise it resolves later
+  // and writes a stale completed/error result into the next task's state.
+  useEffect(() => {
+    return () => {
+      runAbortRef.current?.abort()
+    }
+  }, [])
 
   // Focus the panel when it opens; return focus to whatever triggered it
   // (the Header's "Robot" toggle) when it closes.
@@ -490,7 +630,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const isHumanStepActive =
     humanStep?.status === 'started' && simulation.isRunning
   const isGestureStep = isHumanStepActive && humanStep?.condition === 'gesture'
-  const isTimeout = humanStep?.status === 'timeout'
+  // Guarded by isRunning, not just status — otherwise a timeout banner from
+  // the run that just ended (or, before the disconnect fix, an even older
+  // one) stays pinned up through the next run/task (W3.7).
+  const isTimeout = humanStep?.status === 'timeout' && simulation.isRunning
   const gestureActive = activeGesture !== 'NONE' && activeGesture !== ''
   const expectedGesture =
     isHumanStepActive && humanStep?.condition === 'gesture'
@@ -823,6 +966,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               dark
               value={liveView}
               exclusive
+              // Locked to Task Execution during a run — that tab is also the
+              // only place Stop lives, so switching away while the robot
+              // (real or simulated) is moving would strand the operator
+              // without it (W3.6).
+              disabled={simulation.isRunning}
               onChange={(_, v) => v && setLiveView(v)}
               options={[
                 { value: 'simulation', label: 'Task Execution' },
@@ -919,6 +1067,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       src={MJPEG_URL}
                       alt="Robot camera feed"
                       onLoad={() => setFeedFrameLoaded(true)}
+                      onError={() => setFeedError(true)}
                       style={{
                         width: '100%',
                         height: '100%',
@@ -943,15 +1092,39 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           background: panel.videoBg,
                         }}
                       >
-                        <CircularProgress
-                          size={20}
-                          sx={{ color: panel.primary }}
-                        />
-                        <Typography
-                          sx={{ fontSize: '0.72rem', color: panel.textDim }}
-                        >
-                          Starting simulation...
-                        </Typography>
+                        {feedError ? (
+                          <>
+                            <VideoOff size={20} color={panel.errorLight} />
+                            <Typography
+                              sx={{
+                                fontSize: '0.72rem',
+                                color: panel.errorLight,
+                                textAlign: 'center',
+                              }}
+                            >
+                              Camera feed unavailable — check the ROS bridge and
+                              camera stream.
+                            </Typography>
+                          </>
+                        ) : (
+                          <>
+                            <CircularProgress
+                              size={20}
+                              sx={{ color: panel.primary }}
+                            />
+                            {/* This overlay tracks the CAMERA STREAM, not the
+                                run — it sits here until the first MJPEG frame
+                                arrives. It used to read "Starting
+                                simulation...", which made a camera that never
+                                connected look like a run stuck at step zero
+                                (misread live as a frozen STATUS, 2026-07-30). */}
+                            <Typography
+                              sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                            >
+                              Connecting to camera feed...
+                            </Typography>
+                          </>
+                        )}
                       </Box>
                     )}
                   </>
@@ -1271,6 +1444,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     onChange={(e) => setTestCameraOn(e.target.checked)}
                     disabled={simulation.isRunning}
                     sx={{
+                      ...panelSwitchOffSx,
                       '& .MuiSwitch-switchBase.Mui-checked': {
                         color: panel.primary,
                       },
@@ -1322,6 +1496,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       }
                       disabled={!testCameraOn || simulation.isRunning}
                       sx={{
+                        ...panelSwitchOffSx,
                         '& .MuiSwitch-switchBase.Mui-checked': {
                           color: panel.primary,
                         },
@@ -1371,6 +1546,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       onChange={(e) => setTestVoiceOn(e.target.checked)}
                       disabled={simulation.isRunning || !voice.browserSupported}
                       sx={{
+                        ...panelSwitchOffSx,
                         '& .MuiSwitch-switchBase.Mui-checked': {
                           color: panel.primary,
                         },
@@ -1620,35 +1796,46 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     sx={{
                       color: panel.text,
                       fontSize: '0.82rem',
+                      // MuiInputBase's global override (themes/overrides/InputBase.ts)
+                      // forces background:'white' on every input app-wide — fine on
+                      // the light theme, but it beats this field's dark-panel text
+                      // colors, making the value unreadable. Override locally.
+                      background: panel.chromeStrong,
                       '& .MuiSelect-select': {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       },
                     }}
-                    slotProps={{
-                      paper: {
-                        sx: {
-                          bgcolor: panel.bg,
-                          border: `1px solid ${panel.hairlineStrong}`,
-                          '& .MuiMenuItem-root': {
-                            color: panel.text,
-                            fontSize: '0.82rem',
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                          },
-                          '& .MuiMenuItem-root:hover': {
-                            bgcolor: panel.hover,
-                          },
-                          '& .MuiMenuItem-root.Mui-selected': {
-                            bgcolor: panel.primaryTint(0.18),
+                    MenuProps={{
+                      slotProps: {
+                        paper: {
+                          sx: {
+                            bgcolor: panel.bg,
+                            border: `1px solid ${panel.hairlineStrong}`,
+                            '& .MuiMenuItem-root': {
+                              color: panel.text,
+                              fontSize: '0.82rem',
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                            },
+                            '& .MuiMenuItem-root:hover': {
+                              bgcolor: panel.hover,
+                            },
+                            '& .MuiMenuItem-root.Mui-selected': {
+                              bgcolor: panel.primaryTint(0.18),
+                            },
                           },
                         },
                       },
                     }}
                   >
                     {webcam.devices.map((d) => (
-                      <MenuItem key={d.deviceId} value={d.deviceId} title={d.label}>
+                      <MenuItem
+                        key={d.deviceId}
+                        value={d.deviceId}
+                        title={d.label}
+                      >
                         {d.label}
                       </MenuItem>
                     ))}
@@ -1924,6 +2111,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 }}
               >
                 STATUS
+                {/* Live-event link state. A dead SocketIO connection and a run
+                    that simply isn't progressing look identical on this line
+                    otherwise — that ambiguity cost two debugging rounds on
+                    2026-07-30, since block_step events reaching the bridge
+                    says nothing about them reaching the browser. */}
+                {simulation.isRunning && !connected && (
+                  <Box
+                    component="span"
+                    sx={{ color: panel.errorLight, ml: 1, letterSpacing: 0 }}
+                  >
+                    · events offline
+                  </Box>
+                )}
               </Typography>
               <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
                 {simulation.isRunning && (
@@ -1945,7 +2145,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
             <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
               <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
-                Mode:
+                Mode
               </Typography>
               <SegmentedControl
                 dark
@@ -1958,11 +2158,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     value: 'sim',
                     label: UI_TEXT.simulate,
                     icon: <MonitorPlay size={13} />,
+                    activeColor: panel.success,
                   },
                   {
                     value: 'real',
                     label: UI_TEXT.runOnRobot,
                     icon: <Cpu size={13} />,
+                    activeColor: panel.warning,
                   },
                 ]}
               />
@@ -2001,6 +2203,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     setRunMode(e.target.checked ? 'auto' : 'live')
                   }
                   sx={{
+                    ...panelSwitchOffSx,
                     '& .MuiSwitch-switchBase.Mui-checked': {
                       color: panel.primary,
                     },
@@ -2127,16 +2330,39 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               '&:hover': { boxShadow: 'none' },
               ...(simulation.isRunning
                 ? {}
-                : {
-                    background: panel.primary,
-                    '&:hover': {
-                      background: panel.primaryDark,
-                      boxShadow: 'none',
-                    },
-                  }),
+                : executionTarget === 'real'
+                  ? {
+                      // Amber = "leads to the real robot moving" — same
+                      // semantic as the "Live hardware" warning banner below
+                      // and the Mode selector's Run on robot pill. White
+                      // text fails here (2.15:1) — warning.contrastText is
+                      // the theme's own designated ink pairing (7.94:1).
+                      background: panel.warning,
+                      color: theme.palette.warning.contrastText,
+                      '&:hover': {
+                        background: panel.warningDark,
+                        boxShadow: 'none',
+                      },
+                    }
+                  : {
+                      // Green = "twin only" — same semantic as the
+                      // reassurance banner below. success.contrastText ink
+                      // (6.72:1) — white fails here too (2.54:1).
+                      background: panel.success,
+                      color: theme.palette.success.contrastText,
+                      '&:hover': {
+                        background: panel.successDark,
+                        boxShadow: 'none',
+                      },
+                    }),
               '&.Mui-disabled': {
                 background: panel.primaryTint(0.18),
-                color: panel.iconMuted,
+                // Was panel.iconMuted (white @ 40%) = 3.65:1 on this tint —
+                // WCAG-exempt (disabled control) but still hard to read as
+                // the page's most prominent button. panel.textDim clears
+                // AA (6.04:1) while staying visually distinct from the
+                // solid-indigo enabled state.
+                color: panel.textDim,
               },
             }}
           >

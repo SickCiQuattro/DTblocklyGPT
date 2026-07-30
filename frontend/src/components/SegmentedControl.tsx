@@ -10,6 +10,10 @@ export interface SegmentedControlOption {
   value: string
   label: string
   icon?: React.ReactNode
+  /** Overrides the default indigo selected-state color for this option only
+   * (dark variant). E.g. distinguishing Simulate (green) from Run on robot
+   * (amber) — options without it keep the shared default. */
+  activeColor?: string
 }
 
 interface SegmentedControlProps extends Omit<
@@ -74,7 +78,27 @@ export const SegmentedControl = ({
       ]}
     >
       {options.map((opt) => (
-        <ToggleButton key={opt.value} value={opt.value} aria-label={opt.label}>
+        <ToggleButton
+          key={opt.value}
+          value={opt.value}
+          aria-label={opt.label}
+          sx={
+            opt.activeColor
+              ? {
+                  '&.Mui-selected': {
+                    bgcolor: dark
+                      ? alpha(opt.activeColor, 0.25)
+                      : alpha(opt.activeColor, 0.12),
+                    '&:hover': {
+                      bgcolor: dark
+                        ? alpha(opt.activeColor, 0.3)
+                        : alpha(opt.activeColor, 0.16),
+                    },
+                  },
+                }
+              : undefined
+          }
+        >
           {opt.icon}
           {opt.label}
         </ToggleButton>

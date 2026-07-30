@@ -531,8 +531,35 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       `}</style>
 
       {chatOpen && (
+        // role="separator" + tabIndex + aria-valuenow is the WAI-ARIA APG
+        // "Window Splitter" pattern (spec-correct for a resize handle, not a
+        // workaround) — jsx-a11y's interactive-roles list doesn't special-case it.
+        /* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
         <div
           onPointerDown={startResizing}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize Copilot panel"
+          aria-valuenow={width}
+          aria-valuemin={320}
+          aria-valuemax={600}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            const STEP = 16
+            const delta =
+              e.key === 'ArrowRight'
+                ? chatPosition === 'left'
+                  ? STEP
+                  : -STEP
+                : e.key === 'ArrowLeft'
+                  ? chatPosition === 'left'
+                    ? -STEP
+                    : STEP
+                  : null
+            if (delta === null) return
+            e.preventDefault()
+            setWidth(Math.min(600, Math.max(320, width + delta)))
+          }}
           style={{
             position: 'absolute',
             top: 0,
@@ -546,6 +573,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           }}
           className="resize-handle"
         />
+        /* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
       )}
 
       <div

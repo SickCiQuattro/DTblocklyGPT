@@ -114,7 +114,7 @@ const TaskRowActions = ({
   const isPublishedWithDraft = rowStatus === 'published_with_draft'
   // published_with_draft still runs (its last published version) — only a
   // task that was never published can't run at all.
-  const canRunOnRobot = rowStatus === 'published' || isPublishedWithDraft
+  const canRun = rowStatus === 'published' || isPublishedWithDraft
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
@@ -133,8 +133,8 @@ const TaskRowActions = ({
     >
       <Tooltip
         title={
-          canRunOnRobot
-            ? 'Run on the real robot'
+          canRun
+            ? `${UI_TEXT.simulate} this task`
             : 'This task is a draft — publish it first to run it'
         }
       >
@@ -142,15 +142,20 @@ const TaskRowActions = ({
             Tooltip's hover events */}
         <span>
           <IconButton
+            // Always green, always opens the panel pre-set to Simulate
+            // (never Real robot) — a one-click shortcut from the list
+            // should never default to moving the physical arm. Matches the
+            // robot panel's "green = twin-only" convention
+            // (DigitalTwinPanel.tsx Mode selector / Run button).
             sx={{ width: 40, height: 40, color: 'success.dark' }}
-            disabled={!canRunOnRobot}
+            disabled={!canRun}
             onClick={() =>
               navigate(`/task/${row.id}`, {
-                state: { autoOpenRobot: true, executionTarget: 'real' },
+                state: { autoOpenRobot: true, executionTarget: 'sim' },
               })
             }
             id={`btn-run-task-${row.id}`}
-            aria-label="run on the real robot"
+            aria-label={`${UI_TEXT.simulate} this task`}
           >
             <Play size={17} />
           </IconButton>
@@ -285,11 +290,16 @@ const TaskRowActions = ({
         confirmLabel="Delete"
         onConfirm={() => {
           setIsDeleting(true)
-          void handleDelete(row.id).finally(() => {
-            setIsDeleting(false)
-            setDeleteConfirmOpen(false)
-            handleClose()
-          })
+          // fetchApi (services/api.ts) already toasts on failure and rethrows —
+          // .catch() here just absorbs that rejection so it doesn't surface as
+          // an unhandled promise rejection; no second toast added.
+          void handleDelete(row.id)
+            .catch(() => {})
+            .finally(() => {
+              setIsDeleting(false)
+              setDeleteConfirmOpen(false)
+              handleClose()
+            })
         }}
         onCancel={() => setDeleteConfirmOpen(false)}
       />
@@ -302,11 +312,13 @@ const TaskRowActions = ({
         confirmLabel="Discard"
         onConfirm={() => {
           setIsDiscarding(true)
-          void handleDiscard(row.id).finally(() => {
-            setIsDiscarding(false)
-            setDiscardConfirmOpen(false)
-            handleClose()
-          })
+          void handleDiscard(row.id)
+            .catch(() => {})
+            .finally(() => {
+              setIsDiscarding(false)
+              setDiscardConfirmOpen(false)
+              handleClose()
+            })
         }}
         onCancel={() => setDiscardConfirmOpen(false)}
       />
@@ -583,9 +595,10 @@ const ListTasks = () => {
   }
 
   const handleDiscard = (id: number) => {
-    // No manual .catch — same as handleDelete above: fetchApi already toasts
-    // every failure path (services/api.ts), a second toast here would just
-    // stack a redundant one behind it.
+    // No .then-chained .catch here: fetchApi already toasts every failure
+    // path (services/api.ts) and rethrows — the call sites below absorb that
+    // rejection instead, so it doesn't surface as unhandled without a second
+    // redundant toast.
     return fetchApi({
       url: endpoints.task.discardDraft,
       method: MethodHTTP.POST,
@@ -699,6 +712,7 @@ const ListTasks = () => {
             inputRef={searchInputRef}
             size="small"
             placeholder="Search tasks…"
+            aria-label="Search tasks"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)

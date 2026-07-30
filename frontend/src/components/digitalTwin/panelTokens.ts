@@ -44,10 +44,12 @@ export const panel = {
 
   success: raw.success.main,
   successLight: '#86EFAC',
+  successDark: raw.success.dark,
   successTint: (opacity: number) => alpha(raw.success.main, opacity),
 
   warning: raw.warning.main,
   warningLight: raw.warning.light,
+  warningDark: raw.warning.dark,
   warningTint: (opacity: number) => alpha(raw.warning.main, opacity),
 
   error: raw.error.main,

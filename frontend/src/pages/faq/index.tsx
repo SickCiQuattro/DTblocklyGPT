@@ -39,14 +39,17 @@ const Faq = () => {
         in the rack&rdquo; — and it builds the matching blocks for you. When it
         proposes blocks, review them and press <b>Apply</b> to add them to your
         workspace, or <b>Cancel</b> to discard the suggestion. You can also just
-        ask it questions about the task you&rsquo;re building.
+        ask it questions about the task you&rsquo;re building. Turn on{' '}
+        <b>Proactive analysis</b> (the toggle inside Copilot) if you want it to
+        automatically review your workspace and point out problems without you
+        having to ask.
       </p>
 
       <h2>Testing before you run</h2>
       <p>
         Open the <b>Robot</b> panel (top right) to test your task. It has two
-        views: <b>Simulation</b> shows the robot moving once a run starts, and{' '}
-        <b>Test recognition</b> turns on your camera so you can check that
+        views: <b>Task Execution</b> shows the robot moving once a run starts,
+        and <b>Test recognition</b> turns on your camera so you can check that
         gesture, voice, and object detection actually work — you can try this
         any time, even before running anything.
       </p>
@@ -68,17 +71,18 @@ const Faq = () => {
           <b>Published</b>: saved and ready to run.
         </li>
         <li>
-          <b>Draft in progress</b>: published once, with newer changes not yet
-          published — running still uses the last published version.
+          <b>Published, with unpublished changes</b>: still shows as{' '}
+          <b>Published</b> and still runs — running always uses the last
+          published version, never your unpublished edits.
         </li>
       </ul>
 
       <h2>Running on the real robot</h2>
       <p>
-        In the Robot panel, choose <b>Run in: Simulation</b> to try the task
-        safely — the physical arm never moves. Choose <b>Real robot</b> to run
-        it on the physical arm; you&rsquo;ll be asked to confirm first, since
-        this is a real, irreversible motion.
+        In the Robot panel, choose <b>Simulate</b> to try the task safely — the
+        physical arm never moves. Choose <b>Run on robot</b> to run it on the
+        physical arm; you&rsquo;ll be asked to confirm first, since this is a
+        real, irreversible motion.
       </p>
       <p>
         The teach-pendant <b>e-stop</b> is always the fastest way to stop the

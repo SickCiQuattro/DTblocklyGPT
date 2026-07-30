@@ -18,6 +18,16 @@ export const InputLabel = (theme: Theme) => ({
           lineHeight: '1.4375em',
         },
       },
+      // Required-field asterisk: inconsistent across the app for reasons
+      // that were never a deliberate design choice (TextField auto-shows
+      // it, hand-built FormControl/InputLabel usually doesn't — see
+      // LoginForm.tsx's Username vs Password). Required is already
+      // communicated where it matters (helper text, aria-invalid, Yup error
+      // text) — hide the redundant symbol everywhere instead of patching it
+      // field by field.
+      asterisk: {
+        display: 'none',
+      },
     },
   },
 })

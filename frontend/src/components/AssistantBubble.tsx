@@ -85,8 +85,11 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
           <span
             style={{
               fontSize: '11px',
+              // No opacity dimming here (unlike UserBubble's timestamp,
+              // which has headroom): success.darker on this bubble's tinted
+              // background only clears WCAG AA (4.5:1) at full opacity —
+              // 0.8 dropped it to 3.6:1.
               color: theme.palette.success.darker,
-              opacity: 0.8,
             }}
           >
             {time}

@@ -55,6 +55,7 @@ export type SelectableShadowBlockType =
   | 'when_block'
   | 'when_otherwise_block'
   | 'macro_task_block'
+  | 'human_feedback_block'
 
 /**
  * Shadow and real block types that, when clicked, open a specific picker popover.

@@ -29,6 +29,7 @@ import {
   toggleChat,
   toggleSim,
 } from 'store/reducers/task'
+import { resetSimulation } from 'store/reducers/simulation'
 import { openDrawer } from 'store/reducers/menu'
 import { BlocklyEditor, getBlocklyStructure } from 'features/blockly'
 import { useViewSettings } from 'features/blockly/utils/useViewSettings'
@@ -120,6 +121,10 @@ export const UnifiedWorkspace = () => {
     autoOpenRobotHandledRef.current = true
     const shouldBeOpen = !!navState?.autoOpenRobot
     if (simOpen !== shouldBeOpen) dispatch(toggleSim())
+    // simulation is likewise a single global slice with no per-task scope
+    // (W3.7) — without this, navigating away mid-run and opening a different
+    // task inherits isRunning/message from whatever ran on the last one.
+    dispatch(resetSimulation())
     // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [])
 

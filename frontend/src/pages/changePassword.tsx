@@ -18,6 +18,7 @@ import { endpoints } from 'services/endpoints'
 import { LocalStorageKey, getFromLocalStorage } from 'utils/localStorageUtils'
 import { defaultPath } from 'utils/constants'
 import { activeItem } from 'store/reducers/menu'
+import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
 interface ChangePasswordFormValues {
   oldPassword: string
@@ -30,6 +31,7 @@ interface ChangePasswordResponse {
 }
 
 const ChangePassword = () => {
+  useDocumentTitle('Change Password')
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
