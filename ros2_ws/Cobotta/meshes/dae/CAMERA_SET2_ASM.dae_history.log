@@ -1,3 +1,0 @@
-Instantiated with filepath=None->None, scale=[1.0, 1.0, 1.0], mesh=<bpy_struct, Mesh("CAMERA_SET2_ASM") at 0x7f55fb4fc008>, meshname=CAMERA_SET2_ASM, material=None, mesh_orientation=None, {}
-->trying export of <bpy_struct, Mesh("CAMERA_SET2_ASM") at 0x7f55fb4fc008> to /home/thomas/Scrivania/Blender/export10/unnamed/meshes/dae/CAMERA_SET2_ASM.dae
-->wrote dae to /home/thomas/Scrivania/Blender/export10/unnamed/meshes/dae/CAMERA_SET2_ASM.dae from bpy_types.Mesh
