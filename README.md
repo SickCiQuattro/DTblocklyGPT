@@ -49,6 +49,9 @@ The system is composed of four independent processes that must all be running fo
 > `ros2_ws/.venv` → Flask bridge and ROS2 nodes only (system site-packages + `flask`, `flask-socketio`).
 > Running `ros2` commands inside the Poetry shell, or running `poetry run` inside the `.venv`, will break things.
 
+> Code and UI don't always use the same name for the same thing (e.g. `action_block` in the code is
+> "Skills" in the UI). Full conversion table: [docs/ui-naming-map.md](docs/ui-naming-map.md).
+
 ---
 
 ## Prerequisites
@@ -206,13 +209,13 @@ Open `backend/.env` and fill in your key:
 FLASK_BRIDGE_URL = "http://localhost:5000"
 
 LLM_PROVIDER = "gemini"
-LLM_MODEL = "gemini-3.1-flash-lite"
+LLM_MODEL = "gemini-3.5-flash-lite"
 
 OPENAI_API_KEY = ""
 GEMINI_API_KEY = "your_key_here"
 ```
 
-> `LLM_MODEL` must be a model your `GEMINI_API_KEY` can actually access — an invalid name makes every chat call fail. Switch provider with `LLM_PROVIDER` (`gemini` / `openai` / `ollama`); the matching endpoint is selected automatically (no `LLM_BASE_URL` needed for Gemini/OpenAI). If `LLM_MODEL` is left unset, the code falls back to `gemini-2.5-flash`.
+> `LLM_MODEL` must be a model your `GEMINI_API_KEY` can actually access — an invalid name makes every chat call fail. Switch provider with `LLM_PROVIDER` (`gemini` / `openai` / `ollama`); the matching endpoint is selected automatically (no `LLM_BASE_URL` needed for Gemini/OpenAI). If `LLM_MODEL` is left unset, the code falls back to `gemini-2.5-flash`. `LLM_API_KEY`/`LLM_BASE_URL` are optional and only needed to override the key/endpoint for whichever provider is active (e.g. point at a local proxy).
 
 **Frontend** — copy the template and fill in the localhost defaults:
 
@@ -220,7 +223,7 @@ GEMINI_API_KEY = "your_key_here"
 cp frontend/.env.example frontend/.env
 ```
 
-Open `frontend/.env` and set all six values:
+Open `frontend/.env` and set the six required values:
 
 ```env
 VITE_BACKEND_PROTOCOL = http://
@@ -231,7 +234,7 @@ VITE_FRONTEND_HOST = localhost
 VITE_FRONTEND_PORT = :3000
 ```
 
-> The template ships with empty strings (`''`). The app will not start correctly without these values.
+> The template ships with empty strings (`''`). The app will not start correctly without these six values — the `VITE_FRONTEND_*` ones are read by the Django backend (`CSRF_TRUSTED_ORIGINS`), not by the frontend, despite the prefix; leaving them empty makes `manage.py runserver` fail its system check on Django 4.0+. `VITE_SOCKET_PROTOCOL`/`VITE_SOCKET_PORT`/`VITE_CAMERA_STREAM_URL` are optional — each already has a working default (see comments in `frontend/.env.example`) and only need setting to override it, e.g. for a production build.
 
 ### 4. Install backend dependencies (Poetry)
 
@@ -411,18 +414,22 @@ Everything above runs in **simulation**. To drive the **real Denso COBOTTA** and
 
 **Startup (3 terminals):**
 ```bash
-# T1 — full twin + real arm + vision on the Canon (auto-started)
+# T1 — full twin + real arm (vision NOT started by default — ENABLE_VISION
+# defaults to false; set ENABLE_VISION=1 for object detection on the Canon)
 cd ros2_ws/Cobotta
-BCAP_HOST=192.168.0.1 EXT_SPEED=20 bash launch_physical.sh
+ENABLE_VISION=1 BCAP_HOST=192.168.0.1 EXT_SPEED=20 bash launch_physical.sh
 #   → wait for "B-CAP connected (ExtSpeed=20)"
-#   overrides: CAMERA_SOURCE=0 (USB cam) · ENABLE_VISION=0 (no detection) · BCAP_PROVIDER=…
+#   overrides: CAMERA_SOURCE=0 (USB cam) · BCAP_PROVIDER=… · YOLO_MODEL=yoloe-11s-seg.pt
+#   YOLO_CLASSES="test tube,medicine bottle,beaker,bowl" (open-vocab; unset = stock yolov8n.pt)
 ```
 
 ```bash
 # T2 — Django with hardware profile (arms the server; DRIVE_HARDWARE alone
 # does not move the arm — the frontend's "Real robot" target also has to
 # send driveHardware:true per request. "Simulation" never moves the arm.)
-DRIVE_HARDWARE=1 poetry run python manage.py runserver
+# VISION_MODEL must match T1's YOLO_MODEL/YOLO_CLASSES choice (yoloe or unset
+# for stock) — the two configs don't auto-discover each other.
+VISION_MODEL=yoloe DRIVE_HARDWARE=1 poetry run python manage.py runserver
 ```
 
 ```bash
@@ -455,6 +462,8 @@ camera/detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-
 | Operator | `operator1` | `Operator_1!` |
 | Manager | `manager1` | `passwordmanager1` |
 
+> `operator1` is actually in the Django `Manager` group in the shipped `db.sqlite3`, not `Operator`, despite the label above — it can reach the admin pages too. Use `manager1` if you specifically need to test the Operator-only role restriction.
+
 ### Django admin panel (`http://localhost:8000/admin/`)
 
 | Username | Password |
@@ -485,5 +494,6 @@ camera/detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-
 | `No module named 'rclpy'` inside Poetry shell | ROS2 Python binding missing | Use the `.venv` for ROS2 nodes, not `poetry shell`. Poetry env does not have `--system-site-packages` |
 | App loads but Simulate does nothing | Flask bridge not running | Check Terminal 3 / `launch_sim.sh` output; Flask API must respond on `:5000` |
 | CORS or CSRF errors in browser | Port forwarding not set up | Follow Path B SSH forwarding — all four ports must be forwarded |
-| `frontend/.env` values show as `undefined` | Template values left empty | Open `frontend/.env` and fill all six `VITE_*` variables (template ships with `''`) |
+| `frontend/.env` values show as `undefined` | Template values left empty | Open `frontend/.env` and fill the six `VITE_BACKEND_*`/`VITE_FRONTEND_*` variables (template ships with `''`) |
+| `manage.py runserver` fails: `SystemCheckError` on `CSRF_TRUSTED_ORIGINS` (4_0.E001) | `VITE_FRONTEND_PROTOCOL`/`HOST`/`PORT` empty or missing in `frontend/.env` | Django builds `CSRF_TRUSTED_ORIGINS` from these three — fill them in even though they look frontend-only |
 | Gesture always returns `NONE` but no error | `hand_landmarker.task` missing (silent fallback) | Same as row 2 above — download the model |
