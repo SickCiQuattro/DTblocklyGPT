@@ -31,6 +31,9 @@ Catalog (owner-scoped, shared=True):
   Tasks (7, published): Sort tubes by colour, Fill the tube rack,
     Shake and check sample, Dispose failed sample, Verify and store
     medicine, Restock the tube rack, Dispose after voice approval.
+  Draft tasks (2, unpublished, private): Move tube to sample tray, Sort
+    green tube by camera — exercise the Draft status chip / Save-vs-Publish
+    distinction; not shown to other users (shared=False).
 
 Every object/location name maps 1:1 to a Gazebo SDF folder under
 ros2_ws/Cobotta/{objects,locations}/<name.replace(' ', '_').lower()>/ — keep
@@ -431,3 +434,36 @@ class Command(BaseCommand):
                 },
             )
             self.stdout.write(f"  {'Created' if created else 'Updated'} task: {task.name}")
+
+        sample_tray = locs["sample tray"]
+
+        draft_tasks = [
+            {
+                "name": "Move tube to sample tray",
+                "description": "Picks up a tube and sets it on the sample tray.",
+                "workspace": workspace(pick(tube), place(sample_tray)),
+            },
+            {
+                "name": "Sort green tube by camera",
+                "description": "Waits for a green tube in view, then moves it to the collection rack.",
+                "workspace": workspace(when(find(green_tt), pick(green_tt), place(collection_rack))),
+            },
+        ]
+
+        for spec in draft_tasks:
+            ws = spec["workspace"]
+            task, created = Task.objects.update_or_create(
+                name=spec["name"], owner=owner,
+                defaults={
+                    "task_type": "task", "status": "draft", "shared": False,
+                    "description": spec["description"],
+                    # Matches a real never-published task's shape (see
+                    # libraries.py's task-create view + task_lifecycle.py's
+                    # save_draft): no published_workspace, signature stays at
+                    # the model default "" since build_task_signature only
+                    # ever runs on publish.
+                    "published_workspace": None, "draft_workspace": ws, "workspace": None,
+                    "code": None, "signature": "", "dependencies": [],
+                },
+            )
+            self.stdout.write(f"  {'Created' if created else 'Updated'} draft task: {task.name}")
