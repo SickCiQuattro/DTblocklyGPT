@@ -89,7 +89,7 @@ class FlaskRosClient:
         """POST /api/move-path with one bounded retry — only on a connection
         failure (request never reached the server). A read timeout means the
         server may already have accepted and started the trajectory; retrying
-        that would replay a real robot motion, so it is not retried (W2.2)."""
+        that would replay a real robot motion, so it is not retried."""
         last_exc = None
         for attempt in range(retries + 1):
             try:

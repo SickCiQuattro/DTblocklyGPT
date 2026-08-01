@@ -38,7 +38,9 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 taskStructure = data.get("taskStructure")
                 publish = data.get("publish", False)
 
-                task = Task.objects.filter(id=task_id).first()
+                # Owner-only — writes are not the same boundary as
+                # get_graphic_task's read (which also allows shared=True).
+                task = Task.objects.filter(id=task_id, owner=request.user).first()
                 if task is None:
                     return error_response("Task not found")
 
@@ -49,7 +51,7 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                 if publish:
                     sig = build_task_signature(workspace_value)
 
-                    Task.objects.filter(id=task_id).update(
+                    Task.objects.filter(id=task_id, owner=request.user).update(
                         published_workspace=workspace_value,
                         draft_workspace=None,
                         status="published",
@@ -62,7 +64,7 @@ def save_graphic_task(request: HttpRequest) -> HttpResponse:
                         if task.status == "published"
                         else task.status
                     )
-                    Task.objects.filter(id=task_id).update(
+                    Task.objects.filter(id=task_id, owner=request.user).update(
                         draft_workspace=workspace_value,
                         status=new_status,
                         last_modified=getDateTimeNow()
@@ -94,7 +96,10 @@ def get_graphic_task(request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
                 task_id = request.GET.get("id")
-                task = Task.objects.filter(id=task_id).first()
+                # Same owner-or-shared boundary as task_detail's read path.
+                task = Task.objects.filter(
+                    Q(owner=request.user) | Q(shared=True), id=task_id
+                ).first()
                 if task is None:
                     return success_response()
 

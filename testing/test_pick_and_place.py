@@ -1,10 +1,10 @@
 #./usr/bin/env python3
 """
-Test fisica Cobotta - Gazebo Harmonic + ROS2 Jazzy
+Cobotta physics test - Gazebo Harmonic + ROS2 Jazzy
 
-PREREQUISITI:
-- avvia gazebo_bridge.bat
-- avvia worldCobotta.sdf
+PREREQUISITES:
+- start gazebo_bridge.bat
+- start worldCobotta.sdf
 """
 
 import rclpy
@@ -12,9 +12,11 @@ from rclpy.node import Node
 from std_msgs.msg import Float64
 import time
 
-# todo: aggiugnere spawn automatico degli oggetti e location necessarie per il testing
-# * inizialmente si caricavano direttamente con il mondo worldCobotta.sdf, e venivano inclusi come dei moduli statici
-# * inserirli all'avvio del test di pick and place con funzione di reset della scena (guarda simulate.py)
+# TODO: add automatic spawning of the objects/locations this test needs.
+# * they used to be loaded directly with the worldCobotta.sdf world, included
+#   as static models.
+# * spawn them at test start instead, with a scene-reset function (see
+#   simulate.py).
 
 # <include>
 #       <name>flaskholder1</name>
@@ -48,8 +50,8 @@ class CobottaControllerROS2(Node):
     def __init__(self):
         super().__init__('cobotta_test_controller')
         
-        # Topic ROS2 mappati da ros_gz_bridge tramite map.yaml
-        # Il bridge mappa i topic Gazebo a nomi ROS2 più semplici
+        # ROS2 topics mapped by ros_gz_bridge via map.yaml.
+        # The bridge maps Gazebo topics to simpler ROS2 names.
         self.joint_topics = {
             'joint1': '/joint1_cmd',
             'joint2': '/joint2_cmd',

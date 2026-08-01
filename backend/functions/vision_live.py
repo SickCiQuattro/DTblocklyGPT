@@ -107,12 +107,10 @@ def _get_yolo_model():
     with _models_lock:
         if _yolo_model is None:
             try:
-                if not _YOLO_WEIGHTS.exists():
-                    logger.error("yolov8n.pt not found at %s — object detection disabled", _YOLO_WEIGHTS)
-                    _yolo_model = False
-                else:
-                    from ultralytics import YOLO
-                    _yolo_model = YOLO(str(_YOLO_WEIGHTS))
+                from ultralytics import YOLO
+                # Auto-downloads to this path on first call if missing — same
+                # behavior as vision_node.py's YOLO(p("yolo_model")) call.
+                _yolo_model = YOLO(str(_YOLO_WEIGHTS))
             except Exception as exc:
                 logger.error("YOLO init failed (object detection disabled): %s", exc)
                 _yolo_model = False

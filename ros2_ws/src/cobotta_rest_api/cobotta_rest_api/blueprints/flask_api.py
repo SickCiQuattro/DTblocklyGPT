@@ -259,8 +259,9 @@ def showTrajectory(id):
 
 @bp.route("/trajectory/<int:id>/play")
 def playTrajectory(id):
-    # TODO: playTrajectory richiede il service ROS /play_trajectory disponibile solo con cobotta_node (robot fisico).
-    # Con BridgeNodeROS in modalità simulazione, questo endpoint non è supportato.
+    # playTrajectory needs the ROS service /play_trajectory, only available
+    # via cobotta_node (physical robot) — unsupported under BridgeNodeROS in
+    # simulation mode.
     return jsonify({"error": "Trajectory playback not available in simulation mode"}), 501
 
 

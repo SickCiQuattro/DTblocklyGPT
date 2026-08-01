@@ -43,7 +43,10 @@ def save_draft(request: HttpRequest) -> HttpResponse:
         task_id = data.get("id")
         task_structure = data.get("taskStructure")
 
-        task = Task.objects.filter(id=task_id).first()
+        # No owner filter here used to mean any authenticated user could
+        # overwrite anyone's draft by id — writes are owner-only, unlike
+        # task_detail's GET which also allows shared=True (read, not write).
+        task = Task.objects.filter(id=task_id, owner=request.user).first()
         if task is None:
             return error_response("Task not found")
 
@@ -89,7 +92,7 @@ def publish_task(request: HttpRequest) -> HttpResponse:
         task_id = data.get("id")
         task_structure = data.get("taskStructure")
 
-        task = Task.objects.filter(id=task_id).first()
+        task = Task.objects.filter(id=task_id, owner=request.user).first()
         if task is None:
             return error_response("Task not found")
 
@@ -132,7 +135,7 @@ def discard_draft(request: HttpRequest) -> HttpResponse:
         data = loads(request.body)
         task_id = data.get("id")
 
-        task = Task.objects.filter(id=task_id).first()
+        task = Task.objects.filter(id=task_id, owner=request.user).first()
         if task is None:
             return error_response("Task not found")
 

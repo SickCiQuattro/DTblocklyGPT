@@ -14,10 +14,26 @@ from django.db.models import OuterRef, Subquery
 from django.contrib.auth import update_session_auth_hash
 
 
+def _is_manager(request: HttpRequest) -> bool:
+    """Same gate the frontend's GroupRoute applies to admin-only pages
+    (Users, Robots) — staff/superuser or the Manager group. None of the
+    user-management endpoints below checked this before; any authenticated
+    user (including a plain Operator) could reset another account's
+    password or create/edit/deactivate any user."""
+    user = request.user
+    return (
+        user.is_staff
+        or user.is_superuser
+        or user.groups.filter(name="Manager").exists()
+    )
+
+
 def get_user_list(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 users = (
                     User.objects.filter(is_superuser=False)
                     .values(
@@ -47,6 +63,8 @@ def user_detail(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 user_id = request.GET.get("id")
                 user = User.objects.filter(id=user_id).first()
                 if user is None:
@@ -61,6 +79,8 @@ def user_detail(request: HttpRequest) -> HttpResponse:
                 user_fields["role"] = group
                 return success_response(user_fields)
             if request.method == HttpMethod.DELETE.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 data = loads(request.body)
                 user_id = data.get("id")
                 user_active = data.get("active")
@@ -69,6 +89,8 @@ def user_detail(request: HttpRequest) -> HttpResponse:
                 )
                 return success_response()
             if request.method == HttpMethod.POST.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 data = loads(request.body)
                 user_name = data.get("username")
                 user_email = data.get("email")
@@ -93,6 +115,8 @@ def user_detail(request: HttpRequest) -> HttpResponse:
                 group.user_set.add(new_user)
                 return success_response()
             if request.method == HttpMethod.PUT.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 data = loads(request.body)
                 user_id = data.get("id")
                 user_name = data.get("username")
@@ -246,6 +270,8 @@ def reset_password(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
+                if not _is_manager(request):
+                    return error_response("Managers only.", status=403)
                 data = loads(request.body)
                 user_id = data.get("id")
                 user = User.objects.get(id=user_id)

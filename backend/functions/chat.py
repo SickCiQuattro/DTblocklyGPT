@@ -42,8 +42,8 @@ MAX_CHAT_HISTORY = 20
 logger = logging.getLogger(__name__)
 
 
-# ponytail: process-global cache, not per-request — fine for a single dev
-# server; a multi-worker deployment would need a shared cache (e.g. Redis).
+# Process-global cache, not per-request — fine for a single dev server; a
+# multi-worker deployment would need a shared cache (e.g. Redis).
 _SCENE_CACHE = {"value": None, "at": 0.0}
 _SCENE_CACHE_TTL_OK = 3       # seconds — scene changes slowly, avoid re-fetch on rapid chat turns
 _SCENE_CACHE_TTL_DOWN = 30    # seconds — don't re-pay the bridge timeout on every message while it's down
@@ -88,9 +88,9 @@ def _scene_summary():
 
 @dataclass
 class ProviderLLMResponse:
-    answer: str                    # Testo naturale estratto
-    raw_arguments: dict            # Argomenti della tool call parsati
-    raw_response: object           # Risposta originale del client per debug
+    answer: str                    # Extracted natural-language text
+    raw_arguments: dict            # Parsed tool-call arguments
+    raw_response: object           # Original client response, for debugging
 
 
 class LLMProvider:
@@ -1058,7 +1058,7 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
         # A step with no recognizable type is a malformed LLM output, not a
         # real step to show the user — drop it instead of passing a phantom
         # entry through to the proposed-task preview (callers must filter the
-        # None out, see the four validate_step(...) call sites below).
+        # None out, see the recursive validate_step(...) call sites above).
         # Warning, not error: dropping it already keeps garbage out of the
         # workspace, so the rest of an otherwise-valid proposal shouldn't be
         # discarded wholesale over one malformed step (is_valid only looks at

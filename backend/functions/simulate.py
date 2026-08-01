@@ -27,6 +27,7 @@ import platform
 import os
 import math
 import xml.etree.ElementTree as ET
+import warnings
 import ikpy.chain
 import numpy as np
 import threading
@@ -208,7 +209,7 @@ _placed_seq: int = 0
 # _persist_placed_object) and stop_simulation() (clearing it) racing on the
 # same list with no synchronization — a plain list append during a
 # concurrent reassignment can silently drop an entry, leaking that object in
-# Gazebo past STOP (W3.4). Deliberately its own lock, not _SIM_RUN_LOCK:
+# Gazebo past STOP. Deliberately its own lock, not _SIM_RUN_LOCK:
 # Stop must be able to interrupt a run that's still holding _SIM_RUN_LOCK.
 _PLACED_LOCK = threading.Lock()
 
@@ -238,7 +239,7 @@ def _abort_task(reason: str, detail: str | None = None):
         logger.error("abort_bridge_stop_failed", extra={"reason": reason, "error": str(e)})
         if is_first_call:
             # The operator needs to know the soft-stop itself didn't land —
-            # the arm may still be moving (W2.6).
+            # the arm may still be moving.
             _TASK_ABORT_REASON += " (also: could not confirm the robot stopped — check it manually)"
     try:
         _bridge.notify("/api/notify", {"description": reason, "status": "error"})
@@ -307,7 +308,12 @@ URDF_PATH = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "urdf", "cobotta_ik.urd
 
 if os.path.exists(URDF_PATH):
     try:
-        full_chain = ikpy.chain.Chain.from_urdf_file(URDF_PATH, base_elements=["base_link"])
+        # from_urdf_file builds its own default active_links_mask (all links
+        # active) before we replace it below, so it warns about the fixed
+        # base/hand links here even though COBOTTA_CHAIN never uses that mask.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="ikpy.chain")
+            full_chain = ikpy.chain.Chain.from_urdf_file(URDF_PATH, base_elements=["base_link"])
         # Keep only links up to joint_hand to use hand center as TCP (no X/Y offset)
         links = []
         for link in full_chain.links:
@@ -345,10 +351,10 @@ def debug_fk(q_deg, label="FK"):
 
 def get_sdf_dimensions(sdf_name: str, folder: str = "objects"):
     try:
-        # _safe_gz_entity_name rejects anything but [a-z0-9_] — besides being
-        # the shell-injection fix (W3.1), that also blocks '..'/'/' path
-        # traversal through this join, which .replace(" ", "_") alone (the
-        # previous "sanitize" here) did not.
+        # _safe_gz_entity_name rejects anything but [a-z0-9_] — besides
+        # preventing shell injection, that also blocks '..'/'/' path
+        # traversal through this join, which a plain .replace(" ", "_")
+        # would not.
         safe_name = _safe_gz_entity_name(sdf_name) or ""
         sdf_path = os.path.join(BASE_DIR, "ros2_ws", "Cobotta", folder, safe_name, "model.sdf")
         if not os.path.exists(sdf_path):
@@ -897,15 +903,16 @@ def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: floa
 
 
 def resolve_location_metrics(sdf_name: str) -> float:
-    # Standard location heights in meters
+    # Fallback heights (m) for locations whose SDF has no usable collision
+    # geometry — only the current catalog folder names (see seed_library.py
+    # LOCATIONS) are looked up by _h_place; other entries here are for
+    # ros2_ws/Cobotta/locations/ folders that exist but aren't in the
+    # catalog (not wired to any DB row).
     location_heights = {
-        "collector": 0.06,
         "cup": 0.08,
         "pot": 0.06,
         "pulvis": 0.05,
-        "plate": 0.02,
         "divider": 0.05,
-        "box": 0.08,
         "pillbox": 0.04,
         "tube_rack": 0.045,
         "collection_rack": 0.06,
@@ -1016,7 +1023,7 @@ def resolve_place_z(location_name: str, height_m: float) -> float:
 # self-bound via their own `--timeout`/`-d` flags (3-5s), so this is a hard
 # backstop for a genuinely hung process, not the normal-path latency. Without
 # it a stuck subprocess blocks the request thread AND _SIM_RUN_LOCK forever,
-# so no later run can ever start (W3.3).
+# so no later run can ever start.
 _SHELL_CMD_TIMEOUT_S = 8
 
 # Object/location names come from DB tables the operator can edit and are
@@ -1026,7 +1033,7 @@ _SHELL_CMD_TIMEOUT_S = 8
 # the surrounding shell/proto-text quoting — this is the actual fix, not
 # shlex.quote(): the vulnerable string is data nested inside an already-quoted
 # argument, not a standalone shell token, so shell-quoting it doesn't apply
-# here the way it would for a bare argv element (W3.1).
+# here the way it would for a bare argv element.
 _SAFE_GZ_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
@@ -1191,7 +1198,12 @@ def simulate_ros_move(
     joint_5: float,
     joint_6: float,
     hand: float,
-):
+) -> bool:
+    """Returns True on success. Every caller must check this before sending
+    the same target to hardware (_send_hw_target) or recording it as the new
+    current state (set_current_state) — otherwise an abort here (which
+    already calls _bridge.stop()) gets immediately undone by the caller's
+    own next line, which was never conditioned on this call succeeding."""
     ros_params = {
         "joint_1": joint_1,
         "joint_2": joint_2,
@@ -1203,8 +1215,17 @@ def simulate_ros_move(
     }
     try:
         _bridge.move_joints(ros_params)
+        return True
     except Exception as e:
-        print(f"[SIMULATOR] simulate_ros_move failed params={ros_params}: {e}")
+        # Same "never fake a success" rule as smooth_move's move-path
+        # failure: a silent print here let the twin freeze while the real
+        # arm kept moving on the caller's separate hardware target, and the
+        # run still reported success.
+        _abort_task(
+            "Lost connection to the simulator.",
+            detail=f"move_joints request failed params={ros_params}: {e}",
+        )
+        return False
 
 
 def _parse_hand_mm(message: str):
@@ -1375,7 +1396,8 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
     hand_delta = abs(hand - start_hand)
 
     if max_delta < 0.01 and hand_delta < 0.5:
-        simulate_ros_move(*target_joints, hand)
+        if not simulate_ros_move(*target_joints, hand):
+            return
         set_current_state(target_joints, hand)
         _send_hw_target(target_joints, hand)
         _wait_for_sim_arrival(target_joints, duration_s)
@@ -1410,7 +1432,7 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
         _bridge.move_path(waypoints)
     except Exception as e:
         # Don't record a target the simulated arm was never told to reach —
-        # every later IK seed and plan would trust a phantom pose (W2.1).
+        # every later IK seed and plan would trust a phantom pose.
         _abort_task("Lost connection to the simulator.", detail=f"move-path request failed: {e}")
         return
 
@@ -1422,8 +1444,8 @@ def smooth_move(target_joints, hand, duration_s=1.8, hz=20):
 def _send_hw_path(joints_list, hand, max_points: int = None) -> bool:
     """Forward a waypoint path to the real arm one verified PTP move at a
     time — the bulk move-path POST used for Gazebo only carries the final pose
-    to hardware, which would collapse a multi-point descent into one point
-    (W1.4). Shared by send_waypoints and simulate_ros_action.
+    to hardware, which would collapse a multi-point descent into one point.
+    Shared by send_waypoints and simulate_ros_action.
 
     ``max_points`` caps the TOTAL number of hardware PTP calls for this
     segment, evenly spaced, endpoints always included — see
@@ -1704,8 +1726,8 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         model = normalize_object_for_grasp(sdf_name, obj)
         plan = plan_pick_for_object(model, x_rel, y_rel)
         if not plan.feasible:
-            # W2.3: this used to just skip the pick — but a skipped pick left
-            # no signal for the PLACE block that follows, which would then
+            # Must abort, not just skip the pick — a skipped pick leaves no
+            # signal for the PLACE block that follows, which would then
             # detach/snap an object that was never actually grasped.
             _abort_task(
                 f"Couldn't pick up '{sdf_name}' — it isn't shaped for the gripper.",
@@ -1897,13 +1919,13 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
         print(str(e))
 
 
-def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_name: str = "collector"):
+def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_name: str = "collection rack"):
     try:
         # Sync state from ROS. Abort if it fails — a stale IK seed risks
         # singularities / collisions on the descent.
         if not sync_current_state_from_ros():
-            # W2.3: this used to just return — the run then reported success
-            # with the object silently never placed.
+            # Must abort, not just return — otherwise the run reports
+            # success with the object silently never placed.
             _abort_task(
                 "Lost track of the robot arm's position — couldn't start the place.",
                 detail="PLACE: could not sync joint state from ROS",
@@ -2092,7 +2114,7 @@ def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_n
 
         # 3. Detach → snap object to slot → open gripper
         if not detach_object_from_gripper():
-            # W2.5: the snap-to-slot below assumes the weld already let go —
+            # The snap-to-slot below assumes the weld already let go —
             # teleporting a still-welded object is undefined. Abort instead
             # of continuing as if the detach had succeeded.
             _abort_task(
@@ -2183,13 +2205,19 @@ def simulate_ros_action(action_points: list = []):
         set_current_state(joints_list[-1], cur_hand)
 
     except Exception as e:
-        print(str(e))
+        # Must abort, not silently no-op — a malformed waypoint (bad JSON,
+        # missing joint key) here would otherwise let the run report
+        # success with the operator believing the Skill ran.
+        _abort_task(
+            "Couldn't play the recorded motion — its saved points look corrupted.",
+            detail=f"simulate_ros_action failed: {e}",
+        )
 
 
 def reset_simulation_world():
     global _LAST_HW_HAND_MM
     try:
-        # Also per-run state (W3.4) — otherwise _verify_hw_grasp's first call
+        # Also per-run state — otherwise _verify_hw_grasp's first call
         # on a fresh run can read the previous run's gripper aperture instead
         # of "no data yet".
         _LAST_HW_HAND_MM = None
@@ -2201,9 +2229,8 @@ def reset_simulation_world():
         simulation_recursive_blockly_parser.pick_slot_index = 0
         _spawned_in_world.clear()
 
-        # Reset the last-pick context too (W3.4) — these are function
-        # attributes that otherwise survive across runs (this function only
-        # ever reset the slot counters above). Without this, a second run
+        # Reset the last-pick context too — these are function attributes
+        # that otherwise survive across runs. Without this, a second run
         # that places without picking first (or whose first pick fails
         # before setting them) inherits the previous run's grasp yaw / hand
         # aperture / carry pose instead of the "no pick context" defaults.
@@ -2237,21 +2264,25 @@ def reset_simulation_world():
 
 
 def delete_spawned_object_and_place():
-    """Remove temporary objects created during PICK/PLACE to allow
-    repeating the sequence without resetting the entire world.
+    """Remove the reusable "object" and "location" entities so PICK/PLACE
+    can repeat without resetting the entire world.
 
-    Only the reusable "object" entity (the pick buffer) is touched here —
-    persisted placed_* copies (see _persist_placed_object) are deliberately
-    left alone so they survive across repeat() iterations; they're swept
-    only on reset_simulation_world()/stop_simulation().
+    Both are spawned under fixed names (no allow_renaming), so a second
+    PICK or PLACE in the same run needs the previous entity gone first or
+    the spawn RPC returns data:false. Persisted placed_* copies (see
+    _persist_placed_object) are deliberately left alone here so they
+    survive across repeat() iterations; they're swept only on
+    reset_simulation_world()/stop_simulation().
     """
     try:
         delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
+        delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
         # Detach before delete: prevents stale weld state across repeated runs.
         print("[GRASP] Cleanup: detaching welded child before removing 'object'")
         detach_object_from_gripper()
         _interruptible_sleep(0.2)
         launch_wsl_ros_command(delete_object)
+        launch_wsl_ros_command(delete_location)
         _interruptible_sleep(0.4)
         _spawned_in_world.clear()
     except Exception as e:
@@ -2306,9 +2337,9 @@ def _delete_placed_objects():
     """Sweep every persisted placed_* entity (world reset / STOP)."""
     global _placed_in_world
     # Snapshot-and-clear atomically so a concurrent _persist_placed_object
-    # append (run thread) can't be lost between the read and the reassign
-    # (W3.4) — the actual `gz` deletes run outside the lock since each can
-    # take seconds and shouldn't block a concurrent append.
+    # append (run thread) can't be lost between the read and the reassign —
+    # the actual `gz` deletes run outside the lock since each can take
+    # seconds and shouldn't block a concurrent append.
     with _PLACED_LOCK:
         names, _placed_in_world = _placed_in_world, []
     for name in names:
@@ -2583,11 +2614,15 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
 
 def _move_to_scan_pose():
     """Move robot to SCAN_POSE if not already there, then settle for detection."""
-    current_joints, _ = get_current_state()
+    current_joints, current_hand = get_current_state()
     max_delta = max(abs(t - s) for t, s in zip(SCAN_POSE, current_joints))
     if max_delta > 2.0:  # degrees threshold — skip move if already in scan pose
         print(f"[SCAN] Moving to scan pose {SCAN_POSE}")
-        smooth_move(SCAN_POSE, ROS_OPEN_GRIPPER)
+        # Hold the current gripper aperture instead of forcing it open — a
+        # find_object condition can run mid-carry (e.g. inside a when block
+        # after a pick), and forcing the gripper open here would drop
+        # whatever it's holding, same fix as simulate_ros_action above.
+        smooth_move(SCAN_POSE, current_hand)
         _interruptible_sleep(0.8)  # camera settle before detection
     else:
         print("[SCAN] Already at scan pose — skipping move")
@@ -2834,9 +2869,9 @@ def simulation_recursive_blockly_parser(
                 print(f"[ERROR] Repeat: invalid/missing 'times' field, skipping loop entirely: {exc}")
                 times = 0
             if times > MAX_LOOP_ITERATIONS:
-                # W4.1: unlike repeat_until, this field is a fixed count with
-                # no other backstop — a bad/huge value ran until the operator
-                # noticed and pressed Stop.
+                # Unlike repeat_until, this field is a fixed count with no
+                # other backstop — a bad/huge value would otherwise run
+                # until the operator noticed and pressed Stop.
                 print(f"[WARNING] Repeat: {times} exceeds MAX_LOOP_ITERATIONS "
                       f"({MAX_LOOP_ITERATIONS}) — capping")
                 times = MAX_LOOP_ITERATIONS
@@ -2856,10 +2891,10 @@ def simulation_recursive_blockly_parser(
             if not condition_block:
                 # Mirror _h_when: an unattached exit condition must never let a
                 # robot action run — skip the loop entirely instead of treating
-                # the absent guard as trivially satisfied after one iteration
-                # (that used to run DO once unconditionally, the exact opposite
+                # the absent guard as trivially satisfied after one iteration.
+                # Running DO once unconditionally would be the exact opposite
                 # of WHEN's "no condition = never run" rule for the same
-                # reachable case — condition: null passes chat.py validation).
+                # reachable case (condition: null passes chat.py validation).
                 print("[WARNING] Repeat-Until: no condition attached — skipping loop entirely")
                 _next()
                 return
@@ -2896,9 +2931,9 @@ def simulation_recursive_blockly_parser(
             # null passes chat.py validation) or a hand-built block with an
             # empty shadow slot. Treat "no condition" as "not fulfilled", not
             # a crash: an ambiguous/incomplete guard must never let a robot
-            # action run, and a raised KeyError here used to be swallowed by
-            # the parser's blanket except, silently truncating every step
-            # after this one while the run still reported success.
+            # action run — a raised KeyError here would otherwise be
+            # swallowed by the parser's blanket except, silently truncating
+            # every step after this one while the run still reported success.
             condition_block = code.get("inputs", {}).get("WHEN", {}).get("block")
             fulfilled = False
             if condition_block:
@@ -2975,11 +3010,11 @@ def simulation_recursive_blockly_parser(
             if confirm_event:
                 if _condition_contains_find(confirm_event):
                     _move_to_scan_pose()
-                # The return value used to be discarded here: a confirm that
-                # timed out (or a malformed nested AND/OR confirm) still
-                # notified human-step-complete and let the task proceed —
-                # the exact failure a human confirm step exists to prevent
-                # (e.g. placing a never-verified item).
+                # The return value must be checked, not discarded — a confirm
+                # that timed out (or a malformed nested AND/OR confirm) would
+                # otherwise still notify human-step-complete and let the task
+                # proceed, the exact failure a human confirm step exists to
+                # prevent (e.g. placing a never-verified item).
                 confirmed = _eval_condition_tree(confirm_event, simulate_event)
                 if not confirmed:
                     _abort_task(
@@ -3087,33 +3122,41 @@ def simulation_recursive_blockly_parser(
             )
             spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
             if not spawn_ok:
-                print(f"[SIMULATOR] WARNING: object spawn failed for '{sdf_name}' — pick will run but attach skipped")
+                # Used to be a warning that let the pick continue with the
+                # attach skipped — the arm then closed on empty space (or,
+                # on hardware, on a real object the twin never showed),
+                # and a later gate aborted with an unrelated diagnosis.
+                # Same "never fake a success" rule as every other gate here.
+                _abort_task(
+                    f"Couldn't pick up '{sdf_name}' — it didn't spawn in the simulator.",
+                    detail=f"object spawn failed for '{sdf_name}' (gz create returned false)",
+                )
+                return
+            print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_rest:.4f} (min_z={obj_min_z:.4f})")
+            _spawned_in_world.add(sdf_name)
+            # Detach-FIRST: clear the pending DetachableJoint auto-weld before any
+            # hold/read, so the object never free-falls from the arm home pose.
+            print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
+            detach_object_from_gripper()
+            _interruptible_sleep(0.1)
+            detach_object_from_gripper()
+            # Deterministic hold: assert the object upright at its known rest pose
+            # (kills the home-drop + tip of tall/thin objects). No polling settle.
+            # GATE (mirror the pre-attach snap): a failed hold breaks determinism,
+            # so abort this pick rather than grasping an unheld/unstable object.
+            if set_object_world_pose(spawn_x, spawn_y, z_rest, yaw=0.0):
+                print(f"[GRASP] hold confirmed: upright at rest "
+                      f"({spawn_x},{spawn_y},z={z_rest:.4f})")
             else:
-                print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_rest:.4f} (min_z={obj_min_z:.4f})")
-                _spawned_in_world.add(sdf_name)
-                # Detach-FIRST: clear the pending DetachableJoint auto-weld before any
-                # hold/read, so the object never free-falls from the arm home pose.
-                print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
-                detach_object_from_gripper()
-                _interruptible_sleep(0.1)
-                detach_object_from_gripper()
-                # Deterministic hold: assert the object upright at its known rest pose
-                # (kills the home-drop + tip of tall/thin objects). No polling settle.
-                # GATE (mirror the pre-attach snap): a failed hold breaks determinism,
-                # so abort this pick rather than grasping an unheld/unstable object.
-                if set_object_world_pose(spawn_x, spawn_y, z_rest, yaw=0.0):
-                    print(f"[GRASP] hold confirmed: upright at rest "
-                          f"({spawn_x},{spawn_y},z={z_rest:.4f})")
-                else:
-                    _abort_task(
-                        f"Couldn't pick up '{sdf_name}' — it wasn't resting stably where expected.",
-                        detail=f"post-spawn hold failed for '{sdf_name}' (set_pose) — "
-                               "refusing to pick an unstable/unheld object",
-                    )
-                    return
-                _interruptible_sleep(0.3)
+                _abort_task(
+                    f"Couldn't pick up '{sdf_name}' — it wasn't resting stably where expected.",
+                    detail=f"post-spawn hold failed for '{sdf_name}' (set_pose) — "
+                           "refusing to pick an unstable/unheld object",
+                )
+                return
+            _interruptible_sleep(0.3)
             simulation_recursive_blockly_parser.last_picked_object = sdf_name
-            simulate_ros_pick(obj, sdf_name, do_attach=spawn_ok,
+            simulate_ros_pick(obj, sdf_name, do_attach=True,
                               pick_x_rel=pick_x_rel, pick_y_rel=pick_y_rel,
                               obj_min_z=obj_min_z, grasp_yaw_override=pick_grasp_yaw)
             _next()
@@ -3168,9 +3211,17 @@ def simulation_recursive_blockly_parser(
             if action and action.points:
                 try:
                     action_points = loads(action.points).get("points", [])
-                    simulate_ros_action(action_points)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Bad JSON in the DB must abort, not silently continue
+                    # as if the skill had run. simulate_ros_action already
+                    # aborts on a playback failure; this is the same rule
+                    # one step earlier, for a payload it can't even parse.
+                    _abort_task(
+                        f"Couldn't run the skill '{action_name}' — its saved motion looks corrupted.",
+                        detail=f"Action.points JSON parse failed: {e}",
+                    )
+                    return
+                simulate_ros_action(action_points)
             _next()
 
         def _h_move_to():
@@ -3194,21 +3245,27 @@ def simulation_recursive_blockly_parser(
                     target_q = [pos["j1"], pos["j2"], pos["j3"], pos["j4"], pos["j5"], pos["j6"]]
                     # MOVE_TO is an arm command, not a gripper command — carry
                     # the current aperture through to both sim and hardware
-                    # instead of guessing (W1.1: was open on hw, closed in sim).
+                    # instead of guessing (a mismatch here would leave the
+                    # gripper open on hardware and closed on the twin, or
+                    # vice versa).
                     _, current_hand = get_current_state()
-                    simulate_ros_move(
+                    if not simulate_ros_move(
                         pos["j1"], pos["j2"], pos["j3"],
                         pos["j4"], pos["j5"], pos["j6"],
                         current_hand,
-                    )
+                    ):
+                        return
                     _send_hw_target(target_q, current_hand)
+                    set_current_state(target_q, current_hand)
                     moved = True
 
             if not moved:
                 print(f"[ROBOT]   No joint data in DB for '{location_name}' → using default intermediate position")
                 _, current_hand = get_current_state()
-                simulate_ros_move(*SAFE_INTERMEDIATE_POSE, current_hand)
+                if not simulate_ros_move(*SAFE_INTERMEDIATE_POSE, current_hand):
+                    return
                 _send_hw_target(list(SAFE_INTERMEDIATE_POSE), current_hand)
+                set_current_state(list(SAFE_INTERMEDIATE_POSE), current_hand)
 
             _interruptible_sleep(2)
             _next()
@@ -3221,11 +3278,13 @@ def simulation_recursive_blockly_parser(
             else:
                 print("[ROBOT] Closing gripper")
                 hand_value = ROS_CLOSE_GRIPPER_WITH_OBJECT
-            # Gripper-only command — keep the arm where it currently is (W1.2:
-            # this used to fly the sim arm to a hardcoded home pose while the
-            # real arm stayed put, a full-pose divergence mid-carry).
+            # Gripper-only command — keep the arm where it currently is.
+            # Flying the sim arm to a hardcoded home pose here instead would
+            # diverge from the real arm, which stays put, a full-pose
+            # mismatch mid-carry.
             current_joints, _ = get_current_state()
-            simulate_ros_move(*current_joints, hand_value)
+            if not simulate_ros_move(*current_joints, hand_value):
+                return
             set_current_state(current_joints, hand_value)
             _send_hw_target([], hand_value, hand_only=True)
             _interruptible_sleep(1)
@@ -3234,7 +3293,8 @@ def simulation_recursive_blockly_parser(
         def _h_open_gripper():
             print("[ROBOT] Opening gripper")
             current_joints, _ = get_current_state()
-            simulate_ros_move(*current_joints, ROS_OPEN_GRIPPER)
+            if not simulate_ros_move(*current_joints, ROS_OPEN_GRIPPER):
+                return
             set_current_state(current_joints, ROS_OPEN_GRIPPER)
             _send_hw_target([], ROS_OPEN_GRIPPER, hand_only=True)
             _interruptible_sleep(1)
@@ -3243,7 +3303,8 @@ def simulation_recursive_blockly_parser(
         def _h_close_gripper():
             print("[ROBOT] Closing gripper")
             current_joints, _ = get_current_state()
-            simulate_ros_move(*current_joints, ROS_CLOSE_GRIPPER_WITH_OBJECT)
+            if not simulate_ros_move(*current_joints, ROS_CLOSE_GRIPPER_WITH_OBJECT):
+                return
             set_current_state(current_joints, ROS_CLOSE_GRIPPER_WITH_OBJECT)
             _send_hw_target([], ROS_CLOSE_GRIPPER_WITH_OBJECT, hand_only=True)
             _interruptible_sleep(1)
@@ -3335,10 +3396,10 @@ def simulation_recursive_blockly_parser(
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 
     except Exception as e:
-        # W2.4: this used to just print — the chain silently truncated here
-        # while simulate_task() still reported success_response() because
-        # _TASK_ABORT_REASON stayed None. Any handler bug now hard-aborts
-        # instead of masquerading as a clean run. block_type may not have been
+        # Any handler bug hard-aborts here instead of masquerading as a
+        # clean run — a bare print would let the chain silently truncate
+        # while simulate_task() still reports success_response() because
+        # _TASK_ABORT_REASON stays None. block_type may not have been
         # assigned yet if `code` itself was malformed, hence the safe lookup.
         safe_block_type = code.get("type", "unknown") if isinstance(code, dict) else "unknown"
         logger.exception("parser_handler_exception", extra={"block_type": safe_block_type})
@@ -3414,6 +3475,12 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                             )
                         if _TASK_ABORT_REASON:
                             return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
+                        if SIMULATION_STOP_EVENT.is_set():
+                            # stop_simulation() sets the event but never
+                            # _TASK_ABORT_REASON (that field is reserved for
+                            # a hard failure) — without this check, an
+                            # operator-initiated Stop still reported success.
+                            return error_response("Task stopped by operator")
                         return success_response()
                     finally:
                         _set_world_paused(True)

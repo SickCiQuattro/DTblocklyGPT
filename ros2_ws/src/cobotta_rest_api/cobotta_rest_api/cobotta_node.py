@@ -89,14 +89,15 @@ class HardwareControl(Node):
         self._halt_requested = threading.Event()
 
         # Consecutive CurJnt read failures on the encoder timer. The b-CAP link
-        # can drop between moves (nothing else touches it then) and the timer
-        # was the only thing that would notice — but it only logged a warning
-        # and kept ticking forever, so _hw_ok stayed True with a dead link.
+        # can drop between moves (nothing else touches it then), and the timer
+        # is the only thing polling it — this counter is what turns repeated
+        # failures into _hw_ok going False, instead of the timer just logging
+        # a warning and ticking forever with a dead link.
         self._encoder_fail_count = 0
-        # Rate-limits the timer's reconnect attempts once _hw_ok goes False
-        # (W3.2) — without this, a link drop disabled the arm permanently:
+        # Rate-limits the timer's reconnect attempts once _hw_ok goes False —
+        # without this, a link drop disables the arm permanently:
         # _move_target_cb refuses to even try a move while _hw_ok is False,
-        # so nothing ever generated the exception its own retry logic needs.
+        # so nothing generates the exception its own retry logic needs.
         self._last_reconnect_attempt = 0.0
 
         self._enable_hardware = enable_hardware
@@ -135,7 +136,7 @@ class HardwareControl(Node):
         # from the physical robot (not the Gazebo twin). Separate topic so it does
         # not collide with the sim's joint_state_broadcaster on /joint_states.
         self._real_pub = self.create_publisher(JointState, "/cobotta/joint_states_real", 10)
-        # Not gated on self._hw_ok (W3.2): the timer is also what retries the
+        # Not gated on self._hw_ok: the timer is also what retries the
         # b-CAP connection once the link is down, including when the initial
         # connect above failed — without the timer running, nothing would ever
         # attempt a reconnect at all.
@@ -412,16 +413,15 @@ class HardwareControl(Node):
     # ── encoder feedback (closed loop) ─────────────────────────────────────────
 
     def _try_reconnect_from_timer(self):
-        """Retry the b-CAP connection while the link is marked down (W3.2).
+        """Retry the b-CAP connection while the link is marked down.
 
-        Called from the encoder timer instead of the old bare early-return —
-        without this, ENCODER_FAIL_THRESHOLD consecutive failures (~0.3s)
-        disabled the real arm until the node was restarted: _move_target_cb
-        refuses to even attempt a move while _hw_ok is False, so nothing else
-        ever generated the exception its own reconnect-and-retry needs.
-        Rate-limited so a genuinely offline link doesn't get hammered every
-        100ms, and non-blocking on the lock so it never fights an in-flight
-        move for the socket.
+        Called from the encoder timer — without this, ENCODER_FAIL_THRESHOLD
+        consecutive failures (~0.3s) would disable the real arm until the
+        node was restarted: _move_target_cb refuses to even attempt a move
+        while _hw_ok is False, so nothing else would generate the exception
+        its own reconnect-and-retry needs. Rate-limited so a genuinely
+        offline link doesn't get hammered every 100ms, and non-blocking on
+        the lock so it never fights an in-flight move for the socket.
         """
         now = time.monotonic()
         if now - self._last_reconnect_attempt < HW_RECONNECT_INTERVAL_S:

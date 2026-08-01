@@ -100,14 +100,17 @@ def change_password(request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
                 data = loads(request.body)
-                user_id = data.get("id")
                 new_password = data.get("newPassword")
                 old_password = data.get("oldPassword")
 
                 if not request.user.check_password(old_password):
                     return success_response({"wrongPassword": True})
 
-                user = User.objects.get(id=user_id)
+                # The id used to come from the request body — verifying the
+                # caller's own old password, then changing whichever user id
+                # was passed, let any authenticated user take over any
+                # account. Always operate on the caller.
+                user = request.user
                 user.set_password(new_password)
                 user.save()
                 update_session_auth_hash(request, user)
