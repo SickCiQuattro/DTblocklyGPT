@@ -10,6 +10,8 @@ import {
   removeFromLocalStorage,
 } from 'utils/localStorageUtils'
 import { MessageText } from 'utils/messages'
+import { endpoints } from 'services/endpoints'
+import { MethodHTTP, fetchApi } from 'services/api'
 
 interface ProfileTabProps {
   setOpen?: (open: boolean) => void
@@ -29,6 +31,16 @@ export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
 
   const handleLogout = () => {
     setSelectedIndex(1)
+    // This only ever cleared localStorage — the Django session cookie
+    // (sessionid/csrftoken) survived, so "logged out" was local-only. The
+    // backend endpoint for this already exists and was just never called.
+    // Best-effort: local state clears and the redirect happens either way,
+    // even if the request itself fails (e.g. offline).
+    fetchApi({ url: endpoints.auth.logout, method: MethodHTTP.POST }).catch(
+      (error: unknown) => {
+        console.error('Server logout failed:', error)
+      },
+    )
     removeFromLocalStorage(LocalStorageKey.USER)
     toast.success(MessageText.logoutSuccess)
     setOpen?.(false)

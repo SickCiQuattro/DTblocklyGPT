@@ -1,19 +1,44 @@
 /* ─── Custom Toolbox Sidebar ──────────────────────────────────────────────── */
 
+/* The clipping window — this is what animates shut. It must NOT be a flex
+   container for the content (see .custom-toolbox__inner below): flexing the
+   header/accordion/pills directly inside a shrinking box forces them to
+   reflow at every intermediate width, wrapping and stacking their own text
+   before disappearing instead of just sliding out of a clipped window. */
 .custom-toolbox {
   width: 240px;
   min-width: 240px;
   max-width: 240px;
   height: 100%;
+  isolation: isolate;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  /* Same duration/easing as railTransition (MiniDrawerStyled.tsx) — every
+     other collapsible panel in the shell moves on this curve. */
+  transition:
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-toolbox--collapsed {
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+}
+
+/* The actual content — rigid at 240px regardless of the outer window's
+   current width, so it only ever gets clipped, never resized. */
+.custom-toolbox__inner {
+  width: 240px;
+  min-width: 240px;
+  height: 100%;
   background-color: #FFFFFF;
   border-right: 1px solid #E2E8F0;
   display: flex;
   flex-direction: column;
-  isolation: isolate;
-  overflow: hidden;
   box-sizing: border-box;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  position: relative;
 }
 
 .custom-toolbox.is-deleting {

@@ -36,6 +36,15 @@ export type TaskState = {
   // formattedIssues) — mirrored here so Header/index.tsx can show the count
   // next to Save without needing the live Blockly workspace instance itself.
   conformanceIssues: string[]
+  // True the instant a structural edit happens, false once the resulting
+  // save round-trip completes. Distinct from activeTaskStatus ===
+  // 'published_with_draft', which only becomes true after that save
+  // actually lands — for a task that WAS published, there's a gap between
+  // "edited" and "saved" (the 2s autosave debounce, task-workspace/index.tsx)
+  // during which activeTaskStatus still reads 'published'. Run must not
+  // treat that gap as "safe to run" — see Header/index.tsx's isRunPrimary
+  // and DigitalTwinPanel.tsx's canRun.
+  hasUnsavedEdits: boolean
   chatPosition: 'left' | 'right'
   robotPanelWidth: 'standard' | 'wide'
 }
@@ -64,6 +73,7 @@ export const initialState: TaskState = {
   saveError: false,
   workspaceReady: false,
   conformanceIssues: [],
+  hasUnsavedEdits: false,
   chatPosition:
     (typeof window !== 'undefined'
       ? (localStorage.getItem('chatPosition') as 'left' | 'right')
@@ -141,6 +151,9 @@ const taskSlice = createSlice({
     setConformanceIssues(state, action: PayloadAction<string[]>) {
       state.conformanceIssues = action.payload
     },
+    setHasUnsavedEdits(state, action: PayloadAction<boolean>) {
+      state.hasUnsavedEdits = action.payload
+    },
     setLastSaved(state, action: PayloadAction<string | null>) {
       state.lastSaved = action.payload
     },
@@ -178,6 +191,7 @@ export const {
   setSaveError,
   setWorkspaceReady,
   setConformanceIssues,
+  setHasUnsavedEdits,
   setLastSaved,
   toggleChatPosition,
   toggleRobotPanelWidth,

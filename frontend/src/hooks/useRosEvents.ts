@@ -24,7 +24,7 @@ export interface BlockStepStatus {
 
 // Same host as the Django backend (VITE_BACKEND_HOST) — the polling_socket_node
 // SocketIO server runs alongside the Flask bridge, not behind Django. Port is
-// its own var since it's fixed at 5001 today, not the backend's :8000 (W4.4).
+// its own var since it's fixed at 5001 today, not the backend's :8000.
 const SOCKET_URL =
   (import.meta.env.VITE_SOCKET_PROTOCOL || 'http://') +
   (import.meta.env.VITE_BACKEND_HOST || 'localhost') +
@@ -65,7 +65,7 @@ export function useRosEvents() {
       setBlockStep(null)
       // A stale 'timeout'/'error' humanStep otherwise survives past
       // disconnect and into the next run or task — its banner has no
-      // isRunning guard downstream, so it would stay up forever (W3.7).
+      // isRunning guard downstream, so it would stay up forever.
       setHumanStep(null)
     })
 

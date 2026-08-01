@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
@@ -115,6 +115,14 @@ const ListRobots = () => {
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage,
   )
+
+  // A page left stale by a shrinking result set (search, filter, another
+  // tab's delete) made the empty-state ("No robots found") fire even
+  // though rows exist, just not on this page — clamp instead of misreport.
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(rows.length / rowsPerPage) - 1)
+    if (page > maxPage) setPage(maxPage)
+  }, [rows.length, rowsPerPage, page])
 
   return (
     <MainCard

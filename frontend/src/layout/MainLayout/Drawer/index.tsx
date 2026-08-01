@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { useTheme } from '@mui/material/styles'
-import { Box, Drawer, useMediaQuery } from '@mui/material'
+import { Box, Divider, Drawer, useMediaQuery } from '@mui/material'
 
 import { drawerWidth } from 'utils/constants'
 import { Profile } from 'layout/MainLayout/Header/Profile'
 
 import { DrawerHeader } from './DrawerHeader'
 import { DrawerContent } from './DrawerContent'
+import { NAV_SEPARATOR_HEIGHT } from './DrawerContent/Navigation/NavItem'
 import {
   closedMixin,
   closedPaperMixin,
@@ -72,18 +73,32 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
             sx={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 1.5,
-              padding: '12px 8px',
-              borderTop: `1px solid ${theme.palette.divider}`,
               bgcolor: 'background.paper',
             }}
           >
+            {/* Same fixed-height separator as the FAQ row above — reserving
+                the height in both states is what keeps the profile from
+                shifting when the rail is toggled. */}
+            <Box
+              aria-hidden
+              sx={{
+                height: NAV_SEPARATOR_HEIGHT,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Divider
+                sx={{ width: open ? '100%' : 24, borderColor: 'divider' }}
+              />
+            </Box>
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: open ? 'flex-start' : 'center',
                 width: '100%',
+                padding: '12px 8px',
               }}
             >
               <Profile drawerOpen={open} />

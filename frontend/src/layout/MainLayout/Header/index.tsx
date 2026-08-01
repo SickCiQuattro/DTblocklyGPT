@@ -69,6 +69,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const conformanceIssues = useAppSelector(
     (state) => state.task.conformanceIssues,
   )
+  const hasUnsavedEdits = useAppSelector((state) => state.task.hasUnsavedEdits)
   const [issuesAnchorEl, setIssuesAnchorEl] =
     React.useState<HTMLElement | null>(null)
 
@@ -76,8 +77,14 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   // takes over once there is truly nothing left to do: the task is already
   // published AND the live workspace still passes conformance (activeTaskStatus
   // only updates after a save round-trip, so workspaceReady catches the case
-  // where the user broke a block on an already-published task).
-  const isRunPrimary = activeTaskStatus === 'published' && workspaceReady
+  // where the user broke a block on an already-published task) AND there's no
+  // edit still sitting in the autosave debounce — without hasUnsavedEdits,
+  // Run stayed primary for up to the 2s (or longer, edit-dependent) gap
+  // between a real edit and the autosave that actually publishes it, and
+  // clicking it during that gap ran the stale published version while the
+  // screen showed the new one.
+  const isRunPrimary =
+    activeTaskStatus === 'published' && workspaceReady && !hasUnsavedEdits
 
   const [isEditing, setIsEditing] = React.useState(false)
   const [localName, setLocalName] = React.useState(activeTaskName)
@@ -177,84 +184,132 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               <Typography
                 variant="h5"
                 component="h1"
-                sx={{ fontWeight: 600, cursor: 'pointer' }}
+                sx={{
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  // The left group grew a badge + Discard button — an
+                  // unbounded long name could now push into the fixed-width
+                  // action group instead of just crowding empty space.
+                  maxWidth: '320px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
                 onClick={() => setIsEditing(true)}
+                title={activeTaskName}
               >
                 {activeTaskName}
               </Typography>
-              <IconButton
-                size="small"
-                onClick={() => setIsEditing(true)}
-                aria-label="Rename task"
-                title="Rename task"
-              >
-                <Pencil size={14} />
-              </IconButton>
+              <Tooltip title="Rename task">
+                <IconButton
+                  size="small"
+                  onClick={() => setIsEditing(true)}
+                  aria-label="Rename task"
+                >
+                  <Pencil size={14} />
+                </IconButton>
+              </Tooltip>
             </div>
           )}
           {statusChip}
+          {/* Status-linked controls live next to the chip they explain, not
+              in the action group — otherwise Copilot/Save/Run shift
+              horizontally every time one of these appears (Nielsen: stable
+              positions build muscle memory across visits). */}
+          {!workspaceReady && conformanceIssues.length > 0 && (
+            <>
+              <Tooltip title="Why this task isn't ready to publish">
+                <Button
+                  size="small"
+                  onClick={(e) => setIssuesAnchorEl(e.currentTarget)}
+                  startIcon={<AlertTriangle size={14} />}
+                  aria-label={`${conformanceIssues.length} issue${conformanceIssues.length !== 1 ? 's' : ''} to fix before publishing`}
+                  sx={{
+                    height: theme.spacing(3.75),
+                    minWidth: 0,
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    px: 1.25,
+                    color: 'warning.darker',
+                    bgcolor: 'warning.lighter',
+                    border: '1px solid',
+                    borderColor: 'warning.light',
+                    '&:hover': { bgcolor: 'warning.light' },
+                  }}
+                >
+                  {conformanceIssues.length}
+                </Button>
+              </Tooltip>
+              <Popover
+                open={!!issuesAnchorEl}
+                anchorEl={issuesAnchorEl}
+                onClose={() => setIssuesAnchorEl(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                slotProps={{ paper: { sx: { mt: 0.5, maxWidth: 420 } } }}
+              >
+                <Stack spacing={1} sx={{ p: 1.5 }}>
+                  {conformanceIssues.map((issue, i) => (
+                    <Box
+                      key={i}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px',
+                      }}
+                    >
+                      <AlertTriangle
+                        size={13}
+                        style={{
+                          flexShrink: 0,
+                          marginTop: 2,
+                          color: theme.palette.warning.dark,
+                        }}
+                      />
+                      <Typography sx={{ fontSize: '0.8rem' }}>
+                        {issue}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Popover>
+            </>
+          )}
+          {activeTaskStatus === 'published_with_draft' && (
+            <Tooltip title="Discard the unpublished changes and revert to the last published version">
+              <Button
+                variant="text"
+                size="small"
+                startIcon={
+                  isSaving ? (
+                    <CircularProgress size={14} color="inherit" />
+                  ) : (
+                    <RotateCcw size={14} />
+                  )
+                }
+                disabled={isSaving}
+                onClick={() => setDiscardConfirmOpen(true)}
+                sx={{
+                  height: theme.spacing(3.75),
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  fontSize: '0.85rem',
+                  color: 'error.darker',
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.error.main, 0.08),
+                  },
+                }}
+              >
+                {UI_TEXT.discardUnpublishedChanges}
+              </Button>
+            </Tooltip>
+          )}
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {!workspaceReady && conformanceIssues.length > 0 && (
-          <>
-            <Tooltip title="Why this task isn't ready to publish">
-              <Button
-                size="small"
-                onClick={(e) => setIssuesAnchorEl(e.currentTarget)}
-                startIcon={<AlertTriangle size={14} />}
-                aria-label={`${conformanceIssues.length} issue${conformanceIssues.length !== 1 ? 's' : ''} to fix before publishing`}
-                sx={{
-                  height: theme.spacing(3.75),
-                  minWidth: 0,
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  px: 1.25,
-                  color: 'warning.darker',
-                  bgcolor: 'warning.lighter',
-                  border: '1px solid',
-                  borderColor: 'warning.light',
-                  '&:hover': { bgcolor: 'warning.light' },
-                }}
-              >
-                {conformanceIssues.length}
-              </Button>
-            </Tooltip>
-            <Popover
-              open={!!issuesAnchorEl}
-              anchorEl={issuesAnchorEl}
-              onClose={() => setIssuesAnchorEl(null)}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-              slotProps={{ paper: { sx: { mt: 0.5, maxWidth: 420 } } }}
-            >
-              <Stack spacing={1} sx={{ p: 1.5 }}>
-                {conformanceIssues.map((issue, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '8px',
-                    }}
-                  >
-                    <AlertTriangle
-                      size={13}
-                      style={{
-                        flexShrink: 0,
-                        marginTop: 2,
-                        color: theme.palette.warning.dark,
-                      }}
-                    />
-                    <Typography sx={{ fontSize: '0.8rem' }}>{issue}</Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </Popover>
-          </>
-        )}
         <Tooltip title={chatOpen ? 'Close Copilot' : 'Ask Copilot for help'}>
           <Button
             variant="text"
@@ -280,34 +335,6 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             Copilot
           </Button>
         </Tooltip>
-        {activeTaskStatus === 'published_with_draft' && (
-          <Button
-            variant="text"
-            size="small"
-            startIcon={
-              isSaving ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <RotateCcw size={14} />
-              )
-            }
-            disabled={isSaving}
-            onClick={() => setDiscardConfirmOpen(true)}
-            sx={{
-              height: theme.spacing(3.75),
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.85rem',
-              color: 'error.darker',
-              '&:hover': {
-                bgcolor: alpha(theme.palette.error.main, 0.08),
-              },
-            }}
-          >
-            {UI_TEXT.discardUnpublishedChanges}
-          </Button>
-        )}
         <Tooltip
           title={`${workspaceReady ? 'Save & Publish' : 'Save draft'} (${modKey()}S)`}
         >
@@ -326,7 +353,10 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             onClick={() => dispatch(triggerSave(true))}
             sx={{
               height: theme.spacing(3.75),
-              minWidth: '120px',
+              // Fits "Save & Publish", the longer of the two labels, so
+              // Save (and Run beside it) never shifts width when the label
+              // swaps with "Save draft".
+              minWidth: '160px',
               px: 2,
               borderRadius: '8px',
               textTransform: 'none',

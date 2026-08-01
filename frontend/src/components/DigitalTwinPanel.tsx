@@ -42,6 +42,8 @@ import { toggleSim, toggleRobotPanelWidth } from 'store/reducers/task'
 import {
   RECOGNIZED_GESTURES,
   RECOGNIZED_VOICE_COMMANDS,
+  gestureLabel,
+  voiceLabel,
 } from 'constants/recognitionRegistry'
 import { UI_TEXT } from 'constants/uiVocabulary'
 import { endpoints } from 'services/endpoints'
@@ -94,8 +96,7 @@ const panelSwitchOffSx = {
 
 // Default only resolves through the Vite dev-server proxy (vite.config.mts)
 // to web_video_server:8080 — a production build served from Django under
-// /static/ has no /camera route, so this needs an absolute override there
-// (W4.4).
+// /static/ has no /camera route, so this needs an absolute override there.
 const MJPEG_URL =
   import.meta.env.VITE_CAMERA_STREAM_URL ||
   '/camera/stream?topic=/camera/image_raw&type=mjpeg'
@@ -137,6 +138,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const simulation = useSelector((state: any) => state.simulation)
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const robotPanelWidth = useAppSelector((state) => state.task.robotPanelWidth)
+  const hasUnsavedEdits = useAppSelector((state) => state.task.hasUnsavedEdits)
 
   // Sandbox toggles for the "Test recognition" tab only — independent of any
   // run (mic permission shouldn't be required just to test gestures, and
@@ -157,7 +159,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const [feedFrameLoaded, setFeedFrameLoaded] = useState(false)
   // Distinguishes "stream dead" from "Gazebo still booting" — without this
   // the spinner below spins forever if web_video_server/the Vite camera
-  // proxy is down, indistinguishable from a slow-starting simulation (W4.4).
+  // proxy is down, indistinguishable from a slow-starting simulation.
   const [feedError, setFeedError] = useState(false)
   const [stepCompleted, setStepCompleted] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -172,7 +174,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const wasRunningRef = useRef(false)
   // Aborts the in-flight /api/task/simulate/ POST on Stop or unmount — without
   // it the 600s request outlives the Stop click and later overwrites the
-  // "stopped" status with a stale completed/error result (W3.5).
+  // "stopped" status with a stale completed/error result.
   const runAbortRef = useRef<AbortController | null>(null)
   const [executionTarget, setExecutionTarget] = useState<'sim' | 'real'>(
     initialExecutionTarget ?? 'sim',
@@ -218,7 +220,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // server-side (_notify_block_step in simulate.py) but nothing consumed
   // them into simulation.progress/message before, so the STATUS line sat
   // frozen on "Starting…" for the whole run, which can legitimately take
-  // minutes (W4.3). Capped short of 100 — a step count is a lower bound on
+  // minutes. Capped short of 100 — a step count is a lower bound on
   // total steps (loops repeat the same block id), not an exact fraction, so
   // it must not claim completion before setSimulationCompleted does.
   // Counted in useRosEvents, not here: under the polling transport a whole
@@ -267,9 +269,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (!simulation.isRunning || humanStep?.status !== 'started') return
     const label =
       humanStep.condition === 'gesture'
-        ? `Waiting for gesture "${humanStep.value}"…`
+        ? `Waiting for gesture "${gestureLabel(humanStep.value)}"…`
         : humanStep.condition === 'voice'
-          ? `Waiting for voice command "${humanStep.value}"…`
+          ? `Waiting for voice command "${voiceLabel(humanStep.value)}"…`
           : humanStep.condition === 'object'
             ? `Waiting to find "${humanStep.value}"…`
             : 'Waiting for operator confirmation…'
@@ -293,7 +295,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // (socket events, webcam polling, countdown ticks), and each recompute was
   // a full tree walk. isRunning is in the key so the value is still fresh
   // exactly when runNeedsRef below freezes it — that effect fires on the
-  // same dependency (W4.5).
+  // same dependency.
   const taskNeedsCameraLive = useMemo(
     () =>
       !!workspace?.getAllBlocks(false).some((b) => b.type === 'gesture_block'),
@@ -519,7 +521,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         signal: controller.signal,
         // A 400/409 (e.g. "a simulation is already running") means the run
         // was rejected, not completed — must not fall into the try's success
-        // path below (W2.7).
+        // path below.
         rethrowOn: [400, 409],
       })
       if (!controller.signal.aborted) dispatch(setSimulationCompleted())
@@ -624,15 +626,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // Only a fully published task can drive sim or robot. A task that is still a
   // draft — or published_with_draft (edits pending) — must not run, because the
   // runtime workspace would be the last published version and would not match
-  // the draft on screen. Webcam/gesture testing stays available regardless.
-  const canRun = taskStatus === 'published'
+  // the draft on screen. hasUnsavedEdits closes the gap the other two miss:
+  // right after an edit to an already-published task, taskStatus still reads
+  // 'published' until the autosave round-trip lands (up to 2s, longer with
+  // continued editing) — without this, Run would stay enabled and execute
+  // the stale published version while the screen shows the new one. Webcam/
+  // gesture testing stays available regardless.
+  const canRun = taskStatus === 'published' && !hasUnsavedEdits
 
   const isHumanStepActive =
     humanStep?.status === 'started' && simulation.isRunning
   const isGestureStep = isHumanStepActive && humanStep?.condition === 'gesture'
   // Guarded by isRunning, not just status — otherwise a timeout banner from
-  // the run that just ended (or, before the disconnect fix, an even older
-  // one) stays pinned up through the next run/task (W3.7).
+  // the run that just ended stays pinned up through the next run/task.
   const isTimeout = humanStep?.status === 'timeout' && simulation.isRunning
   const gestureActive = activeGesture !== 'NONE' && activeGesture !== ''
   const expectedGesture =
@@ -665,7 +671,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       text:
         taskStatus === 'published_with_draft'
           ? `${UI_TEXT.unpublishedChanges} — use Save & Publish in the top bar to run them.`
-          : 'This task is a draft — use Save & Publish in the top bar to run it.',
+          : taskStatus === 'published' && hasUnsavedEdits
+            ? "You just made an edit that hasn't saved yet — wait a moment, then use Save & Publish in the top bar to run it."
+            : 'This task is a draft — use Save & Publish in the top bar to run it.',
     })
   }
   if (executionTarget === 'real' && !hardwareArmed) {
@@ -936,9 +944,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <Typography sx={{ fontSize: '0.78rem', color: panel.warningLight }}>
               Timeout:{' '}
               {humanStep?.condition === 'gesture'
-                ? `gesture "${humanStep?.value}" not detected`
+                ? `gesture "${gestureLabel(humanStep?.value)}" not detected`
                 : humanStep?.condition === 'voice'
-                  ? `voice command "${humanStep?.value}" not heard`
+                  ? `voice command "${voiceLabel(humanStep?.value)}" not heard`
                   : humanStep?.condition === 'human_feedback'
                     ? 'operator confirmation not received'
                     : `object "${humanStep?.value}" not detected`}
@@ -964,12 +972,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             <SectionLabel>Live view</SectionLabel>
             <SegmentedControl
               dark
+              aria-label="Live view"
               value={liveView}
               exclusive
               // Locked to Task Execution during a run — that tab is also the
               // only place Stop lives, so switching away while the robot
               // (real or simulated) is moving would strand the operator
-              // without it (W3.6).
+              // without it.
               disabled={simulation.isRunning}
               onChange={(_, v) => v && setLiveView(v)}
               options={[
@@ -1102,8 +1111,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                                 textAlign: 'center',
                               }}
                             >
-                              Camera feed unavailable — check the ROS bridge and
-                              camera stream.
+                              Camera feed unavailable — check that the robot's
+                              camera is connected and the simulation stack is
+                              running.
                             </Typography>
                           </>
                         ) : (
@@ -1314,7 +1324,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           letterSpacing: '0.02em',
                         }}
                       >
-                        {expectedGesture}
+                        {gestureLabel(expectedGesture)}
                       </Typography>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
@@ -1341,7 +1351,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                               : panel.textDim,
                         }}
                       >
-                        {activeGesture || 'NONE'}
+                        {gestureLabel(activeGesture)}
                       </Typography>
                     </Box>
                   </Stack>
@@ -1799,12 +1809,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       // MuiInputBase's global override (themes/overrides/InputBase.ts)
                       // forces background:'white' on every input app-wide — fine on
                       // the light theme, but it beats this field's dark-panel text
-                      // colors, making the value unreadable. Override locally.
-                      background: panel.chromeStrong,
+                      // colors, making the value unreadable. !important to make sure
+                      // it actually wins (plain override here left the dropdown-arrow
+                      // corner still showing the forced white through).
+                      background: `${panel.chromeStrong} !important`,
                       '& .MuiSelect-select': {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        background: 'transparent !important',
+                      },
+                      '& .MuiSelect-icon': {
+                        color: panel.textDim,
+                        background: 'transparent !important',
                       },
                     }}
                     MenuProps={{
@@ -1979,7 +1996,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     ? 'gesture engine unavailable'
                     : cameraActive && webcam.active && webcam.error
                       ? 'capture error — retry'
-                      : activeGesture || 'NONE'}
+                      : gestureLabel(activeGesture)}
                 </Typography>
               </Stack>
 
@@ -2149,6 +2166,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               </Typography>
               <SegmentedControl
                 dark
+                aria-label="Mode"
                 value={executionTarget}
                 exclusive
                 disabled={simulation.isRunning}

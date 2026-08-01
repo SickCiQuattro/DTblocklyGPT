@@ -154,16 +154,6 @@ export const FormAction = ({
       return
     }
 
-    // Mock data
-    /*
-    const newPoint =
-      '{"X": 0, "Y": 0, "Z": 0, "RX": 0, "RY": 0, "RZ": 0, "FIG": 0}'
-    const pointObj = JSON.parse(point)
-    const newArray = [...pointObj.points, newPoint]
-    const newPointObj = { points: newArray }
-    setFieldValue('points', JSON.stringify(newPointObj))
-    */
-
     void fetchApi<GetJointPositionResponse, { robot: number }>({
       url: endpoints.home.libraries.getJointPosition,
       method: MethodHTTP.POST,

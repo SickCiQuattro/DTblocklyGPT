@@ -76,7 +76,6 @@ export const FormObject = ({
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
   const [searchParams] = useSearchParams()
   const forcedName = searchParams.get('forcedName')
-  // const [acquiredPhoto, setAcquiredPhoto] = React.useState<boolean>(false)
 
   const onSubmit = (
     values: ObjectFormValues,
@@ -134,9 +133,6 @@ export const FormObject = ({
       return
     }
 
-    // Mock data
-    // setFieldValue('height', 10)
-
     void fetchApi<CartesianPositionResponse, { robot: number }>({
       url: endpoints.home.libraries.getCartesianPosition,
       method: MethodHTTP.POST,
@@ -164,14 +160,6 @@ export const FormObject = ({
       setFieldError('robot', MessageText.requiredField)
       return
     }
-
-    // Mock data
-    /*
-    setAcquiredPhoto(true)
-    setFieldValue('photo', '/test_image/grid_photo.png')
-    setFieldValue('contour', '/test_image/grid_contour.png')
-    setFieldValue('shape', '/test_image/grid_shape.png')
-    */
 
     void fetchApi<ObjectPhotoResponse, { robot: number }>({
       url: endpoints.home.libraries.getPhoto,
@@ -589,11 +577,6 @@ export const FormObject = ({
                       maxHeight: '500px',
                       border: '1px solid',
                     }}
-                    /*                     image={
-                      acquiredPhoto
-                        ? values.photo
-                        : `data:image/png;base64,${values.photo}`
-                    } */
                     image={`data:image/png;base64,${values.photo}`}
                     alt="Object Photo"
                   />
@@ -615,11 +598,6 @@ export const FormObject = ({
                       maxHeight: '500px',
                       border: '1px solid',
                     }}
-                    /*                     image={
-                      acquiredPhoto
-                        ? values.contour
-                        : `data:image/png;base64,${values.contour}`
-                    } */
                     image={`data:image/png;base64,${values.contour}`}
                     alt="Object Contour"
                   />
@@ -641,11 +619,6 @@ export const FormObject = ({
                       maxHeight: '500px',
                       border: '1px solid',
                     }}
-                    /*                     image={
-                      acquiredPhoto
-                        ? values.shape
-                        : `data:image/png;base64,${values.shape}`
-                    } */
                     image={`data:image/png;base64,${values.shape}`}
                     alt="Object Shape"
                   />

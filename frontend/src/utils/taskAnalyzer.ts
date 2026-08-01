@@ -58,7 +58,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
         issues.push({
           type: 'error',
           message:
-            'Robot attempting to pick while already holding an object (missing intermediate place)',
+            'This step tries to pick up an object while already holding one — add a Place step first.',
           stepPath: currentPath,
         })
       }
@@ -68,7 +68,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
         issues.push({
           type: 'error',
           message:
-            'Robot attempting to place but not holding an object (missing intermediate pick)',
+            "This step tries to place an object, but nothing's been picked up yet — add a Pick step first.",
           stepPath: currentPath,
         })
       }
@@ -77,7 +77,8 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
       if (step.type === 'when' && !step.condition) {
         issues.push({
           type: 'error',
-          message: 'When block is missing a condition',
+          message:
+            'This condition step has no condition set — choose one (gesture, voice command, object, etc.).',
           stepPath: currentPath,
         })
       }
@@ -96,7 +97,8 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
         if (!obj) {
           issues.push({
             type: 'error',
-            message: `Object with id '${step.objectId}' not found`,
+            message:
+              'This step picks an object that no longer exists in the library — pick a different one.',
             stepPath: currentPath,
           })
         } else {
@@ -108,7 +110,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
           ) {
             issues.push({
               type: 'error',
-              message: `Object '${obj.name}' (weight ${obj.weight}) exceeds robot max load (${robot.max_load})`,
+              message: `'${obj.name}' is too heavy for this robot (${obj.weight}g, max ${robot.max_load}g).`,
               stepPath: currentPath,
             })
           }
@@ -119,7 +121,7 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
             if (dimensions.some((dim) => dim && dim > maxOpenArm)) {
               issues.push({
                 type: 'error',
-                message: `Object '${obj.name}' (dimensions ${dimensions.join('x')}) exceeds robot max open arm (${maxOpenArm})`,
+                message: `'${obj.name}' is too wide for this robot's gripper to hold.`,
                 stepPath: currentPath,
               })
             }
@@ -132,7 +134,8 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
         if (!loc) {
           issues.push({
             type: 'error',
-            message: `Location with id '${step.locationId}' not found`,
+            message:
+              'This step places at a location that no longer exists in the library — pick a different one.',
             stepPath: currentPath,
           })
         }
@@ -143,7 +146,8 @@ export const analyzeAbstractTask = (task: AbstractTask): AnalyzerIssue[] => {
         if (!act) {
           issues.push({
             type: 'error',
-            message: `Action with id '${step.actionId}' not found`,
+            message:
+              'This step runs a skill that no longer exists in the library — pick a different one.',
             stepPath: currentPath,
           })
         }

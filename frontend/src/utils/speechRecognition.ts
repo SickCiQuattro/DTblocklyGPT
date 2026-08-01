@@ -93,10 +93,10 @@ const setState = (patch: Partial<SpeechState>) => {
 const listenRequests = new Set<string>()
 let finalTranscript = ''
 
-// ponytail: unbounded restart would spin forever against a dead mic
-// (audio-capture / repeated network errors fire error->end immediately).
-// Cap attempts; reset the counter on any real result, which proves the
-// recognizer is actually healthy.
+// Unbounded restart would spin forever against a dead mic (audio-capture /
+// repeated network errors fire error->end immediately). Cap attempts; reset
+// the counter on any real result, which proves the recognizer is actually
+// healthy.
 let restartAttempts = 0
 const MAX_RESTART_ATTEMPTS = 5
 
@@ -142,9 +142,9 @@ const getRecognition = (): SpeechRecognitionLike | null => {
   recognition.onend = () => {
     if (listenRequests.size > 0 && recognition) {
       if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
-        // ponytail: give up instead of spinning forever on a dead mic —
-        // listenRequests stays populated so a caller can tell the
-        // difference from a clean stop, but we no longer retry it.
+        // Give up instead of spinning forever on a dead mic — listenRequests
+        // stays populated so a caller can tell the difference from a clean
+        // stop, but we no longer retry it.
         setState({ listening: false })
         return
       }

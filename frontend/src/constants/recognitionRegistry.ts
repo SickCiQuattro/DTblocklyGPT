@@ -33,3 +33,14 @@ export const GESTURE_DROPDOWN_OPTIONS: [string, string][] =
 
 export const VOICE_DROPDOWN_OPTIONS: [string, string][] =
   RECOGNIZED_VOICE_COMMANDS.map((v) => [v.label, v.code])
+
+/** Plain-language label for a gesture code (e.g. "THUMBS_UP" -> "Thumbs up")
+ * — falls back to the raw code for anything not in the recognized set. */
+export const gestureLabel = (code: string | null | undefined): string =>
+  RECOGNIZED_GESTURES.find((g) => g.code === code)?.label ?? code ?? 'None'
+
+/** Same, for a voice-command code (e.g. "PROCEED" -> "Proceed"). */
+export const voiceLabel = (code: string | null | undefined): string =>
+  RECOGNIZED_VOICE_COMMANDS.find((v) => v.code === code)?.label ??
+  code ??
+  'None'

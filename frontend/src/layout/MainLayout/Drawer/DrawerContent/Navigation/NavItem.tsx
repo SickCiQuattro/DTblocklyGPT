@@ -16,11 +16,18 @@ import { useAppSelector } from 'store/reducers'
 import { defaultPath } from 'utils/constants'
 import { MenuItem } from 'menu-items/types'
 
+import { railTransition } from '../../MiniDrawerStyled'
+
 // Shared rail metric — every row (nav items + FAQ) is the same height, and the
 // icon lives in a fixed-width column whose left edge is the same in both states,
 // so the glyph centers on the 56px rail when collapsed and stays put when open.
 export const NAV_ROW_HEIGHT = 44
 export const ICON_COLUMN = 28
+
+// Height reserved for a footer separator row (hairline + breathing room). The
+// row keeps this height in BOTH states — same rule as NAV_GROUP_HEADER_HEIGHT —
+// so toggling the rail never shifts the row underneath it.
+export const NAV_SEPARATOR_HEIGHT = 17
 
 const getListItemProps = (
   external: boolean | undefined,
@@ -164,8 +171,12 @@ export const NavItem = ({ item, level }: NavItemProps) => {
             minWidth: 0,
             overflow: 'hidden',
             whiteSpace: 'nowrap',
-            transition:
-              'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            // Must share the rail's own duration/easing: at 200ms the label
+            // reached full width while the 300ms rail was still narrow, so
+            // mid-transition the row was wider than its container and the
+            // scroll area flashed a horizontal scrollbar under the longest
+            // label. Growing in lockstep with the rail keeps it contained.
+            transition: railTransition(theme, ['opacity', 'max-width']),
           }}
           primary={
             <Typography

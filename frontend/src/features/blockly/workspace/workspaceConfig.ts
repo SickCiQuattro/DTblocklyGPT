@@ -16,10 +16,10 @@ import { brand, canvasNeutral } from 'themes/theme'
 
 import './customRender'
 
-// ponytail: was base: @blockly/theme-modern. ModernTheme = Classic + block/
-// category styles we never reference (every block sets an explicit `colour:`,
-// the toolbox is custom React). Classic base renders identically and drops the
-// last blockly@^12-pinned plugin dependency.
+// Classic base, not @blockly/theme-modern — ModernTheme is Classic plus
+// block/category styles this app never references (every block sets an
+// explicit `colour:`, the toolbox is custom React). Classic renders
+// identically here and avoids a blockly@^12-pinned plugin dependency.
 const DTheme = Blockly.Theme.defineTheme('DTheme', {
   name: 'DTheme',
   base: Blockly.Themes.Classic,

@@ -165,7 +165,17 @@ export const computeConformance = (
     .filter((b) => b.isEnabled() && !isUnresolvedShadow(b))
 
   // ── Rule 1: empty workspace ──────────────────────────────────────────────
-  if (topBlocks.length === 0) {
+  // when_start is a permanent structural marker (inserted on every task load,
+  // deletable:false) — a workspace holding only an empty when_start has no
+  // real content, even though topBlocks.length is 1, not 0. Without this, a
+  // brand-new task never reports empty (when_start alone always satisfies
+  // topBlocks.length > 0), so the canvas's "drag a block to start" message
+  // only ever appeared after deleting a task back down to nothing, never on
+  // first load.
+  const realTopBlocks = topBlocks.filter(
+    (b) => b.type !== START_BLOCK_TYPE || b.getNextBlock() !== null,
+  )
+  if (realTopBlocks.length === 0) {
     return buildResult([{ type: 'EMPTY_WORKSPACE', severity: 'error' }], [])
   }
 
@@ -222,12 +232,12 @@ export const computeConformance = (
 export const formatIssue = (issue: ConformanceIssue): string => {
   switch (issue.type) {
     case 'EMPTY_WORKSPACE':
-      return 'The workspace is empty — add at least one block to start.'
+      return "There's nothing here yet — add at least one block to start."
     case 'MULTIPLE_FLOWS':
-      return `${issue.count} separate flows detected — connect all blocks into one sequence.`
+      return `${issue.count} separate groups of blocks aren't connected — connect them into one sequence.`
     case 'UNRESOLVED_SHADOW':
       return `"${issue.humanLabel}" requires a selection.`
     case 'FLOATING_BLOCK':
-      return 'A disconnected block was found — it will be ignored at runtime.'
+      return "A block isn't connected to the program — it won't run."
   }
 }

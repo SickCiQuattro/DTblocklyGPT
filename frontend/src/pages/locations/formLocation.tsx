@@ -142,14 +142,6 @@ export const FormLocation = ({
       return
     }
 
-    // Mock data
-    /*
-    const newPoint =
-      '{"X": 0, "Y": 0, "Z": 0, "RX": 0, "RY": 0, "RZ": 0, "FIG": 0}'
-    setFieldValue('position', newPoint)
-    toast.success('Position acquired')
-    */
-
     void fetchApi<GetJointPositionResponse, { robot: number }>({
       url: endpoints.home.libraries.getJointPosition,
       method: MethodHTTP.POST,

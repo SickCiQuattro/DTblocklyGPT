@@ -59,6 +59,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
+import { brand } from 'themes/theme'
 import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
@@ -1094,6 +1095,21 @@ export const BlocklyEditor = ({
         return
       }
 
+      // Blockly's keyboard-nav focus rings are two separate CSS variables —
+      // --blockly-active-node-color (default #fff200, yellow — the focused
+      // block/field) and --blockly-active-tree-color (default #1379f6, blue —
+      // the focused workspace/toolbox region). Clicking the canvas activates
+      // both at once, so without this a single click shows two
+      // differently-coloured rings. A stylesheet override raced against
+      // Blockly's own injected <style> and lost; an inline style on the
+      // injection div always wins regardless of injection order.
+      workspace
+        .getInjectionDiv()
+        .style.setProperty('--blockly-active-node-color', brand.primary)
+      workspace
+        .getInjectionDiv()
+        .style.setProperty('--blockly-active-tree-color', brand.primary)
+
       // ── Shadow block helpers (local to this workspace instance) ────────────
 
       const getShadowBlocks = (ws: Blockly.WorkspaceSvg): Blockly.BlockSvg[] =>
@@ -1551,26 +1567,28 @@ export const BlocklyEditor = ({
       <a href="#blocklyDiv" className="skip-to-workspace">
         Skip to blocks workspace
       </a>
-      {!viewSettings?.toolboxCollapsed && (
-        <CustomToolbox
-          dataObjects={dataObjects}
-          dataLocations={dataLocations}
-          dataActions={dataActions}
-          dataMacros={availableMacros}
-          isDeleting={isDeleting}
-          deleteZoneState={toolboxDeleteZoneState}
-          blockViewMode={blockViewMode}
-          onRootRefChange={handleToolboxRootRefChange}
-          onCollapse={
-            onViewSettingsChange
-              ? () => onViewSettingsChange({ toolboxCollapsed: true })
-              : undefined
-          }
-          onBlockPointerDown={handleBlockPointerDown}
-          onBlockActivate={handleInsertToolboxItem}
-          macroDetailsById={macroDetailsById}
-        />
-      )}
+      {/* Stays mounted while collapsed so its width can animate shut, same
+          pattern as the nav rail (MiniDrawerStyled) — unmounting on toggle
+          gave the toolbox no transition at all, just an instant swap. */}
+      <CustomToolbox
+        collapsed={!!viewSettings?.toolboxCollapsed}
+        dataObjects={dataObjects}
+        dataLocations={dataLocations}
+        dataActions={dataActions}
+        dataMacros={availableMacros}
+        isDeleting={isDeleting}
+        deleteZoneState={toolboxDeleteZoneState}
+        blockViewMode={blockViewMode}
+        onRootRefChange={handleToolboxRootRefChange}
+        onCollapse={
+          onViewSettingsChange
+            ? () => onViewSettingsChange({ toolboxCollapsed: true })
+            : undefined
+        }
+        onBlockPointerDown={handleBlockPointerDown}
+        onBlockActivate={handleInsertToolboxItem}
+        macroDetailsById={macroDetailsById}
+      />
       <div
         className="custom-dragdrop-workspace-wrapper"
         onContextMenu={(e) => e.preventDefault()}
@@ -2004,6 +2022,7 @@ export const BlocklyEditor = ({
                 <SegmentedControl
                   exclusive
                   fullWidth
+                  aria-label="Block detail"
                   value={viewSettings.blockViewMode}
                   onChange={(_e, val) =>
                     val && onViewSettingsChange({ blockViewMode: val })
@@ -2072,6 +2091,7 @@ export const BlocklyEditor = ({
                 <SegmentedControl
                   exclusive
                   fullWidth
+                  aria-label="Delete confirmations"
                   value={viewSettings.deleteConfirmMode}
                   onChange={(_e, val) =>
                     val && onViewSettingsChange({ deleteConfirmMode: val })
@@ -2082,6 +2102,13 @@ export const BlocklyEditor = ({
                     { value: 'never', label: 'Never' },
                   ]}
                 />
+                <Typography
+                  sx={{ mt: 0.5, fontSize: 11, color: 'text.secondary' }}
+                >
+                  When deleting asks for confirmation — Always for every block,
+                  Multiple only when it takes more than one block with it, Never
+                  skips the confirmation.
+                </Typography>
               </Box>
 
               <SettingSwitch

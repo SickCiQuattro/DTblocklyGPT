@@ -9,7 +9,7 @@
  *
  * Internal code names (macro_task_block, contextualHelpEnabled, executionTarget,
  * ...) are intentionally different from these labels — see
- * docs/mappa-nomi-codice-ui.md for the full code-name ↔ user-facing-label map.
+ * docs/ui-naming-map.md for the full code-name ↔ user-facing-label map.
  *
  * Not exhaustive by design: only terms that were found duplicated (and
  * drifting) across files during the Nielsen/WCAG audit are centralized here.

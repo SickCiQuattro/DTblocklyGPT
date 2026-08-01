@@ -15,6 +15,7 @@ import {
   Box,
   CircularProgress,
   Stack,
+  Tooltip,
 } from '@mui/material'
 import { CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react'
 
@@ -165,7 +166,7 @@ export const AnalyzeTaskModal = ({
         paper: { sx: { p: 1.5, maxWidth: '520px', width: '100%' } },
       }}
     >
-      <DialogTitle sx={{ pb: 1 }}>Analyze task: {task?.name}</DialogTitle>
+      <DialogTitle sx={{ pb: 1 }}>Check for problems: {task?.name}</DialogTitle>
 
       <DialogContent sx={{ py: 1.5 }}>
         {analyzing && (
@@ -177,8 +178,8 @@ export const AnalyzeTaskModal = ({
         {!analyzing && (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Are you sure you want to perform static verification checks on
-              this task?
+              Checks the task's logic for problems before you run it — nothing
+              on the robot moves.
             </Typography>
 
             <Box sx={{ mb: 3 }}>
@@ -300,9 +301,15 @@ export const AnalyzeTaskModal = ({
                             At:{' '}
                             {issue.stepPath
                               .map((step) =>
-                                typeof step === 'number' ? step + 1 : step,
+                                typeof step === 'number'
+                                  ? `step ${step + 1}`
+                                  : ({
+                                      steps: 'inside the repeat',
+                                      do: 'then',
+                                      otherwise: 'otherwise',
+                                    }[step] ?? step),
                               )
-                              .join(' > ')}
+                              .join(' → ')}
                           </Typography>
                         </Box>
                       ))}
@@ -322,15 +329,19 @@ export const AnalyzeTaskModal = ({
         >
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleOk}
-          disabled={!selectedRobot || analyzing}
-          sx={{ fontWeight: 500, borderRadius: '8px', minWidth: '80px' }}
-        >
-          Analyze
-        </Button>
+        <Tooltip title={!selectedRobot ? 'Select a robot first' : ''}>
+          <span>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleOk}
+              disabled={!selectedRobot || analyzing}
+              sx={{ fontWeight: 500, borderRadius: '8px', minWidth: '80px' }}
+            >
+              Check for problems
+            </Button>
+          </span>
+        </Tooltip>
       </DialogActions>
     </Dialog>
   )

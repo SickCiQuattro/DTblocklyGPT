@@ -18,8 +18,9 @@ const Faq = () => {
         wait for a condition), <b>Robot Actions</b> (pick up, place, open/close
         gripper), <b>Human Actions</b> (pause and show a message, notify
         someone), <b>Conditions</b> (wait for a gesture, a voice command, or an
-        object to appear), and <b>Saved Tasks</b> (reuse a task you already
-        built).
+        object to appear), <b>Saved Tasks</b> (reuse a task you already built),
+        and <b>Library</b> (your objects, locations, and skills — drag one of
+        these into a dashed slot like &ldquo;Select object…&rdquo; to fill it).
       </p>
       <p>
         Some blocks show a dashed slot with a{' '}
@@ -27,7 +28,8 @@ const Faq = () => {
           <i>+</i>
         </b>{' '}
         inside, like <i>&ldquo;Select object…&rdquo;</i>. Drag a matching block
-        into that slot to fill it — the task can&rsquo;t be saved until every
+        into that slot to fill it. You can save a draft at any time, even with
+        empty slots — but a task can&rsquo;t be published or run until every
         slot is filled. Hover a block in the toolbox to preview what it does
         before you use it.
       </p>
@@ -37,12 +39,13 @@ const Faq = () => {
         The <b>Copilot</b> panel on the right lets you describe what the robot
         should do in plain language — e.g. &ldquo;pick up the flask and place it
         in the rack&rdquo; — and it builds the matching blocks for you. When it
-        proposes blocks, review them and press <b>Apply</b> to add them to your
-        workspace, or <b>Cancel</b> to discard the suggestion. You can also just
-        ask it questions about the task you&rsquo;re building. Turn on{' '}
-        <b>Proactive analysis</b> (the toggle inside Copilot) if you want it to
-        automatically review your workspace and point out problems without you
-        having to ask.
+        proposes blocks, review them and press <b>Apply</b> to build them in
+        your workspace — if you already have blocks there, this replaces them,
+        and you&rsquo;ll be asked to confirm first. Press <b>Cancel</b> to
+        discard the suggestion instead. You can also just ask it questions about
+        the task you&rsquo;re building. Turn on <b>Proactive analysis</b> (the
+        toggle inside Copilot) if you want it to automatically review your
+        workspace and point out problems without you having to ask.
       </p>
 
       <h2>Testing before you run</h2>
@@ -72,8 +75,9 @@ const Faq = () => {
         </li>
         <li>
           <b>Published, with unpublished changes</b>: still shows as{' '}
-          <b>Published</b> and still runs — running always uses the last
-          published version, never your unpublished edits.
+          <b>Published</b>, but can&rsquo;t run until you publish or discard
+          those changes — the version on screen and the version that would run
+          are no longer the same task.
         </li>
       </ul>
 

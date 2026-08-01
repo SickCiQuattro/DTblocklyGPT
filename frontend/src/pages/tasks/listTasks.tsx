@@ -112,9 +112,10 @@ const TaskRowActions = ({
   const open = Boolean(anchorEl)
   const rowStatus = (row as any).status?.toLowerCase()
   const isPublishedWithDraft = rowStatus === 'published_with_draft'
-  // published_with_draft still runs (its last published version) — only a
-  // task that was never published can't run at all.
-  const canRun = rowStatus === 'published' || isPublishedWithDraft
+  // Only a fully published task can run — published_with_draft can't either:
+  // the runtime uses published_workspace, which would no longer match the
+  // draft shown in the editor (same gate as DigitalTwinPanel.tsx's canRun).
+  const canRun = rowStatus === 'published'
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation()
@@ -135,7 +136,9 @@ const TaskRowActions = ({
         title={
           canRun
             ? `${UI_TEXT.simulate} this task`
-            : 'This task is a draft — publish it first to run it'
+            : isPublishedWithDraft
+              ? `${UI_TEXT.unpublishedChanges} — publish or discard them to run this task`
+              : 'This task is a draft — publish it first to run it'
         }
       >
         {/* span wrapper: a disabled IconButton alone won't fire the
@@ -732,6 +735,7 @@ const ListTasks = () => {
           />
           <SegmentedControl
             exclusive
+            aria-label="Filter by status"
             value={statusFilter}
             onChange={(_e, v) => {
               if (v) {

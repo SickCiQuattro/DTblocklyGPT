@@ -21,11 +21,12 @@ export interface TaskStatusVisual {
   border: string
   icon: LucideIcon
   /**
-   * Set only for `published_with_draft` — the task IS published and runnable
-   * (so the chip itself says "Published", same as a clean publish), but a
-   * newer edit hasn't been published yet. Render this as a small secondary
-   * note next to the chip, never as a separate "Draft"-prefixed status —
-   * see docs/analisi-sistema on the "three axes called draft" fix.
+   * Set only for `published_with_draft` — a published version of the task
+   * exists (so the chip itself says "Published", same as a clean publish),
+   * but it can't run: a newer edit sits unpublished on top of it, so the
+   * task must be published or discarded first. Render this as a small
+   * secondary note next to the chip, never as a separate "Draft"-prefixed
+   * status — see docs/internal on the "three axes called draft" fix.
    */
   secondaryLabel?: string
   secondaryColor?: string
@@ -61,10 +62,11 @@ export const taskStatusVisual = (rawStatus?: string): TaskStatusVisual => {
     )
   }
   if (s === 'published_with_draft') {
-    // Same chip as a clean publish (it IS published and runnable) — the
-    // cyan "in progress" hue moves to a secondary note instead of being the
-    // chip's own color, so filtering by "Published" never shows a card
-    // whose chip visibly contradicts the filter.
+    // Same chip as a clean publish (a published version does exist, it's
+    // just not the version that would run) — the cyan "in progress" hue
+    // moves to a secondary note instead of being the chip's own color, so
+    // filtering by "Published" never shows a card whose chip visibly
+    // contradicts the filter.
     return visual(
       UI_TEXT.published,
       tokenColor.successMain,

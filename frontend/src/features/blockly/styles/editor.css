@@ -148,6 +148,11 @@
     stroke: none !important;
 }
 
+/* Blockly's keyboard-nav focus ring colors (--blockly-active-node-color,
+   --blockly-active-tree-color) are set as inline styles on the injection div
+   in BlocklyEditor.tsx's handleWorkspaceReady instead of here — a stylesheet
+   override raced against Blockly's own injected <style> tag and lost. */
+
 /* ─── Workspace UI elements ───────────────────────────────────────────────── */
 
 .blocklyZoom,

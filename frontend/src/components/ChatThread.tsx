@@ -40,6 +40,8 @@ import { AbstractStep } from 'pages/tasks/types'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { UserLoginInterface } from 'pages/login/LoginForm'
 
+import { ConfirmDialog } from 'components/ConfirmDialog'
+
 import { UserBubble } from './UserBubble'
 import { AssistantBubble } from './AssistantBubble'
 import { ChatComposer } from './ChatComposer'
@@ -111,6 +113,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const [isResizing, setIsResizing] = useState(false)
   const [showProposalOverlay, setShowProposalOverlay] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  // Applying a proposal replaces the whole workspace (chatSync.ts disposes
+  // every existing top-level block first) — confirm before doing that to
+  // an operator's own work, not just to an empty canvas.
+  const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false)
   const [listMessages, setListMessages] = useState<MessageType[]>([
     INITIAL_MESSAGE_1,
   ])
@@ -576,189 +582,213 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         /* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
       )}
 
+      {/* Fixed at the resizable `width` regardless of the outer Box's
+          current (possibly animating-shut) width — the outer box is what
+          clips via its own overflow:hidden. Without this split, closing
+          Copilot forced every message/label to reflow at each intermediate
+          width, wrapping and stacking its own text before disappearing
+          instead of just sliding out of a clipped window (same fix as
+          CustomToolbox's collapse — see CustomToolbox.css). */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          minHeight: '56px',
-          padding: '6px 12px',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          background: theme.palette.grey[50],
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div
-            style={{
-              color: theme.palette.slate[600],
-              fontSize: '0.74rem',
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-            }}
-          >
-            COPILOT
-          </div>
-          <div
-            style={{
-              color: theme.palette.slate[400],
-              fontSize: '0.63rem',
-              fontWeight: 500,
-              letterSpacing: '0.02em',
-            }}
-          >
-            Ask for help with your task
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <Tooltip
-            title={
-              contextualHelpEnabled
-                ? 'Proactive analysis: on — Copilot automatically reviews workspace issues (uses tokens)'
-                : 'Proactive analysis: off — no automatic review'
-            }
-            placement="bottom"
-          >
-            <IconButton
-              onClick={toggleContextualHelp}
-              size="small"
-              aria-label={
-                contextualHelpEnabled
-                  ? 'Turn off proactive analysis'
-                  : 'Turn on proactive analysis'
-              }
-              sx={{
-                color: contextualHelpEnabled
-                  ? indigo
-                  : theme.palette.slate[400],
-                '&:hover': {
-                  background: alpha(indigo, 0.08),
-                },
-              }}
-            >
-              <Sparkles
-                size={17}
-                fill={contextualHelpEnabled ? indigo : 'none'}
-              />
-            </IconButton>
-          </Tooltip>
-          <Tooltip
-            title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
-            placement="bottom"
-          >
-            <IconButton
-              onClick={() => dispatch(toggleChatPosition())}
-              size="small"
-              aria-label={
-                chatPosition === 'left' ? 'Move to right' : 'Move to left'
-              }
-              sx={{
-                color: indigo,
-                '&:hover': {
-                  background: alpha(indigo, 0.08),
-                },
-              }}
-            >
-              <ArrowLeftRight size={18} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Close chat" placement="bottom">
-            <IconButton
-              onClick={onClose}
-              size="small"
-              className="close-btn-premium"
-              aria-label="Close chat"
-            >
-              <X size={18} style={{ color: indigo }} />
-            </IconButton>
-          </Tooltip>
-        </div>
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          position: 'relative',
-          overflow: 'hidden',
+          width: `${width}px`,
+          minWidth: `${width}px`,
+          height: '100%',
+          flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
+          boxSizing: 'border-box',
         }}
       >
         <div
-          className="chat-messages-container"
           style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '16px 20px',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            minHeight: '56px',
+            padding: '6px 12px',
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            background: theme.palette.grey[50],
           }}
         >
-          {listMessages.map(renderMessage)}
-          {isProcessing && renderTypingIndicator()}
-          <div ref={chatEndRef} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div
+              style={{
+                color: theme.palette.slate[600],
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+              }}
+            >
+              COPILOT
+            </div>
+            <div
+              style={{
+                color: theme.palette.slate[400],
+                fontSize: '0.63rem',
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+              }}
+            >
+              Ask for help with your task
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Tooltip
+              title={
+                contextualHelpEnabled
+                  ? 'Proactive analysis: on — Copilot automatically reviews workspace issues (uses tokens)'
+                  : 'Proactive analysis: off — no automatic review'
+              }
+              placement="bottom"
+            >
+              <IconButton
+                onClick={toggleContextualHelp}
+                size="small"
+                aria-label={
+                  contextualHelpEnabled
+                    ? 'Turn off proactive analysis'
+                    : 'Turn on proactive analysis'
+                }
+                sx={{
+                  color: contextualHelpEnabled
+                    ? indigo
+                    : theme.palette.slate[400],
+                  '&:hover': {
+                    background: alpha(indigo, 0.08),
+                  },
+                }}
+              >
+                <Sparkles
+                  size={17}
+                  fill={contextualHelpEnabled ? indigo : 'none'}
+                />
+              </IconButton>
+            </Tooltip>
+            <Tooltip
+              title={chatPosition === 'left' ? 'Move to right' : 'Move to left'}
+              placement="bottom"
+            >
+              <IconButton
+                onClick={() => dispatch(toggleChatPosition())}
+                size="small"
+                aria-label={
+                  chatPosition === 'left' ? 'Move to right' : 'Move to left'
+                }
+                sx={{
+                  color: indigo,
+                  '&:hover': {
+                    background: alpha(indigo, 0.08),
+                  },
+                }}
+              >
+                <ArrowLeftRight size={18} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Close chat" placement="bottom">
+              <IconButton
+                onClick={onClose}
+                size="small"
+                className="close-btn-premium"
+                aria-label="Close chat"
+              >
+                <X size={18} style={{ color: indigo }} />
+              </IconButton>
+            </Tooltip>
+          </div>
         </div>
 
-        {/* Proposal Details Slide-Up Overlay */}
-        {proposal.proposedTask && (
-          <div
-            className={`proposal-overlay ${
-              showProposalOverlay ? 'overlay-open' : ''
-            }`}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 90,
-              background: theme.palette.background.paper,
-              transform: showProposalOverlay
-                ? 'translateY(0)'
-                : 'translateY(100%)',
-              transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            <TaskPreviewCard
-              proposedTask={proposal.proposedTask}
-              validationWarnings={proposal.validationWarnings}
-              answer={proposal.answer}
-              dataObjects={dataObjects}
-              dataLocations={dataLocations}
-              dataActions={dataActions}
-              onApply={() => {
-                if (onApplyProposedTask && proposal.proposedTask) {
-                  onApplyProposedTask(proposal.proposedTask)
-                }
-                dispatch(clearProposedTask())
-              }}
-              onCancel={() => {
-                dispatch(clearProposedTask())
-              }}
-              onBack={() => setShowProposalOverlay(false)}
-            />
-          </div>
-        )}
-      </div>
-
-      {proposal.proposedTask && !showProposalOverlay && (
         <div
-          className="proposal-floating-badge"
           style={{
-            margin: '0 20px 8px 20px',
-            background: 'rgba(99, 102, 241, 0.08)',
-            border: '1px solid rgba(99, 102, 241, 0.16)',
-            borderRadius: '10px',
-            padding: '10px 14px',
+            flex: 1,
+            position: 'relative',
+            overflow: 'hidden',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.04)',
+            flexDirection: 'column',
           }}
         >
-          <style>{`
+          <div
+            className="chat-messages-container"
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            {listMessages.map(renderMessage)}
+            {isProcessing && renderTypingIndicator()}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Proposal Details Slide-Up Overlay */}
+          {proposal.proposedTask && (
+            <div
+              className={`proposal-overlay ${
+                showProposalOverlay ? 'overlay-open' : ''
+              }`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 90,
+                background: theme.palette.background.paper,
+                transform: showProposalOverlay
+                  ? 'translateY(0)'
+                  : 'translateY(100%)',
+                transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <TaskPreviewCard
+                proposedTask={proposal.proposedTask}
+                validationWarnings={proposal.validationWarnings}
+                answer={proposal.answer}
+                dataObjects={dataObjects}
+                dataLocations={dataLocations}
+                dataActions={dataActions}
+                onApply={() => {
+                  const hasExistingBlocks =
+                    (workspace?.getTopBlocks(false).length ?? 0) > 0
+                  if (hasExistingBlocks) {
+                    setConfirmReplaceOpen(true)
+                    return
+                  }
+                  if (onApplyProposedTask && proposal.proposedTask) {
+                    onApplyProposedTask(proposal.proposedTask)
+                  }
+                  dispatch(clearProposedTask())
+                }}
+                onCancel={() => {
+                  dispatch(clearProposedTask())
+                }}
+                onBack={() => setShowProposalOverlay(false)}
+              />
+            </div>
+          )}
+        </div>
+
+        {proposal.proposedTask && !showProposalOverlay && (
+          <div
+            className="proposal-floating-badge"
+            style={{
+              margin: '0 20px 8px 20px',
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.16)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.04)',
+            }}
+          >
+            <style>{`
             @keyframes badge-entrance {
               from { opacity: 0; transform: translateY(8px); }
               to { opacity: 1; transform: translateY(0); }
@@ -785,73 +815,90 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               transform: scale(0.98);
             }
           `}</style>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                width: '6px',
-                height: '6px',
-                backgroundColor: indigo,
-                borderRadius: '50%',
-                display: 'inline-block',
-                boxShadow: `0 0 8px ${indigo}`,
-              }}
-            />
-            <span
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: theme.palette.text.primary,
-              }}
-            >
-              New blocks proposed
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  backgroundColor: indigo,
+                  borderRadius: '50%',
+                  display: 'inline-block',
+                  boxShadow: `0 0 8px ${indigo}`,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: theme.palette.text.primary,
+                }}
+              >
+                New blocks proposed
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => setShowProposalOverlay(true)}
+                className="badge-action-btn"
+              >
+                Review
+              </button>
+              <button
+                onClick={() => dispatch(clearProposedTask())}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: theme.palette.slate[400],
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.color = theme.palette.error.main)
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.color = theme.palette.slate[400])
+                }
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button
-              onClick={() => setShowProposalOverlay(true)}
-              className="badge-action-btn"
-            >
-              Review
-            </button>
-            <button
-              onClick={() => dispatch(clearProposedTask())}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: theme.palette.slate[400],
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '4px',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = theme.palette.error.main)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = theme.palette.slate[400])
-              }
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+        )}
 
-      <ChatComposer
-        isProcessing={isProcessing}
-        message={message}
-        setMessage={setMessage}
-        isRecording={isRecording}
-        setIsRecording={setIsRecording}
-        transcript={transcript}
-        resetTranscript={resetTranscript}
-        browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
-        isMicrophoneAvailable={isMicrophoneAvailable}
-        onMessageSend={onMessageSend}
-      />
+        <ChatComposer
+          isProcessing={isProcessing}
+          message={message}
+          setMessage={setMessage}
+          isRecording={isRecording}
+          setIsRecording={setIsRecording}
+          transcript={transcript}
+          resetTranscript={resetTranscript}
+          browserSupportsSpeechRecognition={browserSupportsSpeechRecognition}
+          isMicrophoneAvailable={isMicrophoneAvailable}
+          onMessageSend={onMessageSend}
+        />
+
+        <ConfirmDialog
+          open={confirmReplaceOpen}
+          title="Replace your blocks?"
+          message="Applying this proposal replaces everything currently in the workspace — your existing blocks will be gone."
+          confirmLabel="Replace"
+          tone="danger"
+          onConfirm={() => {
+            setConfirmReplaceOpen(false)
+            if (onApplyProposedTask && proposal.proposedTask) {
+              onApplyProposedTask(proposal.proposedTask)
+            }
+            dispatch(clearProposedTask())
+          }}
+          onCancel={() => setConfirmReplaceOpen(false)}
+        />
+      </div>
     </Box>
   )
 }

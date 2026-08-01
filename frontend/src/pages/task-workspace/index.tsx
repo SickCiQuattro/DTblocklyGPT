@@ -26,6 +26,7 @@ import {
   setSaveError,
   setWorkspaceReady,
   setConformanceIssues,
+  setHasUnsavedEdits,
   toggleChat,
   toggleSim,
 } from 'store/reducers/task'
@@ -121,9 +122,9 @@ export const UnifiedWorkspace = () => {
     autoOpenRobotHandledRef.current = true
     const shouldBeOpen = !!navState?.autoOpenRobot
     if (simOpen !== shouldBeOpen) dispatch(toggleSim())
-    // simulation is likewise a single global slice with no per-task scope
-    // (W3.7) — without this, navigating away mid-run and opening a different
-    // task inherits isRunning/message from whatever ran on the last one.
+    // simulation is likewise a single global slice with no per-task scope —
+    // without this, navigating away mid-run and opening a different task
+    // inherits isRunning/message from whatever ran on the last one.
     dispatch(resetSimulation())
     // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [])
@@ -248,6 +249,11 @@ export const UnifiedWorkspace = () => {
       if (taskData.last_modified) {
         dispatch(setLastSaved(dayjs(taskData.last_modified).format('HH:mm:ss')))
       }
+      // Same per-visit leak as lastSaved: loading a task must not inherit
+      // "unsaved edits" from whatever was open before. The deserialize below
+      // happens inside Blockly.Events.disable()/enable() (BlocklyWorkspace.tsx),
+      // so it never fires the structural-change listener that would set this.
+      dispatch(setHasUnsavedEdits(false))
       if (taskData.code) {
         const isVisual = (item: any): boolean => {
           if (typeof item !== 'object' || item === null) return false
@@ -281,6 +287,7 @@ export const UnifiedWorkspace = () => {
       // been saved, but lastSaved would still carry whatever the previously
       // open task last saved at if not cleared here.
       dispatch(setLastSaved(null))
+      dispatch(setHasUnsavedEdits(false))
       setTaskStructure([])
     }
   }, [taskData, id, dispatch])
@@ -347,14 +354,24 @@ export const UnifiedWorkspace = () => {
         let targetId = id ? Number(id) : null
 
         if (!targetId) {
-          // If we don't have an ID, we must FIRST create the task row via metadata POST endpoint
+          // If we don't have an ID, we must FIRST create the task row via metadata POST endpoint.
+          // rethrowOn: [400] — a name collision (e.g. the default "New Task"
+          // reused by a second untitled task) otherwise resolved here with
+          // the backend's {nameAlreadyExists: true} payload instead of an
+          // id, which the check below couldn't tell apart from any other
+          // failure and reported as a generic connection problem.
           const res = await fetchApi<any, any>({
             url: endpoints.home.libraries.task,
             method: MethodHTTP.POST,
+            rethrowOn: [400],
             body: {
               id: -1,
               name: currentName,
-              description: 'Visual task program',
+              // No canned description — every task used to get the literal
+              // text "Visual task program" as its subtitle everywhere
+              // (task list, Check for problems). Leaving it unset (backend
+              // defaults to null) lets the card omit the subtitle entirely
+              // until the operator writes a real one.
               shared: false,
               task_type: 'task',
               status: 'draft',
@@ -423,6 +440,10 @@ export const UnifiedWorkspace = () => {
         dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
         dispatch(triggerSavedFlash(true))
         dispatch(setSaveError(false))
+        // The just-saved structure is now what would run — Run can trust
+        // activeTaskStatus/workspaceReady again (see setHasUnsavedEdits(true)
+        // in handleTaskStructureChange below for why this was ever false).
+        dispatch(setHasUnsavedEdits(false))
 
         if (!id && targetId) {
           // If it was a newly created task, navigate to the correct URL path
@@ -441,7 +462,11 @@ export const UnifiedWorkspace = () => {
         // Autosave failures show no toast (would fire every 2s while the
         // connection is down) — this flag is the only persistent signal.
         dispatch(setSaveError(true))
-        if (!isAutoSave) {
+        // A 400 (e.g. the name collision above) already got its own
+        // specific, accurate toast from fetchApi — a second generic
+        // "Failed to save draft" on top of it just buries the real reason.
+        const alreadyToasted = err instanceof Error && err.name === '400'
+        if (!isAutoSave && !alreadyToasted) {
           toast.error(
             isPublish ? 'Failed to publish task' : 'Failed to save draft',
           )
@@ -461,6 +486,13 @@ export const UnifiedWorkspace = () => {
   ) => {
     const structureArray = newStructure || []
     setTaskStructure(structureArray)
+    // Set synchronously, not after the debounce fires — a task that WAS
+    // published still reads activeTaskStatus === 'published' for up to 2s
+    // (longer if the operator keeps editing, since each change re-arms this
+    // timer) after a real edit. Without this, Run stays the filled primary
+    // action during that whole window and would run the stale published
+    // version while the screen shows the new one.
+    dispatch(setHasUnsavedEdits(true))
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)

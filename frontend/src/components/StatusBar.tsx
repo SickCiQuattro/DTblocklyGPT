@@ -107,7 +107,7 @@ export const StatusBar: React.FC = () => {
           }}
         >
           {saveError
-            ? 'Save failed — check your connection'
+            ? 'Save failed — see the notification for why'
             : justSaved
               ? 'Saved ✓'
               : lastSaved

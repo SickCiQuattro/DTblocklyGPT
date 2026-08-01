@@ -64,7 +64,7 @@ export const simulationSlice = createSlice({
       state.progress = 0
       state.message = action.payload
     },
-    // This slice is a single global instance, not scoped per task (W3.7) —
+    // This slice is a single global instance, not scoped per task —
     // without an explicit reset, navigating away mid-run and opening a
     // different task inherits isRunning/message from whatever ran last.
     // Dispatched by task-workspace's per-visit re-sync, same pattern as

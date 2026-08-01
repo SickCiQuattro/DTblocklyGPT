@@ -41,6 +41,8 @@ import './CustomToolbox.css'
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface CustomToolboxProps {
+  /** Stays mounted (for its own width transition) — this drives the collapsed state. */
+  collapsed: boolean
   dataObjects: ObjectListType[]
   dataLocations: LocationListType[]
   dataActions: ActionListType[]
@@ -403,6 +405,7 @@ const CategoryPanel: React.FC<{
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export const CustomToolbox: React.FC<CustomToolboxProps> = ({
+  collapsed,
   dataObjects,
   dataLocations,
   dataActions,
@@ -417,7 +420,10 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   macroDetailsById,
 }) => {
   const theme = useTheme()
-  const [expandedKey, setExpandedKey] = useState<string | null>('logic-control')
+  // Robot Actions (pick/place/gripper), not Task Flow (loops/conditionals) —
+  // a brand-new task is more likely to start with a physical action than a
+  // control-flow construct.
+  const [expandedKey, setExpandedKey] = useState<string | null>('robot-actions')
 
   const handleAccordionChange = (key: string) => {
     setExpandedKey((prev) => (prev === key ? null : key))
@@ -425,14 +431,28 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
 
   return (
     <aside
-      className="custom-toolbox"
+      className={
+        collapsed
+          ? 'custom-toolbox custom-toolbox--collapsed'
+          : 'custom-toolbox'
+      }
       data-view-mode={blockViewMode}
       ref={onRootRefChange}
+      // inert, not aria-hidden alone — same reasoning as DigitalTwinPanel's
+      // simOpen gate: aria-hidden leaves a still-mounted panel's controls
+      // reachable by Tab, inert removes them from the tab order too.
+      inert={collapsed}
     >
-      <header
-        className="custom-toolbox__header"
-        style={
-          /*isDeleting
+      {/* Fixed at 240px regardless of the outer <aside>'s width — the outer
+          box is what animates shut (clipped via its own overflow:hidden).
+          Without this split, the content itself was forced to reflow at
+          every intermediate width, wrapping and stacking its own text
+          before disappearing instead of just sliding out of view clipped. */}
+      <div className="custom-toolbox__inner">
+        <header
+          className="custom-toolbox__header"
+          style={
+            /*isDeleting
             ? {
                 backgroundColor: '#FEF2F2',
                 borderBottom: '2px dashed #C84D28',
@@ -440,21 +460,21 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                 paddingBottom: '4px',
               }
             : */ {
-            transition: 'all 0.2s ease-in-out',
-            borderBottom: `1px solid ${theme.palette.slate[200]}`,
+              transition: 'all 0.2s ease-in-out',
+              borderBottom: `1px solid ${theme.palette.slate[200]}`,
+            }
           }
-        }
-      >
-        <div className="custom-toolbox__header-content">
-          <div className="custom-toolbox__header-title-row">
-            <span
-              className="custom-toolbox__header-label"
-              style={isDeleting ? { color: theme.palette.accent.dark } : {}}
-            >
-              {isDeleting ? 'DELETE ZONE' : UI_TEXT.toolbox.toUpperCase()}
-            </span>
+        >
+          <div className="custom-toolbox__header-content">
+            <div className="custom-toolbox__header-title-row">
+              <span
+                className="custom-toolbox__header-label"
+                style={isDeleting ? { color: theme.palette.accent.dark } : {}}
+              >
+                {isDeleting ? 'DELETE ZONE' : UI_TEXT.toolbox.toUpperCase()}
+              </span>
 
-            {/*isDeleting && (
+              {/*isDeleting && (
               <span
                 className="custom-toolbox__header-delete-badge"
                 aria-hidden="true"
@@ -476,89 +496,92 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                 />
               </span>
             )*/}
-          </div>
+            </div>
 
-          <span
-            className="custom-toolbox__header-subtitle"
-            style={
-              isDeleting
-                ? { color: theme.palette.accent.dark, fontWeight: 600 }
-                : {}
-            }
-          >
-            {isDeleting ? 'Drop block to remove' : 'Drag blocks into workspace'}
-          </span>
-        </div>
-
-        {onCollapse && !isDeleting && (
-          <Tooltip title="Hide toolbox">
-            <IconButton
-              size="small"
-              onClick={onCollapse}
-              aria-label="Hide toolbox"
-              sx={{
-                flexShrink: 0,
-                width: 30,
-                height: 30,
-                borderRadius: '8px',
-                color: theme.palette.slate[600],
-                '&:hover': {
-                  backgroundColor: theme.palette.primary.lighter,
-                  color: theme.palette.primary.main,
-                },
-              }}
+            <span
+              className="custom-toolbox__header-subtitle"
+              style={
+                isDeleting
+                  ? { color: theme.palette.accent.dark, fontWeight: 600 }
+                  : {}
+              }
             >
-              <PanelLeft size={18} />
-            </IconButton>
-          </Tooltip>
-        )}
-      </header>
-
-      <div className="custom-toolbox__scroll">
-        {TOOLBOX_CATEGORIES.map((category) => {
-          const pills = resolveDynamicBlocks(
-            category.blocks,
-            dataObjects,
-            dataLocations,
-            dataActions,
-            dataMacros,
-            macroDetailsById,
-          )
-
-          return (
-            <CategoryPanel
-              key={category.key}
-              category={category}
-              pills={pills}
-              blockViewMode={blockViewMode}
-              expanded={expandedKey === category.key}
-              onChange={handleAccordionChange}
-              onBlockPointerDown={onBlockPointerDown}
-              onBlockActivate={onBlockActivate}
-            />
-          )
-        })}
-      </div>
-      {isDeleting && (
-        <div
-          className={`custom-toolbox__delete-overlay custom-toolbox__delete-overlay--${deleteZoneState}`}
-          role="status"
-          aria-live="polite"
-        >
-          <div className="custom-toolbox__delete-overlay-content">
-            <Trash2
-              size={48}
-              className="custom-toolbox__delete-overlay-icon"
-              aria-hidden="true"
-            />
-            <p className="custom-toolbox__delete-overlay-text">
-              {deleteZoneState === 'hover-confirm'
-                ? 'Release to delete'
-                : 'Drop here to remove'}
-            </p>
+              {isDeleting
+                ? 'Drop block to remove'
+                : 'Drag blocks into workspace'}
+            </span>
           </div>
+
+          {onCollapse && !isDeleting && (
+            <Tooltip title="Hide toolbox">
+              <IconButton
+                size="small"
+                onClick={onCollapse}
+                aria-label="Hide toolbox"
+                sx={{
+                  flexShrink: 0,
+                  width: 30,
+                  height: 30,
+                  borderRadius: '8px',
+                  color: theme.palette.slate[600],
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.lighter,
+                    color: theme.palette.primary.main,
+                  },
+                }}
+              >
+                <PanelLeft size={18} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </header>
+
+        <div className="custom-toolbox__scroll">
+          {TOOLBOX_CATEGORIES.map((category) => {
+            const pills = resolveDynamicBlocks(
+              category.blocks,
+              dataObjects,
+              dataLocations,
+              dataActions,
+              dataMacros,
+              macroDetailsById,
+            )
+
+            return (
+              <CategoryPanel
+                key={category.key}
+                category={category}
+                pills={pills}
+                blockViewMode={blockViewMode}
+                expanded={expandedKey === category.key}
+                onChange={handleAccordionChange}
+                onBlockPointerDown={onBlockPointerDown}
+                onBlockActivate={onBlockActivate}
+              />
+            )
+          })}
         </div>
-      )}
+        {isDeleting && (
+          <div
+            className={`custom-toolbox__delete-overlay custom-toolbox__delete-overlay--${deleteZoneState}`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="custom-toolbox__delete-overlay-content">
+              <Trash2
+                size={48}
+                className="custom-toolbox__delete-overlay-icon"
+                aria-hidden="true"
+              />
+              <p className="custom-toolbox__delete-overlay-text">
+                {deleteZoneState === 'hover-confirm'
+                  ? 'Release to delete'
+                  : 'Drop here to remove'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </aside>
   )
 }

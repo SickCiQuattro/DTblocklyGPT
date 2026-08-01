@@ -76,7 +76,7 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
     ? `${errors.length} ${errors.length === 1 ? 'thing' : 'things'} to fix before running`
     : warnings.length
       ? `${warnings.length} ${warnings.length === 1 ? 'thing' : 'things'} to review`
-      : 'Ready to run'
+      : 'No logic problems found'
   const accent = errors.length
     ? theme.palette.error.darker
     : warnings.length
@@ -117,7 +117,9 @@ export const EvaluationCard: React.FC<EvaluationCardProps> = ({ task }) => {
             color: theme.palette.slate[600],
           }}
         >
-          No problems found — you can start the simulation.
+          The sequence of steps looks correct. This doesn't check whether
+          objects fit the robot's gripper — use "Check for problems" from the
+          task list for that.
         </p>
       ) : (
         <>

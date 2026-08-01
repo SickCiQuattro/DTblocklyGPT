@@ -35,7 +35,7 @@ const loadSettings = (): ViewSettings => {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return { ...DEFAULT_VIEW_SETTINGS, ...JSON.parse(raw) }
   } catch {
-    // ponytail: corrupt/blocked storage → fall back to defaults
+    // Corrupt/blocked storage — fall back to defaults.
   }
   return DEFAULT_VIEW_SETTINGS
 }
