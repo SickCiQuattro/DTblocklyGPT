@@ -1063,9 +1063,23 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
         # workspace, so the rest of an otherwise-valid proposal shouldn't be
         # discarded wholesale over one malformed step (is_valid only looks at
         # "error"-severity entries — see requires_confirmation below).
+        #
+        # This branch catches two different failures that used to report
+        # identically as "no type": a genuinely missing key, and a type the
+        # LLM invented or copied from a UI label ("Repeat times") instead of
+        # the internal type ("repeat"). Naming the offending value is what
+        # tells those apart — without it the message actively misleads.
+        if step_type:
+            detail = f"unsupported step type '{step_type}'"
+        else:
+            detail = "a step with no type"
+        logger.warning(
+            "validate_step dropped step %s: %s. Raw step: %s",
+            step_index, detail, json.dumps(step, ensure_ascii=False, default=str),
+        )
         warnings.append({
             "severity": "warning",
-            "message": f"Step {step_index}: the assistant proposed a step with no type — it was dropped."
+            "message": f"Step {step_index}: the assistant proposed {detail} — it was dropped."
         })
         return None
 
@@ -1169,6 +1183,20 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                         validated_step = validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions)
                         if validated_step is not None:
                             validated_task.append(validated_step)
+
+                    # Once a step is dropped there is no other record of what
+                    # the LLM actually sent — the frontend only ever sees the
+                    # sanitized warning text. Logged only on an actual drop so
+                    # this stays quiet on healthy turns. Warning level because
+                    # no log handler is configured (settings.LOGGING has no
+                    # 'handlers'), so anything below WARNING never prints.
+                    if len(validated_task) < len(llm_task):
+                        logger.warning(
+                            "Dropped %d of %d proposed steps. Raw LLM task: %s",
+                            len(llm_task) - len(validated_task),
+                            len(llm_task),
+                            json.dumps(llm_task, ensure_ascii=False, default=str),
+                        )
 
                     message_parts = []
                     if answer:

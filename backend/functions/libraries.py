@@ -126,6 +126,8 @@ def task_detail(request: HttpRequest) -> HttpResponse:
                     "name": task.name,
                     "description": task.description,
                     "shared": task.shared,
+                    "owner": task.owner_id,
+                    "owner__username": task.owner.username,
                     "task_type": task.task_type,
                     "status": task.status,
                     "code": raw_workspace,
@@ -259,6 +261,8 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                         "id",
                         "name",
                         "shared",
+                        "owner",
+                        "owner__username",
                         "height",
                         "contour",
                         "photo",
@@ -274,7 +278,12 @@ def object_detail(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)
                 object_id = data.get("id")
-                object = Object.objects.filter(id=object_id)
+                # Ownership only, same reasoning as task_detail's DELETE — a
+                # raw id-only filter let any authenticated user delete
+                # another user's object, shared or not, by guessing its id.
+                object = Object.objects.filter(id=object_id, owner=request.user)
+                if not object.exists():
+                    return error_response("Object not found", status=404)
                 object.delete()
                 return success_response()
             if request.method == HttpMethod.POST.value:
@@ -413,7 +422,10 @@ def object_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"keywordExist": True, "keywordFound": keywordsFound}
                     return bad_request("Keyword already exists", data_result)
 
-                Object.objects.filter(id=object_id).update(
+                object_qs = Object.objects.filter(id=object_id, owner=request.user)
+                if not object_qs.exists():
+                    return error_response("Object not found", status=404)
+                object_qs.update(
                     name=object_name,
                     shared=object_shared,
                     height=object_height,
@@ -470,6 +482,8 @@ def action_detail(request: HttpRequest) -> HttpResponse:
                         "id",
                         "name",
                         "shared",
+                        "owner",
+                        "owner__username",
                         "speed",
                         "pattern",
                         "height",
@@ -481,7 +495,9 @@ def action_detail(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)
                 action_id = data.get("id")
-                action = Action.objects.filter(id=action_id)
+                action = Action.objects.filter(id=action_id, owner=request.user)
+                if not action.exists():
+                    return error_response("Skill not found", status=404)
                 action.delete()
                 return success_response()
             if request.method == HttpMethod.POST.value:
@@ -605,7 +621,10 @@ def action_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"keywordExist": True, "keywordFound": keywordsFound}
                     return bad_request("Keyword already exists", data_result)
 
-                Action.objects.filter(id=action_id).update(
+                action_qs = Action.objects.filter(id=action_id, owner=request.user)
+                if not action_qs.exists():
+                    return error_response("Skill not found", status=404)
+                action_qs.update(
                     name=action_name,
                     shared=action_shared,
                     speed=action_speed,
@@ -652,6 +671,8 @@ def location_detail(request: HttpRequest) -> HttpResponse:
                         "id",
                         "name",
                         "shared",
+                        "owner",
+                        "owner__username",
                         "position",
                         "keywords",
                     ]
@@ -660,7 +681,9 @@ def location_detail(request: HttpRequest) -> HttpResponse:
             if request.method == HttpMethod.DELETE.value:
                 data = loads(request.body)
                 location_id = data.get("id")
-                location = Location.objects.filter(id=location_id)
+                location = Location.objects.filter(id=location_id, owner=request.user)
+                if not location.exists():
+                    return error_response("Location not found", status=404)
                 location.delete()
                 return success_response()
             if request.method == HttpMethod.POST.value:
@@ -782,7 +805,10 @@ def location_detail(request: HttpRequest) -> HttpResponse:
                     data_result = {"keywordExist": True, "keywordFound": keywordsFound}
                     return bad_request("Keyword already exists", data_result)
 
-                Location.objects.filter(id=location_id).update(
+                location_qs = Location.objects.filter(id=location_id, owner=request.user)
+                if not location_qs.exists():
+                    return error_response("Location not found", status=404)
+                location_qs.update(
                     name=location_name,
                     shared=location_shared,
                     position=location_position,

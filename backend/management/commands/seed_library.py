@@ -140,7 +140,7 @@ class Command(BaseCommand):
         self._fix_double_encoded_positions(owner)
         objs = self._seed_objects(owner)
         locs = self._seed_locations(owner)
-        acts = {a.name: a for a in Action.objects.filter(owner=owner)}
+        acts = self._seed_actions(owner)
         self._seed_tasks(owner, objs, locs, acts)
 
         self.stdout.write(self.style.SUCCESS("Done."))
@@ -271,6 +271,26 @@ class Command(BaseCommand):
             )
             self.stdout.write(f"  {'Created' if created else 'Updated'} location: {loc.name}")
             result[loc.name] = loc
+        return result
+
+    def _seed_actions(self, owner):
+        """Mark the pharma-catalog skills shared. Unlike _seed_objects/
+        _seed_locations, this never creates a row: a Skill's `points` are
+        real taught waypoints this script can't synthesize, so an
+        update_or_create here could silently create an empty, untaught skill
+        on a database that never had these legacy manually-taught rows —
+        worse than the gap it would fix. Only flips `shared` on rows that
+        already exist."""
+        result = {}
+        for name in ("Inspect sample", "Shake sample"):
+            action = Action.objects.filter(owner=owner, name=name).first()
+            if action is None:
+                continue
+            if not action.shared:
+                action.shared = True
+                action.save(update_fields=["shared"])
+                self.stdout.write(f"  Marked skill shared: {action.name}")
+            result[action.name] = action
         return result
 
     # ── Tasks ────────────────────────────────────────────────────────────

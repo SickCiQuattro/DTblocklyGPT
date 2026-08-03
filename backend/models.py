@@ -42,7 +42,9 @@ class Action(models.Model):
             elif key == "name":
                 response_data[key] = self.name
             elif key == "owner":
-                response_data[key] = self.owner
+                response_data[key] = self.owner_id
+            elif key == "owner__username":
+                response_data[key] = self.owner.username
             elif key == "shared":
                 response_data[key] = self.shared
             elif key == "speed":
@@ -96,7 +98,9 @@ class Object(models.Model):
             elif key == "name":
                 response_data[key] = self.name
             elif key == "owner":
-                response_data[key] = self.owner
+                response_data[key] = self.owner_id
+            elif key == "owner__username":
+                response_data[key] = self.owner.username
             elif key == "shared":
                 response_data[key] = self.shared
             elif key == "photo":
@@ -143,7 +147,9 @@ class Location(models.Model):
             elif key == "name":
                 response_data[key] = self.name
             elif key == "owner":
-                response_data[key] = self.owner
+                response_data[key] = self.owner_id
+            elif key == "owner__username":
+                response_data[key] = self.owner.username
             elif key == "shared":
                 response_data[key] = self.shared
             elif key == "position":
