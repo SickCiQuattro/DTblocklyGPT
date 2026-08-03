@@ -15,6 +15,8 @@ export interface ObjectDetailType {
   id: number
   name: string
   shared: boolean
+  owner: number
+  owner__username: string
   height: number | null
   keywords: string[]
   photo: string

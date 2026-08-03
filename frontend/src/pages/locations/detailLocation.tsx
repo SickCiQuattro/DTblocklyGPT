@@ -9,6 +9,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MyRobotType } from 'pages/myrobots/types'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { FormLocation } from './formLocation'
 import { LocationDetailType } from './types'
@@ -19,6 +20,15 @@ const DetailLocation = () => {
   const dispatch = useDispatch()
   const insertMode = id === 'add'
   useDocumentTitle(insertMode ? 'Add Location' : 'Location Detail')
+
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
   const {
     data: dataLocation,
     error: locationError,
@@ -50,6 +60,12 @@ const DetailLocation = () => {
     !isLoadingLocation &&
     !locationError &&
     dataLocation === undefined
+  const readOnly =
+    !insertMode &&
+    dataLocation !== undefined &&
+    currentUserId !== null &&
+    String(dataLocation.owner) !== currentUserId &&
+    dataLocation.shared
 
   const subtitle = insertMode
     ? 'Here you can define the details of the Location. Hover over fields to see their descriptions.'
@@ -81,6 +97,8 @@ const DetailLocation = () => {
           dataMyRobots={dataMyRobots || []}
           insertMode={insertMode}
           backFunction={backFunction}
+          readOnly={readOnly}
+          ownerUsername={dataLocation?.owner__username}
         />
       )}
     </MainCard>

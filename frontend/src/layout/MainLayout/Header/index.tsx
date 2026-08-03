@@ -12,6 +12,7 @@ import {
   Popover,
   Stack,
   Box,
+  Alert,
 } from '@mui/material'
 import AppBar from '@mui/material/AppBar'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
@@ -70,6 +71,8 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
     (state) => state.task.conformanceIssues,
   )
   const hasUnsavedEdits = useAppSelector((state) => state.task.hasUnsavedEdits)
+  const isReadOnly = useAppSelector((state) => state.task.isReadOnly)
+  const ownerUsername = useAppSelector((state) => state.task.ownerUsername)
   const [issuesAnchorEl, setIssuesAnchorEl] =
     React.useState<HTMLElement | null>(null)
 
@@ -200,18 +203,44 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               >
                 {activeTaskName}
               </Typography>
-              <Tooltip title="Rename task">
-                <IconButton
-                  size="small"
-                  onClick={() => setIsEditing(true)}
-                  aria-label="Rename task"
-                >
-                  <Pencil size={14} />
-                </IconButton>
+              <Tooltip
+                title={
+                  isReadOnly
+                    ? "Shared by another user — you can't edit this task"
+                    : 'Rename task'
+                }
+              >
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => setIsEditing(true)}
+                    aria-label="Rename task"
+                    disabled={isReadOnly}
+                  >
+                    <Pencil size={14} />
+                  </IconButton>
+                </span>
               </Tooltip>
             </div>
           )}
           {statusChip}
+          {isReadOnly && (
+            <Alert
+              severity="info"
+              icon={false}
+              sx={{
+                py: 0,
+                px: 1.25,
+                height: theme.spacing(3.75),
+                alignItems: 'center',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                '& .MuiAlert-message': { py: 0 },
+              }}
+            >
+              Shared by {ownerUsername ?? 'another user'} — read-only
+            </Alert>
+          )}
           {/* Status-linked controls live next to the chip they explain, not
               in the action group — otherwise Copilot/Save/Run shift
               horizontally every time one of these appears (Nielsen: stable
@@ -277,33 +306,41 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
             </>
           )}
           {activeTaskStatus === 'published_with_draft' && (
-            <Tooltip title="Discard the unpublished changes and revert to the last published version">
-              <Button
-                variant="text"
-                size="small"
-                startIcon={
-                  isSaving ? (
-                    <CircularProgress size={14} color="inherit" />
-                  ) : (
-                    <RotateCcw size={14} />
-                  )
-                }
-                disabled={isSaving}
-                onClick={() => setDiscardConfirmOpen(true)}
-                sx={{
-                  height: theme.spacing(3.75),
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  fontSize: '0.85rem',
-                  color: 'error.darker',
-                  '&:hover': {
-                    bgcolor: alpha(theme.palette.error.main, 0.08),
-                  },
-                }}
-              >
-                {UI_TEXT.discardUnpublishedChanges}
-              </Button>
+            <Tooltip
+              title={
+                isReadOnly
+                  ? "Shared by another user — you can't edit this task"
+                  : 'Discard the unpublished changes and revert to the last published version'
+              }
+            >
+              <span>
+                <Button
+                  variant="text"
+                  size="small"
+                  startIcon={
+                    isSaving ? (
+                      <CircularProgress size={14} color="inherit" />
+                    ) : (
+                      <RotateCcw size={14} />
+                    )
+                  }
+                  disabled={isSaving || isReadOnly}
+                  onClick={() => setDiscardConfirmOpen(true)}
+                  sx={{
+                    height: theme.spacing(3.75),
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    fontSize: '0.85rem',
+                    color: 'error.darker',
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.error.main, 0.08),
+                    },
+                  }}
+                >
+                  {UI_TEXT.discardUnpublishedChanges}
+                </Button>
+              </span>
             </Tooltip>
           )}
         </div>
@@ -336,52 +373,58 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
           </Button>
         </Tooltip>
         <Tooltip
-          title={`${workspaceReady ? 'Save & Publish' : 'Save draft'} (${modKey()}S)`}
+          title={
+            isReadOnly
+              ? "Shared by another user — you can't edit this task"
+              : `${workspaceReady ? 'Save & Publish' : 'Save draft'} (${modKey()}S)`
+          }
         >
-          <Button
-            variant={isRunPrimary ? 'outlined' : 'contained'}
-            color="primary"
-            size="small"
-            startIcon={
-              isSaving ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <Save size={14} />
-              )
-            }
-            disabled={isSaving}
-            onClick={() => dispatch(triggerSave(true))}
-            sx={{
-              height: theme.spacing(3.75),
-              // Fits "Save & Publish", the longer of the two labels, so
-              // Save (and Run beside it) never shifts width when the label
-              // swaps with "Save draft".
-              minWidth: '160px',
-              px: 2,
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.85rem',
-              boxShadow: 'none',
-              ...(isRunPrimary && {
-                borderColor: alpha(theme.palette.primary.dark, 0.5),
-                color: 'primary.dark',
-              }),
-              '&:hover': {
+          <span>
+            <Button
+              variant={isRunPrimary ? 'outlined' : 'contained'}
+              color="primary"
+              size="small"
+              startIcon={
+                isSaving ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <Save size={14} />
+                )
+              }
+              disabled={isSaving || isReadOnly}
+              onClick={() => dispatch(triggerSave(true))}
+              sx={{
+                height: theme.spacing(3.75),
+                // Fits "Save & Publish", the longer of the two labels, so
+                // Save (and Run beside it) never shifts width when the label
+                // swaps with "Save draft".
+                minWidth: '160px',
+                px: 2,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                fontSize: '0.85rem',
                 boxShadow: 'none',
                 ...(isRunPrimary && {
-                  borderColor: 'primary.dark',
-                  bgcolor: alpha(theme.palette.primary.main, 0.04),
+                  borderColor: alpha(theme.palette.primary.dark, 0.5),
+                  color: 'primary.dark',
                 }),
-              },
-              '&.Mui-disabled': {
-                opacity: 0.7,
-                cursor: 'not-allowed',
-              },
-            }}
-          >
-            {workspaceReady ? 'Save & Publish' : 'Save draft'}
-          </Button>
+                '&:hover': {
+                  boxShadow: 'none',
+                  ...(isRunPrimary && {
+                    borderColor: 'primary.dark',
+                    bgcolor: alpha(theme.palette.primary.main, 0.04),
+                  }),
+                },
+                '&.Mui-disabled': {
+                  opacity: 0.7,
+                  cursor: 'not-allowed',
+                },
+              }}
+            >
+              {workspaceReady ? 'Save & Publish' : 'Save draft'}
+            </Button>
+          </span>
         </Tooltip>
         <Tooltip
           title={

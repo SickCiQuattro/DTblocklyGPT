@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Button,
   Checkbox,
   Chip,
@@ -39,6 +40,8 @@ interface FormActionProps {
   dataMyRobots: MyRobotType[]
   insertMode: boolean
   backFunction: () => void
+  readOnly?: boolean
+  ownerUsername?: string
 }
 
 interface ActionFormValues extends ActionDetailType {
@@ -84,6 +87,8 @@ export const FormAction = ({
   dataMyRobots,
   insertMode,
   backFunction,
+  readOnly = false,
+  ownerUsername,
 }: FormActionProps) => {
   const [searchParams] = useSearchParams()
   const [addKeyword, setAddKeyword] = React.useState<string>('')
@@ -106,6 +111,7 @@ export const FormAction = ({
       setFieldTouched,
     }: FormikHelpers<ActionFormValues>,
   ) => {
+    if (readOnly) return
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
     setKeywordErrors([])
     void fetchApi<SaveActionResponse, ActionFormValues>({
@@ -190,6 +196,8 @@ export const FormAction = ({
         id: dataAction?.id || -1,
         name: forcedName || dataAction?.name || '',
         shared: dataAction?.shared || false,
+        owner: dataAction?.owner ?? -1,
+        owner__username: dataAction?.owner__username ?? '',
         points: dataAction?.points || '{"points": []}',
         pattern: dataAction?.pattern || '',
         speed: dataAction?.speed || 1,
@@ -226,6 +234,13 @@ export const FormAction = ({
             }}
           >
             <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
+              {readOnly && (
+                <Grid size={12}>
+                  <Alert severity="info">
+                    Shared by {ownerUsername ?? 'another user'} — read-only
+                  </Alert>
+                </Grid>
+              )}
               <Grid size={2}>
                 <Stack spacing={1}>
                   <TextField
@@ -236,7 +251,7 @@ export const FormAction = ({
                     required
                     onBlur={handleBlur}
                     onChange={handleChange}
-                    disabled={!!forcedName}
+                    disabled={!!forcedName || readOnly}
                     error={Boolean(touched.name && errors.name)}
                     aria-invalid={Boolean(touched.name && errors.name)}
                     aria-describedby={
@@ -266,6 +281,7 @@ export const FormAction = ({
                           void setFieldValue('shared', !values.shared)
                         }}
                         checked={values.shared}
+                        disabled={readOnly}
                       />
                     }
                     label="Shared"
@@ -284,6 +300,7 @@ export const FormAction = ({
                     name="add_keyword"
                     label="Add keyword"
                     title="You can define keywords for this skill to be used as synonyms during the chat"
+                    disabled={readOnly}
                     onChange={(e) => setAddKeyword(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -310,6 +327,7 @@ export const FormAction = ({
                                 }
                               }}
                               disabled={
+                                readOnly ||
                                 !addKeyword ||
                                 values.keywords.includes(addKeyword)
                               }
@@ -333,16 +351,20 @@ export const FormAction = ({
                       key={keyword}
                       label={keyword}
                       variant="outlined"
-                      onDelete={() => {
-                        const newKeywords = [...values.keywords]
-                        newKeywords.splice(index, 1)
-                        void setFieldValue('keywords', newKeywords)
+                      onDelete={
+                        readOnly
+                          ? undefined
+                          : () => {
+                              const newKeywords = [...values.keywords]
+                              newKeywords.splice(index, 1)
+                              void setFieldValue('keywords', newKeywords)
 
-                        const newKeywordErrors = keywordErrors.filter(
-                          (keywordError) => keywordError !== keyword,
-                        )
-                        setKeywordErrors(newKeywordErrors)
-                      }}
+                              const newKeywordErrors = keywordErrors.filter(
+                                (keywordError) => keywordError !== keyword,
+                              )
+                              setKeywordErrors(newKeywordErrors)
+                            }
+                      }
                       color={
                         keywordErrors.includes(keyword) ? 'error' : 'primary'
                       }
@@ -375,6 +397,7 @@ export const FormAction = ({
                     }}
                     aria-label="Speed"
                     onChange={handleChange}
+                    disabled={readOnly}
                     valueLabelDisplay="auto"
                     step={1}
                     marks
@@ -397,6 +420,7 @@ export const FormAction = ({
                       name="pattern"
                       onBlur={handleBlur}
                       onChange={handleChange}
+                      disabled={readOnly}
                       error={Boolean(touched.pattern && errors.pattern)}
                       title="Pattern of the skill. You can use already defined pattern or define a custom list of points from the Points section"
                     >
@@ -432,6 +456,7 @@ export const FormAction = ({
                         void setFieldValue('robot', e.target.value)
                         void setFieldValue('position', '')
                       }}
+                      disabled={readOnly}
                       error={Boolean(touched.robot && errors.robot)}
                       aria-invalid={Boolean(touched.robot && errors.robot)}
                       aria-describedby={
@@ -471,6 +496,7 @@ export const FormAction = ({
                     variant="outlined"
                     aria-label="detail"
                     size="medium"
+                    disabled={readOnly}
                     title="Acquire a point to define a custom pattern"
                     startIcon={<Target size={18} />}
                   >
@@ -520,6 +546,7 @@ export const FormAction = ({
                         <Button
                           color="error"
                           title="Delete this point"
+                          disabled={readOnly}
                           onClick={() => setDeleteIndex(index)}
                         >
                           Delete
@@ -544,13 +571,17 @@ export const FormAction = ({
               <Grid size={12}>
                 <Button
                   disableElevation
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                   fullWidth
                   size="large"
                   type="submit"
                   variant="contained"
                   color="primary"
-                  title="Save this skill"
+                  title={
+                    readOnly
+                      ? "Shared by another user — you can't edit this"
+                      : 'Save this skill'
+                  }
                 >
                   Save
                 </Button>

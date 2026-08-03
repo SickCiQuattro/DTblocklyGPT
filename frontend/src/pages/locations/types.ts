@@ -32,6 +32,8 @@ export type LocationDetailType = {
   id: number
   name: string
   shared: boolean
+  owner: number
+  owner__username: string
   position: CartesianPositionType | null
   keywords: string[]
 }

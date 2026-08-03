@@ -451,11 +451,12 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
       // blocks itself; this call exists purely as a pre-flight check.
       abstractToBlockly(proposedTask, dataObjects, dataLocations, dataActions)
 
-      // Call the onApply callback (parent should handle updating the task structure)
+      // Parent owns the proposal lifecycle and clears it on every branch.
+      // Do NOT clear it here: onApply() may only *open* a confirmation
+      // dialog and return, so clearing now nulls proposedTask before the
+      // user confirms — the confirm handler then finds nothing to apply and
+      // silently no-ops, which is exactly how "Replace does nothing" looked.
       onApply()
-
-      // Clear the proposal
-      dispatch(clearProposedTask())
     } catch (error) {
       console.error('Error applying task:', error)
       toast.error(

@@ -215,8 +215,20 @@ export const BlocklyWorkspace = ({
   }, [editMode, dataTask])
 
   useEffect(() => {
-    if (!primaryWorkspaceRef.current || !applyExternalTaskState) return
-    if (!isValidBlockState(pendingExternalTask)) return
+    if (!applyExternalTaskState) return
+    if (!primaryWorkspaceRef.current) {
+      console.error(
+        'External task state was ready to apply but the Blockly workspace is not injected yet',
+      )
+      return
+    }
+    if (!isValidBlockState(pendingExternalTask)) {
+      console.error(
+        'External task state was ready to apply but pendingExternalTask is not a valid block state',
+        pendingExternalTask,
+      )
+      return
+    }
 
     const workspace = primaryWorkspaceRef.current
     const blocklyTaskStructure = getBlocklyStructure()

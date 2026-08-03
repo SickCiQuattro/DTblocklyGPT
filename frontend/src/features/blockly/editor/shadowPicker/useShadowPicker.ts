@@ -25,7 +25,6 @@ import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
 import { TaskType } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
-
 import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
 
 import { toKeywordsCsvOrNull } from '../../utils/keywords'

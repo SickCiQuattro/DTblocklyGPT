@@ -333,30 +333,34 @@ const TaskRowActions = ({
 
 const TaskCard = ({
   row,
+  canView,
   canManage,
   onOpen,
   ...actionProps
 }: {
   row: TaskType
+  canView: boolean
   canManage: boolean
   onOpen: () => void
 } & Omit<React.ComponentProps<typeof TaskRowActions>, 'row' | 'canManage'>) => (
   <Tooltip
-    title={canManage ? '' : 'Shared by another user — you can’t open this task'}
-    disableHoverListener={canManage}
+    title={canView ? '' : 'Private — owned by another user'}
+    disableHoverListener={canView}
   >
     <Paper
       variant="outlined"
-      tabIndex={canManage ? 0 : -1}
+      tabIndex={canView ? 0 : -1}
       role="button"
       aria-label={
-        canManage
-          ? `Open ${row.name} workspace`
-          : `${row.name} — shared by another user, read only`
+        canView
+          ? row.shared && !canManage
+            ? `Open ${row.name} workspace — shared, read only`
+            : `Open ${row.name} workspace`
+          : `${row.name} — private, owned by another user`
       }
-      onClick={() => canManage && onOpen()}
+      onClick={() => canView && onOpen()}
       onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && canManage) {
+        if ((e.key === 'Enter' || e.key === ' ') && canView) {
           e.preventDefault()
           onOpen()
         }
@@ -367,8 +371,8 @@ const TaskCard = ({
         display: 'flex',
         flexDirection: 'column',
         gap: 1,
-        cursor: canManage ? 'pointer' : 'default',
-        opacity: canManage ? 1 : 0.72,
+        cursor: canView ? 'pointer' : 'default',
+        opacity: canView ? 1 : 0.72,
         boxShadow: (theme) => theme.customShadows.card,
         '@media (prefers-reduced-motion: no-preference)': {
           // Keep the card on its own compositing layer at rest too — without
@@ -573,6 +577,14 @@ const ListTasks = () => {
 
   const canManage = (owner: TaskType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
+
+  // Opening a shared task is legitimate (task_detail's GET already allows
+  // owner-or-shared reads, and the workspace itself now renders a read-only
+  // mode for it) — canManage alone used to block the card entirely for any
+  // shared-not-owned task, while the separate Run icon (status-only, no
+  // ownership check) opened it anyway. canView is the real "can this row be
+  // opened at all" gate; canManage stays owner-only for Edit/Discard/Delete.
+  const canView = (row: TaskType) => canManage(row.owner) || row.shared
 
   const handleOpenWorkspace = (id: number) => {
     dispatch(activeItem(''))
@@ -851,6 +863,7 @@ const ListTasks = () => {
                 <TaskCard
                   key={row.id}
                   row={row}
+                  canView={canView(row)}
                   canManage={canManage(row.owner)}
                   onOpen={() => handleOpenWorkspace(row.id)}
                   {...actionProps}

@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Button,
   Checkbox,
   Chip,
@@ -53,6 +54,8 @@ interface FormLocationProps {
   dataMyRobots: MyRobotType[]
   insertMode: boolean
   backFunction: () => void
+  readOnly?: boolean
+  ownerUsername?: string
 }
 
 interface LocationFormValues extends Omit<LocationDetailType, 'position'> {
@@ -79,6 +82,8 @@ export const FormLocation = ({
   dataMyRobots,
   insertMode,
   backFunction,
+  readOnly = false,
+  ownerUsername,
 }: FormLocationProps) => {
   const [searchParams] = useSearchParams()
   const [addKeyword, setAddKeyword] = React.useState<string>('')
@@ -95,6 +100,7 @@ export const FormLocation = ({
       setFieldTouched,
     }: FormikHelpers<LocationFormValues>,
   ) => {
+    if (readOnly) return
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
     setKeywordErrors([])
     void fetchApi<SaveLocationResponse, LocationFormValues>({
@@ -164,6 +170,8 @@ export const FormLocation = ({
         id: dataLocation?.id || -1,
         name: forcedName || dataLocation?.name || '',
         shared: dataLocation?.shared || false,
+        owner: dataLocation?.owner ?? -1,
+        owner__username: dataLocation?.owner__username ?? '',
         position: dataLocation?.position
           ? JSON.stringify(dataLocation.position)
           : null,
@@ -197,6 +205,13 @@ export const FormLocation = ({
           }}
         >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
+            {readOnly && (
+              <Grid size={12}>
+                <Alert severity="info">
+                  Shared by {ownerUsername ?? 'another user'} — read-only
+                </Alert>
+              </Grid>
+            )}
             <Grid size={2}>
               <Stack spacing={1}>
                 <TextField
@@ -207,7 +222,7 @@ export const FormLocation = ({
                   required
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  disabled={!!forcedName}
+                  disabled={!!forcedName || readOnly}
                   error={Boolean(touched.name && errors.name)}
                   aria-invalid={Boolean(touched.name && errors.name)}
                   aria-describedby={
@@ -235,6 +250,7 @@ export const FormLocation = ({
                         void setFieldValue('shared', !values.shared)
                       }}
                       checked={values.shared}
+                      disabled={readOnly}
                     />
                   }
                   label="Shared"
@@ -253,6 +269,7 @@ export const FormLocation = ({
                   name="add_keyword"
                   label="Add keyword"
                   title="You can define keywords for this grid to be used as synonyms during the chat"
+                  disabled={readOnly}
                   onChange={(e) => setAddKeyword(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -279,6 +296,7 @@ export const FormLocation = ({
                               }
                             }}
                             disabled={
+                              readOnly ||
                               !addKeyword ||
                               values.keywords.includes(addKeyword)
                             }
@@ -301,16 +319,20 @@ export const FormLocation = ({
                     key={keyword}
                     label={keyword}
                     variant="outlined"
-                    onDelete={() => {
-                      const newKeywords = [...values.keywords]
-                      newKeywords.splice(index, 1)
-                      void setFieldValue('keywords', newKeywords)
+                    onDelete={
+                      readOnly
+                        ? undefined
+                        : () => {
+                            const newKeywords = [...values.keywords]
+                            newKeywords.splice(index, 1)
+                            void setFieldValue('keywords', newKeywords)
 
-                      const newKeywordErrors = keywordErrors.filter(
-                        (keywordError) => keywordError !== keyword,
-                      )
-                      setKeywordErrors(newKeywordErrors)
-                    }}
+                            const newKeywordErrors = keywordErrors.filter(
+                              (keywordError) => keywordError !== keyword,
+                            )
+                            setKeywordErrors(newKeywordErrors)
+                          }
+                    }
                     color={
                       keywordErrors.includes(keyword) ? 'error' : 'primary'
                     }
@@ -336,6 +358,7 @@ export const FormLocation = ({
                       void setFieldValue('robot', e.target.value)
                       void setFieldValue('position', '')
                     }}
+                    disabled={readOnly}
                     error={Boolean(touched.robot && errors.robot)}
                     aria-invalid={Boolean(touched.robot && errors.robot)}
                     aria-describedby={
@@ -374,6 +397,7 @@ export const FormLocation = ({
                   aria-label="detail"
                   size="medium"
                   variant="outlined"
+                  disabled={readOnly}
                   title="Acquire the position of the location"
                   startIcon={<Crosshair size={20} />}
                 >
@@ -427,13 +451,17 @@ export const FormLocation = ({
             <Grid size={12}>
               <Button
                 disableElevation
-                disabled={isSubmitting}
+                disabled={isSubmitting || readOnly}
                 fullWidth
                 size="large"
                 type="submit"
                 variant="contained"
                 color="primary"
-                title="Save this location"
+                title={
+                  readOnly
+                    ? "Shared by another user — you can't edit this"
+                    : 'Save this location'
+                }
               >
                 Save
               </Button>

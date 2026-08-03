@@ -45,6 +45,14 @@ export type TaskState = {
   // treat that gap as "safe to run" — see Header/index.tsx's isRunPrimary
   // and DigitalTwinPanel.tsx's canRun.
   hasUnsavedEdits: boolean
+  // True when the loaded task is shared and NOT owned by the current user —
+  // read access is legitimate (task_detail's GET allows owner-or-shared),
+  // but every write endpoint is owner-only. Drives the Header's read-only
+  // banner/disabled Save-Publish-Discard-Rename and blocks the autosave
+  // debounce at the source in task-workspace/index.tsx, instead of letting
+  // it hit the backend and surface as a generic "Task not found" toast.
+  isReadOnly: boolean
+  ownerUsername: string | null
   chatPosition: 'left' | 'right'
   robotPanelWidth: 'standard' | 'wide'
 }
@@ -74,6 +82,8 @@ export const initialState: TaskState = {
   workspaceReady: false,
   conformanceIssues: [],
   hasUnsavedEdits: false,
+  isReadOnly: false,
+  ownerUsername: null,
   chatPosition:
     (typeof window !== 'undefined'
       ? (localStorage.getItem('chatPosition') as 'left' | 'right')
@@ -103,11 +113,15 @@ const taskSlice = createSlice({
         id: string | null
         name: string
         status: TaskStatus
+        isReadOnly?: boolean
+        ownerUsername?: string | null
       }>,
     ) {
       state.activeTaskId = action.payload.id
       state.activeTaskName = action.payload.name
       state.activeTaskStatus = action.payload.status
+      state.isReadOnly = action.payload.isReadOnly ?? false
+      state.ownerUsername = action.payload.ownerUsername ?? null
     },
     setTaskName(state, action: PayloadAction<string>) {
       state.activeTaskName = action.payload

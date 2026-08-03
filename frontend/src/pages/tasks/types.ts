@@ -36,6 +36,8 @@ export type TaskDetailType = {
   description: string
   name: string
   shared: boolean
+  owner: number
+  owner__username: string
   code: Record<string, unknown> | null
   task_type: TaskTypeField
   status: TaskStatus

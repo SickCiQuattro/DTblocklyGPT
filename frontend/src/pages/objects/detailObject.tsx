@@ -9,6 +9,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MyRobotType } from 'pages/myrobots/types'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { FormObject } from './formObject'
 import { ObjectDetailType } from './types'
@@ -19,6 +20,15 @@ const DetailObject = () => {
   const dispatch = useDispatch()
   const insertMode = id === 'add'
   useDocumentTitle(insertMode ? 'Add Object' : 'Object Detail')
+
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
   const {
     data: dataObject,
     error: objectError,
@@ -45,6 +55,12 @@ const DetailObject = () => {
   const loadError = !insertMode && !isLoadingObject && !!objectError
   const notFound =
     !insertMode && !isLoadingObject && !objectError && dataObject === undefined
+  const readOnly =
+    !insertMode &&
+    dataObject !== undefined &&
+    currentUserId !== null &&
+    String(dataObject.owner) !== currentUserId &&
+    dataObject.shared
 
   const subtitle = insertMode
     ? 'Here you can define the details of the Object. Hover over fields to see their descriptions.'
@@ -75,6 +91,8 @@ const DetailObject = () => {
           dataMyRobots={dataMyRobots}
           insertMode={insertMode}
           backFunction={backFunction}
+          readOnly={readOnly}
+          ownerUsername={dataObject?.owner__username}
         />
       )}
     </MainCard>

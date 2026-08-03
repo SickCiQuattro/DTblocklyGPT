@@ -9,6 +9,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MyRobotType } from 'pages/myrobots/types'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { FormAction } from './formAction'
 import { ActionDetailType } from './types'
@@ -19,6 +20,15 @@ const DetailAction = () => {
   const dispatch = useDispatch()
   const insertMode = id === 'add'
   useDocumentTitle(insertMode ? 'Add Skill' : 'Skill Detail')
+
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
   const {
     data: dataAction,
     error: actionError,
@@ -45,6 +55,12 @@ const DetailAction = () => {
   const loadError = !insertMode && !isLoadingAction && !!actionError
   const notFound =
     !insertMode && !isLoadingAction && !actionError && dataAction === undefined
+  const readOnly =
+    !insertMode &&
+    dataAction !== undefined &&
+    currentUserId !== null &&
+    String(dataAction.owner) !== currentUserId &&
+    dataAction.shared
 
   const subtitle = insertMode
     ? 'Here you can define the details of the Skill. Hover over fields to see their descriptions.'
@@ -75,6 +91,8 @@ const DetailAction = () => {
           dataMyRobots={dataMyRobots || []}
           insertMode={insertMode}
           backFunction={backFunction}
+          readOnly={readOnly}
+          ownerUsername={dataAction?.owner__username}
         />
       )}
     </MainCard>

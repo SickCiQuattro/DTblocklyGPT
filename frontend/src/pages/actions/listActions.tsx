@@ -74,6 +74,9 @@ const ListActions = () => {
   const canManageAction = (owner: ActionListType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
 
+  const canViewAction = (row: ActionListType) =>
+    canManageAction(row.owner) || row.shared
+
   const { data, error, mutate, isLoading } = useSWR<ActionListType[], Error>({
     url: endpoints.home.libraries.actions,
   })
@@ -248,11 +251,13 @@ const ListActions = () => {
                         onClick={() => handleDetail(row.id)}
                         color="primary"
                         aria-label="detail"
-                        disabled={!canManageAction(row.owner)}
+                        disabled={!canViewAction(row)}
                         title={
-                          canManageAction(row.owner)
-                            ? 'View skill details'
-                            : 'Shared by another user — only they can view or edit it'
+                          canViewAction(row)
+                            ? canManageAction(row.owner)
+                              ? 'View skill details'
+                              : 'Shared by another user — read-only'
+                            : 'Private — owned by another user'
                         }
                         size="small"
                       >

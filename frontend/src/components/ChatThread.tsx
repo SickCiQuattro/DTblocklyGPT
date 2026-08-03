@@ -39,7 +39,6 @@ import { buildBlockCatalog } from 'features/blockly/toolbox'
 import { AbstractStep } from 'pages/tasks/types'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { UserLoginInterface } from 'pages/login/LoginForm'
-
 import { ConfirmDialog } from 'components/ConfirmDialog'
 
 import { UserBubble } from './UserBubble'

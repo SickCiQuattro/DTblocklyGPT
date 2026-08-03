@@ -74,6 +74,9 @@ const ListObjects = () => {
   const canManageObject = (owner: ObjectListType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
 
+  const canViewObject = (row: ObjectListType) =>
+    canManageObject(row.owner) || row.shared
+
   const { data, error, mutate, isLoading } = useSWR<ObjectListType[], Error>({
     url: endpoints.home.libraries.objects,
   })
@@ -248,11 +251,13 @@ const ListObjects = () => {
                         onClick={() => handleDetail(row.id)}
                         color="primary"
                         aria-label="detail"
-                        disabled={!canManageObject(row.owner)}
+                        disabled={!canViewObject(row)}
                         title={
-                          canManageObject(row.owner)
-                            ? 'View object details'
-                            : 'Shared by another user — only they can view or edit it'
+                          canViewObject(row)
+                            ? canManageObject(row.owner)
+                              ? 'View object details'
+                              : 'Shared by another user — read-only'
+                            : 'Private — owned by another user'
                         }
                         size="small"
                       >

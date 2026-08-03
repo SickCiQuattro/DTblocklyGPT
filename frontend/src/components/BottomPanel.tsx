@@ -3,6 +3,7 @@ import { Box, Typography, IconButton, Tooltip } from '@mui/material'
 import { Maximize2, Minimize2 } from 'lucide-react'
 
 import { Theme as ThemeOption } from 'themes/theme'
+
 import { panel as panelTokens } from './digitalTwin/panelTokens'
 
 // Intentionally-dark developer terminal (design spec §3.8) — same spec

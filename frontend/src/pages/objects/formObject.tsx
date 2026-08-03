@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Alert,
   Button,
   CardMedia,
   Checkbox,
@@ -38,6 +39,8 @@ interface FormObjectProps {
   dataMyRobots: MyRobotType[] | undefined
   insertMode: boolean
   backFunction: () => void
+  readOnly?: boolean
+  ownerUsername?: string
 }
 
 interface ObjectFormValues extends ObjectDetailType {
@@ -71,6 +74,8 @@ export const FormObject = ({
   dataMyRobots,
   insertMode,
   backFunction,
+  readOnly = false,
+  ownerUsername,
 }: FormObjectProps) => {
   const [addKeyword, setAddKeyword] = React.useState<string>('')
   const [keywordErrors, setKeywordErrors] = React.useState<string[]>([])
@@ -86,6 +91,7 @@ export const FormObject = ({
       setFieldTouched,
     }: FormikHelpers<ObjectFormValues>,
   ) => {
+    if (readOnly) return
     const method = insertMode ? MethodHTTP.POST : MethodHTTP.PUT
     setKeywordErrors([])
     void fetchApi<SaveObjectResponse, ObjectFormValues>({
@@ -185,6 +191,8 @@ export const FormObject = ({
         id: dataObject?.id || -1,
         name: forcedName || dataObject?.name || '',
         shared: dataObject?.shared || false,
+        owner: dataObject?.owner ?? -1,
+        owner__username: dataObject?.owner__username ?? '',
         height: dataObject?.height || 0,
         keywords: dataObject?.keywords || [],
         robot: null,
@@ -223,6 +231,13 @@ export const FormObject = ({
           }}
         >
           <Grid container spacing={3} columns={{ xs: 1, sm: 6, md: 12 }}>
+            {readOnly && (
+              <Grid size={12}>
+                <Alert severity="info">
+                  Shared by {ownerUsername ?? 'another user'} — read-only
+                </Alert>
+              </Grid>
+            )}
             <Grid size={2}>
               <Stack spacing={1}>
                 <TextField
@@ -233,7 +248,7 @@ export const FormObject = ({
                   required
                   onBlur={handleBlur}
                   onChange={handleChange}
-                  disabled={!!forcedName}
+                  disabled={!!forcedName || readOnly}
                   error={Boolean(touched.name && errors.name)}
                   aria-invalid={Boolean(touched.name && errors.name)}
                   aria-describedby={
@@ -261,6 +276,7 @@ export const FormObject = ({
                         void setFieldValue('shared', !values.shared)
                       }}
                       checked={values.shared}
+                      disabled={readOnly}
                     />
                   }
                   label="Shared"
@@ -279,6 +295,7 @@ export const FormObject = ({
                   name="add_keyword"
                   label="Add keyword"
                   title="You can define keywords for this object to be used as synonyms during the chat"
+                  disabled={readOnly}
                   onChange={(e) => setAddKeyword(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -305,6 +322,7 @@ export const FormObject = ({
                               }
                             }}
                             disabled={
+                              readOnly ||
                               !addKeyword ||
                               values.keywords.includes(addKeyword)
                             }
@@ -327,16 +345,20 @@ export const FormObject = ({
                     key={keyword}
                     label={keyword}
                     variant="outlined"
-                    onDelete={() => {
-                      const newKeywords = [...values.keywords]
-                      newKeywords.splice(index, 1)
-                      void setFieldValue('keywords', newKeywords)
+                    onDelete={
+                      readOnly
+                        ? undefined
+                        : () => {
+                            const newKeywords = [...values.keywords]
+                            newKeywords.splice(index, 1)
+                            void setFieldValue('keywords', newKeywords)
 
-                      const newKeywordErrors = keywordErrors.filter(
-                        (keywordError) => keywordError !== keyword,
-                      )
-                      setKeywordErrors(newKeywordErrors)
-                    }}
+                            const newKeywordErrors = keywordErrors.filter(
+                              (keywordError) => keywordError !== keyword,
+                            )
+                            setKeywordErrors(newKeywordErrors)
+                          }
+                    }
                     color={
                       keywordErrors.includes(keyword) ? 'error' : 'primary'
                     }
@@ -359,6 +381,7 @@ export const FormObject = ({
                     name="robot"
                     onBlur={handleBlur}
                     onChange={handleChange}
+                    disabled={readOnly}
                     error={Boolean(touched.robot && errors.robot)}
                     aria-invalid={Boolean(touched.robot && errors.robot)}
                     aria-describedby={
@@ -397,6 +420,7 @@ export const FormObject = ({
                   aria-label="detail"
                   size="medium"
                   variant="outlined"
+                  disabled={readOnly}
                   title="Define the height of the object"
                   startIcon={<Crosshair size={20} />}
                 >
@@ -442,6 +466,7 @@ export const FormObject = ({
                   }}
                   onBlur={handleBlur}
                   onChange={handleChange}
+                  disabled={readOnly}
                   error={Boolean(touched.weight && errors.weight)}
                   title="Weight of the object in grams"
                 />
@@ -469,6 +494,7 @@ export const FormObject = ({
                   }}
                   onBlur={handleBlur}
                   onChange={handleChange}
+                  disabled={readOnly}
                   error={Boolean(touched.obj_length && errors.obj_length)}
                   title="Length of the object in millimeters"
                 />
@@ -496,6 +522,7 @@ export const FormObject = ({
                   }}
                   onBlur={handleBlur}
                   onChange={handleChange}
+                  disabled={readOnly}
                   error={Boolean(touched.obj_width && errors.obj_width)}
                   title="Width of the object in millimeters"
                 />
@@ -528,6 +555,7 @@ export const FormObject = ({
                   }}
                   aria-label="Force"
                   onChange={handleChange}
+                  disabled={readOnly}
                   valueLabelDisplay="auto"
                   step={1}
                   marks
@@ -555,6 +583,7 @@ export const FormObject = ({
                   aria-label="detail"
                   size="medium"
                   variant="outlined"
+                  disabled={readOnly}
                   title="Acquire photo of the object to recognize the shape"
                   startIcon={<Crosshair size={20} />}
                 >
@@ -628,13 +657,17 @@ export const FormObject = ({
             <Grid size={12}>
               <Button
                 disableElevation
-                disabled={isSubmitting}
+                disabled={isSubmitting || readOnly}
                 fullWidth
                 size="large"
                 type="submit"
                 variant="contained"
                 color="primary"
-                title="Save this object"
+                title={
+                  readOnly
+                    ? "Shared by another user — you can't edit this"
+                    : 'Save this object'
+                }
               >
                 Save
               </Button>

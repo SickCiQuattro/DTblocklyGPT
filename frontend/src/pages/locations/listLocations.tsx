@@ -74,6 +74,9 @@ const ListLocations = () => {
   const canManageLocation = (owner: LocationListType['owner']) =>
     currentUserId !== null && String(owner) === currentUserId
 
+  const canViewLocation = (row: LocationListType) =>
+    canManageLocation(row.owner) || row.shared
+
   const { data, error, mutate, isLoading } = useSWR<LocationListType[], Error>({
     url: endpoints.home.libraries.locations,
   })
@@ -248,11 +251,13 @@ const ListLocations = () => {
                         onClick={() => handleDetail(row.id)}
                         color="primary"
                         aria-label="detail"
-                        disabled={!canManageLocation(row.owner)}
+                        disabled={!canViewLocation(row)}
                         title={
-                          canManageLocation(row.owner)
-                            ? 'View location details'
-                            : 'Shared by another user — only they can view or edit it'
+                          canViewLocation(row)
+                            ? canManageLocation(row.owner)
+                              ? 'View location details'
+                              : 'Shared by another user — read-only'
+                            : 'Private — owned by another user'
                         }
                         size="small"
                       >

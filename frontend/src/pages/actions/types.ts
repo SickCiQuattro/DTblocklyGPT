@@ -13,6 +13,8 @@ export interface ActionDetailType {
   name: string
   points: string
   shared: boolean
+  owner: number
+  owner__username: string
   speed: number
   pattern: string
   keywords: string[]

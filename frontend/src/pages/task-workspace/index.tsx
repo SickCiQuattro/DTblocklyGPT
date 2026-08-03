@@ -45,9 +45,15 @@ import { fetchApi, MethodHTTP } from 'services/api'
 import { ObjectListType } from 'pages/objects/types'
 import { LocationListType } from 'pages/locations/types'
 import { ActionListType } from 'pages/actions/types'
-import { TaskType, TaskDetailType, AbstractStep } from 'pages/tasks/types'
+import {
+  TaskType,
+  TaskDetailType,
+  AbstractStep,
+  TaskStatus,
+} from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
+import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
 import { ChatThread } from '../../components/ChatThread'
 import { DigitalTwinPanel } from '../../components/DigitalTwinPanel'
@@ -93,8 +99,20 @@ export const UnifiedWorkspace = () => {
     (state) => state.task.discardTriggered,
   )
   const renameTriggered = useAppSelector((state) => state.task.renameTriggered)
+  const isReadOnly = useAppSelector((state) => state.task.isReadOnly)
   const chatPosition =
     useAppSelector((state) => state.task.chatPosition) || 'right'
+
+  // Same source/shape as listTasks.tsx's canManage — one place per-file that
+  // reads the logged-in user's id from localStorage, kept in sync deliberately.
+  const storedUser: unknown = getFromLocalStorage(LocalStorageKey.USER)
+  const currentUserId =
+    typeof storedUser === 'object' &&
+    storedUser !== null &&
+    'id' in storedUser &&
+    (typeof storedUser.id === 'string' || typeof storedUser.id === 'number')
+      ? String(storedUser.id)
+      : null
 
   // Sync chat sidebar visibility based on homepage URL query parameters
   useEffect(() => {
@@ -211,6 +229,8 @@ export const UnifiedWorkspace = () => {
             name: m.name,
             description: m.description,
             shared: m.shared,
+            owner: m.owner,
+            owner__username: m.owner__username,
             status: m.status,
             task_type: m.task_type,
             signature: m.signature,
@@ -233,11 +253,23 @@ export const UnifiedWorkspace = () => {
   // Set active task info in Redux on load
   useEffect(() => {
     if (taskData) {
+      // Read is legitimate for owner-or-shared (task_detail's GET), but every
+      // write endpoint is owner-only — a task that loaded fine can still be
+      // read-only. taskData.owner is undefined only if task_detail's response
+      // predates this field (shouldn't happen post-deploy, but don't treat a
+      // missing owner as "not mine" and lock out the actual owner).
+      const taskIsReadOnly =
+        taskData.owner !== undefined &&
+        currentUserId !== null &&
+        String(taskData.owner) !== currentUserId &&
+        taskData.shared
       dispatch(
         setActiveTask({
           id: taskData.id.toString(),
           name: taskData.name,
           status: taskData.status,
+          isReadOnly: taskIsReadOnly,
+          ownerUsername: taskData.owner__username ?? null,
         }),
       )
       // lastSaved is a single global Redux flag with no per-task scope, so
@@ -290,7 +322,7 @@ export const UnifiedWorkspace = () => {
       dispatch(setHasUnsavedEdits(false))
       setTaskStructure([])
     }
-  }, [taskData, id, dispatch])
+  }, [taskData, id, dispatch, currentUserId])
 
   // Convert initial backend structure to Blockly block structure
   const initialDataTask = useMemo(() => {
@@ -425,18 +457,44 @@ export const UnifiedWorkspace = () => {
           })
         }
 
-        // Invalidate and sync SWR cache and status in real-time
-        const updatedTask = await mutateTask()
-        if (updatedTask) {
+        if (isAutoSave) {
+          // The resulting status is fully predictable from save_draft's own
+          // rule (task_lifecycle.py: draft/published_with_draft stay put,
+          // published -> published_with_draft) — no need to round-trip for
+          // it. A full mutateTask() here (autosave fires every ~2s while
+          // typing) re-fetched the task on every keystroke pause, which
+          // re-ran the "on load" effect above and clobbered the in-progress
+          // taskStructure/isReadOnly/hasUnsavedEdits state with a server
+          // echo of what was just saved — the visible "workspace refreshes
+          // on its own" symptom.
+          const newStatus: TaskStatus = isPublish
+            ? 'published'
+            : taskData?.status === 'published'
+              ? 'published_with_draft'
+              : (taskData?.status ?? 'draft')
           dispatch(
             setActiveTask({
-              id: updatedTask.id.toString(),
-              name: updatedTask.name,
-              status: updatedTask.status,
+              // targetId is non-null here: the branch above either read it
+              // from an existing `id` or throws before falling through.
+              id: targetId!.toString(),
+              name: currentName,
+              status: newStatus,
             }),
           )
+        } else {
+          // Invalidate and sync SWR cache and status in real-time
+          const updatedTask = await mutateTask()
+          if (updatedTask) {
+            dispatch(
+              setActiveTask({
+                id: updatedTask.id.toString(),
+                name: updatedTask.name,
+                status: updatedTask.status,
+              }),
+            )
+          }
+          void mutate({ url: endpoints.home.libraries.tasks })
         }
-        void mutate({ url: endpoints.home.libraries.tasks })
         dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
         dispatch(triggerSavedFlash(true))
         dispatch(setSaveError(false))
@@ -484,6 +542,12 @@ export const UnifiedWorkspace = () => {
   const handleTaskStructureChange = (
     newStructure: import('pages/tasks/types').ASTBranch[] | null,
   ) => {
+    // Belt-and-suspenders: BlocklyEditor's editMode={!isReadOnly} should
+    // already stop the user from producing structural changes at all on a
+    // shared-not-mine task, but never let an edit reach the 2s autosave
+    // debounce regardless — the write endpoint would 404 "Task not found"
+    // (owner-only by design) and surface as a confusing generic save error.
+    if (isReadOnly) return
     const structureArray = newStructure || []
     setTaskStructure(structureArray)
     // Set synchronously, not after the debounce fires — a task that WAS
@@ -516,6 +580,9 @@ export const UnifiedWorkspace = () => {
   useEffect(() => {
     if (saveTriggered) {
       dispatch(triggerSave(false)) // Reset immediately to prevent multiple triggers
+      // Header's Save button is already disabled when isReadOnly, but Ctrl/Cmd+S
+      // below dispatches unconditionally — stop it here too before it 404s.
+      if (isReadOnly) return
 
       // Clear any pending debounced auto-save timeout to prevent race condition status downgrades
       if (saveTimeoutRef.current) {
@@ -524,7 +591,14 @@ export const UnifiedWorkspace = () => {
 
       void saveTaskToBackend(activeTaskName, isReady, false)
     }
-  }, [saveTriggered, activeTaskName, isReady, saveTaskToBackend, dispatch])
+  }, [
+    saveTriggered,
+    activeTaskName,
+    isReady,
+    saveTaskToBackend,
+    dispatch,
+    isReadOnly,
+  ])
 
   // Ctrl/Cmd+S → same save trigger the header Save button dispatches.
   // preventDefault blocks the browser's native "Save Page As" dialog.
@@ -546,6 +620,7 @@ export const UnifiedWorkspace = () => {
   useEffect(() => {
     if (renameTriggered) {
       dispatch(triggerRename(false)) // Reset immediately to prevent multiple triggers
+      if (isReadOnly) return
       if (id && taskData && taskData.name !== activeTaskName) {
         fetchApi({
           url: endpoints.home.libraries.task,
@@ -581,12 +656,14 @@ export const UnifiedWorkspace = () => {
     dispatch,
     mutateTask,
     mutate,
+    isReadOnly,
   ])
 
   // Discard draft trigger listener
   useEffect(() => {
     if (discardTriggered) {
       dispatch(triggerDiscard(false)) // Reset immediately to prevent multiple triggers
+      if (isReadOnly) return
       if (id) {
         dispatch(setSaving(true))
         fetchApi({
@@ -614,7 +691,7 @@ export const UnifiedWorkspace = () => {
           })
       }
     }
-  }, [discardTriggered, id, dispatch, mutateTask, mutate])
+  }, [discardTriggered, id, dispatch, mutateTask, mutate, isReadOnly])
 
   const isLoading =
     isLoadingObjects ||
@@ -714,7 +791,7 @@ export const UnifiedWorkspace = () => {
             currentTaskId={currentTaskId}
             dataTask={editorDataTask}
             pendingExternalTask={pendingChatTask}
-            editMode={true}
+            editMode={!isReadOnly}
             applyExternalTaskState={newChatResponse}
             onExternalTaskStateApplied={() => {
               setNewChatResponse(false)
@@ -746,8 +823,22 @@ export const UnifiedWorkspace = () => {
             )
             if (isBlockState(converted)) {
               setPendingChatTask(converted)
+              setNewChatResponse(true)
+            } else {
+              // abstractToBlockly returns `{}` (no `type`) when every step in
+              // the proposal used a type it doesn't recognize — previously
+              // this fell through silently: setNewChatResponse(true) still
+              // fired, but with no valid pendingExternalTask the apply effect
+              // in BlocklyWorkspace.tsx no-ops, so Replace looked like it did
+              // nothing with zero console error.
+              console.error(
+                'Chat proposal could not be converted to blocks',
+                proposed,
+              )
+              toast.error(
+                "Couldn't apply these blocks — the proposal used a step type the workspace doesn't support.",
+              )
             }
-            setNewChatResponse(true)
           }}
         />
       </Box>

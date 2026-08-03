@@ -89,6 +89,8 @@ export const FormTask = ({ data, backFunction }: FormTaskProps) => {
         description: data.description ?? '',
         code: data.code ?? null,
         shared: data.shared ?? false,
+        owner: data.owner,
+        owner__username: data.owner__username,
         task_type: data.task_type ?? 'task',
         status: data.status ?? 'draft',
         signature: data.signature ?? '',

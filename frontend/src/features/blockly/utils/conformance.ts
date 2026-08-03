@@ -167,14 +167,18 @@ export const computeConformance = (
   // ── Rule 1: empty workspace ──────────────────────────────────────────────
   // when_start is a permanent structural marker (inserted on every task load,
   // deletable:false) — a workspace holding only an empty when_start has no
-  // real content, even though topBlocks.length is 1, not 0. Without this, a
-  // brand-new task never reports empty (when_start alone always satisfies
-  // topBlocks.length > 0), so the canvas's "drag a block to start" message
-  // only ever appeared after deleting a task back down to nothing, never on
-  // first load.
-  const realTopBlocks = topBlocks.filter(
-    (b) => b.type !== START_BLOCK_TYPE || b.getNextBlock() !== null,
-  )
+  // real content, even though topBlocks.length is 1, not 0. A shadow next
+  // block doesn't count as content either: insertStartBlock attaches a
+  // shadow_start_sequence_block ("+" placeholder) by default on every fresh
+  // task, so getNextBlock() alone is never null and the empty case was still
+  // missed. Without both checks, a brand-new task never reports empty, so the
+  // canvas's "drag a block to start" message only ever appeared after
+  // deleting a task back down to nothing, never on first load.
+  const realTopBlocks = topBlocks.filter((b) => {
+    if (b.type !== START_BLOCK_TYPE) return true
+    const next = b.getNextBlock()
+    return next !== null && !isUnresolvedShadow(next)
+  })
   if (realTopBlocks.length === 0) {
     return buildResult([{ type: 'EMPTY_WORKSPACE', severity: 'error' }], [])
   }
