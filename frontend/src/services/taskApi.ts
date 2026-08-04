@@ -1,3 +1,12 @@
+// NOT WIRED: no component imports from this module. The real publish flow
+// calls `fetchApi({ url: endpoints.task.publish })` directly from
+// `pages/task-workspace/index.tsx` (`saveTaskToBackend`), which sends only
+// `{ id, taskStructure }` — no `dependencies`/`forcePublish`, and no
+// `rethrowOn: [202, 409]`, so the 202/409 handling below is currently dead:
+// `services/api.ts`'s generic `fetchApi` resolves both statuses as success
+// when the caller doesn't opt into rethrowing them. This file's shape is
+// correct if a real DAG/staleness check is ever built server-side — see
+// docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5.
 import axios from 'axios'
 
 import { endpoints } from './endpoints'

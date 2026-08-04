@@ -94,7 +94,16 @@ export const fetchApi = async <
         const rethrow = rethrowOn?.includes(error.response.status) ?? false
         switch (error.response.status) {
           case 202:
-            // Breaking changes
+            // Breaking changes. LANDMINE if a caller ever starts returning
+            // 202/409 without also passing rethrowOn: [202, 409] — without
+            // it, both cases below resolve the promise with the payload
+            // instead of throwing, so a rejected/needs-confirmation response
+            // is indistinguishable from success to the caller (and to the
+            // user: a toast.success can fire right after). The current
+            // task-publish path (task-workspace/index.tsx) doesn't opt in,
+            // but no backend path returns 202/409 for it today either — see
+            // docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5.
+            // If that ever changes, add rethrowOn there before relying on it.
             if (rethrow) break
             return error.response.data.payload as TResponse
           case 400:

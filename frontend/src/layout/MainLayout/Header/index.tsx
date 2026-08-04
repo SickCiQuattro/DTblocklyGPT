@@ -245,14 +245,27 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               in the action group — otherwise Copilot/Save/Run shift
               horizontally every time one of these appears (Nielsen: stable
               positions build muscle memory across visits). */}
-          {!workspaceReady && conformanceIssues.length > 0 && (
+          {conformanceIssues.length > 0 && (
             <>
-              <Tooltip title="Why this task isn't ready to publish">
+              {/* workspaceReady is errors-only (computeConformance's
+                  `errors.length === 0`) — conformanceIssues mixes in
+                  non-blocking warnings too (e.g. an orphaned/circular macro
+                  reference), so the badge must show for those even though
+                  Save/Publish isn't actually blocked. Copy/aria-label reflect
+                  which case this is instead of always claiming "to fix
+                  before publishing". */}
+              <Tooltip
+                title={
+                  workspaceReady
+                    ? 'Non-blocking warnings for this task'
+                    : "Why this task isn't ready to publish"
+                }
+              >
                 <Button
                   size="small"
                   onClick={(e) => setIssuesAnchorEl(e.currentTarget)}
                   startIcon={<AlertTriangle size={14} />}
-                  aria-label={`${conformanceIssues.length} issue${conformanceIssues.length !== 1 ? 's' : ''} to fix before publishing`}
+                  aria-label={`${conformanceIssues.length} issue${conformanceIssues.length !== 1 ? 's' : ''} ${workspaceReady ? 'to review' : 'to fix before publishing'}`}
                   sx={{
                     height: theme.spacing(3.75),
                     minWidth: 0,

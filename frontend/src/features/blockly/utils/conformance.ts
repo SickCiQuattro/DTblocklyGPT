@@ -55,6 +55,48 @@ export type ConformanceIssue =
       blockId: string
       blockType: string
     }
+  | {
+      type: 'ORPHAN_MACRO_REF'
+      severity: 'warning'
+      blockId: string
+      macroId: number
+      macroName: string
+    }
+  | {
+      type: 'CIRCULAR_MACRO_REF'
+      severity: 'warning'
+      blockId: string
+      macroId: number
+      macroName: string
+    }
+
+/**
+ * A single macro_task_block reference found while walking a workspace (live
+ * or serialized) — { id, name } is the exact shape stored in the block's
+ * `data` JSON (see blocklyParser.ts's `stepToBlock` 'macro_task' case).
+ */
+export type MacroRef = { id: number; name: string; blockId?: string }
+
+/**
+ * Everything computeConformance needs to check macro references, pre-built
+ * by the caller (useConformance.ts) from React-side data
+ * (macroDetailsById in task-workspace/index.tsx). Kept as plain
+ * data in/data out so this file stays framework-agnostic — see the file's
+ * design constraints above.
+ */
+export type MacroContext = {
+  /** id of the task currently open in the editor, or null if unsaved/new —
+   *  used as the start of the cycle search: does anything this task
+   *  references eventually reference back to this task itself. */
+  currentTaskId: number | null
+  /** ids of macros that actually resolve right now (published, visible to
+   *  this user) — anything outside this set is an ORPHAN_MACRO_REF. */
+  knownMacroIds: Set<number>
+  /** macro id -> ids of the macros IT references, derived from each
+   *  macro's own last-published workspace. Used to walk past the macros
+   *  directly referenced here to find an indirect cycle (A -> B -> A). */
+  macroOutgoingRefs: Map<number, number[]>
+}
 
 export interface ConformanceResult {
   /** 'draft' if any errors exist, 'ready' otherwise (warnings are allowed). */
@@ -126,6 +168,207 @@ const collectUnresolvedShadows = (
   return found
 }
 
+/**
+ * Safely parses a live block's `data` JSON payload — same format written by
+ * blocklyParser.ts's 'macro_task' step: `{ id, name }`. Returns null on
+ * anything malformed rather than throwing, matching the tolerant parsing
+ * already used for entity blocks in blocks/mutators.ts.
+ */
+const parseMacroRefData = (
+  rawData: unknown,
+): { id?: unknown; name?: unknown } | null => {
+  if (typeof rawData !== 'string' || rawData.length === 0) return null
+  try {
+    const parsed: unknown = JSON.parse(rawData)
+    return typeof parsed === 'object' && parsed !== null ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const MACRO_BLOCK_TYPE = 'macro_task_block'
+
+/**
+ * Recursively walks every block reachable from `root` (same traversal shape
+ * as collectUnresolvedShadows: value inputs, statement inputs, next-chain)
+ * collecting every macro_task_block reference found in the LIVE, currently
+ * open workspace.
+ */
+const collectMacroTaskRefs = (
+  block: Blockly.Block,
+  found: MacroRef[] = [],
+): MacroRef[] => {
+  if (block.type === MACRO_BLOCK_TYPE) {
+    const data = parseMacroRefData(block.data)
+    if (data && typeof data.id === 'number') {
+      found.push({
+        id: data.id,
+        name: typeof data.name === 'string' ? data.name : `Task ${data.id}`,
+        blockId: block.id,
+      })
+    }
+  }
+
+  for (const input of block.inputList) {
+    const connected = input.connection?.targetBlock()
+    if (connected) collectMacroTaskRefs(connected, found)
+  }
+
+  const next = block.getNextBlock()
+  if (next) collectMacroTaskRefs(next, found)
+
+  return found
+}
+
+/**
+ * Recursively walks a SERIALIZED (JSON) block subtree — the shape returned
+ * by Blockly.serialization.blocks.save(), i.e. a macro's own
+ * published_workspace — collecting every macro_task_block reference it
+ * contains. Used to build the cross-macro dependency graph for cycle
+ * detection (buildMacroOutgoingRefs below); the live-workspace walker above
+ * can't be reused here since other macros' content only ever exists as
+ * plain JSON fetched from the server, never as live Blockly Block instances.
+ */
+const collectMacroRefsFromSerializedNode = (
+  node: Record<string, unknown>,
+  found: MacroRef[] = [],
+): MacroRef[] => {
+  if (node['type'] === MACRO_BLOCK_TYPE) {
+    const data = parseMacroRefData(node['data'])
+    if (data && typeof data.id === 'number') {
+      found.push({
+        id: data.id,
+        name: typeof data.name === 'string' ? data.name : `Task ${data.id}`,
+      })
+    }
+  }
+
+  const inputs = node['inputs'] as Record<string, unknown> | undefined
+  if (inputs) {
+    for (const slot of Object.values(inputs)) {
+      const block = (slot as { block?: Record<string, unknown> } | undefined)
+        ?.block
+      if (block) collectMacroRefsFromSerializedNode(block, found)
+    }
+  }
+
+  const next = node['next'] as { block?: Record<string, unknown> } | undefined
+  if (next?.block) collectMacroRefsFromSerializedNode(next.block, found)
+
+  return found
+}
+
+/**
+ * Builds the id -> [referenced macro ids] graph used for cycle detection,
+ * from each macro's own last-published workspace. `codeByMacroId` mirrors
+ * task-workspace/index.tsx's macroDetailsById (id -> { code }), typed
+ * narrowly here to keep this file decoupled from TaskDetailType.
+ *
+ * A macro's `code` is a serialized block tree — either a single top-level
+ * block object, or (legacy shape, seen in persisted data) an array of
+ * top-level block objects. Both are handled.
+ */
+export const buildMacroOutgoingRefs = (
+  codeByMacroId: Record<number, { code: unknown }>,
+): Map<number, number[]> => {
+  const graph = new Map<number, number[]>()
+
+  for (const [idStr, { code }] of Object.entries(codeByMacroId)) {
+    const macroId = Number(idStr)
+    if (!code) {
+      graph.set(macroId, [])
+      continue
+    }
+    const nodes = Array.isArray(code) ? code : [code]
+    const refs = nodes.flatMap((node) =>
+      typeof node === 'object' && node !== null
+        ? collectMacroRefsFromSerializedNode(node as Record<string, unknown>)
+        : [],
+    )
+    graph.set(macroId, Array.from(new Set(refs.map((r) => r.id))))
+  }
+
+  return graph
+}
+
+/**
+ * Depth-first search from each directly-referenced macro, walking
+ * macroOutgoingRefs, looking for a path that revisits a node already on the
+ * current path — including looping back to currentTaskId itself. Mirrors
+ * the runtime MAX_MACRO_DEPTH safety net's intent (simulate.py) but at
+ * edit time: same DEPTH_CAP so a large-but-legitimately-deep dependency
+ * tree can't hang the UI.
+ */
+const DEPTH_CAP = 64
+
+const findMacroCycle = (
+  startId: number,
+  currentTaskId: number | null,
+  macroOutgoingRefs: Map<number, number[]>,
+): boolean => {
+  const path = new Set<number>(currentTaskId !== null ? [currentTaskId] : [])
+
+  const dfs = (nodeId: number, depth: number): boolean => {
+    if (depth > DEPTH_CAP) return false
+    if (path.has(nodeId)) return true
+    path.add(nodeId)
+    for (const next of macroOutgoingRefs.get(nodeId) ?? []) {
+      if (dfs(next, depth + 1)) return true
+    }
+    path.delete(nodeId)
+    return false
+  }
+
+  return dfs(startId, 0)
+}
+
+/**
+ * Scans every reachable flow for macro_task_block references and returns
+ * one warning per problem found: ORPHAN_MACRO_REF for a reference that
+ * doesn't resolve to a currently-published macro, CIRCULAR_MACRO_REF for a
+ * reference that (directly or transitively, via other macros' own
+ * references) loops back to itself or to the task currently being edited.
+ * A ref can be flagged for at most one of the two — an orphan can't
+ * meaningfully participate in a cycle check.
+ */
+const collectMacroWarnings = (
+  flowRoots: Blockly.Block[],
+  macroContext: MacroContext,
+): ConformanceIssue[] => {
+  const refs = flowRoots.flatMap((root) => collectMacroTaskRefs(root))
+  const warnings: ConformanceIssue[] = []
+
+  for (const ref of refs) {
+    if (!macroContext.knownMacroIds.has(ref.id)) {
+      warnings.push({
+        type: 'ORPHAN_MACRO_REF',
+        severity: 'warning',
+        blockId: ref.blockId ?? '',
+        macroId: ref.id,
+        macroName: ref.name,
+      })
+      continue
+    }
+    if (
+      findMacroCycle(
+        ref.id,
+        macroContext.currentTaskId,
+        macroContext.macroOutgoingRefs,
+      )
+    ) {
+      warnings.push({
+        type: 'CIRCULAR_MACRO_REF',
+        severity: 'warning',
+        blockId: ref.blockId ?? '',
+        macroId: ref.id,
+        macroName: ref.name,
+      })
+    }
+  }
+
+  return warnings
+}
+
 /** Builds the final ConformanceResult from a list of errors and warnings. */
 const buildResult = (
   errors: ConformanceIssue[],
@@ -148,8 +391,18 @@ const buildResult = (
  *     Note: extra disconnected tops become FLOATING_BLOCK warnings instead.
  *  3. Any unresolved shadow block in the flow → error UNRESOLVED_SHADOW (×N)
  *  4. Orphan/floating blocks outside the flow → warning FLOATING_BLOCK (×N)
+ *  5. macro_task_block referencing an unpublished/deleted/invisible task
+ *     → warning ORPHAN_MACRO_REF (×N), only when macroContext is passed
+ *  6. macro_task_block whose dependency chain loops back to itself or to
+ *     the task being edited → warning CIRCULAR_MACRO_REF (×N), only when
+ *     macroContext is passed
  *
  * Status is 'ready' only when there are zero errors (warnings are allowed).
+ * Rules 5-6 are warnings, not errors, by design: the runtime already
+ * survives both (a deleted macro no-ops at execution, a cycle is capped by
+ * MAX_MACRO_DEPTH in simulate.py) — this is an early, non-blocking signal,
+ * not a new gate on Save/Publish. See
+ * docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5 for why.
  *
  * Works identically regardless of whether the when_start block is present
  * (Detailed/Essential mode) or absent (Minimal mode). The start block is
@@ -158,6 +411,7 @@ const buildResult = (
  */
 export const computeConformance = (
   workspace: Blockly.Workspace,
+  macroContext?: MacroContext,
 ): ConformanceResult => {
   // Collect all roots: enabled, non-shadow top-level blocks.
   const topBlocks = workspace
@@ -188,6 +442,21 @@ export const computeConformance = (
   const startBlock = topBlocks.find((b) => b.type === START_BLOCK_TYPE)
   const root = startBlock ?? topBlocks[0]
 
+  // ── Rules 5-6: macro references, across every flow ───────────────────────
+  // Computed once up front (independent of which error path below fires) so
+  // fixing a blocking error doesn't hide an orphan/circular macro warning
+  // that was already there — same reasoning as Rule 2's own comment below.
+  const macroWarnings = macroContext
+    ? collectMacroWarnings(
+        topBlocks
+          .map((top) =>
+            top.type === START_BLOCK_TYPE ? (top.getNextBlock() ?? top) : top,
+          )
+          .filter((flowRoot) => !isUnresolvedShadow(flowRoot)),
+        macroContext,
+      )
+    : []
+
   // ── Rule 2: multiple flows (error) ───────────────────────────────────────
   // If there are multiple disconnected top-level blocks, the workspace is
   // ambiguous. We enforce a single flow to consider the task 'ready' — but
@@ -207,7 +476,7 @@ export const computeConformance = (
         errors.push(...collectUnresolvedShadows(flowRoot))
       }
     }
-    return buildResult(errors, [])
+    return buildResult(errors, macroWarnings)
   }
 
   // ── Rule 3: unresolved shadow blocks in the main flow ────────────────────
@@ -217,16 +486,16 @@ export const computeConformance = (
     root.type === START_BLOCK_TYPE ? (root.getNextBlock() ?? root) : root
 
   if (isUnresolvedShadow(traversalRoot)) {
-    return buildResult([toShadowIssue(traversalRoot)], [])
+    return buildResult([toShadowIssue(traversalRoot)], macroWarnings)
   }
 
   const shadowErrors = collectUnresolvedShadows(traversalRoot)
   if (shadowErrors.length > 0) {
-    return buildResult(shadowErrors, [])
+    return buildResult(shadowErrors, macroWarnings)
   }
 
   // ── All errors resolved ───────────────────────────────────────────────────
-  return buildResult([], [])
+  return buildResult([], macroWarnings)
 }
 
 /**
@@ -243,5 +512,9 @@ export const formatIssue = (issue: ConformanceIssue): string => {
       return `"${issue.humanLabel}" requires a selection.`
     case 'FLOATING_BLOCK':
       return "A block isn't connected to the program — it won't run."
+    case 'ORPHAN_MACRO_REF':
+      return `Saved task "${issue.macroName}" isn't published (or isn't shared with you) — it can't run.`
+    case 'CIRCULAR_MACRO_REF':
+      return `Saved task "${issue.macroName}" eventually calls back into this task, forming a loop — it can't run.`
   }
 }

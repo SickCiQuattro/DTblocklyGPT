@@ -1,3 +1,8 @@
+// NOT WIRED: no component imports from this module (mirrors taskApi.ts, see
+// its header comment for the full explanation). `endpoints.macro` is a
+// literal alias of `endpoints.task` (services/endpoints.ts) — there is no
+// separate macro-publish route on the backend for this to call even if it
+// were wired up. See docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5.
 import axios, { AxiosRequestConfig } from 'axios'
 
 import type {

@@ -364,6 +364,10 @@ export const UnifiedWorkspace = () => {
   const { isReady, issues, formattedIssues } = useConformance(
     workspace,
     viewSettings.blockViewMode === 'complete',
+    {
+      currentTaskId: currentTaskId === -1 ? null : currentTaskId,
+      macroDetailsById,
+    },
   )
   const isCanvasEmpty = issues.some((i) => i.type === 'EMPTY_WORKSPACE')
 

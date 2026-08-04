@@ -64,7 +64,10 @@ def bad_request(error, payload=None, status=400):
 
 
 def accepted_response(message: str = "", data=None) -> HttpResponse:
-    """202 — breaking changes detected, requires forcePublish confirmation."""
+    """202 — request understood but needs confirmation before it takes full
+    effect (e.g. a breaking change requiring forcePublish). Not currently
+    called anywhere: no publish path builds a breaking-changes check yet —
+    see docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5."""
     payload = {"message": message}
     if data is not None:
         payload["data"] = data
@@ -72,7 +75,9 @@ def accepted_response(message: str = "", data=None) -> HttpResponse:
 
 
 def conflict_response(message: str = "", data=None) -> HttpResponse:
-    """409 — cycle detected in the dependency DAG."""
+    """409 — request conflicts with current state (e.g. a dependency cycle).
+    Not currently called anywhere: no publish path builds a DAG cycle check
+    yet — see docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5."""
     payload = {"message": message}
     if data is not None:
         payload["data"] = data

@@ -92,14 +92,6 @@ export interface ShadowPickerItem {
    * When absent, the picker falls back to `resolveRealBlockTypeFromShadow`.
    */
   blockType?: SelectableShadowBlockType
-  /**
-   * For items backed by a macro_task, signals that the macro has a published
-   * workspace available. Items with `isMacroReady = false` are shown as
-   * disabled in the menu (the task exists but is still a draft).
-   *
-   * Undefined for non-macro items (not applicable).
-   */
-  isMacroReady?: boolean
 }
 
 export interface ShadowPickerPosition {

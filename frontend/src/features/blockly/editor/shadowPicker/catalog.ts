@@ -115,9 +115,8 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
  * Build the full list of items shown when the user clicks a sequence shadow slot.
  *
  * Static robot/human/flow items are combined with one dynamic item per available
- * macro task. The `isMacroReady` flag is set to `true` only for tasks with a
- * `status` of `'published'` or `'published_with_draft'`, meaning a stable
- * `published_workspace` exists that `explodeMacro` can expand.
+ * macro task, filtered to `status` `'published'` or `'published_with_draft'` —
+ * meaning a stable `published_workspace` exists that `explodeMacro` can expand.
  *
  * Tasks still in `'draft'` state are filtered out entirely: they have no
  * published workspace and cannot be used in other tasks.
@@ -252,8 +251,6 @@ export const buildSequencePickerItems = (
       // MAPPING REFERENCE:
       // - Category key: 'macro-tasks' ➔ User-facing picker group: UI_TEXT.savedTasks
       group: UI_TEXT.savedTasks,
-      // Signal to the picker UI that this item has a stable published workspace.
-      isMacroReady: true,
     }))
 
   return [...staticItems, ...macroItems]

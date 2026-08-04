@@ -486,8 +486,11 @@ Blockly.defineBlocksWithJsonArray([
 // ─── 6. MACRO TASKS ──────────────────────────────────────────────────────────
 // A macro_task_block references another saved task by ID.
 // Its `data` field stores { id, name } and the macro_block_mutation
-// (registered in mutators.ts) shows a warning when the referenced task
-// is no longer available.
+// (registered in mutators.ts) only warns when `data.id` is absent (block
+// never assigned a task) — it does NOT check that the referenced task still
+// exists. A deleted macro keeps its stale `data.id` and frozen `name` label
+// with no warning; the only place a missing macro actually surfaces is
+// "Break into steps" (macroExplosion.ts), which is reactive, not preventive.
 
 Blockly.defineBlocksWithJsonArray([
   {

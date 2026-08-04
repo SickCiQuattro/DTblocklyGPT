@@ -13,14 +13,16 @@
  *
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Blockly from 'blockly/core'
 
 import {
+  buildMacroOutgoingRefs,
   computeConformance,
   formatIssue,
   type ConformanceIssue,
   type ConformanceResult,
+  type MacroContext,
   type TaskStatus,
 } from './conformance'
 
@@ -73,10 +75,19 @@ export interface UseConformanceResult {
  *   modes hide the shadow's text label, so the warning bubble text ("X
  *   requires a selection") would reference a label the user can't see next to
  *   it. Default true for callers that don't care about view mode.
+ * @param macroData - Optional: enables the ORPHAN_MACRO_REF/CIRCULAR_MACRO_REF
+ *   checks. `macroDetailsById` mirrors task-workspace/index.tsx's own map
+ *   (id -> { code }, code being that macro's published_workspace); omit
+ *   entirely to skip macro checks (e.g. for a viewer/read-only context that
+ *   has no such data).
  */
 export const useConformance = (
   workspace: Blockly.WorkspaceSvg | null,
   showBlockWarnings = true,
+  macroData?: {
+    currentTaskId: number | null
+    macroDetailsById: Record<number, { code: unknown }>
+  },
 ): UseConformanceResult => {
   const [result, setResult] = useState<ConformanceResult>(EMPTY_RESULT)
 
@@ -84,6 +95,32 @@ export const useConformance = (
   const workspaceRef = useRef(workspace)
   useEffect(() => {
     workspaceRef.current = workspace
+  })
+
+  // Depends on macroDetailsById/currentTaskId directly, not the macroData
+  // wrapper object — callers pass that as an inline literal, a fresh
+  // reference every render, which would defeat this memo if used as the dep.
+  // macroDetailsById itself is already memoized by the caller
+  // (task-workspace/index.tsx), so this only recomputes the graph when the
+  // available macro set actually changes, not on every keystroke-triggered
+  // structural event.
+  const currentTaskId = macroData?.currentTaskId ?? null
+  const macroDetailsById = macroData?.macroDetailsById
+  const macroContext = useMemo<MacroContext | undefined>(() => {
+    if (!macroDetailsById) return undefined
+    return {
+      currentTaskId,
+      knownMacroIds: new Set(Object.keys(macroDetailsById).map(Number)),
+      macroOutgoingRefs: buildMacroOutgoingRefs(macroDetailsById),
+    }
+  }, [macroDetailsById, currentTaskId])
+
+  // Same stable-ref pattern as workspaceRef — recompute() is a useCallback
+  // that must not be reconstructed (and thus re-subscribed to the workspace)
+  // every time macroContext's identity changes.
+  const macroContextRef = useRef(macroContext)
+  useEffect(() => {
+    macroContextRef.current = macroContext
   })
 
   // Tracks which block ids currently carry a native Blockly warning bubble, so
@@ -101,7 +138,9 @@ export const useConformance = (
 
   const recompute = useCallback(() => {
     const ws = workspaceRef.current
-    const next = ws ? computeConformance(ws) : EMPTY_RESULT
+    const next = ws
+      ? computeConformance(ws, macroContextRef.current)
+      : EMPTY_RESULT
     setResult(next)
 
     if (!ws) return
@@ -158,6 +197,14 @@ export const useConformance = (
       workspace.removeChangeListener(listener)
     }
   }, [workspace, recompute])
+
+  // Macro references can go stale from OUTSIDE this editor — another tab
+  // publishing, unpublishing, or deleting a macro this task references —
+  // with no Blockly structural event on this workspace to trigger the
+  // effect above. Re-run whenever the available macro set itself changes.
+  useEffect(() => {
+    if (workspaceRef.current) recompute()
+  }, [macroContext, recompute])
 
   return {
     status: result.status,
