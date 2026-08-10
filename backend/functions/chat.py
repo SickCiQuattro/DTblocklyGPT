@@ -18,6 +18,7 @@ from openai import OpenAI
 from dataclasses import dataclass
 
 from backend.models import Object, Action, Location
+from backend.functions import study_log
 from django.db.models import Q
 from django.contrib.auth.models import User
 import os
@@ -1224,6 +1225,24 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     is_valid = not any(w["severity"] == "error" for w in validation_warnings)
                     task_modified = response_json.get("taskModified", True)
                     requires_confirmation = task_modified and len(validated_task) > 0 and is_valid
+
+                    # One record per chat turn. "How many times did the operator
+                    # have to ask before getting a program worth accepting" is a
+                    # headline measure of the conversational interface, and
+                    # counting it off the screen recording means replaying every
+                    # session by hand. `requires_confirmation` is what the user
+                    # actually sees offered, so it is the honest definition of
+                    # "this turn produced something".
+                    study_log.log_event(
+                        "chat_turn",
+                        message=message,
+                        intent=response_json.get("intent"),
+                        task_modified=task_modified,
+                        proposed_steps=len(validated_task),
+                        offered=requires_confirmation,
+                        is_valid=is_valid,
+                        warnings=frontend_warnings,
+                    )
 
                     data_result = {
                         "messageParts": message_parts,

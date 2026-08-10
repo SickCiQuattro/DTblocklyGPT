@@ -33,6 +33,7 @@ import numpy as np
 import threading
 import requests.exceptions
 from backend.functions.env_utils import get_bool_env
+from backend.functions import study_log
 from backend.functions.flask_ros_client import FlaskRosClient
 from backend.functions.calibration import (
     URDF_GAZEBO_Z_OFFSET,
@@ -67,6 +68,19 @@ _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 # itself, move the arm — see _HW_DRIVE_REQUESTED below.
 # Default off — sim stack unchanged when unset.
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
+# Refuse to satisfy a human-confirm condition by any route other than a real,
+# observed operator action taken during the step. Off by default: the bypasses
+# it disables exist so a developer without a camera can still run a task
+# end-to-end. On, they become failures.
+#
+# Required for user-study sessions, where each bypass silently fabricates a
+# successful confirmation that is indistinguishable in the recording from one
+# the participant actually made:
+#   - a dead vision bridge returns success for gesture and find_object (but
+#     never for voice or button, so it biases two conditions out of four);
+#   - an object already in frame, or already spawned in the Gazebo world,
+#     satisfies find_object with no operator involvement at all.
+STRICT_CONDITIONS = get_bool_env("STRICT_CONDITIONS")
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
 # How many of a ramp's IK waypoints reach the real arm, at most (Gazebo always
 # gets the full path). Each waypoint sent to hardware is a discrete b-CAP PTP
@@ -2441,6 +2455,13 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             _bridge.get_vision_state()
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                  requests.exceptions.HTTPError):
+            if STRICT_CONDITIONS:
+                logger.warning("condition_failed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
+                _abort_task(
+                    "The task stopped because the camera isn't reachable.",
+                    detail=f"gesture '{gesture}': vision bridge unreachable (STRICT_CONDITIONS)",
+                )
+                return False
             logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
             print(f"[CONDITION] Gesture bridge unreachable — bypassing gesture '{gesture}'")
             try:
@@ -2453,6 +2474,13 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         print(f"[CONDITION] Waiting for gesture: {gesture} (timeout {timeout}s)...")
         deadline = time.monotonic() + timeout
         detected = False
+        # Gesture arrives by polling, not as a request, so a wrong gesture is
+        # never an event the way a wrong spoken word is (which POSTs to
+        # /api/voice-command and is counted there). Logging each *transition*
+        # to a new non-empty gesture recovers a comparable attempt count:
+        # without it "number of attempts" simply does not exist for this
+        # channel, and cannot be put beside voice and button.
+        last_seen = None
         while time.monotonic() < deadline:
             if SIMULATION_STOP_EVENT.is_set():
                 break
@@ -2466,7 +2494,17 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 # age field, to not break against an older bridge.
                 reported_at = poll_time - age if age is not None else None
                 is_fresh = reported_at is None or reported_at >= entry_time - GESTURE_FRESHNESS_SLOP_S
-                if state.get("gesture") == gesture and is_fresh:
+                observed = state.get("gesture")
+                if observed != last_seen:
+                    last_seen = observed
+                    if observed and observed != "NONE" and is_fresh:
+                        study_log.log_event(
+                            "attempt",
+                            channel="gesture",
+                            value=observed,
+                            accepted=observed == gesture,
+                        )
+                if observed == gesture and is_fresh:
                     detected = True
                     break
             except Exception:
@@ -2494,12 +2532,35 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         obj_name = obj_data.get("name", "")
         coco_class, color = parse_object_query(obj_name)
         # If bridge is unreachable, bypass immediately.
+        # Object presence is a continuous state, not a momentary event like a
+        # gesture, so the gesture freshness check (which asks "was this
+        # reported after the step started?") has no equivalent here: the
+        # detection topic republishes at ~2 Hz for as long as the object stays
+        # in frame, so its age is always small no matter when it appeared.
+        # Under STRICT_CONDITIONS the operator must therefore cause a
+        # transition — the object has to be seen absent at some point and then
+        # appear — otherwise an object already sitting in frame satisfies the
+        # step in 0 s with no human involvement, which is not a measurable
+        # confirmation.
+        seen_absent = False
         try:
             state = _bridge.get_vision_state()
             if _detections_match(state, coco_class, color):
-                print(f"[CONDITION] Object '{obj_name}' detected immediately!")
-                return True
+                if not STRICT_CONDITIONS:
+                    print(f"[CONDITION] Object '{obj_name}' detected immediately!")
+                    return True
+                print(f"[CONDITION] Object '{obj_name}' already in frame — "
+                      f"waiting for it to leave and reappear (STRICT_CONDITIONS)")
+            else:
+                seen_absent = True
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            if STRICT_CONDITIONS:
+                logger.warning("condition_failed", extra={"reason": "bridge_unreachable", "block": "find_object_block"})
+                _abort_task(
+                    "The task stopped because the camera isn't reachable.",
+                    detail=f"find_object '{obj_name}': vision bridge unreachable (STRICT_CONDITIONS)",
+                )
+                return False
             logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "find_object_block"})
             print(f"[CONDITION] Vision bridge unreachable — bypassing find_object '{obj_name}'")
             try:
@@ -2510,7 +2571,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 pass
             return True
         # Bridge reachable but object not seen yet — check Gazebo world as secondary.
-        if obj_name in _spawned_in_world:
+        if obj_name in _spawned_in_world and not STRICT_CONDITIONS:
             logger.warning("condition_bypassed", extra={"reason": "object_in_world", "block": "find_object_block"})
             print(f"[CONDITION] Object '{obj_name}' in Gazebo world — bypassing find_object")
             return True
@@ -2524,8 +2585,15 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             try:
                 state = _bridge.get_vision_state()
                 if _detections_match(state, coco_class, color):
-                    detected = True
-                    break
+                    # Under STRICT_CONDITIONS a match only counts once the
+                    # object has been observed absent, so what is measured is
+                    # the operator putting it there, not the fact that it
+                    # happened to already be in view.
+                    if seen_absent or not STRICT_CONDITIONS:
+                        detected = True
+                        break
+                else:
+                    seen_absent = True
             except Exception:
                 pass
             _interruptible_sleep(0.5)
@@ -2973,7 +3041,12 @@ def simulation_recursive_blockly_parser(
             task_desc = code.get("fields", {}).get("TASK_DESC", "No description")
             print(f"\n[!] HUMAN ACTION REQUIRED: {task_desc}")
             confirm_event = code.get("inputs", {}).get("CONFIRM_EVENT", {}).get("block")
-            step_start_payload = {"description": task_desc, "timeout": 60}
+            # Must be the same constant _wait_for_condition() enforces: this
+            # value drives the operator's on-screen countdown, and a literal
+            # here meant the ring counted down from 60 while the deadline fired
+            # at 30 — the step looked like it still had half a minute left at
+            # the moment it gave up.
+            step_start_payload = {"description": task_desc, "timeout": CONDITION_TIMEOUT_S}
             if confirm_event:
                 ev_type = confirm_event.get("type", "")
                 if ev_type == EventsItems.GESTURE.value:
@@ -3003,13 +3076,32 @@ def simulation_recursive_blockly_parser(
                 elif ev_type == EventsItems.HUMAN_FEEDBACK.value:
                     from backend.functions.vision_live import reset_confirm
                     reset_confirm()
+                # Travel to the scan pose BEFORE the countdown starts. This
+                # move only happens for find-object confirms, so leaving it
+                # after the notify charged that channel — and only that
+                # channel — several seconds of arm travel as if it were
+                # operator response time, which makes the four confirmation
+                # channels incomparable on duration.
+                if _condition_contains_find(confirm_event):
+                    _move_to_scan_pose()
             try:
                 _bridge.notify("/api/human-step-start", step_start_payload)
             except Exception:
                 pass
+            # Logged after the scan-pose move and immediately before the wait,
+            # so the interval to step_end is operator response time and nothing
+            # else. simulate_event is recorded because in that mode the
+            # condition is short-circuited: without it, an auto-completed run
+            # is indistinguishable in the log from a confirmed one.
+            study_log.log_event(
+                "human_step_start",
+                description=task_desc,
+                condition=step_start_payload.get("condition"),
+                value=step_start_payload.get("value"),
+                timeout_s=CONDITION_TIMEOUT_S,
+                simulate_event=simulate_event,
+            )
             if confirm_event:
-                if _condition_contains_find(confirm_event):
-                    _move_to_scan_pose()
                 # The return value must be checked, not discarded — a confirm
                 # that timed out (or a malformed nested AND/OR confirm) would
                 # otherwise still notify human-step-complete and let the task
@@ -3017,6 +3109,12 @@ def simulation_recursive_blockly_parser(
                 # prevent (e.g. placing a never-verified item).
                 confirmed = _eval_condition_tree(confirm_event, simulate_event)
                 if not confirmed:
+                    study_log.log_event(
+                        "human_step_end",
+                        description=task_desc,
+                        condition=step_start_payload.get("condition"),
+                        outcome="timeout",
+                    )
                     _abort_task(
                         "The task stopped because the operator didn't confirm in time.",
                         detail=f"human_action confirm not received in time for '{task_desc}'",
@@ -3026,6 +3124,12 @@ def simulation_recursive_blockly_parser(
                 _bridge.notify("/api/human-step-complete")
             except Exception:
                 pass
+            study_log.log_event(
+                "human_step_end",
+                description=task_desc,
+                condition=step_start_payload.get("condition"),
+                outcome="confirmed",
+            )
             _next()
 
         def _h_notify_action():
@@ -3461,6 +3565,23 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                     _set_world_paused(False)
                     reset_simulation_world()
 
+                    # Delimits the run in the study log. Without it the human-step
+                    # events in a session are one flat stream with no way to tell
+                    # which task produced them, and time-per-task has to be read
+                    # off the screen recording by hand.
+                    #
+                    # Logged only after every guard above has passed, so a refused
+                    # run never opens an interval that no run_end closes.
+                    study_log.log_event(
+                        "run_start",
+                        task_id=task.id,
+                        task_name=task.name,
+                        target="real" if drive_hardware else "sim",
+                        simulate_event=bool(simulate_event),
+                        user=request.user.get_username(),
+                    )
+                    outcome = "error"
+
                     try:
                         if isinstance(code, list):
                             for block in code:
@@ -3474,15 +3595,28 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                                 simulate_event, inside_conditional=False,
                             )
                         if _TASK_ABORT_REASON:
+                            outcome = "aborted"
                             return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
                         if SIMULATION_STOP_EVENT.is_set():
                             # stop_simulation() sets the event but never
                             # _TASK_ABORT_REASON (that field is reserved for
                             # a hard failure) — without this check, an
                             # operator-initiated Stop still reported success.
+                            outcome = "stopped"
                             return error_response("Task stopped by operator")
+                        outcome = "completed"
                         return success_response()
                     finally:
+                        # In the finally, so a run that raises still closes its
+                        # interval — an unclosed run_start would silently drop
+                        # that task from the per-task timings.
+                        study_log.log_event(
+                            "run_end",
+                            task_id=task.id,
+                            task_name=task.name,
+                            outcome=outcome,
+                            abort_reason=_TASK_ABORT_REASON,
+                        )
                         _set_world_paused(True)
                 finally:
                     _HW_DRIVE_REQUESTED = False

@@ -12,6 +12,7 @@ from backend.models import (
     STATUS_PUBLISHED,
     STATUS_PUBLISHED_WITH_DRAFT,
 )
+from backend.functions import study_log
 from backend.utils.date import getDateTimeNow
 from backend.utils.signature import build_task_signature
 from json import loads
@@ -106,6 +107,21 @@ def publish_task(request: HttpRequest) -> HttpResponse:
         task.save(update_fields=[
             "published_workspace", "draft_workspace", "status", "last_modified", "signature"
         ])
+
+        # Snapshot only on publish, never on save_draft: the frontend autosaves a
+        # draft every couple of seconds, so draft snapshots would bury the log in
+        # near-identical copies. Publishing is the deliberate act, and the
+        # signature makes it trivial to tell a real revision from a re-publish of
+        # unchanged content. Keeping the workspace itself means the errors a
+        # participant made can be coded afterwards from the log alone, instead of
+        # scrubbing the screen recording.
+        study_log.log_event(
+            "task_published",
+            task_id=task.id,
+            task_name=task.name,
+            signature=task.signature,
+            workspace=task_structure,
+        )
 
         return success_response()
 

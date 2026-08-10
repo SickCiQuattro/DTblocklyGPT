@@ -101,6 +101,11 @@ const MJPEG_URL =
   import.meta.env.VITE_CAMERA_STREAM_URL ||
   '/camera/stream?topic=/camera/image_raw&type=mjpeg'
 
+// User-study sessions: force live execution and remove the auto-complete
+// escape hatch, so a confirmation channel can never be satisfied by anything
+// other than the participant. Pairs with the backend's STRICT_CONDITIONS.
+const STUDY_MODE = import.meta.env.VITE_STUDY_MODE === '1'
+
 interface DigitalTwinPanelProps {
   taskId: string
   taskStatus?: TaskStatus
@@ -150,7 +155,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // 'auto': WHEN conditions auto-fulfill, no camera/mic permission requested.
   // 'live': the task's own gesture/voice conditions must really happen —
   // permissions requested at Run, scoped to only what the task uses.
-  const [runMode, setRunMode] = useState<'auto' | 'live'>('auto')
+  //
+  // STUDY_MODE forces 'live' and hides the toggle. During a user study an
+  // accidental auto run is unrecoverable: every confirmation channel reports
+  // success without the participant doing anything, and the resulting data is
+  // indistinguishable from real data after the fact. Opt-in via
+  // VITE_STUDY_MODE so ordinary development keeps the auto default.
+  const [runMode, setRunMode] = useState<'auto' | 'live'>(
+    STUDY_MODE ? 'live' : 'auto',
+  )
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
   )
@@ -335,6 +348,27 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     ? runNeedsRef.current.voice
     : taskNeedsVoiceLive
   const needsCameraOrVoice = taskNeedsCamera || taskNeedsVoice
+
+  // Any block whose condition a human is supposed to satisfy — wider than
+  // needsCameraOrVoice, which only covers the two channels that request a
+  // browser permission. Auto mode short-circuits ALL four channels, so
+  // warning only about gesture and voice left button-confirm and find_object
+  // silently self-completing: the run looks successful and nothing in the
+  // recording shows otherwise.
+  const taskHasHumanStep = useMemo(
+    () =>
+      !!workspace
+        ?.getAllBlocks(false)
+        .some(
+          (b) =>
+            b.type === 'human_action_block' ||
+            b.type === 'gesture_block' ||
+            b.type === 'voice_command_block' ||
+            b.type === 'find_object_block' ||
+            b.type === 'human_feedback_block',
+        ),
+    [workspace, simulation.isRunning],
+  )
 
   // The webcam/mic run whenever the sandbox toggle is on OR a live run
   // needs them for this task — one lifecycle, regardless of which reason.
@@ -647,7 +681,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       : null
   const gestureMatch = !!(expectedGesture && activeGesture === expectedGesture)
 
-  const timeoutTotal = humanStep?.timeout ?? 60
+  // Fallback matches the backend's own default (CONDITION_TIMEOUT_S). It only
+  // applies if a payload arrives without a timeout; a mismatched fallback here
+  // is how the countdown came to disagree with the enforced deadline before.
+  const timeoutTotal = humanStep?.timeout ?? 30
   const countdownPct = countdown !== null ? (countdown / timeoutTotal) * 100 : 0
 
   // The self-view (webcam mirrored into the main video area, see the
@@ -684,9 +721,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           : 'Robot not connected — check the hardware connection before running.',
     })
   }
-  if (needsCameraOrVoice && runMode === 'auto') {
+  if (taskHasHumanStep && runMode === 'auto') {
     preflightIssues.push({
-      text: 'This task uses gesture or voice recognition.',
+      text: needsCameraOrVoice
+        ? 'This task uses gesture or voice recognition. In auto mode the step completes on its own.'
+        : 'This task waits for the operator. In auto mode the step completes on its own, without waiting.',
       action: {
         label: 'Switch to Execute live',
         onClick: () => setRunMode('live'),
@@ -1355,41 +1394,47 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       </Typography>
                     </Box>
                   </Stack>
-                  {countdown !== null && (
-                    <>
-                      <LinearProgress
-                        variant="determinate"
-                        value={countdownPct}
-                        aria-live="polite"
-                        aria-label={`${countdown} seconds remaining`}
-                        sx={{
-                          height: 3,
-                          borderRadius: 2,
-                          mb: 0.5,
-                          backgroundColor: panel.trackBg,
-                          '& .MuiLinearProgress-bar': {
-                            backgroundColor:
-                              countdown < 10
-                                ? panel.error
-                                : countdown < 20
-                                  ? panel.warning
-                                  : panel.primary,
-                            borderRadius: 2,
-                          },
-                        }}
-                      />
-                      <Typography
-                        sx={{
-                          fontSize: '0.68rem',
-                          color:
-                            countdown < 10 ? panel.errorLight : panel.muted,
-                          textAlign: 'right',
-                        }}
-                      >
-                        {countdown}s
-                      </Typography>
-                    </>
-                  )}
+                </Box>
+              )}
+
+              {/* Time remaining — for every confirmation channel, not just
+                  gesture. This used to be nested inside the gesture card
+                  above, so an operator confirming by button, voice or object
+                  detection got a spinner with no indication that the step was
+                  on a deadline at all: the four channels differed in the
+                  feedback they gave, not only in how they were answered. */}
+              {isHumanStepActive && countdown !== null && (
+                <Box sx={{ mt: 1.5 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={countdownPct}
+                    aria-live="polite"
+                    aria-label={`${countdown} seconds remaining`}
+                    sx={{
+                      height: 3,
+                      borderRadius: 2,
+                      mb: 0.5,
+                      backgroundColor: panel.trackBg,
+                      '& .MuiLinearProgress-bar': {
+                        backgroundColor:
+                          countdown < 10
+                            ? panel.error
+                            : countdown < 20
+                              ? panel.warning
+                              : panel.primary,
+                        borderRadius: 2,
+                      },
+                    }}
+                  />
+                  <Typography
+                    sx={{
+                      fontSize: '0.68rem',
+                      color: countdown < 10 ? panel.errorLight : panel.muted,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {countdown}s
+                  </Typography>
                 </Box>
               )}
             </>
@@ -2194,7 +2239,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               choice at all (auto-completing a physical gesture/voice wait
               makes no sense and is unsafe), so the switch is replaced by a
               plain safety notice and runMode is forced to 'live'. */}
-            {executionTarget === 'sim' ? (
+            {executionTarget === 'sim' && !STUDY_MODE ? (
               <Stack
                 direction="row"
                 sx={{
@@ -2231,6 +2276,26 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   }}
                 />
               </Stack>
+            ) : executionTarget === 'sim' ? (
+              // Study mode on simulation: no toggle to offer, but the absence
+              // of one must not read as "the setting is missing".
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  background: panel.primaryTint(0.12),
+                  border: `1px solid ${panel.primaryTint(0.4)}`,
+                  mb: 1,
+                }}
+              >
+                <AlertTriangle size={15} color={panel.primary} />
+                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                  Study mode — every operator step must be performed live.
+                </Typography>
+              </Box>
             ) : (
               <Box
                 sx={{

@@ -34,7 +34,7 @@ they need a physical measurement session, not a guess):
 
 import math
 
-from backend.functions.env_utils import get_bool_env
+from backend.functions.env_utils import get_bool_env, get_int_env
 
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 
@@ -243,7 +243,16 @@ SAFE_INTERMEDIATE_POSE: list = ACTIVE["SAFE_INTERMEDIATE_POSE"]
 SCAN_POSE: list = ACTIVE["SCAN_POSE"]
 LOCATION_PROFILES: dict = ACTIVE["LOCATION_PROFILES"]
 PICK_RACK_PROFILE: dict = ACTIVE["PICK_RACK_PROFILE"]
-CONDITION_TIMEOUT_S: int = ACTIVE["CONDITION_TIMEOUT_S"]
+# Overridable per-session via HUMAN_STEP_TIMEOUT_S. Neither profile overrides
+# it, so the env var is the only way to change it — needed for user-study
+# sessions, where a human step dimensioned for the default would fail on
+# calibration rather than on the confirmation channel under test. This is the
+# single source of truth: the value sent to the frontend countdown must come
+# from here too (simulate.py's human-step-start payload), or the operator sees
+# a countdown that disagrees with the deadline actually being enforced.
+CONDITION_TIMEOUT_S: int = get_int_env(
+    "HUMAN_STEP_TIMEOUT_S", ACTIVE["CONDITION_TIMEOUT_S"]
+)
 SPAWN_SETTLE_THRESHOLD_M: float = ACTIVE["SPAWN_SETTLE_THRESHOLD_M"]
 PICK_Z_FINE_TUNE: float = ACTIVE["PICK_Z_FINE_TUNE"]
 HW_VERIFY_TOL_DEG: float = ACTIVE["HW_VERIFY_TOL_DEG"]

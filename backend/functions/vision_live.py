@@ -14,6 +14,8 @@ import requests
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from backend.functions import study_log
+
 logger = logging.getLogger(__name__)
 
 FLASK_BRIDGE_URL = os.getenv("FLASK_BRIDGE_URL", "http://localhost:5000").rstrip("/")
@@ -308,12 +310,18 @@ def process_voice_command(request: HttpRequest) -> JsonResponse:
 
     word = str(data.get("voice", "")).strip().upper()
     if word not in _VOICE_WORDS:
+        # Logged before the early return: a word the operator said that the
+        # system refused is an attempt, and this is the only place it is
+        # observable server-side. Dropping it here is what made "number of
+        # attempts before resolution" unmeasurable.
+        study_log.log_event("attempt", channel="voice", value=word, accepted=False)
         return JsonResponse({"error": "unknown voice command", "voice": word}, status=400)
 
     with _voice_lock:
         _latest_voice = word
         _latest_voice_time = time.monotonic()
 
+    study_log.log_event("attempt", channel="voice", value=word, accepted=True)
     return JsonResponse({"status": "ok", "voice": word})
 
 
@@ -364,4 +372,8 @@ def process_human_confirm(request: HttpRequest) -> JsonResponse:
         _confirm_pending = True
         _confirm_time = time.monotonic()
 
+    # Always accepted at this layer; whether it lands inside a waiting step's
+    # freshness window is decided later by get_confirm(). Both cases are
+    # attempts and both belong in the log.
+    study_log.log_event("attempt", channel="human_feedback", accepted=True)
     return JsonResponse({"status": "ok"})

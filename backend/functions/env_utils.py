@@ -21,3 +21,21 @@ def get_bool_env(key: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in _TRUTHY
+
+
+def get_int_env(key: str, default: int, minimum: int = 1) -> int:
+    """Return the integer value of environment variable ``key``.
+
+    Falls back to ``default`` when unset, unparseable, or below ``minimum`` —
+    a timeout of 0 or a typo like "30s" must not silently produce a step that
+    expires instantly, which would look like an operator failure rather than a
+    misconfiguration.
+    """
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return default
+    return value if value >= minimum else default
