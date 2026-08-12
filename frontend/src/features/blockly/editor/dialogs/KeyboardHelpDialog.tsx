@@ -2,9 +2,16 @@
  * KeyboardHelpDialog.tsx
  *
  * Lists Blockly's standard keyboard-navigation shortcuts (verified against the
- * bundled v13.1.0 ShortcutRegistry) so keyboard-only and screen-reader users can
+ * bundled v13.2.0 ShortcutRegistry) so keyboard-only and screen-reader users can
  * discover them. We intentionally use Blockly's standard shortcuts rather than
  * inventing our own, per the Blockly accessibility best-practices guide.
+ *
+ * This list is the project's WCAG 2.1.4 evidence: single-character shortcuts DO
+ * exist (they are Blockly's, and keyboard navigation is force-enabled in
+ * BlocklyEditor), so the criterion is met by the "active only on focus"
+ * exception — not by their absence. Re-check this list after any Blockly
+ * upgrade: package.json pins `^13.0.0`, so the bundled version can move on a
+ * plain `npm install`.
  */
 import {
   Dialog,
@@ -29,7 +36,7 @@ const MOD =
     ? 'Cmd'
     : 'Ctrl'
 
-// Blockly v13.1.0 built-in keyboard-navigation defaults, verified against the
+// Blockly v13.2.0 built-in keyboard-navigation defaults, verified against the
 // ShortcutRegistry bindings shipped with the installed package. Single-letter
 // shortcuts only fire while the workspace has focus and you are not typing in a
 // field. MOD resolves to Cmd on macOS, Ctrl elsewhere (Blockly's CTRL_CMD).

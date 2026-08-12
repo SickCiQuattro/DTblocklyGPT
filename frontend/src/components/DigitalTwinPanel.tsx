@@ -278,18 +278,27 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // the robot is genuinely waiting on them. human_step 'started' already
   // carries condition/value for exactly this wait — surface it on the same
   // STATUS line instead of only in the separate countdown overlay.
+  // Composed once and reused by the STATUS line and the overlay, so the two
+  // never drift. The channel is the part that matters: "waiting" alone does
+  // not tell the operator what they are supposed to do.
+  const humanStepLabel = useMemo(() => {
+    if (humanStep?.status !== 'started') return null
+    switch (humanStep.condition) {
+      case 'gesture':
+        return `Waiting for gesture "${gestureLabel(humanStep.value)}"…`
+      case 'voice':
+        return `Waiting for voice command "${voiceLabel(humanStep.value)}"…`
+      case 'object':
+        return `Waiting to find "${humanStep.value}"…`
+      default:
+        return 'Waiting for operator confirmation…'
+    }
+  }, [humanStep])
+
   useEffect(() => {
-    if (!simulation.isRunning || humanStep?.status !== 'started') return
-    const label =
-      humanStep.condition === 'gesture'
-        ? `Waiting for gesture "${gestureLabel(humanStep.value)}"…`
-        : humanStep.condition === 'voice'
-          ? `Waiting for voice command "${voiceLabel(humanStep.value)}"…`
-          : humanStep.condition === 'object'
-            ? `Waiting to find "${humanStep.value}"…`
-            : 'Waiting for operator confirmation…'
-    dispatch(setSimulationMessage(label))
-  }, [humanStep, simulation.isRunning, dispatch])
+    if (!simulation.isRunning || !humanStepLabel) return
+    dispatch(setSimulationMessage(humanStepLabel))
+  }, [humanStepLabel, simulation.isRunning, dispatch])
 
   // Safety-net cleanup when the run stops (the last block's `end` also clears).
   // Kept separate so `isRunning` isn't a dependency of the per-step effect.
@@ -1251,6 +1260,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     >
                       {humanStep?.description || 'Human action required'}
                     </Typography>
+                    {/* Names the channel instead of a bare "waiting", so what
+                        is shown matches what the STATUS line announces. Not a
+                        live region itself: that one lives on the STATUS line,
+                        and a second one here would say the same sentence
+                        twice. */}
                     <Stack
                       direction="row"
                       sx={{ alignItems: 'center' }}
@@ -1263,7 +1277,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       <Typography
                         sx={{ fontSize: '0.72rem', color: panel.textDim }}
                       >
-                        Waiting for operator...
+                        {humanStepLabel ?? 'Waiting for operator...'}
                       </Typography>
                     </Stack>
                     {humanStep?.condition === 'human_feedback' && (
@@ -2191,7 +2205,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 {simulation.isRunning && (
                   <CircularProgress size={11} sx={{ color: panel.primary }} />
                 )}
+                {/* The panel's live region for run progress, and the only one
+                    that announces the start of a human step — the overlay below
+                    is purely visual, so without this a screen-reader user is
+                    told the wait EXPIRED but never that it began.
+                    Deliberately on this always-mounted element rather than on
+                    the overlay: a live region inserted into the DOM already
+                    populated is announced unreliably, while a persistent one
+                    whose text changes is not. The message already names the
+                    channel (see humanStepLabel above), which is the part the
+                    operator needs. */}
                 <Typography
+                  role="status"
+                  aria-live="polite"
                   sx={{
                     fontSize: '0.8rem',
                     fontWeight: 500,

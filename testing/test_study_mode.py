@@ -371,7 +371,7 @@ def test_analisi_ignores_attempts_outside_the_waiting_window(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, _, _ = analisi.analyse_participant(path)
+    conditions, *_ = analisi.analyse_participant(path)
 
     assert conditions[0]["tentativi"] == 1, "solo il tentativo dentro la finestra"
     assert conditions[0]["primo_tentativo"] == "SI"
@@ -390,7 +390,7 @@ def test_analisi_attributes_nothing_without_step_boundaries(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, _, _ = analisi.analyse_participant(path)
+    conditions, *_ = analisi.analyse_participant(path)
 
     assert conditions[0]["tentativi"] == 0
     assert conditions[0]["tempo_s"] is None
@@ -409,7 +409,7 @@ def test_analisi_leaves_find_object_attempts_undefined(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, _, _ = analisi.analyse_participant(path)
+    conditions, *_ = analisi.analyse_participant(path)
 
     assert len(conditions) == 1
     assert conditions[0]["condizione"] == "D_oggetto"
@@ -431,7 +431,7 @@ def test_analisi_flags_auto_mode_runs(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, runs, _ = analisi.analyse_participant(path)
+    conditions, runs, *_ = analisi.analyse_participant(path)
 
     assert conditions[0]["AUTO_DA_SCARTARE"] == "SI"
     assert runs[0]["AUTO_DA_SCARTARE"] == "SI"
@@ -447,10 +447,56 @@ def test_analisi_survives_truncated_line(tmp_path, capsys):
         encoding="utf-8",
     )
 
-    _, runs, _ = analisi.analyse_participant(path)
+    _, runs, *_ = analisi.analyse_participant(path)
 
     assert len(runs) == 1  # the good line still parsed
     assert "illeggibile" in capsys.readouterr().err
+
+
+def test_analisi_summarises_published_workspace():
+    """Block count, unresolved sockets and types must be readable from the log,
+    otherwise the offline error coding the analysis plan promises means opening
+    twelve JSONL by hand."""
+    analisi = _load_analisi()
+    workspace = [{
+        "type": "when_start",
+        "next": {"block": {
+            "type": "pick_block",
+            # Placeholder stripped at save time: the socket arrives empty.
+            "inputs": {"OBJECT": {}},
+            "next": {"block": {
+                "type": "human_action_block",
+                "inputs": {"CONFIRM_EVENT": {"block": {"type": "gesture_block"}}},
+            }},
+        }},
+    }]
+
+    shape = analisi.summarise_workspace(workspace)
+
+    # when_start is placed by the editor, not the participant.
+    assert shape["n_blocchi"] == 3
+    assert shape["innesti_vuoti"] == 1
+    assert "gesture_block" in shape["tipi"]
+    assert "when_start" not in shape["tipi"]
+
+
+def test_analisi_counts_republications_as_revisions(tmp_path):
+    analisi = _load_analisi()
+    rows = [
+        _event("task_published", 1.0, task_id=50, task_name="T",
+               signature="aaa", workspace=[{"type": "when_start"}]),
+        _event("task_published", 2.0, task_id=50, task_name="T",
+               signature="bbb", workspace=[{"type": "when_start"}]),
+        _event("task_published", 3.0, task_id=51, task_name="U",
+               signature="ccc", workspace=[{"type": "when_start"}]),
+    ]
+    path = tmp_path / "P01.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    *_, publish = analisi.analyse_participant(path)
+
+    assert [r["pubblicazione_n"] for r in publish] == [1, 2, 1]
+    assert [r["firma"] for r in publish] == ["aaa", "bbb", "ccc"]
 
 
 def test_analisi_bootstrap_needs_three_observations():
