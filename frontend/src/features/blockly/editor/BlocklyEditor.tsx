@@ -151,6 +151,33 @@ const ORPHAN_SYNC_TYPES = new Set<string>([
  * Find the single when_start entry-point block in the workspace.
  * Returns null if it has not been inserted yet.
  */
+/**
+ * True while the user is entering text, so a global keyboard shortcut must
+ * keep its hands off the event.
+ *
+ * Both shortcuts in this file listen on `document`, which means they fire no
+ * matter where focus is — including inside the HTML input Blockly opens for a
+ * `field_input` (the description on "Human action" and "Notify" blocks). The
+ * block stays selected while that editor is open, so an unguarded handler
+ * reads a keystroke meant for the text as a command aimed at the block.
+ *
+ * The two checks cover different failure modes: the element test catches focus
+ * genuinely sitting in a text control, and `WidgetDiv.isVisible()` catches any
+ * open Blockly field editor regardless of where it is mounted or where focus
+ * ended up.
+ */
+function isTypingContext(): boolean {
+  const active = document.activeElement
+  if (
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLTextAreaElement ||
+    (active instanceof HTMLElement && active.isContentEditable)
+  ) {
+    return true
+  }
+  return Blockly.WidgetDiv.isVisible()
+}
+
 function findStartBlock(
   workspace: Blockly.WorkspaceSvg,
 ): Blockly.BlockSvg | null {
@@ -610,6 +637,10 @@ export const BlocklyEditor = ({
   // Ctrl/Cmd+K → block search palette.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Same reason as the Delete/Backspace handler below: pressed while the
+      // user is editing a block's description, this yanked them out of the
+      // field and opened the search palette over their unfinished text.
+      if (isTypingContext()) return
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault()
         setBlockSearchOpen(true)
@@ -1320,6 +1351,14 @@ export const BlocklyEditor = ({
         if (e.key !== 'Delete' && e.key !== 'Backspace') return
         const active = document.activeElement
         if (!active) return
+
+        // Never steal Backspace from someone who is typing: erasing a
+        // character in a block's description asked to delete the whole block.
+        // Worse here than for the other shortcut, because this handler runs in
+        // the CAPTURE phase — ahead of both Blockly and the input's own default
+        // behaviour — so it has to be the conservative one.
+        if (isTypingContext()) return
+
         const isInsideWorkspace = Array.from(
           document.querySelectorAll('.injectionDiv'),
         ).some((div) => div === active || div.contains(active))
