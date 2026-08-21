@@ -120,3 +120,42 @@ def test_halt_cb_survives_repeated_failure(node):
 
     assert result.success is False
     assert "e-stop" in result.message
+
+
+def test_halt_is_attempted_even_when_the_main_session_is_down(node):
+    """_hw_ok describes the MAIN b-CAP session, not the halt channel.
+
+    The halt channel is a second, independent socket — that separation is the
+    entire reason it exists, so a wedged main session cannot block a stop. But
+    _halt_cb opened with `if not self._hw_ok: return "hardware disabled"`, which
+    inverted it: _hw_ok goes False exactly when a move errored or the encoder
+    reads failed, i.e. when the arm may be mid-motion and the halt matters most,
+    and the request was then refused without the halt channel being tried at all.
+
+    Every other test here sets _hw_ok = True, which is why the guard was never
+    exercised despite this file already asserting the failure message.
+    """
+    node._hw_ok = False
+
+    response = node._halt_cb(SimpleNamespace(), SimpleNamespace())
+
+    node._halt_bcap.robot_halt.assert_called_once_with(node._halt_robot)
+    assert response.success is True
+    assert node._halt_requested.is_set()
+
+
+def test_halt_reconnects_when_the_channel_is_down_and_main_is_too(node, monkeypatch):
+    """Neither session alive: the halt channel must still reconnect and try."""
+    node._hw_ok = False
+    node._halt_bcap = None
+
+    def _fake_connect():
+        node._halt_bcap = MagicMock()
+        node._halt_robot = MagicMock()
+
+    monkeypatch.setattr(node, "_connect_halt_locked", _fake_connect)
+
+    response = node._halt_cb(SimpleNamespace(), SimpleNamespace())
+
+    assert response.success is True
+    node._halt_bcap.robot_halt.assert_called_once()

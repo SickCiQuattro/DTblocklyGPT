@@ -131,7 +131,17 @@ def stopPath():
     was_active = flask_pub.stop_path()
     # None when no hardware node is running — sim-only stop is enough in that case.
     halt = flask_pub.call_halt()
-    return jsonify({"status": "stopped", "was_executing": was_active, "hardware_halt": halt})
+    # "stopped" is a claim about the ARM, so it must not be made when the halt
+    # channel reported failure. It used to be hardcoded, so a refused or timed
+    # out halt reached Django as a 200 saying "stopped": the operator's panel
+    # showed the run ended and the banner telling them the arm might still be
+    # moving — the one message that matters here — could never fire.
+    halt_failed = halt is not None and not halt.get("ok")
+    return jsonify({
+        "status": "halt-failed" if halt_failed else "stopped",
+        "was_executing": was_active,
+        "hardware_halt": halt,
+    })
 
 
 @bp.route("/health")

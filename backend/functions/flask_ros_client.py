@@ -106,10 +106,27 @@ class FlaskRosClient:
                     time.sleep(_MOVE_PATH_RETRY_DELAY_S)
         raise last_exc
 
-    def stop(self) -> None:
-        """POST /api/stop — cancel any in-flight path and halt the real arm."""
+    def stop(self) -> dict:
+        """POST /api/stop — cancel any in-flight path and halt the real arm.
+
+        Returns the bridge's body, which carries `hardware_halt`:
+        ``None`` when no hardware node is running (a sim-only stop is the whole
+        story there), otherwise ``{"ok": bool, "message": str}``.
+
+        This used to return None and discard the body. The halt result was
+        therefore thrown away at the one layer that could act on it, and a
+        refused halt was indistinguishable from a successful one all the way up
+        to the operator's screen — which is the only place it matters, because
+        the answer is "use the teach-pendant e-stop now".
+        """
         resp = self._session.post(self._url("/api/stop"), timeout=_STOP_TIMEOUT)
         resp.raise_for_status()
+        try:
+            return resp.json()
+        except ValueError:
+            # A 2xx with an unparseable body: the request was handled, but we
+            # cannot claim anything about the arm.
+            return {}
 
     def get_health(self) -> dict:
         """GET /api/health — aggregate status of bridge/gazebo/hardware/vision."""

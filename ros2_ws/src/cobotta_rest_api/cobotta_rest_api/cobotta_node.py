@@ -281,12 +281,17 @@ class HardwareControl(Node):
 
         Not a safety stop: this is best-effort operational reliability. The
         teach-pendant deadman / e-stop remains the only safety-rated stop.
-        """
-        if not self._hw_ok:
-            response.success = False
-            response.message = "hardware disabled"
-            return response
 
+        Deliberately NOT gated on self._hw_ok. That flag describes the *main*
+        b-CAP session; the halt channel is a second, independent socket
+        (_connect_halt_locked), which is the entire reason it exists — see the
+        same statement in _disconnect(). Refusing here when the main session is
+        down inverted that: _hw_ok goes False precisely when a move errored or
+        the encoder reads failed, i.e. when the arm may be mid-motion and the
+        halt is most needed, and the request was rejected without the halt
+        channel being tried at all. The loop below reconnects and retries on its
+        own, so it is safe to enter with no live socket.
+        """
         # Set BEFORE sending Halt: even if this call fails after the arm already
         # started decelerating, _move_target_cb must not reconnect-and-retry the
         # move that is being halted.
