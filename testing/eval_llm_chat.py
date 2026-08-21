@@ -24,6 +24,7 @@ import json
 import pathlib
 import platform
 import datetime
+import re
 import subprocess
 import hashlib
 import os
@@ -191,31 +192,29 @@ class OllamaNativeProvider:
             arguments = tool_calls[0]["function"]["arguments"]
             raw_arguments = arguments if isinstance(arguments, dict) else json.loads(arguments or "{}")
         else:
-            # Deliberately a bare json.loads with no salvage step, matching
-            # LLMProvider.complete() in chat.py exactly. This measures the
-            # system as built: a reply the app would drop has to score as
-            # dropped here too.
+            # Mirrors LLMProvider.complete() in chat.py exactly, including its
+            # salvage step (a regex pulling JSON out of a ```json fenced
+            # block, for models — observed: qwen2.5:14b — that wrap the
+            # answer in prose instead of a bare object or a real tool call).
             #
-            # There WAS a salvage step — a regex pulling JSON out of a
-            # ```json fenced block, added because qwen2.5:14b wraps its answer
-            # in prose. Its comment claimed to mirror chat.py; chat.py has no
-            # such fallback and never had one, so the harness was quietly
-            # more capable than the app, for the two ollama-nothink specs
-            # alone (the ollama:* specs go through LLMProvider and never saw
-            # it). Two rows of a 22-row comparison, scored by a more forgiving
-            # parser than the other twenty.
-            #
-            # It never reached the recorded results — every nothink run
-            # predates it — so no published number moved when it was removed.
-            # If fenced replies are worth tolerating, the fix belongs in
-            # chat.py, where users would get it too; then everything is
-            # re-run against the same parser. Meanwhile unparsed_reply() below
-            # records the shape of what could not be read, which answers
-            # "how often does this actually happen?" without hiding it.
+            # History: this salvage step used to live only here, not in
+            # chat.py, so it silently gave the two ollama-nothink specs a
+            # more forgiving parser than the twenty ollama:*/cloud specs that
+            # go through LLMProvider — removed for that reason. The salvage
+            # step has since been committed to chat.py itself (users get it
+            # too, not just this harness), so it belongs back here: both
+            # paths need to fail together, not just succeed together.
+            # unparsed_reply() below still records the shape of what could
+            # not be read even after the salvage attempt.
+            content = msg.get("content") or "{}"
             try:
-                raw_arguments = json.loads(msg.get("content") or "{}")
+                raw_arguments = json.loads(content)
             except Exception:
-                raw_arguments = {}
+                try:
+                    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
+                    raw_arguments = json.loads(fenced.group(1)) if fenced else {}
+                except Exception:
+                    raw_arguments = {}
 
         usage = SimpleNamespace(prompt_tokens=data.get("prompt_eval_count"), completion_tokens=data.get("eval_count"))
         return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage, message=msg))

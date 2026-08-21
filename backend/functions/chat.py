@@ -147,7 +147,15 @@ class LLMProvider:
         try:
             raw_arguments = json.loads(arguments_str)
         except Exception:
-            raw_arguments = {}
+            try:
+                # Some models (observed: qwen2.5:14b via Ollama) answer with
+                # prose plus a ```json ... ``` fenced block instead of a bare
+                # JSON object or a real tool call — extract the fenced
+                # payload before giving up on the whole proposal.
+                fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", arguments_str, re.DOTALL)
+                raw_arguments = json.loads(fenced.group(1)) if fenced else {}
+            except Exception:
+                raw_arguments = {}
 
         answer = raw_arguments.get("answer", "")
         return ProviderLLMResponse(
