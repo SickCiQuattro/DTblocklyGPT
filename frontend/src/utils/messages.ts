@@ -10,6 +10,9 @@ export enum MessageText {
   invalidCredentials = 'Invalid credentials',
   serverError = 'Server error',
   logoutSuccess = 'Logged out successfully',
+  // Not "logged out": the server never confirmed the session was ended, so on a
+  // shared machine the next person could still get back into this account.
+  logoutServerUnreachable = 'Signed out on this device, but the server did not confirm. Close the browser before anyone else uses it.',
   noConnection = 'Server connection problem',
   passwordMismatch = 'Passwords do not match',
   alreadyExists = 'This value already exists',

@@ -47,6 +47,7 @@ import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage } from 'utils/constants'
 import { formatDateTimeShortFrontend } from 'utils/date'
+import { isModalOpen } from 'utils/keyboardGuards'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
 import { ObjectListType } from 'pages/objects/types'
@@ -504,6 +505,12 @@ const ListTasks = () => {
     const onKey = (e: KeyboardEvent) => {
       if (!((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')))
         return
+      // The typing check below isn't enough while a dialog is open ("Check for
+      // problems", a row's delete/discard confirm): those focus a button, not
+      // an input, so the guard passed and this pulled focus to a search field
+      // outside the dialog — straight through MUI's focus trap, which then
+      // fights to pull it back.
+      if (isModalOpen()) return
       const active = document.activeElement
       const isTypingElsewhere =
         active instanceof HTMLElement &&

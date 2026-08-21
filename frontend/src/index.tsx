@@ -7,6 +7,7 @@ import { locale } from 'dayjs'
 import 'dayjs/locale/en-gb'
 
 import { swrParams } from 'services/api'
+import { ErrorBoundary } from 'components/ErrorBoundary'
 import { ToastContainerStyled } from 'components/ToastContainer'
 import ThemeCustomization from 'themes'
 import { Routes } from 'routes'
@@ -35,7 +36,13 @@ root.render(
     <BrowserRouter>
       <SWRConfig value={swrParams}>
         <ThemeCustomization>
-          <Routes />
+          {/* Inside ThemeCustomization so the fallback is themed, and around
+              Routes so it covers every lazily-loaded page — a rejected chunk
+              import is thrown past Loadable's Suspense, which only handles the
+              pending state. */}
+          <ErrorBoundary>
+            <Routes />
+          </ErrorBoundary>
         </ThemeCustomization>
         <ToastContainerStyled />
       </SWRConfig>

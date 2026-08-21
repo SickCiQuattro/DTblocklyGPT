@@ -27,6 +27,7 @@ import { ActionListType } from 'pages/actions/types'
 import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
+import { isBlocklyPayload } from 'utils/blocklyPayload'
 
 import {
   AbstractRobot,
@@ -85,14 +86,7 @@ export const AnalyzeTaskModal = ({
 
       let abstractSteps: AbstractStep[] = []
       if (Array.isArray(taskCode) && taskCode.length > 0) {
-        // If the first item's type ends with '_block' or is 'when_start', it's a Blockly payload
-        const isBlockly = taskCode.some(
-          (b: any) =>
-            typeof b.type === 'string' &&
-            (b.type === 'when_start' || b.type.endsWith('_block')),
-        )
-
-        if (isBlockly) {
+        if (isBlocklyPayload(taskCode)) {
           const branches = blocklyToAbstractAll(taskCode as CustomBlock[]) || []
           abstractSteps = branches.find((b) => b.isMain)?.steps || []
         } else {

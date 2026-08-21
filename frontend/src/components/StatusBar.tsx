@@ -15,6 +15,7 @@ export const StatusBar: React.FC = () => {
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
   const savedFlash = useAppSelector((state) => state.task.savedFlash)
   const saveError = useAppSelector((state) => state.task.saveError)
+  const hasUnsavedEdits = useAppSelector((state) => state.task.hasUnsavedEdits)
   const isSimulationRunning = useAppSelector(
     (state) => state.simulation.isRunning,
   )
@@ -106,13 +107,23 @@ export const StatusBar: React.FC = () => {
             transition: 'color 0.6s ease, font-size 0.3s ease',
           }}
         >
+          {/* hasUnsavedEdits comes before lastSaved on purpose. lastSaved is a
+              timestamp of the last successful save; rendering it whenever it
+              exists turned a past event into a claim about the present, so the
+              bar read "Saved at 10:31" during the 2s autosave debounce — and
+              kept reading it if the user navigated away inside that window,
+              which cancels the pending save outright. With this, "Saved at X"
+              means what a reader already takes it to mean: saved then, and
+              nothing has changed since. */}
           {saveError
             ? 'Save failed — see the notification for why'
             : justSaved
               ? 'Saved ✓'
-              : lastSaved
-                ? `Saved at ${lastSaved}`
-                : UI_TEXT.unsavedChanges}
+              : hasUnsavedEdits
+                ? UI_TEXT.unsavedChanges
+                : lastSaved
+                  ? `Saved at ${lastSaved}`
+                  : UI_TEXT.unsavedChanges}
         </Typography>
       </Box>
 

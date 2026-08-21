@@ -15,6 +15,9 @@ export type TaskState = {
   simOpen: boolean
   codeOpen: boolean
   isSaving: boolean
+  /** Only the discard-draft request. isSaving is set by every save
+   *  path, so it cannot be used to tell when a discard finished. */
+  isDiscarding: boolean
   saveTriggered: boolean
   // Rename-only save — distinct from saveTriggered, which also
   // (re)publishes the whole workspace when it happens to pass conformance.
@@ -74,6 +77,7 @@ export const initialState: TaskState = {
   simOpen: false,
   codeOpen: false,
   isSaving: false,
+  isDiscarding: false,
   saveTriggered: false,
   renameTriggered: false,
   discardTriggered: false,
@@ -144,6 +148,9 @@ const taskSlice = createSlice({
     setSaving(state, action: PayloadAction<boolean>) {
       state.isSaving = action.payload
     },
+    setDiscarding(state, action: PayloadAction<boolean>) {
+      state.isDiscarding = action.payload
+    },
     triggerSave(state, action: PayloadAction<boolean>) {
       state.saveTriggered = action.payload
     },
@@ -198,6 +205,7 @@ export const {
   toggleSim,
   toggleCode,
   setSaving,
+  setDiscarding,
   triggerSave,
   triggerRename,
   triggerDiscard,

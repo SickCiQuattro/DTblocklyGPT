@@ -64,6 +64,7 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
     (state) => state.task.activeTaskStatus,
   )
   const isSaving = useAppSelector((state) => state.task.isSaving)
+  const isDiscarding = useAppSelector((state) => state.task.isDiscarding)
   const simOpen = useAppSelector((state) => state.task.simOpen)
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const workspaceReady = useAppSelector((state) => state.task.workspaceReady)
@@ -102,14 +103,20 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   }, [activeTaskName])
 
   // The actual discard happens in task-workspace/index.tsx's
-  // discardTriggered listener (isSaving flips true while it's in flight) —
-  // auto-close the confirm dialog once that finishes instead of closing it
-  // immediately on click, so the loading state below has time to show.
-  const wasSavingRef = React.useRef(false)
+  // discardTriggered listener — auto-close the confirm dialog once THAT
+  // finishes, rather than closing it immediately on click, so the loading
+  // state below has time to show.
+  //
+  // Keyed on isDiscarding, not isSaving: isSaving is set by every save path,
+  // so the debounced autosave completing behind this dialog closed it on its
+  // own. The user saw the confirm dismiss itself — which reads as "done" —
+  // while nothing had been discarded and the autosave had in fact just
+  // persisted the very changes they were asking to throw away.
+  const wasDiscardingRef = React.useRef(false)
   React.useEffect(() => {
-    if (wasSavingRef.current && !isSaving) setDiscardConfirmOpen(false)
-    wasSavingRef.current = isSaving
-  }, [isSaving])
+    if (wasDiscardingRef.current && !isDiscarding) setDiscardConfirmOpen(false)
+    wasDiscardingRef.current = isDiscarding
+  }, [isDiscarding])
 
   const handleSaveName = () => {
     if (skipBlurSaveRef.current) {
@@ -170,6 +177,35 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
                   e.preventDefault()
                   skipBlurSaveRef.current = true
                   handleCancelEditName()
+                } else if (
+                  (e.metaKey || e.ctrlKey) &&
+                  (e.key === 's' || e.key === 'S')
+                ) {
+                  // Commit the in-progress name, then save — rather than
+                  // blocking the save while the rename editor is open.
+                  // The global Ctrl/Cmd+S (task-workspace/index.tsx) reads
+                  // activeTaskName from Redux, which this editor only writes
+                  // on blur/Enter, so pressing it mid-rename saved the task
+                  // under its previous name and dropped the new one with no
+                  // sign it had been ignored. The global handler skips its own
+                  // dispatch whenever focus is in a text field, so this is the
+                  // only one that fires here — no double save.
+                  e.preventDefault()
+                  // Both dispatches land in the same React batch, so the save
+                  // effect over in task-workspace re-runs already seeing the
+                  // new name. No triggerRename: saveTaskToBackend PUTs the
+                  // name itself when it differs from the loaded task, and the
+                  // rename listener would fire a second, racing PUT for it.
+                  const trimmed = localName.trim()
+                  if (trimmed && trimmed !== activeTaskName) {
+                    dispatch(setTaskName(trimmed))
+                  }
+                  // Leaving edit mode unmounts the InputBase, and some
+                  // browsers fire a blur on unmount — same reason
+                  // handleCancelEditName arms this ref (see handleSaveName).
+                  skipBlurSaveRef.current = true
+                  setIsEditing(false)
+                  dispatch(triggerSave(true))
                 }
               }}
               autoFocus
@@ -477,7 +513,10 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
         </Tooltip>
         <ConfirmDialog
           open={discardConfirmOpen}
-          loading={isSaving}
+          // isDiscarding, for the same reason the auto-close above uses it: a
+          // background autosave firing behind this dialog put it into a
+          // loading state describing an operation the user had not started.
+          loading={isDiscarding}
           message="Discard these unpublished changes? They'll be lost and the task will revert to its last published version."
           confirmLabel="Discard"
           onConfirm={() => dispatch(triggerDiscard(true))}
