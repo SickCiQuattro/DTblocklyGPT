@@ -87,12 +87,42 @@ export const ConfirmDialog = ({
     open={open}
     onClose={loading ? undefined : onCancel}
     onKeyDown={(e) => {
+      if (loading) return
+
+      // Left/Right move between the two buttons. A two-button dialog reads as
+      // one horizontal choice, and that is how people drive one in every other
+      // app; requiring Tab for a choice this small is the kind of thing that
+      // makes keyboard use feel like a workaround. Tab still works — this is
+      // an addition, not a replacement.
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const buttons = Array.from(
+          e.currentTarget.querySelectorAll<HTMLButtonElement>(
+            'button:not([disabled])',
+          ),
+        )
+        if (buttons.length < 2) return
+        const current = buttons.indexOf(
+          document.activeElement as HTMLButtonElement,
+        )
+        // Focus sitting on the dialog body rather than a button: enter the row
+        // from the end the arrow points at, instead of doing nothing.
+        const next =
+          current === -1
+            ? e.key === 'ArrowRight'
+              ? 0
+              : buttons.length - 1
+            : (current + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) %
+              buttons.length
+        e.preventDefault()
+        buttons[next].focus()
+        return
+      }
+
       // Only step in when Enter lands outside our own buttons — a focused
       // Cancel/Confirm button already activates on Enter natively, and
       // intervening there would preventDefault the button's own click and
       // fire onConfirm instead, even with focus on Cancel.
       if (
-        !loading &&
         confirmOnEnter &&
         e.key === 'Enter' &&
         (e.target as HTMLElement).tagName !== 'BUTTON'

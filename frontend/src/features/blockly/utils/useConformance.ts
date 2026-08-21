@@ -47,6 +47,36 @@ const EMPTY_RESULT: ConformanceResult = {
   warnings: [],
 }
 
+/**
+ * Whether two results say the same thing, so an unchanged recompute can keep
+ * the previous object and let React bail out of the re-render.
+ *
+ * `computeConformance` returns a fresh object every call, so without this every
+ * recompute is a state change — and that is half of an infinite loop: a caller
+ * whose `macroData` churns identity per render re-runs the effect below, which
+ * sets state, which renders, which churns again. That happened (a `useSWR`
+ * destructured with an `= []` default), and React threw "Maximum update depth
+ * exceeded".
+ *
+ * Fix the churn where it occurs too, but keeping this makes the loop impossible
+ * to close from outside rather than trusting every caller to memoise correctly.
+ */
+const sameResult = (a: ConformanceResult, b: ConformanceResult): boolean => {
+  if (a === b) return true
+  if (a.status !== b.status) return false
+  if (a.issues.length !== b.issues.length) return false
+  // Issues are small, flat and derived deterministically in a stable order.
+  return a.issues.every((issue, i) => {
+    const other = b.issues[i]
+    return (
+      issue.type === other.type &&
+      issue.severity === other.severity &&
+      (issue as { blockId?: string }).blockId ===
+        (other as { blockId?: string }).blockId
+    )
+  })
+}
+
 // ─── Public interface ─────────────────────────────────────────────────────────
 
 export interface UseConformanceResult {
@@ -141,7 +171,10 @@ export const useConformance = (
     const next = ws
       ? computeConformance(ws, macroContextRef.current)
       : EMPTY_RESULT
-    setResult(next)
+    // Keep the previous object when nothing changed: React then skips the
+    // re-render, which is what stops a churning caller from looping (see
+    // sameResult).
+    setResult((prev) => (sameResult(prev, next) ? prev : next))
 
     if (!ws) return
 

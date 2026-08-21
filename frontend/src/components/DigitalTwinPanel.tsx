@@ -621,23 +621,52 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     // the panel says otherwise — that must not stay a console-only error,
     // since the teach-pendant e-stop is the operator's real fallback here.
     fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST }).catch(
-      (error: any) => {
+      (error: unknown) => {
         console.error('Error stopping simulation:', error)
+        // Prefer the server's own wording when it has any. Two different
+        // things reach this handler and they call for different actions: the
+        // request never arrived, or it arrived and the arm refused to confirm
+        // the halt. The backend distinguishes them; stating only the first
+        // would describe the wrong failure half the time.
+        const serverMessage = (
+          error as { response?: { data?: { message?: string } } } | null
+        )?.response?.data?.message
         setErrorBanner(
-          'The stop request failed to reach the robot — it may still be moving. ' +
-            'Use the teach-pendant e-stop now if the real arm is running.',
+          serverMessage ||
+            'The stop request failed to reach the robot — it may still be moving. ' +
+              'Use the teach-pendant e-stop now if the real arm is running.',
         )
       },
     )
   }
   const handleClose = () => dispatch(toggleSim())
 
-  // Cancel any in-flight run request if the panel unmounts mid-run (e.g. the
-  // operator navigates to a different task) — otherwise it resolves later
-  // and writes a stale completed/error result into the next task's state.
+  // Unmounting mid-run (e.g. the operator navigates to a different task).
+  //
+  // Aborting the request only drops OUR side of the conversation — the run
+  // keeps going on the server, and the arm with it, because stopping is a
+  // separate POST. The next workspace mount then dispatches resetSimulation(),
+  // so every indicator reads "Idle" while the robot is still working through
+  // the previous task. Sending the stop is what makes the UI's claim true.
+  //
+  // A ref, not `simulation.isRunning` in a dependency array: this effect must
+  // run its cleanup exactly once, at unmount, with whatever the state is then.
+  const isRunningRef = useRef(simulation.isRunning)
+  isRunningRef.current = simulation.isRunning
   useEffect(() => {
     return () => {
       runAbortRef.current?.abort()
+      if (!isRunningRef.current) return
+      // Fire-and-forget by necessity — the component is going away and there
+      // is nowhere left to show an error. The server-side abort machinery is
+      // what actually halts Gazebo and the arm; this is the request that
+      // starts it.
+      void fetchApi({
+        url: endpoints.task.stop,
+        method: MethodHTTP.POST,
+      }).catch((error: unknown) => {
+        console.error('Stop-on-unmount failed:', error)
+      })
     }
   }, [])
 
@@ -689,6 +718,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       ? humanStep.value
       : null
   const gestureMatch = !!(expectedGesture && activeGesture === expectedGesture)
+
+  // Put focus on the Confirm button the moment a button-confirmed human step
+  // starts. The STATUS line already announces the wait, but announcing it is
+  // only half: the step is on a timer, and a keyboard user who has to hunt
+  // through the panel for the button can run out of clock while being told
+  // what to do. This is the one place in the app where reachability and
+  // timing interact.
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null)
+  const needsButtonConfirm =
+    isHumanStepActive && humanStep?.condition === 'human_feedback'
+  useEffect(() => {
+    if (needsButtonConfirm) confirmButtonRef.current?.focus()
+  }, [needsButtonConfirm])
 
   // Fallback matches the backend's own default (CONDITION_TIMEOUT_S). It only
   // applies if a payload arrives without a timeout; a mismatched fallback here
@@ -750,8 +792,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   return (
     <Box
       ref={panelRef}
-      role="dialog"
-      aria-modal="false"
+      // A landmark, not a dialog: the editor column shrinks to
+      // `calc(100% - 35vw)` while this is open, so it does not overlay the
+      // page, and there is no focus trap — announcing "dialog" promised a
+      // boundary Tab walks straight out of. As a landmark it is reachable by
+      // landmark key at any time, which matters because the run status and the
+      // human-step prompt live here and are needed *during* a run.
+      role="region"
       aria-labelledby="digital-twin-title"
       // inert, not aria-hidden — aria-hidden alone left this panel's
       // (still-mounted, still-focusable) buttons reachable by Tab while
@@ -1282,6 +1329,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     </Stack>
                     {humanStep?.condition === 'human_feedback' && (
                       <Button
+                        ref={confirmButtonRef}
                         variant="contained"
                         size="small"
                         onClick={handleConfirmHumanStep}

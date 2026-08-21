@@ -13,8 +13,8 @@
  * dialog pressed keys that did nothing, which reads as "the shortcuts are
  * broken" rather than "the documentation is wrong".
  *
- * So the dialog now renders from this table, and rows that mirror a *Blockly*
- * shortcut name are checked against the live ShortcutRegistry in development
+ * So the dialog now renders from this table, and every Blockly shortcut a row
+ * documents is checked against the live ShortcutRegistry in development
  * (see warnOnShortcutDrift). That catches a Blockly upgrade removing or
  * renaming something we document — package.json pins `^13.0.0`, so the bundled
  * version can move on a plain `npm install`.
@@ -44,11 +44,15 @@ export interface ShortcutRow {
   /** What pressing it does, in the user's terms. */
   description: string
   /**
-   * The name this row mirrors in Blockly's ShortcutRegistry, when Blockly is
-   * the thing that implements it. Rows the app implements itself leave this
-   * unset — there is no registry entry to check them against.
+   * Every Blockly ShortcutRegistry name this row documents. A single row often
+   * covers more than one — "N / B" is next_stack AND previous_stack, the
+   * copy/cut/paste row is three — and naming only the first meant the drift
+   * check below silently verified a third of what the row claims.
+   *
+   * Left unset for rows Blockly does not implement: the app's own shortcuts,
+   * and Tab, which is the browser's focus order rather than a shortcut at all.
    */
-  blocklyName?: string
+  blocklyNames?: string[]
 }
 
 /**
@@ -60,33 +64,34 @@ export const SHORTCUT_ROWS: ShortcutRow[] = [
   {
     keys: 'Arrow keys',
     description: 'Move between blocks, fields and connections',
+    blocklyNames: ['up', 'down', 'left', 'right'],
   },
   {
     keys: 'W',
     description: 'Jump focus to the workspace',
-    blocklyName: 'focus_workspace',
+    blocklyNames: ['focus_workspace'],
   },
   {
     keys: 'N / B',
     description: 'Go to the next / previous stack',
-    blocklyName: 'next_stack',
+    blocklyNames: ['next_stack', 'previous_stack'],
   },
   {
     keys: 'Enter / Space',
     description:
       'Fill the highlighted slot, or open the editor for a field. On a plain block it explains where you are.',
-    blocklyName: 'perform_action',
+    blocklyNames: ['perform_action'],
   },
   {
     keys: 'M',
     description:
       'Pick up the selected block to move it — this is how you put a block inside a Repeat or a When',
-    blocklyName: 'start_move',
+    blocklyNames: ['start_move'],
   },
   {
     keys: 'Shift+M',
     description: 'Pick up the whole stack to move it',
-    blocklyName: 'start_move_stack',
+    blocklyNames: ['start_move_stack'],
   },
   // Worth spelling out: the arrows here do NOT nudge the block around, they
   // step it between the connection points it is actually allowed to join
@@ -97,72 +102,72 @@ export const SHORTCUT_ROWS: ShortcutRow[] = [
     keys: 'Arrows, then Enter',
     description:
       'While holding a block: the arrows step it between the places it can attach, Enter drops it there (Esc puts it back)',
-    blocklyName: 'finish_move',
+    blocklyNames: ['finish_move', 'abort_move'],
   },
   {
     keys: `${MOD}+Arrows`,
     description:
       'While holding a block: move it freely instead, to leave it unattached',
-    blocklyName: 'move_up',
+    blocklyNames: ['move_up', 'move_down', 'move_left', 'move_right'],
   },
   {
     keys: 'D',
     description:
       'Duplicate the selected block — the copy starts detached, press M to attach it',
-    blocklyName: 'duplicate',
+    blocklyNames: ['duplicate'],
   },
   {
     keys: 'X / Shift+X',
     description:
       'Disconnect the selected block — plain X closes the gap behind it, Shift+X leaves it open',
-    blocklyName: 'disconnect',
+    blocklyNames: ['disconnect'],
   },
   {
     keys: 'C',
     description: 'Clean up / tidy the workspace blocks',
-    blocklyName: 'cleanup',
+    blocklyNames: ['cleanup'],
   },
   {
     keys: 'Delete / Backspace',
     description: 'Delete the selected block',
-    blocklyName: 'delete',
+    blocklyNames: ['delete'],
   },
   {
     keys: `${MOD}+C / ${MOD}+X / ${MOD}+V`,
     description: 'Copy / cut / paste (paste lands near the focused block)',
-    blocklyName: 'copy',
+    blocklyNames: ['copy', 'cut', 'paste'],
   },
   {
     keys: `${MOD}+Z / ${MOD}+Shift+Z / ${MOD}+Y`,
     description: 'Undo / redo',
-    blocklyName: 'undo',
+    blocklyNames: ['undo', 'redo'],
   },
   {
     keys: `${MOD}+Enter`,
     description: 'Open the block’s menu (also Shift+F10)',
-    blocklyName: 'menu',
+    blocklyNames: ['menu'],
   },
   {
     keys: 'I / Shift+I',
     description: 'Announce block info / extended info',
-    blocklyName: 'information',
+    blocklyNames: ['information', 'extended_information'],
   },
   {
     keys: `${MOD}+J`,
     description: 'Show the tooltip for the selected block',
-    blocklyName: 'show_tooltip',
+    blocklyNames: ['show_tooltip'],
   },
   {
     keys: 'Esc',
     description: 'Close whatever is open over the workspace',
-    blocklyName: 'escape',
+    blocklyNames: ['escape'],
   },
   {
     keys: `Shift+${ALT}+A`,
     description: 'Toggle screen-reader accessibility mode',
-    blocklyName: 'toggle_screenreader',
+    blocklyNames: ['toggle_screenreader'],
   },
-  // ── App shortcuts: no blocklyName, because this app implements them ──────
+  // ── App shortcuts: no blocklyNames, because this app implements them ─────
   {
     keys: `${MOD}+K`,
     description: 'Search for a step and add it to the end of the task',
@@ -215,16 +220,16 @@ export const registerAppShortcuts = (
 export const warnOnShortcutDrift = (): void => {
   if (!import.meta.env.DEV) return
   for (const row of SHORTCUT_ROWS) {
-    if (!row.blocklyName) continue
-    const codes = Blockly.ShortcutRegistry.registry.getKeyCodesByShortcutName(
-      row.blocklyName,
-    )
-    if (codes.length === 0) {
-      console.warn(
-        `[appShortcuts] Blockly no longer registers "${row.blocklyName}". ` +
-          `The help dialog still lists "${row.keys}" (${row.description}), ` +
-          `which now does nothing. Fix the row or drop it.`,
-      )
+    for (const name of row.blocklyNames ?? []) {
+      const codes =
+        Blockly.ShortcutRegistry.registry.getKeyCodesByShortcutName(name)
+      if (codes.length === 0) {
+        console.warn(
+          `[appShortcuts] Blockly no longer registers "${name}". ` +
+            `The help dialog still lists "${row.keys}" (${row.description}), ` +
+            `which now does nothing in part or in full. Fix the row or drop it.`,
+        )
+      }
     }
   }
 }

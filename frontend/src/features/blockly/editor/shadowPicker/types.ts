@@ -92,6 +92,16 @@ export interface ShadowPickerItem {
    * When absent, the picker falls back to `resolveRealBlockTypeFromShadow`.
    */
   blockType?: SelectableShadowBlockType
+  /**
+   * Extra block state carried into the created block, same two keys the
+   * toolbox pills use (`ToolboxBlockItem`). A block type whose identity is not
+   * fully determined by its type needs them: a `macro_task_block` created from
+   * the type alone renders as a bare "Do:" and, worse, has no `data.id`, so it
+   * names no task at all. Everything the two insert paths need must live on
+   * the item, or the two paths drift — which is exactly how they drifted.
+   */
+  fields?: Record<string, string>
+  data?: string
 }
 
 export interface ShadowPickerPosition {

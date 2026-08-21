@@ -242,16 +242,25 @@ export const buildSequencePickerItems = (
       (macro) =>
         macro.status === 'published' || macro.status === 'published_with_draft',
     )
-    .map((macro) => ({
-      id: macro.id,
-      name: macro.name?.trim() || `Task ${macro.id}`,
-      description: macro.description?.trim() || undefined,
-      keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
-      blockType: 'macro_task_block' as const,
-      // MAPPING REFERENCE:
-      // - Category key: 'macro-tasks' ➔ User-facing picker group: UI_TEXT.savedTasks
-      group: UI_TEXT.savedTasks,
-    }))
+    .map((macro) => {
+      const displayName = macro.name?.trim() || `Task ${macro.id}`
+      return {
+        id: macro.id,
+        name: displayName,
+        description: macro.description?.trim() || undefined,
+        keywords: ['task', 'macro', macro.name?.toLowerCase() ?? ''],
+        blockType: 'macro_task_block' as const,
+        // Same two keys the toolbox pill sets (CustomToolbox.tsx) — `name` is
+        // the visible label, `data` is the actual reference to the task. Keep
+        // them identical: a block inserted from the search dialog and one
+        // dragged from the toolbox must be the same block.
+        fields: { name: displayName },
+        data: JSON.stringify({ id: macro.id, name: displayName }),
+        // MAPPING REFERENCE:
+        // - Category key: 'macro-tasks' ➔ User-facing picker group: UI_TEXT.savedTasks
+        group: UI_TEXT.savedTasks,
+      }
+    })
 
   return [...staticItems, ...macroItems]
 }

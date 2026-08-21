@@ -362,3 +362,77 @@
     filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.55));
   }
 }
+
+/* ==========================================================================
+   BLOCKLY TOASTS (keyboard-navigation hints)
+   Blockly v13 shows its own toasts for copy/cut and the screen-reader mode
+   nudge (core/hints.ts). Its default style is a 1.2rem black-bordered box
+   pinned bottom-right — correct, but from a different design language than
+   every other surface here. Restyled to match MENU_PAPER_SX (editor/
+   menuStyles.ts), which is the one elevation shared by the context menu, the
+   shadow picker, ⋯ More, Settings and the Cmd/Ctrl+K search.
+   Selectors are single-class to stay at Blockly's own specificity; Blockly
+   registers its CSS first, so equal specificity is enough and !important is
+   not needed.
+   ========================================================================== */
+.blocklyToast {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 10px 14px;
+  gap: 10px;
+  color: #0F172A;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  max-width: 320px;
+}
+
+.blocklyToast .blocklyToastMessage {
+  max-width: 260px;
+}
+
+.blocklyToast .blocklyToastCloseButton {
+  color: #64748B;
+  border-radius: 6px;
+  padding: 3px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Blockly draws the X as an inline SVG with width/height hard-coded to 24 in
+   the element's attributes, so it does NOT follow the toast's font-size — once
+   the text came down to 13px the icon stayed at its original scale and became
+   the loudest thing in the toast. CSS width/height beat presentation
+   attributes, and the viewBox keeps the glyph proportional. */
+.blocklyToast .blocklyToastCloseButton svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+/* The two bars of the X carry fill="black" as an attribute, which no colour on
+   the button would ever reach — presentation attributes lose to any CSS rule,
+   so this is what makes the icon follow the hover/focus colour below. */
+.blocklyToast .blocklyToastCloseButton svg rect {
+  fill: currentColor;
+}
+
+.blocklyToast .blocklyToastCloseButton:hover {
+  background-color: #F1F5F9;
+  color: #0F172A;
+}
+
+.blocklyToast .blocklyToastCloseButton:focus-visible {
+  outline: 2px solid #6366F1;
+  outline-offset: 1px;
+}
+
+/* Blockly animates the toast in by moving `bottom`; keep that but respect a
+   reduced-motion preference, same as the execution highlight above. */
+@media (prefers-reduced-motion: reduce) {
+  .blocklyToast {
+    transition: none;
+  }
+}

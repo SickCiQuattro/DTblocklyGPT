@@ -196,6 +196,12 @@ const BlockPill: React.FC<{
     item: ToolboxBlockItem,
   ) => void
   onActivate: (item: ToolboxBlockItem) => void
+  /** DOM id, so the arrow handler can move focus without a ref per pill. */
+  domId: string
+  /** Roving tabindex: only the active pill of a category is a Tab stop. */
+  isTabStop: boolean
+  /** Move the active pill by `step` within this category. */
+  onArrow: (step: number) => void
 }> = ({
   item,
   categoryName,
@@ -203,6 +209,9 @@ const BlockPill: React.FC<{
   blockViewMode,
   onPointerDown,
   onActivate,
+  domId,
+  isTabStop,
+  onArrow,
 }) => {
   const theme = useTheme()
   return (
@@ -213,6 +222,7 @@ const BlockPill: React.FC<{
       blockViewMode={blockViewMode}
     >
       <div
+        id={domId}
         className="toolbox-pill"
         style={{
           backgroundColor: theme.palette.background.paper,
@@ -220,12 +230,20 @@ const BlockPill: React.FC<{
         }}
         onPointerDown={(e) => onPointerDown(e, item)}
         onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            onArrow(e.key === 'ArrowDown' ? 1 : -1)
+            return
+          }
           if (e.key !== 'Enter' && e.key !== ' ') return
           e.preventDefault()
           onActivate(item)
         }}
         role="button"
-        tabIndex={0}
+        // Roving tabindex. Every pill used to be its own Tab stop, so reaching
+        // the last category meant pressing Tab dozens of times; now the whole
+        // list is one stop and the arrows move inside it.
+        tabIndex={isTabStop ? 0 : -1}
         aria-label={`Add ${item.label} to the task`}
       >
         <span className="toolbox-pill__label">{item.label}</span>
@@ -263,6 +281,9 @@ const OBJECT_POSITION_TABS: CategoryTabDefinition[] = [
   },
 ]
 
+/** Arrow keys that move within the tablist, and which way. */
+const ARROW_STEP: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 }
+
 const CategoryPanel: React.FC<{
   category: ToolboxCategory
   pills: ToolboxBlockItem[]
@@ -297,6 +318,21 @@ const CategoryPanel: React.FC<{
 
   const showCategoryIcons = true
 
+  // Which pill of this category currently holds the Tab stop. Clamped rather
+  // than reset, so switching the Objects/Locations/Skills tab (which changes
+  // the visible list) cannot leave the stop pointing past the end — with no
+  // pill carrying tabIndex=0 the whole category would drop out of the tab
+  // order.
+  const [activePill, setActivePill] = useState(0)
+  const pillTabStop = Math.min(activePill, Math.max(0, visiblePills.length - 1))
+
+  const movePillFocus = (from: number, step: number) => {
+    if (visiblePills.length === 0) return
+    const next = (from + step + visiblePills.length) % visiblePills.length
+    setActivePill(next)
+    document.getElementById(`${category.key}-pill-${next}`)?.focus()
+  }
+
   return (
     <Accordion
       expanded={expanded}
@@ -309,6 +345,9 @@ const CategoryPanel: React.FC<{
       }}
     >
       <AccordionSummary
+        // Focus target for the T shortcut (jump into the palette) and for
+        // H / Shift+H (walk the categories), both of which move focus by id.
+        id={`toolbox-category-${category.key}`}
         expandIcon={<ChevronDown className="toolbox-category__chevron" />}
         className="toolbox-category__header"
         sx={{
@@ -339,7 +378,7 @@ const CategoryPanel: React.FC<{
             role="tablist"
             aria-label={`${category.name} tabs`}
           >
-            {OBJECT_POSITION_TABS.map((tab) => {
+            {OBJECT_POSITION_TABS.map((tab, index) => {
               const isActive = activeTab === tab.key
               const stateClass = isActive
                 ? 'toolbox-category-tab--active'
@@ -348,6 +387,7 @@ const CategoryPanel: React.FC<{
               return (
                 <button
                   key={tab.key}
+                  id={`${category.key}-tab-${tab.key}`}
                   type="button"
                   className={[
                     'toolbox-category-tab',
@@ -357,8 +397,37 @@ const CategoryPanel: React.FC<{
                     .filter(Boolean)
                     .join(' ')}
                   onClick={() => setActiveTab(tab.key)}
+                  // Roving tabindex: the tablist is ONE tab stop, and the
+                  // arrows move within it. Leaving every tab tabbable is what
+                  // made the arrows look broken — role="tab" tells a keyboard
+                  // or screen-reader user that arrows are the way to move, so
+                  // the role was promising behaviour the code did not have.
+                  tabIndex={isActive ? 0 : -1}
+                  onKeyDown={(e) => {
+                    const last = OBJECT_POSITION_TABS.length - 1
+                    const step = ARROW_STEP[e.key] ?? 0
+                    let next = -1
+                    if (step !== 0) {
+                      next = (index + step + last + 1) % (last + 1)
+                    } else if (e.key === 'Home') {
+                      next = 0
+                    } else if (e.key === 'End') {
+                      next = last
+                    }
+                    if (next < 0) return
+                    e.preventDefault()
+                    const target = OBJECT_POSITION_TABS[next]
+                    setActiveTab(target.key)
+                    // Selection follows focus (the ARIA pattern for tabs whose
+                    // panels are cheap to render), so focus has to move too or
+                    // the next arrow press would start from the old tab.
+                    document
+                      .getElementById(`${category.key}-tab-${target.key}`)
+                      ?.focus()
+                  }}
                   role="tab"
                   aria-selected={isActive}
+                  aria-controls={`${category.key}-tabpanel`}
                 >
                   <span className="toolbox-category-tab__label">
                     {tab.label}
@@ -369,34 +438,54 @@ const CategoryPanel: React.FC<{
           </div>
         )}
 
-        {visiblePills.length === 0 ? (
-          <Typography
-            variant="caption"
-            sx={{
-              color: theme.palette.slate[400],
-              fontStyle: 'italic',
-              padding: '4px 0',
-            }}
-          >
-            No blocks available
-          </Typography>
-        ) : (
-          <>
-            {visiblePills.map((pill) => (
-              <BlockPill
-                key={`${category.key}-${pill.type}-${pill.label}-${pill.data ?? ''}`}
-                item={pill}
-                categoryName={category.name}
-                categoryColour={category.colour}
-                blockViewMode={blockViewMode}
-                onPointerDown={onBlockPointerDown}
-                onActivate={onBlockActivate}
-              />
-            ))}
-            {/* Space */}
-            <div style={{ height: '6px', flexShrink: 0, width: '100%' }} />
-          </>
-        )}
+        {/* The pills are the tab panel when this category has tabs, so the
+            tablist above has something to point `aria-controls` at. The
+            wrapper repeats the column layout of `.toolbox-category__body`
+            because it becomes a flex item of it. Categories without tabs get
+            no wrapper and no role: a tabpanel with no tablist is worse than
+            none. */}
+        <div
+          {...(isObjectsPositionsCategory
+            ? {
+                role: 'tabpanel',
+                id: `${category.key}-tabpanel`,
+                'aria-labelledby': `${category.key}-tab-${activeTab}`,
+              }
+            : {})}
+          style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+        >
+          {visiblePills.length === 0 ? (
+            <Typography
+              variant="caption"
+              sx={{
+                color: theme.palette.slate[400],
+                fontStyle: 'italic',
+                padding: '4px 0',
+              }}
+            >
+              No blocks available
+            </Typography>
+          ) : (
+            <>
+              {visiblePills.map((pill, index) => (
+                <BlockPill
+                  key={`${category.key}-${pill.type}-${pill.label}-${pill.data ?? ''}`}
+                  item={pill}
+                  categoryName={category.name}
+                  categoryColour={category.colour}
+                  blockViewMode={blockViewMode}
+                  onPointerDown={onBlockPointerDown}
+                  onActivate={onBlockActivate}
+                  domId={`${category.key}-pill-${index}`}
+                  isTabStop={index === pillTabStop}
+                  onArrow={(step) => movePillFocus(index, step)}
+                />
+              ))}
+              {/* Space */}
+              <div style={{ height: '6px', flexShrink: 0, width: '100%' }} />
+            </>
+          )}
+        </div>
       </AccordionDetails>
     </Accordion>
   )
@@ -429,8 +518,44 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
     setExpandedKey((prev) => (prev === key ? null : key))
   }
 
+  // H / Shift+H walk the categories, mirroring the heading-jump convention
+  // Blockly documents. Blockly's own next_heading/previous_heading are inert in
+  // this app — their precondition requires a native flyout, which this
+  // integration never creates — so there is nothing to collide with, and the
+  // shortcut has to be re-implemented here to mean anything.
+  //
+  // Scoped to the toolbox's own root rather than to `document`: containment
+  // gives us "only fires when focus is in the palette" for free, so typing an
+  // "h" in a search field elsewhere can never jump the palette.
+  const handleToolboxKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'h' && e.key !== 'H') return
+    // Never steal the letter from someone typing it.
+    const active = document.activeElement
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLElement && active.isContentEditable)
+    ) {
+      return
+    }
+    e.preventDefault()
+    const step = e.shiftKey ? -1 : 1
+    const count = TOOLBOX_CATEGORIES.length
+    const current = TOOLBOX_CATEGORIES.findIndex((c) => c.key === expandedKey)
+    // Nothing expanded: enter the list from the end the direction points at.
+    const from = current === -1 ? (step === 1 ? -1 : 0) : current
+    const next = TOOLBOX_CATEGORIES[(from + step + count) % count]
+    // Expand what we land on. Selection follows focus here for the same reason
+    // it does in the Objects/Locations/Skills tab strip below: if `expandedKey`
+    // did not track where H just went, the next press would compute its index
+    // from the stale category and appear to skip one.
+    setExpandedKey(next.key)
+    document.getElementById(`toolbox-category-${next.key}`)?.focus()
+  }
+
   return (
     <aside
+      onKeyDown={handleToolboxKeyDown}
       className={
         collapsed
           ? 'custom-toolbox custom-toolbox--collapsed'

@@ -20,7 +20,6 @@ import {
   ClipboardPaste,
   Copy,
   LayoutTemplate,
-  MessageSquare,
   Minimize2,
   Minus,
   Maximize2,
@@ -120,9 +119,6 @@ const LABEL_MAP: Record<string, string> = {
   // Workspace
   'clean up workspace': 'Arrange blocks',
   'clean up': 'Arrange blocks',
-  // Comment
-  'add comment': 'Add note',
-  'remove comment': 'Remove note',
 }
 
 /**
@@ -161,8 +157,6 @@ export const getMenuIconInfo = (text: string) => {
   if (has(['skip this step'])) return { Icon: EyeOff, color: NEUTRAL }
   if (has(['rename'])) return { Icon: Pencil, color: NEUTRAL }
   if (has(['arrange blocks'])) return { Icon: AlignJustify, color: NEUTRAL }
-  if (has(['add note'])) return { Icon: MessageSquare, color: ADDITIVE }
-  if (has(['remove note'])) return { Icon: MessageSquare, color: DESTRUCTIVE }
   if (has(['help'])) return { Icon: CircleHelp, color: NEUTRAL }
   if (has(['add '])) return { Icon: Plus, color: ADDITIVE }
   if (has(['remove '])) return { Icon: Minus, color: DESTRUCTIVE }
@@ -267,10 +261,27 @@ export const installContextMenuBridge = ({
     let mouseX = 0
     let mouseY = 0
 
+    // A KeyboardEvent has no clientX/clientY, so a menu opened with
+    // Ctrl/Cmd+Enter or Shift+F10 never took the first branch and always landed
+    // in the middle of the workspace — nowhere near the block it acts on.
+    // Anchor it to that block instead; only fall back to the centre when there
+    // is genuinely no block (the workspace menu).
+    const blockAnchor = blockId
+      ? workspaceRef.current
+          ?.getBlockById(blockId)
+          ?.getSvgRoot?.()
+          ?.getBoundingClientRect()
+      : undefined
+
     if ('clientX' in menuOpenEvent && 'clientY' in menuOpenEvent) {
       const e = menuOpenEvent as MouseEvent
       mouseX = Number.isFinite(e.clientX) ? e.clientX : 0
       mouseY = Number.isFinite(e.clientY) ? e.clientY : 0
+    } else if (blockAnchor && blockAnchor.width > 0) {
+      // Bottom-left of the block, so the menu drops below it the way a
+      // right-click menu drops below the pointer.
+      mouseX = Math.round(blockAnchor.left)
+      mouseY = Math.round(blockAnchor.bottom)
     } else if (workspaceRef.current) {
       const rect = workspaceRef.current
         .getInjectionDiv()

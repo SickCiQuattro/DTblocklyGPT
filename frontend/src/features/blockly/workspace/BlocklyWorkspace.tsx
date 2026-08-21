@@ -49,9 +49,25 @@ export const getBlocklyStructure = (): BlockState[] | null => {
   return blocklyTaskStructure as BlockState[]
 }
 
+// Blockly's workspace-level Collapse/Expand Blocks are removed rather than
+// relabelled. They collapse EVERY block in every next-chain, while the two
+// affordances we keep — "Compact block" on a block and "Compact all" in the
+// editor's overflow menu — collapse only blocks with a statement body, so the
+// main chain stays readable. Renaming them would leave two behaviours behind
+// one word; and unlike the block menu, the workspace menu is passed through
+// unfiltered (editor/contextMenu.ts), so there was nowhere else to scope them.
+// blockHelp goes for an unrelated reason: no block defines a help URL.
+const REMOVED_CONTEXT_MENU_ITEMS = [
+  'blockHelp',
+  'collapseWorkspace',
+  'expandWorkspace',
+]
+
 const disableContextMenuItems = () => {
-  if (Blockly.ContextMenuRegistry.registry.getItem('blockHelp'))
-    Blockly.ContextMenuRegistry.registry.unregister('blockHelp')
+  for (const id of REMOVED_CONTEXT_MENU_ITEMS) {
+    if (Blockly.ContextMenuRegistry.registry.getItem(id))
+      Blockly.ContextMenuRegistry.registry.unregister(id)
+  }
 }
 
 const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {

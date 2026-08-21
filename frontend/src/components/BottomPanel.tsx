@@ -99,6 +99,9 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
           <IconButton
             size="small"
             onClick={() => setIsExpanded(!isExpanded)}
+            // Icon-only: the Tooltip describes, it does not name.
+            aria-label={isExpanded ? 'Minimize panel' : 'Maximize panel'}
+            aria-expanded={isExpanded}
             sx={{
               color: PANEL_TEXT,
               padding: '2px',

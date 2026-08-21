@@ -40,8 +40,8 @@ import {
   Undo2,
   Settings,
   Keyboard,
-  FoldVertical,
-  UnfoldVertical,
+  Minimize2,
+  Maximize2,
   Download,
   Upload,
   PanelLeft,
@@ -62,7 +62,12 @@ import { ObjectListType } from 'pages/objects/types'
 import { brand } from 'themes/theme'
 import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
-import { countRealBlocks, getOwnBodyDescendants } from 'utils/blocklySelection'
+import {
+  countRealBlocks,
+  disposeBlockWithBody,
+  getOwnBodyDescendants,
+} from 'utils/blocklySelection'
+import { isTypingInTextControl } from 'utils/keyboardGuards'
 
 import { CustomToolbox, ToolboxBlockItem } from '../toolbox'
 import {
@@ -71,10 +76,9 @@ import {
   type ViewSettings,
 } from '../utils/useViewSettings'
 import { applyBlockViewMode } from '../utils/viewModePresentation'
-import { setBodiesCollapsed } from '../utils/blockLayout'
+import { getCollapseState, setBodiesCollapsed } from '../utils/blockLayout'
 import { exportWorkspaceJson, importWorkspaceJson } from '../utils/workspaceIO'
 import { BlocklyWorkspace, getBlocklyStructure } from '../workspace'
-import '../category/CustomCategory'
 // Side-effect import: registers all Blockly block types (when_start, repeat_block, etc.)
 // before any workspace is injected. Must come before BlocklyWorkspace is mounted.
 import '../blocks/definitions'
@@ -105,7 +109,12 @@ import { GHOST_INPUT_MAP } from 'utils/ghostBlockManager'
 import { KeycapHint, modKey } from 'components/KeycapHint'
 import { SegmentedControl } from 'components/SegmentedControl'
 
-import type { ShadowPickerItem } from './shadowPicker/types'
+import type { ShadowPickerItem, ShadowPopoverType } from './shadowPicker/types'
+import {
+  APP_SHORTCUT_NAMES,
+  registerAppShortcuts,
+  warnOnShortcutDrift,
+} from './appShortcuts'
 import { MENU_PAPER_SX } from './menuStyles'
 import {
   ShadowPickerMenu,
@@ -161,21 +170,15 @@ const ORPHAN_SYNC_TYPES = new Set<string>([
  * block stays selected while that editor is open, so an unguarded handler
  * reads a keystroke meant for the text as a command aimed at the block.
  *
- * The two checks cover different failure modes: the element test catches focus
- * genuinely sitting in a text control, and `WidgetDiv.isVisible()` catches any
- * open Blockly field editor regardless of where it is mounted or where focus
- * ended up.
+ * The two checks cover different failure modes: the shared element test catches
+ * focus genuinely sitting in a text control, and `WidgetDiv.isVisible()` catches
+ * any open Blockly field editor regardless of where it is mounted or where
+ * focus ended up. This is the editor-only extension of the app-wide guard —
+ * keep the element test in `utils/keyboardGuards` so the pages that must not
+ * import Blockly can share it, and add the Blockly-specific arm here.
  */
 function isTypingContext(): boolean {
-  const active = document.activeElement
-  if (
-    active instanceof HTMLInputElement ||
-    active instanceof HTMLTextAreaElement ||
-    (active instanceof HTMLElement && active.isContentEditable)
-  ) {
-    return true
-  }
-  return Blockly.WidgetDiv.isVisible()
+  return isTypingInTextControl() || Blockly.WidgetDiv.isVisible()
 }
 
 function findStartBlock(
@@ -582,6 +585,14 @@ export const BlocklyEditor = ({
     if (workspace) setBodiesCollapsed(workspace, collapsed)
   }, [])
 
+  // Recomputed each time the menu opens, not on every render: the menu's
+  // children only exist while it is open, and the workspace can change under
+  // it between two openings.
+  const collapseState =
+    isMoreMenuOpen && workspaceRef.current
+      ? getCollapseState(workspaceRef.current)
+      : { canCollapse: false, canExpand: false }
+
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Toolbox show/hide changes the canvas width — resize Blockly after reflow.
@@ -634,21 +645,8 @@ export const BlocklyEditor = ({
     [runImport],
   )
 
-  // Ctrl/Cmd+K → block search palette.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Same reason as the Delete/Backspace handler below: pressed while the
-      // user is editing a block's description, this yanked them out of the
-      // field and opened the search palette over their unfinished text.
-      if (isTypingContext()) return
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault()
-        setBlockSearchOpen(true)
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [])
+  // Ctrl/Cmd+K → block search palette. Declared further down, after the dialog
+  // state it has to check (see anyDialogOpenRef).
 
   // a11y: when the user opts into keyboard mode, force Blockly's keyboard-nav
   // visuals always-on; turning it off deactivates them again (previously the
@@ -676,6 +674,56 @@ export const BlocklyEditor = ({
     onCancel: () => void
     confirmLabel?: string
   } | null>(null)
+
+  // Ctrl/Cmd+K → block search palette. A ref, not an effect dependency, so the
+  // listener is installed once and still sees the current dialog state.
+  const anyDialogOpenRef = useRef(false)
+  anyDialogOpenRef.current =
+    confirmDialog !== null || inlineTaskConfirm !== null || keyboardHelpOpen
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || (e.key !== 'k' && e.key !== 'K')) return
+      // Pressed while the user is editing a block's description, this yanked
+      // them out of the field and opened the search palette over their
+      // unfinished text.
+      if (isTypingContext()) return
+      // A confirmation is already up. isTypingContext() does not catch it —
+      // those dialogs put focus on a <button>, not a field — so without this
+      // the palette opened as a second modal on top of the first, leaving two
+      // MUI focus traps fighting over the same focus.
+      if (anyDialogOpenRef.current) return
+      e.preventDefault()
+      setBlockSearchOpen(true)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Route Blockly's own confirmations through the app's ConfirmDialog.
+  // Blockly's default builds a native <dialog> with its own `blocklyDialog`
+  // stylesheet, so it looked like a different product — most visibly on the
+  // workspace menu's "Delete N Blocks", which never reaches the per-block
+  // confirm path below (that one is keyed on a blockId the workspace menu
+  // does not have). Installing it here covers every Blockly confirm at once
+  // rather than intercepting them one label at a time.
+  useEffect(() => {
+    Blockly.dialog.setConfirm((message, callback) => {
+      setConfirmDialog({
+        message,
+        onConfirm: () => {
+          setConfirmDialog(null)
+          callback(true)
+        },
+        onCancel: () => {
+          setConfirmDialog(null)
+          callback(false)
+        },
+      })
+    })
+    // No argument restores Blockly's default (see core/dialog.ts setConfirm).
+    return () => Blockly.dialog.setConfirm()
+  }, [])
 
   // ── Exclude current task from macro list ───────────────────────────────────
   const availableMacros = useMemo(() => {
@@ -794,7 +842,17 @@ export const BlocklyEditor = ({
       const blockType = item.blockType
       if (!blockType) return
       const inputs = buildShadowInputs(blockType)
-      insertStepBlockAtEnd({ type: blockType, ...(inputs ? { inputs } : {}) })
+      const hasFields = !!item.fields && Object.keys(item.fields).length > 0
+      const hasData = typeof item.data === 'string' && item.data.length > 0
+      // Same state shape as handleInsertToolboxItem below. Dropping fields/data
+      // here is what made a Saved Task inserted from the search dialog come out
+      // as an empty "Do:" with no task behind it.
+      insertStepBlockAtEnd({
+        type: blockType,
+        ...(hasFields ? { fields: item.fields } : {}),
+        ...(hasData ? { data: item.data } : {}),
+        ...(inputs ? { inputs } : {}),
+      })
     },
     [insertStepBlockAtEnd],
   )
@@ -1069,6 +1127,100 @@ export const BlocklyEditor = ({
     [],
   )
 
+  // Opening the slot picker, shared by both entry points: the pointer path
+  // (a Blockly CLICK event) and the keyboard path (the open_shadow_picker
+  // shortcut registered below). Blockly only ever fires a block CLICK from
+  // Gesture.doBlockClick() on pointerup, so before this existed the picker —
+  // the only way to say WHICH object to pick or WHERE to place it — could not
+  // be opened without a mouse at all. That made every study task impossible to
+  // build from the keyboard, a WCAG 2.1.1 (Level A) failure.
+  const openShadowPickerFor = useCallback(
+    (
+      workspace: Blockly.WorkspaceSvg,
+      block: Blockly.BlockSvg,
+      popoverType: ShadowPopoverType,
+    ) => {
+      workspace.hideChaff()
+      setContextMenu(null)
+      block.getSvgRoot?.()?.classList.add('shadow-block--selected')
+      setShadowIconState(block, true)
+      shadowPicker.open(
+        block.id,
+        popoverType,
+        resolveShadowPickerPosition(workspace, block),
+      )
+    },
+    [shadowPicker, resolveShadowPickerPosition],
+  )
+  // The shortcut is registered once, in an effect with no dependencies, so it
+  // must not close over this callback directly — same reasoning as
+  // shouldConfirmDeleteRef above.
+  const openShadowPickerForRef = useRef(openShadowPickerFor)
+  useEffect(() => {
+    openShadowPickerForRef.current = openShadowPickerFor
+  }, [openShadowPickerFor])
+
+  // Enter/Space opens the picker on a focused slot; T jumps to the React
+  // palette (Blockly's own focus_toolbox is inert here — it needs a native
+  // toolbox or flyout, and this app registers neither).
+  //
+  // Both collide with a built-in shortcut, and winning that collision is not
+  // luck: addKeyMapping() does `shortcutNames.unshift(name)`, and onKeyDown()
+  // walks the list forward stopping at the first callback returning true.
+  // Blockly registers at module-evaluation time and we register at mount, so
+  // ours are consulted first. Returning false falls through to Blockly's.
+  useEffect(() => {
+    const guards = (workspace: Blockly.WorkspaceSvg) =>
+      !workspace.isDragging() &&
+      !Blockly.DropDownDiv.isVisible() &&
+      !Blockly.WidgetDiv.isVisible() &&
+      !Blockly.getFocusManager().ephemeralFocusTaken()
+
+    return registerAppShortcuts([
+      {
+        name: APP_SHORTCUT_NAMES.openShadowPicker,
+        preconditionFn: guards,
+        callback: (workspace) => {
+          const node = Blockly.getFocusManager().getFocusedNode()
+          if (!(node instanceof Blockly.BlockSvg) || !node.isShadow())
+            return false
+          const popoverType = resolveShadowPopoverType(node.type)
+          if (!popoverType) return false
+          openShadowPickerForRef.current(workspace, node, popoverType)
+          return true
+        },
+        keyCodes: [Blockly.utils.KeyCodes.ENTER, Blockly.utils.KeyCodes.SPACE],
+        // Required on OUR shortcut: the flag checked in addKeyMapping is the
+        // one on the shortcut being registered, not on the pre-existing one.
+        allowCollision: true,
+      },
+      {
+        name: APP_SHORTCUT_NAMES.focusToolbox,
+        preconditionFn: guards,
+        callback: () => {
+          const root = toolboxRootRef.current
+          if (!root) return false
+          // Prefer the open category — landing on a collapsed header shows the
+          // user nothing. `.Mui-expanded` is MUI's own documented class.
+          const target =
+            root.querySelector<HTMLElement>(
+              '.toolbox-category__header.Mui-expanded',
+            ) ?? root.querySelector<HTMLElement>('.toolbox-category__header')
+          if (!target) return false
+          target.focus()
+          return true
+        },
+        keyCodes: [Blockly.utils.KeyCodes.T],
+        allowCollision: true,
+      },
+    ])
+  }, [])
+
+  // Dev-only: warn if the help dialog documents a Blockly shortcut that the
+  // bundled version no longer registers. package.json pins ^13.0.0, so the
+  // version can move on a plain `npm install`.
+  useEffect(() => warnOnShortcutDrift(), [])
+
   // ── Task loaded callback ───────────────────────────────────────────────────
   const handleTaskLoaded = useCallback(() => {
     taskLoadedRef.current = true
@@ -1311,15 +1463,10 @@ export const BlocklyEditor = ({
             shadowPicker.close()
             return
           }
-          workspace.hideChaff()
-          setContextMenu(null)
-          const svgRoot = clickedBlock.getSvgRoot?.()
-          svgRoot?.classList.add('shadow-block--selected')
-          setShadowIconState(clickedBlock, true)
-          shadowPicker.open(
-            clickedBlock.id,
+          openShadowPickerForRef.current(
+            workspace,
+            clickedBlock,
             nextPopoverType,
-            resolveShadowPickerPosition(workspace, clickedBlock),
           )
           return
         }
@@ -1367,35 +1514,32 @@ export const BlocklyEditor = ({
         if (!selected || !(selected instanceof Blockly.BlockSvg)) return
         if (selected.isShadow()) return
         if (selected.type === START_BLOCK_TYPE) return
-        const ownDescendants = getOwnBodyDescendants(selected).filter(
-          (b) => !b.isShadow() && !b.isInsertionMarker(),
-        )
-        const totalCount = 1 + ownDescendants.length
-        if (!shouldConfirmDeleteRef.current(totalCount)) return
+        // getOwnBodyDescendants already drops shadows and insertion markers.
+        const totalCount = 1 + getOwnBodyDescendants(selected).length
+
+        // Always take the deletion over from Blockly, whether or not we ask
+        // first. Blockly's own Delete shortcut runs checkAndDelete(), the
+        // cascade that orphans value-input children (see disposeBlockWithBody).
+        // Gating this on shouldConfirmDelete — as it used to be — meant the
+        // default single-block case ran Blockly's buggy path in silence.
+        // Whether to ASK is a separate question, answered just below.
         e.preventDefault()
         e.stopImmediatePropagation()
+
+        const deleteNow = () => {
+          disposeBlockWithBody(selected)
+          syncHistoryState(workspace)
+        }
+
+        if (!shouldConfirmDeleteRef.current(totalCount)) {
+          deleteNow()
+          return
+        }
         setConfirmDialog({
           message: `Delete ${totalCount} blocks?`,
           onConfirm: () => {
             setConfirmDialog(null)
-            Blockly.Events.setGroup(true)
-            try {
-              // Dispose descendants explicitly before the parent, in reverse
-              // (leaf-first) order. Blockly's own dispose(healStack) cascade
-              // silently leaves a value-input child behind as a floating
-              // orphan when the parent occupies a connection that has a
-              // default shadow configured (e.g. a condition slot) — reported
-              // bug, reproduced by hand. ownDescendants is the exact list the
-              // confirm count above is built from, so this can't miss one.
-              for (let i = ownDescendants.length - 1; i >= 0; i--) {
-                if (!ownDescendants[i].disposed)
-                  ownDescendants[i].dispose(false)
-              }
-              if (!selected.disposed) selected.dispose(true)
-            } finally {
-              Blockly.Events.setGroup(false)
-            }
-            syncHistoryState(workspace)
+            deleteNow()
           },
           onCancel: () => setConfirmDialog(null),
         })
@@ -1416,7 +1560,6 @@ export const BlocklyEditor = ({
       registerToolboxDeleteArea,
       startToolboxHoverTracking,
       stopToolboxHoverTracking,
-      resolveShadowPickerPosition,
       syncHistoryState,
       shadowPicker,
       onWorkspaceReady,
@@ -1445,23 +1588,16 @@ export const BlocklyEditor = ({
     (redo: boolean) => {
       const workspace = workspaceRef.current
       if (!workspace) return
-      const readStack = () =>
-        redo ? workspace.getRedoStack() : workspace.getUndoStack()
-
-      let stack = readStack()
+      const stack = redo ? workspace.getRedoStack() : workspace.getUndoStack()
       if (stack.length === 0) return
 
-      const group = stack[stack.length - 1].group
+      // One call is enough: Blockly's own Workspace.undo() already drains the
+      // whole event group in a single step (it pops while the next event shares
+      // the group id of the first). This used to loop afterwards, re-reading
+      // the stack and undoing again while the top still matched — a loop whose
+      // body could never run, because the group it was matching had already
+      // been consumed.
       workspace.undo(redo)
-
-      if (group) {
-        stack = readStack()
-        while (stack.length > 0 && stack[stack.length - 1].group === group) {
-          workspace.undo(redo)
-          stack = readStack()
-        }
-      }
-
       syncHistoryState(workspace)
     },
     [syncHistoryState],
@@ -1507,35 +1643,32 @@ export const BlocklyEditor = ({
           !block.isShadow() &&
           block.type !== START_BLOCK_TYPE
         ) {
-          const ownDescendants = getOwnBodyDescendants(block).filter(
-            (b) => !b.isShadow(),
-          )
-          const totalCount = 1 + ownDescendants.length
-          if (shouldConfirmDelete(totalCount)) {
-            setConfirmDialog({
-              message: `Delete ${totalCount} blocks?`,
-              onConfirm: () => {
-                setConfirmDialog(null)
-                // Dispose descendants ourselves first (see the identical
-                // comment on the keyboard-delete handler above) — Blockly's
-                // native "Delete N Blocks" callback can leave a value-input
-                // child behind as an orphan when the block occupies a
-                // connection with a default shadow configured.
-                Blockly.Events.setGroup(true)
-                try {
-                  for (let i = ownDescendants.length - 1; i >= 0; i--) {
-                    if (!ownDescendants[i].disposed)
-                      ownDescendants[i].dispose(false)
-                  }
-                } finally {
-                  Blockly.Events.setGroup(false)
-                }
-                window.setTimeout(() => option.callback(), 50)
-              },
-              onCancel: () => setConfirmDialog(null),
-            })
+          const totalCount = 1 + getOwnBodyDescendants(block).length
+
+          // Run our own deletion instead of Blockly's option.callback(), always
+          // — not only when we ask first. Blockly's blockDelete callback is
+          // `focusNode(block); block.checkAndDelete()`, and checkAndDelete is
+          // the cascade that orphans value-input children. We keep the
+          // focusNode part (it is what gives the deletion a sane focus
+          // context) and replace the cascade.
+          const deleteNow = () => {
+            Blockly.getFocusManager().focusNode(block)
+            disposeBlockWithBody(block)
+          }
+
+          if (!shouldConfirmDelete(totalCount)) {
+            deleteNow()
             return
           }
+          setConfirmDialog({
+            message: `Delete ${totalCount} blocks?`,
+            onConfirm: () => {
+              setConfirmDialog(null)
+              deleteNow()
+            },
+            onCancel: () => setConfirmDialog(null),
+          })
+          return
         }
       }
 
@@ -1938,27 +2071,33 @@ export const BlocklyEditor = ({
             <ListItemText primary="Add a step" />
             <KeycapHint sx={{ ml: 3 }}>{ADD_BLOCK_SHORTCUT}</KeycapHint>
           </MenuItem>
+          {/* Same wording and icons as the single-block options in the
+              right-click menu (LABEL_MAP / getMenuIconInfo in contextMenu.ts):
+              one concept, one name. "Collapse"/"Expand" is Blockly's
+              vocabulary, not the app's. */}
           <MenuItem
+            disabled={!collapseState.canCollapse}
             onClick={() => {
               closeMoreMenu()
               handleCollapseAll(true)
             }}
           >
             <ListItemIcon>
-              <FoldVertical size={16} />
+              <Minimize2 size={16} />
             </ListItemIcon>
-            <ListItemText primary="Collapse all" />
+            <ListItemText primary="Compact all" />
           </MenuItem>
           <MenuItem
+            disabled={!collapseState.canExpand}
             onClick={() => {
               closeMoreMenu()
               handleCollapseAll(false)
             }}
           >
             <ListItemIcon>
-              <UnfoldVertical size={16} />
+              <Maximize2 size={16} />
             </ListItemIcon>
-            <ListItemText primary="Expand all" />
+            <ListItemText primary="Show all details" />
           </MenuItem>
           <Divider />
           <MenuItem

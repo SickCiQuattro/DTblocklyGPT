@@ -106,6 +106,10 @@ export const NavItem = ({ item, level }: NavItemProps) => {
         disabled={item.disabled}
         onClick={(e) => itemHandler(item.id, e)}
         selected={isSelected}
+        // `selected` only drives the colours. Without aria-current a screen
+        // reader hears an ordinary link and gets no indication of where in the
+        // app it already is.
+        aria-current={isSelected ? 'page' : undefined}
         sx={{
           zIndex: 1201,
           minHeight: NAV_ROW_HEIGHT,

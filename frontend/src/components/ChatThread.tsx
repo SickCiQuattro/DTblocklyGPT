@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Box,
   Typography,
@@ -164,9 +164,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
   // Auto-open overlay when a new proposal is received
   const prevProposedTaskRef = useRef<any>(null)
+  const proposalOverlayRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (proposal.proposedTask && !prevProposedTaskRef.current) {
       setShowProposalOverlay(true)
+      // Move focus onto the overlay. This is the direct answer to something
+      // the user just asked for, so following it with focus is what they
+      // expect — the same reason a search result list takes focus. The
+      // container itself is the target rather than a button inside it, so the
+      // region's label is read first and nothing is activated by accident.
+      requestAnimationFrame(() => proposalOverlayRef.current?.focus())
     } else if (!proposal.proposedTask) {
       setShowProposalOverlay(false)
     }
@@ -255,6 +262,26 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       }
     }
   }
+
+  // Discarding a proposal has to leave a trace in the transcript. The
+  // assistant's own message is written before the user has decided anything,
+  // and models phrase it as done ("I updated the pick step…"), so dismissing
+  // the proposal used to leave that claim standing as the last thing said —
+  // the history then read as though the change had been made. Two entry points
+  // reach here: the card's Cancel and the collapsed badge's ✕.
+  const discardProposal = useCallback(() => {
+    dispatch(clearProposedTask())
+    setListMessages((prev) => [
+      ...prev,
+      {
+        id: (prev[prev.length - 1]?.id ?? 0) + 1,
+        text: 'Discarded that suggestion — your task is unchanged.',
+        user: UserChatEnum.ROBOT,
+        timestamp: dayjs().toISOString(),
+        type: MessageTypeEnum.TEXT,
+      },
+    ])
+  }, [dispatch])
 
   const onMessageSend = async () => {
     if (!message.trim() || isProcessing) return
@@ -708,6 +735,22 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         >
           <div
             className="chat-messages-container"
+            // role="log" makes each newly appended message announce itself.
+            // Previously only the "Copilot is typing" placeholder was in a live
+            // region, so a screen-reader user was told the answer was coming
+            // and then never told it had arrived. The typing indicator keeps
+            // its own aria-live, so it still announces itself and the answer is
+            // not announced twice.
+            role="log"
+            aria-live="polite"
+            aria-label="Conversation with Copilot"
+            // Scrollable region with no focusable children of its own: without
+            // a tab stop the transcript can only be scrolled with a mouse.
+            // jsx-a11y flags tabIndex on non-interactive elements, but a
+            // scrollable container is the documented exception — 2.1.1 requires
+            // it to be reachable, and the rule's allow-list predates that.
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+            tabIndex={0}
             style={{
               flex: 1,
               overflowY: 'auto',
@@ -728,6 +771,13 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
               className={`proposal-overlay ${
                 showProposalOverlay ? 'overlay-open' : ''
               }`}
+              ref={proposalOverlayRef}
+              // The overlay slides up over the transcript with no announcement
+              // and no focus change, so a keyboard user had to guess that
+              // something had appeared and Tab forward hunting for Apply.
+              role="region"
+              aria-label="Proposed task"
+              tabIndex={-1}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -761,9 +811,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                   }
                   dispatch(clearProposedTask())
                 }}
-                onCancel={() => {
-                  dispatch(clearProposedTask())
-                }}
+                onCancel={discardProposal}
                 onBack={() => setShowProposalOverlay(false)}
               />
             </div>
@@ -843,7 +891,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 Review
               </button>
               <button
-                onClick={() => dispatch(clearProposedTask())}
+                onClick={discardProposal}
                 style={{
                   background: 'none',
                   border: 'none',

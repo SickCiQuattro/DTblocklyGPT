@@ -642,6 +642,15 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
         </Typography>
         <div
           className="task-card-tree"
+          // A flat proposal — a plain list of pick/place/wait steps — has no
+          // focusable descendants at all (StepTree only renders a chevron
+          // button for nodes that have children), so without a tab stop a
+          // keyboard user cannot scroll it and would approve a task whose last
+          // steps they could not read.
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+          tabIndex={0}
+          role="group"
+          aria-label="Proposed task steps"
           style={{
             flex: 1,
             overflowY: 'auto',

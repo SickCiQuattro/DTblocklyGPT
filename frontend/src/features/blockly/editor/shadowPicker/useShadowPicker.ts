@@ -350,6 +350,17 @@ export const useShadowPicker = ({
           if (newBlock.outputConnection)
             parentConnection.connect(newBlock.outputConnection)
         }
+
+        // Retarget Blockly's focus at the block we just created, before the
+        // menu's ephemeral-focus release runs. Two reasons, both about the
+        // keyboard path: `close()` above fires first, so by the time the menu
+        // unmounts the shadow block this picker was opened on is already gone,
+        // and restoring focus to it would land the user nowhere. And landing on
+        // the block they just chose is where they want to be anyway — the next
+        // arrow press continues from there instead of from the top.
+        // focusNode() updates the tracked node even while ephemeral focus is
+        // held; the DOM focus follows when the menu releases it.
+        Blockly.getFocusManager().focusNode(newBlock)
       } finally {
         Blockly.Events.setGroup(false)
       }

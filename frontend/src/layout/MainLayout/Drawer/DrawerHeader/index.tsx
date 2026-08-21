@@ -36,6 +36,11 @@ export const DrawerHeader = ({
           <ButtonBase
             disableRipple
             onClick={handleDrawerToggle}
+            // Without this the accessible name comes from the logo image's alt
+            // text, so a screen reader announces "logo, button" — the name of
+            // the picture, not of the action. The Tooltip supplies only a
+            // description (aria-describedby), which never fills that role.
+            aria-label="Expand sidebar"
             sx={{ display: 'flex', alignItems: 'center', borderRadius: 1 }}
           >
             <LogoSection open={open} />
@@ -47,6 +52,8 @@ export const DrawerHeader = ({
           <IconButton
             onClick={handleDrawerToggle}
             size="small"
+            // Icon-only button: nothing else here carries a name.
+            aria-label="Collapse sidebar"
             sx={{ color: 'primary.main' }}
           >
             <PanelLeft size={18} />

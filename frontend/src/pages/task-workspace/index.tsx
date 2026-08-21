@@ -18,6 +18,7 @@ import { useAppSelector } from 'store/reducers'
 import {
   setActiveTask,
   setSaving,
+  setDiscarding,
   setLastSaved,
   triggerSave,
   triggerRename,
@@ -52,6 +53,8 @@ import {
   TaskStatus,
 } from 'pages/tasks/types'
 import { BlockState as State } from 'utils/blocklyTypes'
+import { isBlocklyPayload } from 'utils/blocklyPayload'
+import { isModalOpen, isTypingInTextControl } from 'utils/keyboardGuards'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 
@@ -65,6 +68,13 @@ const isBlockState = (value: unknown): value is State =>
   value !== null &&
   'type' in value &&
   typeof (value as { type?: unknown }).type === 'string'
+
+/**
+ * Shared empty result for SWR queries that have not resolved yet. One frozen
+ * instance so the "no data" case keeps a stable identity across renders — see
+ * the comment on the queries below for what an inline `[]` cost here.
+ */
+const NO_ROWS: never[] = Object.freeze([]) as never[]
 
 export const UnifiedWorkspace = () => {
   const theme = useTheme()
@@ -188,25 +198,30 @@ export const UnifiedWorkspace = () => {
   const [workspace, setWorkspace] = useState<Blockly.WorkspaceSvg | null>(null)
 
   // SWR queries for libraries
-  const { data: dataObjects = [], isLoading: isLoadingObjects } = useSWR<
+  // NO_ROWS, not an inline `= []`: an inline literal is a new array on every
+  // render while the request is still in flight, and these feed useMemo chains
+  // whose output ends up in an effect that sets state. dataMacros did exactly
+  // that — new array → new filteredMacros → new macroDetailsById → new
+  // macroContext → useConformance's effect re-ran → setResult → re-render →
+  // new array again, until React threw "Maximum update depth exceeded". The
+  // others are the same hazard waiting for a caller to wire them the same way.
+  const { data: dataObjects = NO_ROWS, isLoading: isLoadingObjects } = useSWR<
     ObjectListType[],
     Error
   >({
     url: endpoints.graphic.objectsGraphic,
   })
-  const { data: dataActions = [], isLoading: isLoadingActions } = useSWR<
+  const { data: dataActions = NO_ROWS, isLoading: isLoadingActions } = useSWR<
     ActionListType[],
     Error
   >({
     url: endpoints.graphic.actionsGraphic,
   })
-  const { data: dataLocations = [], isLoading: isLoadingLocations } = useSWR<
-    LocationListType[],
-    Error
-  >({
-    url: endpoints.graphic.locationsGraphic,
-  })
-  const { data: dataMacros = [] } = useSWR<TaskType[], Error>({
+  const { data: dataLocations = NO_ROWS, isLoading: isLoadingLocations } =
+    useSWR<LocationListType[], Error>({
+      url: endpoints.graphic.locationsGraphic,
+    })
+  const { data: dataMacros = NO_ROWS } = useSWR<TaskType[], Error>({
     url: endpoints.graphic.macroList,
   })
 
@@ -287,18 +302,7 @@ export const UnifiedWorkspace = () => {
       // so it never fires the structural-change listener that would set this.
       dispatch(setHasUnsavedEdits(false))
       if (taskData.code) {
-        const isVisual = (item: any): boolean => {
-          if (typeof item !== 'object' || item === null) return false
-          const t = item.type
-          if (typeof t !== 'string') return false
-          return t.endsWith('_block') || t.startsWith('when_')
-        }
-
-        const hasVisualBlock = Array.isArray(taskData.code)
-          ? taskData.code.some(isVisual)
-          : isVisual(taskData.code)
-
-        if (hasVisualBlock) {
+        if (isBlocklyPayload(taskData.code)) {
           const abstract = blocklyToAbstractAll(
             taskData.code as unknown as CustomBlock[] | null,
           )
@@ -328,18 +332,7 @@ export const UnifiedWorkspace = () => {
   const initialDataTask = useMemo(() => {
     if (!taskData || !taskData.code) return null
 
-    const isVisual = (item: any): boolean => {
-      if (typeof item !== 'object' || item === null) return false
-      const t = item.type
-      if (typeof t !== 'string') return false
-      return t.endsWith('_block') || t.startsWith('when_')
-    }
-
-    const hasVisualBlock = Array.isArray(taskData.code)
-      ? taskData.code.some(isVisual)
-      : isVisual(taskData.code)
-
-    if (hasVisualBlock) {
+    if (isBlocklyPayload(taskData.code)) {
       return taskData.code as unknown as State
     }
 
@@ -567,17 +560,54 @@ export const UnifiedWorkspace = () => {
     }
 
     saveTimeoutRef.current = setTimeout(() => {
+      // Null it first: this ref is what "a save is still pending" is read from
+      // (the unmount flush and the beforeunload prompt below), so leaving a
+      // spent handle in it makes both of them fire for a save that already ran.
+      saveTimeoutRef.current = null
       void saveTaskToBackend(activeTaskName, false, true)
     }, 2000)
   }
 
-  // Cleanup timeout on unmount
+  // A pending autosave must survive leaving the page.
+  //
+  // The unmount cleanup used to clear the timer, which silently dropped any
+  // edit made in the last 2 seconds — while the status bar still read
+  // "Saved at HH:mm", because that is a timestamp of the previous save (see
+  // StatusBar). Delete a block, click the Tasks breadcrumb, and the block was
+  // back when you reopened the task, with nothing having said so.
+  //
+  // Flushing instead of cancelling is safe: saveTaskToBackend closes over
+  // module-level fetchApi and Redux dispatch, neither of which needs this
+  // component to still be mounted. Refs, not state, because the cleanup runs
+  // after the last render and must see the values as they were then.
+  const flushPendingSaveRef = useRef<(() => void) | null>(null)
+  flushPendingSaveRef.current = () => {
+    if (!saveTimeoutRef.current) return
+    clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = null
+    if (isReadOnly) return
+    void saveTaskToBackend(activeTaskName, false, true)
+  }
+
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
+      flushPendingSaveRef.current?.()
     }
+  }, [])
+
+  // Closing or reloading the tab never unmounts anything, so the flush above
+  // cannot cover it. The browser only honours a synchronous warning here — an
+  // async save would be cut off — so this asks rather than saves.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!saveTimeoutRef.current) return
+      e.preventDefault()
+      // Chrome ignores custom text and shows its own wording; assigning
+      // returnValue is still what triggers the prompt at all.
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
   // Manual save trigger listener
@@ -591,6 +621,7 @@ export const UnifiedWorkspace = () => {
       // Clear any pending debounced auto-save timeout to prevent race condition status downgrades
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
       }
 
       void saveTaskToBackend(activeTaskName, isReady, false)
@@ -605,11 +636,28 @@ export const UnifiedWorkspace = () => {
   ])
 
   // Ctrl/Cmd+S → same save trigger the header Save button dispatches.
-  // preventDefault blocks the browser's native "Save Page As" dialog.
+  // preventDefault blocks the browser's native "Save Page As" dialog — it runs
+  // before the guards below because the app owns this shortcut everywhere on
+  // this screen: dropping back to the browser dialog on top of an open modal,
+  // or mid-sentence in the Copilot box, is not the fallback anyone wants.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault()
+        // A modal on top owns the keyboard. The Header's "Discard these
+        // unpublished changes?" confirm, the robot panel's real-run confirm
+        // and the editor's own dialogs all sit over this workspace, and this
+        // listener used to save/publish the workspace underneath one of them
+        // — silently, while the user was being asked whether to throw those
+        // very changes away. Same shape as DigitalTwinPanel's Escape guard,
+        // read from the DOM because none of those dialogs' open-state lives
+        // in this component (see utils/keyboardGuards.ts).
+        if (isModalOpen()) return
+        // Focus in a text field means the keystroke belongs to that field.
+        // The header's rename input is the one exception, and it handles
+        // Ctrl/Cmd+S itself so the in-progress name is committed to Redux
+        // before the save reads it (Header/index.tsx).
+        if (isTypingInTextControl()) return
         dispatch(triggerSave(true))
       }
     }
@@ -670,6 +718,7 @@ export const UnifiedWorkspace = () => {
       if (isReadOnly) return
       if (id) {
         dispatch(setSaving(true))
+        dispatch(setDiscarding(true))
         fetchApi({
           url: endpoints.task.discardDraft,
           method: MethodHTTP.POST,
@@ -682,7 +731,26 @@ export const UnifiedWorkspace = () => {
             // when editorDataTask is null, so clearing it first (before
             // taskData/initialDataTask actually reflect the published
             // version) reloads the same stale draft right back in.
-            await mutateTask()
+            const updatedTask = await mutateTask()
+            // Push the new status into Redux here rather than relying on the
+            // load effect re-running. This was the only one of the four write
+            // paths (save, publish, rename, discard) that left it implicit,
+            // and the assumption does not hold: the autosave path never
+            // refetches, so taskData can already read 'published' while Redux
+            // reads 'published_with_draft'. The refetch then returns the same
+            // status, SWR sees unchanged data, the effect never re-runs, and
+            // the "Discard unpublished changes" button stays on screen for a
+            // task that has none — offering to undo work that is not there.
+            if (updatedTask) {
+              dispatch(
+                setActiveTask({
+                  id: updatedTask.id.toString(),
+                  name: updatedTask.name,
+                  status: updatedTask.status,
+                }),
+              )
+            }
+            dispatch(setHasUnsavedEdits(false))
             setEditorDataTask(null) // Force workspace reload from the newly fetched published state
             void mutate({ url: endpoints.home.libraries.tasks })
           })
@@ -692,6 +760,7 @@ export const UnifiedWorkspace = () => {
           })
           .finally(() => {
             dispatch(setSaving(false))
+            dispatch(setDiscarding(false))
           })
       }
     }
@@ -850,7 +919,15 @@ export const UnifiedWorkspace = () => {
       {/* Digital Twin Panel slide-in (Step 8) */}
       <DigitalTwinPanel
         taskId={id || ''}
-        taskStatus={taskData?.status}
+        // activeTaskStatus (Redux), not taskData.status (SWR). The autosave
+        // path deliberately skips the refetch — a mutateTask() on every
+        // keystroke pause clobbered the in-progress workspace — and instead
+        // predicts the new status into Redux. So taskData.status stays
+        // 'published' for the rest of the session after the first edit, while
+        // Redux is current. The Header already reads Redux; the panel read
+        // SWR, which is why the two contradicted each other on screen: one
+        // said "unpublished changes", the other "Ready to run".
+        taskStatus={activeTaskStatus}
         workspace={workspace}
         initialExecutionTarget={initialExecutionTarget}
       />

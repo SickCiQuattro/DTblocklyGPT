@@ -13,6 +13,7 @@
  *  - Empty-state copy when no items match the query
  */
 
+import { useEffect, useRef, useState } from 'react'
 import {
   alpha,
   Box,
@@ -24,6 +25,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+import * as Blockly from 'blockly/core'
 import { Search } from 'lucide-react'
 
 import { KeycapHint } from 'components/KeycapHint'
@@ -80,12 +82,51 @@ export const ShadowPickerMenu = ({
   onClose,
 }: ShadowPickerMenuProps) => {
   const theme = useTheme()
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const highlightedRef = useRef<HTMLLIElement | null>(null)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+
+  // Scroll the highlighted row into view when the arrows walk past the
+  // visible window.
+  useEffect(() => {
+    highlightedRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [highlightedIndex])
+
+  // Reset the highlight where the reset is actually caused — typing — rather
+  // than in an effect watching the query: a new query renders a different list,
+  // and the old index would point into it for one frame.
+  const handleSearchChange = (query: string) => {
+    setHighlightedIndex(0)
+    onSearchChange(query)
+  }
+
+  // Hold Blockly's focus while the menu is open. Blockly installs a global
+  // focusin listener that nulls its tracked focusedNode as soon as focus lands
+  // somewhere it does not own — and a MUI Menu renders in a portal, outside the
+  // injection div. Without this the block we opened from is forgotten, and on
+  // close the user is dropped at the top of the page. The returned lambda
+  // re-selects the tracked node and restores DOM focus to it in one call;
+  // useShadowPicker retargets that node at the newly created block, so the
+  // restore follows the replacement rather than chasing a disposed shadow.
+  useEffect(() => {
+    if (!isOpen) return
+    const el = searchInputRef.current
+    if (!el) return
+    const releaseEphemeralFocus =
+      Blockly.getFocusManager().takeEphemeralFocus(el)
+    return () => releaseEphemeralFocus()
+  }, [isOpen])
+
   return (
     <Menu
       open={isOpen}
       onClose={onClose}
       autoFocus={false}
       disableAutoFocusItem
+      // Blockly's FocusManager owns the restore (see the effect above), and it
+      // is the only one of the two that knows the shadow block was replaced.
+      // Leaving MUI's default restore on would race it back to a detached node.
+      disableRestoreFocus
       anchorReference="anchorPosition"
       anchorPosition={position ?? undefined}
       transformOrigin={{ vertical: 'top', horizontal: 'center' }}
@@ -155,17 +196,35 @@ export const ShadowPickerMenu = ({
           />
           <InputBase
             autoFocus
+            inputRef={searchInputRef}
             placeholder="Search..."
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(event) => {
-              // Prevent the MUI MenuList typeahead from hijacking keyboard input
-              // while the user is typing in the search box.
-              event.stopPropagation()
-              if (event.key === 'Enter' && filteredItems.length > 0) {
-                event.preventDefault()
-                onSelect(filteredItems[0])
+              // Arrow keys and Enter drive the list; everything else is typing
+              // and must not reach MUI's MenuList, whose typeahead would
+              // otherwise steal the letters being typed into this field.
+              // This used to stopPropagation() unconditionally, which also
+              // swallowed the arrows — so the list could not be walked at all
+              // and Enter always took the first match, no matter what was
+              // highlighted.
+              if (filteredItems.length === 0) {
+                event.stopPropagation()
+                return
               }
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setHighlightedIndex((i) => (i + 1) % filteredItems.length)
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setHighlightedIndex(
+                  (i) => (i - 1 + filteredItems.length) % filteredItems.length,
+                )
+              } else if (event.key === 'Enter') {
+                event.preventDefault()
+                onSelect(filteredItems[highlightedIndex] ?? filteredItems[0])
+              }
+              event.stopPropagation()
             }}
             sx={{
               flex: 1,
@@ -248,100 +307,109 @@ export const ShadowPickerMenu = ({
                 {group}
               </Typography>
 
-              {items.map((item) => (
-                <MenuItem
-                  key={`${popoverType}-${item.id}`}
-                  onClick={() => onSelect(item)}
-                  sx={{
-                    my: 0.15,
-                    minHeight: 52,
-                    borderRadius: '8px',
-                    px: 1.25,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 1,
-                    '&:hover': {
-                      backgroundColor: theme.palette.slate[50],
-                    },
-                  }}
-                >
-                  {/* Coloured dot indicating the group / category */}
-                  <Box
+              {items.map((item) => {
+                // groupedItems is a reduce over filteredItems, so these are the
+                // same object references and the flat index is exact.
+                const flatIndex = filteredItems.indexOf(item)
+                const isHighlighted = flatIndex === highlightedIndex
+                return (
+                  <MenuItem
+                    key={`${popoverType}-${item.id}`}
+                    ref={isHighlighted ? highlightedRef : null}
+                    selected={isHighlighted}
+                    onClick={() => onSelect(item)}
+                    onMouseEnter={() => setHighlightedIndex(flatIndex)}
                     sx={{
-                      mt: '5px',
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      flexShrink: 0,
-                      backgroundColor: getDotColour(group),
+                      my: 0.15,
+                      minHeight: 52,
+                      borderRadius: '8px',
+                      px: 1.25,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 1,
+                      '&:hover': {
+                        backgroundColor: theme.palette.slate[50],
+                      },
                     }}
-                  />
-
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    {/* Name row with optional paramHint badge */}
+                  >
+                    {/* Coloured dot indicating the group / category */}
                     <Box
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.75,
+                        mt: '5px',
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        backgroundColor: getDotColour(group),
                       }}
-                    >
-                      <Typography
+                    />
+
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      {/* Name row with optional paramHint badge */}
+                      <Box
                         sx={{
-                          fontSize: '0.85rem',
-                          fontWeight: 600,
-                          color: theme.palette.slate[900],
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.75,
                         }}
                       >
-                        {item.name}
-                      </Typography>
-                      {item.paramHint && (
-                        <Box
+                        <Typography
                           sx={{
-                            px: 0.75,
-                            py: 0.1,
-                            borderRadius: '4px',
-                            backgroundColor: theme.palette.slate[100],
-                            border: `1px solid ${theme.palette.slate[200]}`,
-                            fontSize: '0.7rem',
-                            fontWeight: 500,
-                            color: theme.palette.slate[500],
-                            flexShrink: 0,
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: theme.palette.slate[900],
                           }}
                         >
-                          {item.paramHint}
-                        </Box>
+                          {item.name}
+                        </Typography>
+                        {item.paramHint && (
+                          <Box
+                            sx={{
+                              px: 0.75,
+                              py: 0.1,
+                              borderRadius: '4px',
+                              backgroundColor: theme.palette.slate[100],
+                              border: `1px solid ${theme.palette.slate[200]}`,
+                              fontSize: '0.7rem',
+                              fontWeight: 500,
+                              color: theme.palette.slate[500],
+                              flexShrink: 0,
+                            }}
+                          >
+                            {item.paramHint}
+                          </Box>
+                        )}
+                      </Box>
+
+                      {/* Description (preferred) or keyword fallback */}
+                      {item.description && (
+                        <Typography
+                          sx={{
+                            mt: 0.2,
+                            fontSize: '0.78rem',
+                            color: theme.palette.slate[500],
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {item.description}
+                        </Typography>
+                      )}
+
+                      {item.keywords.length > 0 && !item.description && (
+                        <Typography
+                          sx={{
+                            mt: 0.2,
+                            fontSize: '0.78rem',
+                            color: theme.palette.slate[500],
+                          }}
+                        >
+                          Keywords: {item.keywords.join(', ')}
+                        </Typography>
                       )}
                     </Box>
-
-                    {/* Description (preferred) or keyword fallback */}
-                    {item.description && (
-                      <Typography
-                        sx={{
-                          mt: 0.2,
-                          fontSize: '0.78rem',
-                          color: theme.palette.slate[500],
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {item.description}
-                      </Typography>
-                    )}
-
-                    {item.keywords.length > 0 && !item.description && (
-                      <Typography
-                        sx={{
-                          mt: 0.2,
-                          fontSize: '0.78rem',
-                          color: theme.palette.slate[500],
-                        }}
-                      >
-                        Keywords: {item.keywords.join(', ')}
-                      </Typography>
-                    )}
-                  </Box>
-                </MenuItem>
-              ))}
+                  </MenuItem>
+                )
+              })}
             </Box>
           ))
         )}

@@ -111,13 +111,7 @@ export const FormTask = ({ data, backFunction }: FormTaskProps) => {
         values,
         setFieldValue,
       }) => (
-        <form
-          noValidate
-          onSubmit={handleSubmit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.preventDefault()
-          }}
-        >
+        <form noValidate onSubmit={handleSubmit}>
           <Stack spacing={2.5}>
             <Stack
               direction="row"
