@@ -260,6 +260,9 @@ def process_vision_frame(request: HttpRequest) -> JsonResponse:
 _voice_lock = threading.Lock()
 _latest_voice = "NONE"
 _latest_voice_time = 0.0
+# The word the running step is waiting for, or None outside a voice step.
+# See set_expected_voice().
+_expected_voice = None
 
 # Commands the frontend may send. Matching/synonyms (incl. Italian) live in the
 # browser hook; the backend only validates and stores the normalised code.
@@ -283,6 +286,25 @@ def get_latest_voice(max_age_s: float = 3.0, consume: bool = False) -> str:
                 _latest_voice_time = 0.0
             return word
     return "NONE"
+
+
+def set_expected_voice(word: str | None) -> None:
+    """Tell this module which word the running step is waiting for.
+
+    Only the waiting side knows that, and only this module sees the operator's
+    utterances — so without it the `accepted` field on a voice `attempt` could
+    not mean what it means on the other two channels. It used to be set from
+    "the word is in the vocabulary", while gesture's is `observed == expected`
+    and the button's is a hardcoded True. Three meanings under one name, and
+    the study's headline measure (`primo_tentativo`) reads it as the strictest
+    of the three: a participant saying "sì" to a step waiting for DONE was
+    recorded as a first-try success on a step that then timed out.
+
+    Set at step entry alongside reset_voice(); cleared when the step ends.
+    """
+    global _expected_voice
+    with _voice_lock:
+        _expected_voice = word.strip().upper() if word else None
 
 
 def reset_voice() -> None:
@@ -314,14 +336,28 @@ def process_voice_command(request: HttpRequest) -> JsonResponse:
         # system refused is an attempt, and this is the only place it is
         # observable server-side. Dropping it here is what made "number of
         # attempts before resolution" unmeasurable.
-        study_log.log_event("attempt", channel="voice", value=word, accepted=False)
+        study_log.log_event(
+            "attempt", channel="voice", value=word, accepted=False,
+            in_vocabulary=False,
+        )
         return JsonResponse({"error": "unknown voice command", "voice": word}, status=400)
 
     with _voice_lock:
         _latest_voice = word
         _latest_voice_time = time.monotonic()
+        expected = _expected_voice
 
-    study_log.log_event("attempt", channel="voice", value=word, accepted=True)
+    # accepted = "this resolved the step", the same meaning the gesture channel
+    # gives it (simulate.py: observed == expected). `in_vocabulary` keeps the
+    # older, weaker fact available separately: a recognised word that is simply
+    # not the one this step wants is a different event from noise the browser
+    # could not classify, and the two used to be indistinguishable.
+    study_log.log_event(
+        "attempt", channel="voice", value=word,
+        accepted=(expected is not None and word == expected),
+        in_vocabulary=True,
+        expected=expected,
+    )
     return JsonResponse({"status": "ok", "voice": word})
 
 

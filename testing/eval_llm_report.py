@@ -9,6 +9,11 @@ accuracy per model/category, IT vs EN gap, latency distribution, cost vs
 accuracy, local-model tokens/sec, thinking-vs-nothink toggle, model-size vs
 accuracy curve, and a documented bug-fix before/after.
 
+Charts that compare the two model families (remotely served vs locally
+executed) are emitted once per family on a shared scale, rather than for the
+cloud family alone: the chapter's claims are about the difference between the
+two, and a chart that holds only one of them cannot carry them.
+
 Every chart shares one thesis-ready style: a CVD-safe categorical palette
 (validated with the dataviz skill's contrast/CVD checker), 300 DPI PNG +
 vector PDF output (for LaTeX \\includegraphics), direct data labels so a
@@ -16,7 +21,26 @@ black-and-white printout stays legible, and consistent typography/spacing
 across the whole figure set.
 
 Run with:
-    poetry run python testing/eval_llm_report.py out/run1.json out/run2.json --out-dir out/charts
+    poetry run python testing/eval_llm_report.py testing/out/*.json \\
+        --exclude smoke --exclude ctx8k --out-dir testing/out/charts
+
+Both exclusions are there because a glob over the whole output directory picks
+up two kinds of file that are not samples of the golden set:
+
+  * smoke files are two-case plumbing checks. Merged into the measurement they
+    change every rate, invent three models that were never evaluated, and do
+    most of their damage on `combo` and `condition_variant`, which are the two
+    smallest categories and the two that carry the largest deltas in the
+    reasoning-toggle breakdown.
+  * ctx8k is granite4:350m re-run with a larger context window. It is a
+    different configuration of the same model sharing one spec key, and it is
+    a single pass: 49 calls against the 245 every other model gets. Averaging
+    it in mixes two configurations; keeping it instead of the full run would
+    rest the model's number on a fifth of everyone else's evidence. It belongs
+    in the text as a one-run observation, not in the charts as a measurement.
+
+The coverage audit printed at the top of the run says whether anything is
+still mixed: on a clean campaign every spec reads the same number of runs.
 """
 import argparse
 import json
@@ -84,6 +108,47 @@ _CATEGORY_ORDER = [
     "long_sequence", "condition_variant", "combo",
 ]
 
+# Italian display names for the categories. The thesis table that describes
+# the golden set uses these; the charts used to print the raw JSON keys, so a
+# reader could not match a heatmap column to the table row it belongs to.
+# Anything not in here falls back to the raw key rather than being hidden.
+_CATEGORY_LABEL_IT = {
+    "core": "centrale",
+    "hallucination_guard": "allucinazioni",
+    "nested_logic": "logica annidata",
+    "codeswitch": "alternanza di lingua",
+    "long_sequence": "sequenza lunga",
+    "condition_variant": "variante di condizione",
+    "combo": "combinato",
+}
+
+# Cases per category in a single pass of the golden set (see
+# testing/eval_llm_cases.jsonl and the composition table in the thesis).
+# Explicit rather than counted from the results, so the n= annotations stay
+# right even when the report runs over a partial set of result files.
+_GOLDEN_SET_CATEGORY_SIZE = {
+    "core": 33, "hallucination_guard": 5, "nested_logic": 4, "codeswitch": 2,
+    "long_sequence": 2, "condition_variant": 2, "combo": 1,
+}
+
+
+def _cat_label(category, n_cases=None):
+    """Display name for a category, optionally with its case count.
+
+    The count matters on this golden set: four of the seven categories have
+    one or two cases, so a cell reading 100 or 0 means "the single case
+    passed/failed", not a rate. Printing n on the axis puts that caveat where
+    the number is read instead of leaving it to the caption.
+    """
+    label = _CATEGORY_LABEL_IT.get(category, category)
+    return f"{label}\n(n={n_cases})" if n_cases else label
+
+
+def _is_local(spec):
+    """Ollama specs are the locally-executed models; everything else is a
+    remote service. Used to split every chart that mixes the two families."""
+    return spec.startswith("ollama")
+
 # ---------------------------------------------------------------------------
 # Thesis-ready chart style. Palette is the dataviz-skill reference instance
 # (validated for CVD-safety and normal-vision separation on a light/print
@@ -142,16 +207,48 @@ def _style_axes(ax, grid_axis="y"):
     ax.set_axisbelow(True)
 
 
-def _save(fig, out_dir, name):
-    """Save both a 300 DPI PNG (quick preview) and a vector PDF (LaTeX)."""
+def _save(fig, out_dir, name, title=None, note=None):
+    """Save a clean vector PDF for LaTeX and an annotated PNG for inspection.
+
+    The two outputs are not the same image on purpose, because they are read
+    in two different places.
+
+    The PDF goes into the thesis under \\includegraphics, where the figure
+    already has a caption. A title drawn inside the image would be a second
+    title in a second typeface: matplotlib's sans against the document's
+    Arial, at a size that does not follow the document's and that shrinks
+    again when the figure is scaled to the text width. It would also not
+    reach the List of Figures, which is built from the caption. The same
+    argument applies with more force to the explanatory note, which is prose:
+    LaTeX sets it justified, hyphenated and at the caption size, and the
+    caption is where a reader looks for it. So the PDF carries no title and
+    no note.
+
+    The PNG is read on its own, in a file browser or a chat, with no caption
+    anywhere. There the title and the note are what make it legible, so they
+    are drawn before it is written.
+
+    What stays in BOTH is everything that points at a position inside the
+    graphic: axis labels, tick labels, data labels, legends, and the panel
+    identifiers of a multi-panel figure. A caption cannot point at the left
+    panel; the image has to.
+    """
     if plt is None:
         return
     png = os.path.join(out_dir, f"{name}.png")
     pdf = os.path.join(out_dir, f"{name}.pdf")
-    fig.savefig(png, dpi=300, bbox_inches="tight")
+
     fig.savefig(pdf, bbox_inches="tight")
+
+    if title:
+        fig.suptitle(title, fontweight="bold")
+        fig.tight_layout()
+    if note:
+        fig.text(0.01, -0.02, note, fontsize=7, color=INK["muted"])
+    fig.savefig(png, dpi=300, bbox_inches="tight")
+
     plt.close(fig)
-    print(f"  saved {png} (+ .pdf)")
+    print(f"  saved {pdf} (senza titolo, per LaTeX) + {os.path.basename(png)} (annotato)")
 
 
 def _short(spec):
@@ -163,14 +260,110 @@ def _short(spec):
     return label
 
 
-def load_results(paths):
-    """Merge {spec: [result, ...]} dicts from multiple JSON files."""
+GOLDEN_SET_SIZE = sum(_GOLDEN_SET_CATEGORY_SIZE.values())  # 49 cases in one pass
+
+# Runs per model the protocol calls for. Set by audit_coverage() from what the
+# majority of the specs actually have, so the charts flag coverage against the
+# campaign that was really run rather than against a number hard-coded here.
+EXPECTED_RUNS = 5
+
+
+def load_results(paths, exclude=()):
+    """Merge {spec: [result, ...]} dicts from multiple JSON files.
+
+    `exclude` holds substrings matched against the file name; a file whose
+    name contains any of them is skipped. This exists because a shell glob
+    over the output directory sweeps up artifacts that are not measurements
+    (see audit_coverage), and rebuilding the glob by hand every time is how
+    one of them eventually slips back in.
+
+    Also records which files each spec came from, so the audit can name them
+    when a spec turns out to be a mix of artifacts rather than a measurement.
+    """
     merged = defaultdict(list)
+    sources = defaultdict(list)
+    skipped = []
     for path in paths:
+        name = os.path.basename(path)
+        if any(pat in name for pat in exclude):
+            skipped.append(name)
+            continue
         with open(path) as f:
             data = json.load(f)
         for spec, results in data.items():
             merged[spec].extend(results)
+            sources[spec].append(name)
+    if skipped:
+        print(f"Esclusi {len(skipped)} file su richiesta: {', '.join(sorted(skipped))}")
+    return merged, sources
+
+
+def audit_coverage(merged, sources, include_partial=False):
+    """Print a coverage audit and drop specs that are not a measurement.
+
+    Merging every JSON in the output directory silently mixes two kinds of
+    artifact. A smoke file is a two-case sanity check that the plumbing
+    answers at all; it is not a sample of the golden set. Averaged into the
+    real runs it does three things, all of them wrong and none of them
+    visible in the resulting chart:
+
+      * it invents models. Three specs exist ONLY in smoke files, so a bar
+        chart sorted by pass rate puts a model measured on two calls at the
+        top of the local family with a perfect score.
+      * it shifts every rate by a fraction of a point, which is enough to
+        reorder models that sit a tenth apart, and enough to make the
+        numbers quoted in the thesis prose disagree with the bars.
+      * it lands exactly where it hurts most. The smoke cases are `combo`
+        and `condition_variant`, the two smallest categories and the two
+        that carry the largest deltas in the reasoning-toggle breakdown, so
+        the contamination concentrates on the least robust numbers in the
+        chapter and leaves the other five categories untouched.
+
+    So specs below one full pass of the golden set are dropped by default
+    rather than flagged, because a footnote on a chart does not stop a
+    reader from reading the tallest bar. `--include-partial` keeps them for
+    inspection.
+
+    Anything above one full pass is kept but flagged in BOTH directions: a
+    spec with more calls than the protocol is as suspect as one with fewer,
+    and usually means two different configurations were merged under the
+    same model name.
+    """
+    print("\n" + "=" * 70)
+    print("COPERTURA DEI DATI")
+    print("=" * 70)
+    global EXPECTED_RUNS
+    runs = {s: len(r) / GOLDEN_SET_SIZE for s, r in merged.items()}
+    complete = [v for v in runs.values() if v >= 1]
+    if complete:
+        EXPECTED_RUNS = max(set(round(v) for v in complete),
+                            key=lambda k: sum(1 for v in complete if round(v) == k))
+    expected = EXPECTED_RUNS
+
+    dropped = []
+    for spec in sorted(merged, key=lambda s: len(merged[s])):
+        n = len(merged[spec])
+        r = runs[spec]
+        notes = []
+        if r < 1:
+            notes.append("SOTTO UNA ESECUZIONE" + ("" if include_partial else " -> escluso"))
+        else:
+            if n % GOLDEN_SET_SIZE:
+                notes.append(f"non multiplo di {GOLDEN_SET_SIZE}")
+            if round(r) != expected:
+                notes.append(f"{r:g} esecuzioni contro {expected} della maggioranza")
+        flag = "  <-- " + "; ".join(notes) if notes else ""
+        print(f"  {spec:38s} n={n:4d}  ({r:g} esecuzioni){flag}")
+        if notes:
+            print(f"      da: {', '.join(sorted(set(sources.get(spec, []))))}")
+        if r < 1 and not include_partial:
+            dropped.append(spec)
+
+    for spec in dropped:
+        del merged[spec]
+    if dropped:
+        print(f"\n  Esclusi {len(dropped)} spec sotto una esecuzione completa: {', '.join(dropped)}")
+        print("  (--include-partial per tenerli)")
     return merged
 
 
@@ -196,6 +389,58 @@ def report_accuracy(all_results):
             by_category[r.get("category") or "uncategorized"].append(r)
         for cat, rs in sorted(by_category.items()):
             print(f"      {cat}: {_pass_rate(rs):.1f}% (n={len(rs)})")
+
+
+def report_determinism(all_results):
+    """Run-to-run stability, the numbers behind the determinism claim.
+
+    These were being computed by hand when the chapter was written, which is
+    the wrong place for a number that ends up in a printed sentence. They are
+    produced here so the claim has a generator.
+
+    The runs are recoverable from the merged results without any heuristic:
+    each file stores the golden set replayed whole, so the rows arrive as
+    consecutive blocks of GOLDEN_SET_SIZE in a fixed case order, and slicing
+    by index recovers run 1..k exactly.
+
+    Sample standard deviation, not population: five runs are a sample of the
+    runs the model could have produced, not the population of them. It is
+    also what report_accuracy already prints beside every model, and one
+    chapter should not quote two different estimators for the same quantity.
+    """
+    print("\n" + "=" * 70)
+    print("DETERMINISMO FRA ESECUZIONI (deviazione standard campionaria)")
+    print("=" * 70)
+    zero = {"cloud": 0, "locale": 0}
+    total = {"cloud": 0, "locale": 0}
+    worst = None
+    for spec in sorted(all_results, key=lambda s: len(all_results[s])):
+        rows = all_results[spec]
+        k = len(rows) // GOLDEN_SET_SIZE
+        if k < 2:
+            continue
+        blocks = [rows[i * GOLDEN_SET_SIZE:(i + 1) * GOLDEN_SET_SIZE] for i in range(k)]
+        rates = [_pass_rate(b) for b in blocks]
+        sd = statistics.stdev(rates)
+        by_case = defaultdict(list)
+        for b in blocks:
+            for r in b:
+                by_case[r["name"]].append(bool(r.get("pass")))
+        flaky = sum(1 for v in by_case.values() if len(set(v)) > 1)
+        family = "locale" if _is_local(spec) else "cloud"
+        total[family] += 1
+        if sd == 0:
+            zero[family] += 1
+        if worst is None or sd > worst[1]:
+            worst = (spec, sd, flaky)
+        print(f"  {spec:38s} sd={sd:5.2f}  escursione={max(rates) - min(rates):5.2f}  "
+              f"casi con esito variabile={flaky:2d}/{GOLDEN_SET_SIZE}  ({family})")
+    print()
+    for family in ("locale", "cloud"):
+        if total[family]:
+            print(f"  {family}: {zero[family]}/{total[family]} con esiti identici caso per caso")
+    if worst:
+        print(f"  massima variabilità: {worst[0]} (sd={worst[1]:.2f}, {worst[2]} casi variabili)")
 
 
 def report_multilingual(all_results):
@@ -244,21 +489,27 @@ def _boxplot_one(labels, series, out_dir, name, title):
     all_values = [v for s in series for v in s if v > 0]
     if all_values and max(all_values) / statistics.median(all_values) > 20:
         ax.set_yscale("log")
-        title += "\n(scala log: outlier di timeout comprimono l'asse lineare)"
-    ax.set_title(title)
+        title += " (scala log: gli outlier di timeout comprimono l'asse lineare)"
     _style_axes(ax, grid_axis="y")
     plt.xticks(rotation=40, ha="right", fontsize=fontsize)
     plt.tight_layout()
-    _save(fig, out_dir, name)
+    _save(fig, out_dir, name, title=title)
 
 
 def report_latency(all_results, out_dir):
-    """Fig 6.5/6.6 — latency distribution, split into a cloud chart and a
-    local chart. One combined boxplot across ~20 models (cloud + every
-    Ollama variant) comes out too wide for a printed page and mixes two
-    different sections of the thesis into one figure; splitting by
-    cloud/local keeps each chart at a sane, single-page width and puts each
-    where it's actually discussed."""
+    """latency_boxplot_* — latency distribution, three charts.
+
+    latency_boxplot_compare is the one the thesis uses: two panels on a
+    shared log axis, because that is the only arrangement in which the gap
+    between the families, and the places where they overlap, are visible.
+
+    The two single-family charts are kept as diagnostics, not as figures.
+    Each auto-scales to its own group, which is what you want when reading
+    one family on its own and exactly what you must not use to compare them:
+    two charts scaled independently make different distributions look alike.
+    They stay because a per-family view is useful while inspecting a run;
+    they are not meant for the chapter.
+    """
     print("\n" + "=" * 70)
     print("LATENCY")
     print("=" * 70)
@@ -272,7 +523,7 @@ def report_latency(all_results, out_dir):
         median = statistics.median(latencies)
         std = statistics.stdev(latencies) if len(latencies) > 1 else 0.0
         print(f"  {spec}: mean {mean:.0f}ms | median {median:.0f}ms | stdev {std:.0f}ms")
-        if spec.startswith("ollama"):
+        if _is_local(spec):
             local_labels.append(_short(spec))
             local_series.append(latencies)
         else:
@@ -286,6 +537,51 @@ def report_latency(all_results, out_dir):
                  "Distribuzione della latenza per modello (cloud)")
     _boxplot_one(local_labels, local_series, out_dir, "latency_boxplot_local",
                  "Distribuzione della latenza per modello (locale)")
+    _boxplot_compare(cloud_labels, cloud_series, local_labels, local_series, out_dir)
+
+
+def _boxplot_compare(cloud_labels, cloud_series, local_labels, local_series, out_dir):
+    """latency_boxplot_compare — the two families on ONE shared log axis.
+
+    The separate charts each auto-scale to their own family, which makes the
+    two look alike and hides the only thing worth comparing. On a shared axis
+    the order-of-magnitude gap between the medians is visible, and so are the
+    two exceptions that a blanket 'seconds versus tens of seconds' statement
+    would flatten: the smallest local model answers in about a second, and
+    two remotely served models sit above ten.
+    """
+    if plt is None or not cloud_series or not local_series:
+        return
+    widths = [max(2.2, len(cloud_labels) * 0.62), max(2.2, len(local_labels) * 0.62)]
+    fig, axes = plt.subplots(
+        1, 2, figsize=(min(11, sum(widths) + 1), 5.2),
+        sharey=True, gridspec_kw={"width_ratios": widths},
+    )
+    for ax, labels, series, title in (
+        (axes[0], cloud_labels, cloud_series, "cloud"),
+        (axes[1], local_labels, local_series, "locale"),
+    ):
+        ax.boxplot(
+            series, tick_labels=labels, patch_artist=True,
+            boxprops=dict(facecolor=PALETTE["blue"], alpha=0.25, edgecolor=PALETTE["blue"]),
+            medianprops=dict(color=HEATMAP_RAMP[-1], linewidth=2),
+            whiskerprops=dict(color=INK["secondary"]),
+            capprops=dict(color=INK["secondary"]),
+            flierprops=dict(markeredgecolor=INK["muted"], markersize=4),
+        )
+        ax.set_title(title, fontsize=10, loc="left", color=INK["secondary"])
+        _style_axes(ax, grid_axis="y")
+        ax.tick_params(axis="x", labelrotation=40)
+        for lbl in ax.get_xticklabels():
+            lbl.set_ha("right")
+            lbl.set_fontsize(7.5)
+    axes[0].set_yscale("log")
+    axes[0].set_ylabel("latenza (ms)")
+    plt.tight_layout()
+    _save(fig, out_dir, "latency_boxplot_compare",
+          title="Latenza per chiamata: le due famiglie sulla stessa scala",
+          note="Scala logaritmica condivisa fra i due pannelli. Il distacco fra le mediane è di "
+               "circa un ordine di grandezza, ma i due gruppi non sono separati agli estremi.")
 
 
 def report_cost(all_results):
@@ -296,7 +592,7 @@ def report_cost(all_results):
         priced = [r["cost_usd"] for r in results if r.get("cost_usd") is not None]
         if not results:
             continue
-        if spec.startswith("ollama"):
+        if _is_local(spec):
             print(f"  {spec}: $0.00 (local, no API cost)")
         elif priced:
             avg = statistics.mean(priced)
@@ -310,7 +606,7 @@ def report_tokens_per_sec(all_results):
     print("LOCAL MODEL THROUGHPUT (tokens/sec, completion tokens only)")
     print("=" * 70)
     for spec, results in all_results.items():
-        if not spec.startswith("ollama"):
+        if not _is_local(spec):
             continue
         rates = []
         for r in results:
@@ -323,7 +619,7 @@ def report_tokens_per_sec(all_results):
 
 
 def report_size_vs_accuracy(all_results, out_dir):
-    """Fig 6.6 — model size vs accuracy for the local matrix.
+    """size_vs_accuracy — model size vs accuracy for the local matrix.
 
     Only genuinely same-family points (Qwen2.5 3B/7B/14B, the one series
     where "bigger" is actually the same architecture/training recipe at a
@@ -362,7 +658,7 @@ def report_size_vs_accuracy(all_results, out_dir):
         return "altro"
 
     for spec, results in all_results.items():
-        if not spec.startswith("ollama"):
+        if not _is_local(spec):
             continue
         m = _SIZE_RE.search(spec)
         if not m:
@@ -420,41 +716,60 @@ def report_size_vs_accuracy(all_results, out_dir):
     ax.set_xlabel("dimensione modello (miliardi di parametri)")
     ax.set_ylabel("pass rate (%)")
     ax.set_ylim(0, max(p[1] for p in points) + 16)  # headroom for the topmost point's label
-    ax.set_title("Scala dei modelli locali vs accuratezza sul task")
     ax.legend(loc="lower right", frameon=False, fontsize=8)
     _style_axes(ax, grid_axis="both")
     plt.tight_layout()
-    _save(fig, out_dir, "size_vs_accuracy")
+    _save(fig, out_dir, "size_vs_accuracy",
+          title="Scala dei modelli locali vs accuratezza sul task")
 
 
 def report_pass_rate_bar(all_results, out_dir, baseline_spec="gemini:gemini-3.5-flash-lite"):
-    """Fig 6.5 — headline bar chart: overall pass rate per cloud model.
+    """pass_rate_per_model[_local] — headline bar chart, one per family.
+
+    The local chart exists because the section that discusses local models
+    used to carry all of its numbers in prose while the only accuracy figure
+    in the chapter showed the other family. Same axis limits in both, so the
+    two are readable against each other.
 
     All bars share one hue (identity is already carried by the y-axis
     label); the baseline model is called out with a bold label and a dark
     edge instead of a second color, so orange/red stay reserved for a real
     grouping or a real comparison elsewhere in the chapter, not a
-    single-bar highlight here.
+    single-bar highlight here. The local family has no production baseline,
+    so nothing is highlighted there.
     """
+    _pass_rate_bar_one(all_results, out_dir, "cloud", False,
+                       "pass_rate_per_model", baseline_spec)
+    _pass_rate_bar_one(all_results, out_dir, "locale", True,
+                       "pass_rate_per_model_local", None)
+
+
+def _pass_rate_bar_one(all_results, out_dir, family, want_local, name, baseline_spec):
     print("\n" + "=" * 70)
-    print("PASS RATE PER MODEL (bar chart, cloud)")
+    print(f"PASS RATE PER MODEL (bar chart, {family})")
     print("=" * 70)
     rows = []
     for spec, results in all_results.items():
-        if spec.startswith("ollama"):
+        if _is_local(spec) != want_local:
             continue
         rows.append((spec, _pass_rate(results), len(results)))
     if not rows:
-        print("  (no cloud results)")
+        print(f"  (nessun modello {family} fra i file passati)")
         return
     rows.sort(key=lambda r: r[1])
+    # Coverage is flagged in BOTH directions. A model measured on more calls
+    # than the protocol is as suspect as one measured on fewer: in this
+    # dataset the only such case is two different context-window
+    # configurations merged under one model name, which a "< full run" test
+    # waves through.
+    full = EXPECTED_RUNS * GOLDEN_SET_SIZE
     for spec, rate, n in rows:
-        flag = " (parziale)" if n < 245 else ""
+        flag = "" if n == full else f" (copertura {n}/{full})"
         print(f"  {spec}: {rate:.1f}%{flag} (n={n})")
 
     if plt is None:
         return
-    labels = [_short(spec) + (" *" if n < 245 else "") for spec, _, n in rows]
+    labels = [_short(spec) + ("" if n == full else " *") for spec, _, n in rows]
     values = [r[1] for r in rows]
     edgecolors = [INK["primary"] if spec == baseline_spec else "none" for spec, _, _ in rows]
     linewidths = [1.6 if spec == baseline_spec else 0 for spec, _, _ in rows]
@@ -470,33 +785,54 @@ def report_pass_rate_bar(all_results, out_dir, baseline_spec="gemini:gemini-3.5-
         ax.text(v + 1, yi, f"{v:.1f}%", va="center", fontsize=9)
     ax.set_xlim(0, 108)
     ax.set_xlabel("pass rate (%)")
-    ax.set_title("Accuratezza complessiva per modello (cloud)")
     _style_axes(ax, grid_axis="x")
-    notes = f"Contorno in grassetto: baseline di produzione ({_short(baseline_spec)})."
-    if any(n < 245 for _, _, n in rows):
-        notes += "  * copertura parziale (<245 chiamate)."
-    fig.text(0.01, -0.02, notes, fontsize=7, color=INK["muted"])
+    notes = []
+    if baseline_spec and any(sp == baseline_spec for sp, _, _ in rows):
+        notes.append(f"Contorno in grassetto: baseline di produzione ({_short(baseline_spec)}).")
+    if any(n != full for _, _, n in rows):
+        notes.append(f"* copertura diversa dalle {full} chiamate del protocollo.")
     plt.tight_layout()
-    _save(fig, out_dir, "pass_rate_per_model")
+    _save(fig, out_dir, name,
+          title=f"Accuratezza complessiva per modello ({family})",
+          note="  ".join(notes) if notes else None)
 
 
 def report_category_heatmap(all_results, out_dir):
-    """Fig 6.5 — pass rate per category x model, cloud models only."""
+    """category_heatmap[_local] — pass rate per category x model.
+
+    Emitted once per family, on a SHARED 0-100 colour scale, so the two
+    images can be read side by side in the thesis as one comparison. A single
+    combined heatmap over ~21 models would be taller than a printed page, and
+    splitting by family also puts each image next to the section that
+    discusses it. The scale being identical is what makes the split honest:
+    the hallucination column is the one where the two families separate, and
+    that only reads as a separation if the same value has the same colour in
+    both images.
+    """
+    for family, is_local, name in (
+        ("cloud", False, "category_heatmap"),
+        ("locale", True, "category_heatmap_local"),
+    ):
+        _category_heatmap_one(all_results, out_dir, family, is_local, name)
+
+
+def _category_heatmap_one(all_results, out_dir, family, want_local, name):
     print("\n" + "=" * 70)
-    print("PASS RATE PER CATEGORIA x MODELLO (heatmap)")
+    print(f"PASS RATE PER CATEGORIA x MODELLO ({family}, heatmap)")
     print("=" * 70)
-    cloud_specs = [s for s in all_results if not s.startswith("ollama")]
-    if not cloud_specs:
+    specs = [s for s in all_results if _is_local(s) == want_local]
+    if not specs:
+        print(f"  (nessun modello {family} fra i file passati)")
         return
     seen = set()
-    for s in cloud_specs:
+    for s in specs:
         for r in all_results[s]:
             seen.add(r.get("category") or "uncategorized")
     categories = [c for c in _CATEGORY_ORDER if c in seen] + sorted(seen - set(_CATEGORY_ORDER))
 
-    cloud_specs.sort(key=lambda s: _pass_rate(all_results[s]))
+    specs.sort(key=lambda s: _pass_rate(all_results[s]))
     matrix = []
-    for s in cloud_specs:
+    for s in specs:
         row = []
         for c in categories:
             rs = [r for r in all_results[s] if (r.get("category") or "uncategorized") == c]
@@ -507,15 +843,18 @@ def report_category_heatmap(all_results, out_dir):
     if plt is None:
         return
     arr = np.array(matrix)
-    fig, ax = plt.subplots(figsize=(1.15 * len(categories) + 3, 0.5 * len(cloud_specs) + 2))
+    fig, ax = plt.subplots(figsize=(1.35 * len(categories) + 3, 0.5 * len(specs) + 2.2))
     cmap = mcolors.LinearSegmentedColormap.from_list("blu_notte", HEATMAP_RAMP)
     cmap.set_bad(color="#f2f2f0")
     im = ax.imshow(np.ma.masked_invalid(arr), cmap=cmap, vmin=0, vmax=100, aspect="auto")
     ax.set_xticks(range(len(categories)))
-    ax.set_xticklabels(categories, rotation=30, ha="right")
-    ax.set_yticks(range(len(cloud_specs)))
-    ax.set_yticklabels([_short(s) for s in cloud_specs])
-    for i in range(len(cloud_specs)):
+    ax.set_xticklabels(
+        [_cat_label(c, _GOLDEN_SET_CATEGORY_SIZE.get(c)) for c in categories],
+        rotation=30, ha="right", fontsize=8,
+    )
+    ax.set_yticks(range(len(specs)))
+    ax.set_yticklabels([_short(s) for s in specs])
+    for i in range(len(specs)):
         for j in range(len(categories)):
             v = arr[i, j]
             if v != v:  # NaN: no cases of this category for this model
@@ -525,15 +864,17 @@ def report_category_heatmap(all_results, out_dir):
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("pass rate (%)")
     cbar.outline.set_visible(False)
-    ax.set_title("Accuratezza per categoria e modello")
     for spine in ax.spines.values():
         spine.set_visible(False)
     plt.tight_layout()
-    _save(fig, out_dir, "category_heatmap")
+    _save(fig, out_dir, name,
+          title=f"Accuratezza per categoria e modello ({family})",
+          note="Scala identica nelle due famiglie (0-100%), così che le due immagini si "
+               "confrontino. n = casi per categoria in una singola esecuzione.")
 
 
 def report_cost_vs_accuracy(all_results, out_dir):
-    """Fig 6.5 — cost vs accuracy. Two kinds of point, same hue, different
+    """cost_vs_accuracy — two kinds of point, same hue, different
     marker style: filled circles are real charges (OpenAI, billed in the
     test itself); open circles are Gemini paid-tier ESTIMATES (all Gemini
     testing ran free-tier, real cost $0). The real/estimated split is
@@ -596,59 +937,82 @@ def report_cost_vs_accuracy(all_results, out_dir):
     ymin = min(p[2] for p in points) - 10
     ax.set_ylim(ymin, max(p[2] for p in points) + 6)
     ax.set_yticks([t for t in range(60, 101, 5) if t >= ymin - 5])
-    ax.set_title("Costo vs accuratezza")
     _style_axes(ax, grid_axis="both")
     plt.tight_layout()
-    _save(fig, out_dir, "cost_vs_accuracy")
+    _save(fig, out_dir, "cost_vs_accuracy", title="Costo vs accuratezza")
 
 
 def report_it_en_gap_core(all_results, out_dir):
-    """Fig 6.5 — EN-IT gap on the 'core' category only (the one balanced
-    50/50 in the golden set; see the multilingual-gap caveat in
-    EVAL_HANDOFF.md before reading the all-category gap)."""
+    """it_en_gap_core — EN-IT gap on the 'core' category, BOTH families.
+
+    Two panels sharing one x-axis, cloud on the left and local on the right.
+    The claim this figure supports is that the sign of the gap is a property
+    of the single variant and not of the language or the family: remote
+    models cluster on zero, local ones spread wide in both directions. That
+    claim is only visible if both families are in the picture — the chart
+    used to exclude the local models while the text described them.
+
+    Restricted to 'core' because it is the only category with enough cases
+    per language to make a rate meaningful (15 EN + 18 IT out of 33; the
+    other categories have one to five cases each, and the two codeswitch
+    cases are mixed-language by construction and belong to neither side).
+    Not a 50/50 split, and the note on the figure says so.
+    """
     print("\n" + "=" * 70)
-    print("GAP IT/EN SU CATEGORIA 'core' (bilanciata 50/50)")
+    print("GAP IT/EN SU CATEGORIA 'core' (15 EN + 18 IT)")
     print("=" * 70)
-    rows = []
+    per_family = {"cloud": [], "locale": []}
     for spec, results in all_results.items():
-        if spec.startswith("ollama"):
-            continue
         core = [r for r in results if (r.get("category") or "") == "core"]
         en = [r for r in core if r.get("lang") == "en"]
         it = [r for r in core if r.get("lang") == "it"]
         if not en or not it:
             continue
         gap = _pass_rate(en) - _pass_rate(it)
-        rows.append((spec, gap))
+        per_family["locale" if _is_local(spec) else "cloud"].append((spec, gap))
         print(f"  {spec}: {gap:+.1f}pp (EN {_pass_rate(en):.1f}% vs IT {_pass_rate(it):.1f}%)")
 
-    if plt is None or not rows:
+    families = [(f, rows) for f, rows in per_family.items() if rows]
+    if plt is None or not families:
         return
-    rows.sort(key=lambda r: r[1])
-    labels = [_short(spec) for spec, _ in rows]
-    values = [g for _, g in rows]
-    colors = [PALETTE["blue"] if v >= 0 else PALETTE["red"] for v in values]
-    fig, ax = plt.subplots(figsize=(7, max(4, len(rows) * 0.42)))
-    y = list(range(len(rows)))
-    ax.barh(y, values, color=colors, height=0.6, zorder=3)
-    ax.axvline(0, color=INK["axis"], linewidth=1)
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels)
-    for yi, v in zip(y, values):
-        ax.text(v + (0.4 if v >= 0 else -0.4), yi, f"{v:+.1f}", va="center",
-                 ha="left" if v >= 0 else "right", fontsize=9)
-    ax.set_xlabel("gap EN - IT (punti percentuali, categoria 'core')")
-    ax.set_title("Robustezza multilingua: gap EN-IT su casi bilanciati")
-    _style_axes(ax, grid_axis="x")
-    fig.text(0.01, -0.02,
-              "Blu = EN migliore, rosso = IT migliore. Solo categoria 'core' (16 EN + 16 IT), "
-              "l'unica bilanciata del golden set.", fontsize=7, color=INK["muted"])
+    for _, rows in families:
+        rows.sort(key=lambda r: r[1])
+
+    span = max(abs(g) for _, rows in families for _, g in rows)
+    limit = span * 1.25 + 2
+    heights = [max(2.2, len(rows) * 0.42) for _, rows in families]
+    fig, axes = plt.subplots(
+        len(families), 1, figsize=(7, sum(heights) + 1.2),
+        sharex=True, gridspec_kw={"height_ratios": heights},
+    )
+    if len(families) == 1:
+        axes = [axes]
+
+    for ax, (family, rows) in zip(axes, families):
+        values = [g for _, g in rows]
+        colors = [PALETTE["blue"] if v >= 0 else PALETTE["red"] for v in values]
+        y = list(range(len(rows)))
+        ax.barh(y, values, color=colors, height=0.6, zorder=3)
+        ax.axvline(0, color=INK["axis"], linewidth=1)
+        ax.set_yticks(y)
+        ax.set_yticklabels([_short(spec) for spec, _ in rows])
+        for yi, v in zip(y, values):
+            ax.text(v + (0.8 if v >= 0 else -0.8), yi, f"{v:+.1f}", va="center",
+                    ha="left" if v >= 0 else "right", fontsize=9)
+        ax.set_xlim(-limit, limit)
+        ax.set_title(family, fontsize=10, loc="left", color=INK["secondary"])
+        _style_axes(ax, grid_axis="x")
+
+    axes[-1].set_xlabel("gap EN - IT (punti percentuali, categoria centrale)")
     plt.tight_layout()
-    _save(fig, out_dir, "it_en_gap_core")
+    _save(fig, out_dir, "it_en_gap_core",
+          title="Robustezza multilingua: gap EN-IT sui casi centrali",
+          note="Blu = EN migliore, rosso = IT migliore. Stessa scala nei due pannelli. Solo "
+               "categoria centrale (15 EN + 18 IT su 33), l'unica con abbastanza casi per lingua.")
 
 
 def report_thinking_toggle(all_results, out_dir, pair=("ollama:qwen3.5:9b", "ollama-nothink:qwen3.5:9b")):
-    """Fig 6.6 — the one ceteris-paribus reasoning-toggle pair in the dataset:
+    """thinking_toggle_qwen35_9b — the one ceteris-paribus reasoning-toggle pair:
     same weights, only the request-time think:true/false flag differs."""
     print("\n" + "=" * 70)
     print("THINKING vs NO-THINKING (stesso modello, stessi pesi)")
@@ -663,6 +1027,9 @@ def report_thinking_toggle(all_results, out_dir, pair=("ollama:qwen3.5:9b", "oll
            for rs in (think_r, nothink_r)]
     print(f"  accuratezza: thinking {acc[0]:.1f}% -> think:false {acc[1]:.1f}%")
     print(f"  latenza media: thinking {lat[0]:.1f}s -> think:false {lat[1]:.1f}s")
+
+    # Before the matplotlib guard: the breakdown prints its table either way.
+    _thinking_toggle_by_category(think_r, nothink_r, out_dir)
 
     if plt is None:
         return
@@ -680,19 +1047,90 @@ def report_thinking_toggle(all_results, out_dir, pair=("ollama:qwen3.5:9b", "oll
         ax.set_title(title)
         ax.set_ylim(0, max(values) * 1.15)
         _style_axes(ax, grid_axis="y")
-    fig.suptitle("qwen3.5:9b: ragionamento nascosto attivo vs disattivato", fontweight="bold")
     plt.tight_layout()
-    _save(fig, out_dir, "thinking_toggle_qwen35_9b")
+    _save(fig, out_dir, "thinking_toggle_qwen35_9b",
+          title="qwen3.5:9b: ragionamento nascosto attivo vs disattivato")
+
+
+def _thinking_toggle_by_category(think_r, nothink_r, out_dir):
+    """thinking_toggle_by_category — where the toggle's gain actually comes from.
+
+    The headline pair reports one number for the whole golden set, which says
+    that turning the reasoning off helps but not why. Broken down by category
+    the pattern is the argument: the gain concentrates on the cases whose
+    expected output is structurally deepest, is nil where the structure is
+    flat, and is NEGATIVE in one category. That shape is what supports the
+    claim in the chapter, that explicit reasoning interferes with producing a
+    form declared by a schema rather than with reasoning as such.
+
+    Four of the seven categories hold one or two cases, so a bar at 0 or 100
+    is one case passing or failing. The case count is printed on each axis
+    label rather than left to the caption, because this chart is the one
+    where a reader is most tempted to read a delta as an effect size.
+    """
+    # Console table first, then the chart: every other report function prints
+    # its numbers whether or not matplotlib is installed, and this breakdown
+    # is the one a reader is most likely to want to check against the figure.
+    print("\n  scomposizione per categoria (think -> nothink):")
+    cats, think_v, nothink_v = [], [], []
+    for c in _CATEGORY_ORDER:
+        t = [r for r in think_r if (r.get("category") or "") == c]
+        nt = [r for r in nothink_r if (r.get("category") or "") == c]
+        if not t or not nt:
+            continue
+        cats.append(c)
+        think_v.append(_pass_rate(t))
+        nothink_v.append(_pass_rate(nt))
+        print(f"    {c:22s} {think_v[-1]:5.1f}% -> {nothink_v[-1]:5.1f}%  ({nothink_v[-1] - think_v[-1]:+.1f}pp)")
+    if not cats or plt is None:
+        return
+
+    fig, ax = plt.subplots(figsize=(7.5, max(4, len(cats) * 0.72)))
+    y = np.arange(len(cats))
+    h = 0.36
+    ax.barh(y + h / 2, think_v, height=h, color=PALETTE["red"], zorder=3, label="ragionamento attivo")
+    ax.barh(y - h / 2, nothink_v, height=h, color=PALETTE["blue"], zorder=3, label="ragionamento disattivato")
+    for yi, v in zip(y + h / 2, think_v):
+        ax.text(v + 1.5, yi, f"{v:.0f}", va="center", fontsize=8, color=INK["secondary"])
+    for yi, v in zip(y - h / 2, nothink_v):
+        ax.text(v + 1.5, yi, f"{v:.0f}", va="center", fontsize=8, color=INK["secondary"])
+    ax.set_yticks(y)
+    ax.set_yticklabels([_cat_label(c, _GOLDEN_SET_CATEGORY_SIZE.get(c)) for c in cats], fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 112)
+    ax.set_xlabel("pass rate (%)")
+    _style_axes(ax, grid_axis="x")
+    # Above the axes, not inside them. Every corner of this plot is reachable
+    # by a bar: the categories where the toggle matters are exactly the ones
+    # that run to 100, so an inside placement collides with whichever bar
+    # happens to be longest today and has to be re-picked whenever the data
+    # moves. Outside the frame it cannot collide with anything, and one row of
+    # two entries costs a line of height the figure already has.
+    ax.legend(loc="lower right", bbox_to_anchor=(1, 1.01), ncol=2,
+              frameon=False, fontsize=8)
+    # The caveat has to name BOTH numbers. Saying only "n=1 case" understates
+    # the evidence, because that one case is replayed once per run: the combo
+    # bar is 0/5 against 5/5, not one trial against another. Saying only the
+    # call count would overstate it, because five replays of a single case
+    # measure the model's consistency on that case and not its rate over a
+    # category. Both are printed, and the reader is told which is which.
+    runs_per_arm = min(len(think_r), len(nothink_r)) // GOLDEN_SET_SIZE or 1
+    plt.tight_layout()
+    _save(fig, out_dir, "thinking_toggle_by_category",
+          title="qwen3.5:9b: dove cambia l'effetto del ragionamento",
+          note=f"n = casi distinti per categoria; ciascuno ripetuto su {runs_per_arm} esecuzioni "
+               "per braccio. Sulle categorie da uno o due casi la barra misura la costanza del "
+               "modello su quei casi, non una frequenza su un campione.")
 
 
 def report_tokens_per_sec_bar(all_results, out_dir):
-    """Fig 6.6 — local-model throughput, bar chart version of the console table."""
+    """tokens_per_sec — local-model throughput, bar chart of the console table."""
     print("\n" + "=" * 70)
     print("THROUGHPUT LOCALE (tok/s, bar chart)")
     print("=" * 70)
     rows = []
     for spec, results in all_results.items():
-        if not spec.startswith("ollama"):
+        if not _is_local(spec):
             continue
         rates = []
         for r in results:
@@ -717,14 +1155,13 @@ def report_tokens_per_sec_bar(all_results, out_dir):
     for yi, v in zip(y, values):
         ax.text(v + 0.3, yi, f"{v:.1f}", va="center", fontsize=9)
     ax.set_xlabel("token/s (completion, media)")
-    ax.set_title("Throughput dei modelli locali")
     _style_axes(ax, grid_axis="x")
     plt.tight_layout()
-    _save(fig, out_dir, "tokens_per_sec")
+    _save(fig, out_dir, "tokens_per_sec", title="Throughput dei modelli locali")
 
 
 def report_bugfix_impact(out_dir):
-    """Fig 6.7 — bug #3 before/after (gemini-3.5-flash-lite double-escape
+    """bugfix3_before_after — bug #3 before/after (gemini-3.5-flash-lite double-escape
     parsing fix). Numbers are the two verified measurements documented in
     EVAL_HANDOFF.md bug #3, not derived from a passed-in file: the pre-fix
     run was superseded in place once the fix landed, so there is no separate
@@ -746,27 +1183,40 @@ def report_bugfix_impact(out_dir):
         ax.text(b.get_x() + b.get_width() / 2, v, f"{v:.1f}%", ha="center", va="bottom", fontsize=10)
     ax.set_ylim(0, 108)
     ax.set_ylabel("pass rate (%)")
-    ax.set_title("gemini-3.5-flash-lite:\nstesso modello, stesso prompt,\nfix di parsing di due righe")
     _style_axes(ax, grid_axis="y")
     plt.tight_layout()
-    _save(fig, out_dir, "bugfix3_before_after")
+    _save(fig, out_dir, "bugfix3_before_after",
+          title="gemini-3.5-flash-lite: stesso modello, stesso prompt,\nfix di parsing di due righe")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("json_files", nargs="+", help="one or more JSON files produced by eval_llm_chat.py --json")
     parser.add_argument("--out-dir", default="testing/out/charts", help="directory for chart PNG/PDF (default: testing/out/charts)")
+    parser.add_argument("--exclude", action="append", default=[], metavar="PATTERN",
+                        help="skip input files whose name contains PATTERN (repeatable). "
+                             "Use --exclude smoke to leave the plumbing sanity checks out "
+                             "of the measurement.")
+    parser.add_argument("--include-partial", action="store_true",
+                        help="keep specs measured on less than one full pass of the golden set "
+                             "(smoke runs). Off by default: they are sanity checks, not samples, "
+                             "and merging them changes every rate and invents models.")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
     _apply_thesis_style()
 
-    all_results = load_results(args.json_files)
+    all_results, sources = load_results(args.json_files, exclude=args.exclude)
     if not all_results:
         print("No results found in the given JSON file(s).")
         return 1
+    all_results = audit_coverage(all_results, sources, include_partial=args.include_partial)
+    if not all_results:
+        print("Nessuno spec con una esecuzione completa.")
+        return 1
 
     report_accuracy(all_results)
+    report_determinism(all_results)
     report_multilingual(all_results)
     report_latency(all_results, args.out_dir)
     report_cost(all_results)

@@ -227,6 +227,26 @@ _placed_seq: int = 0
 # Stop must be able to interrupt a run that's still holding _SIM_RUN_LOCK.
 _PLACED_LOCK = threading.Lock()
 
+# Set by _wait_for_condition when it resolves a condition WITHOUT the operator
+# actually satisfying it (camera unreachable, object already in frame/world).
+# Read by _h_human_action so the study log can tell a fabricated confirmation
+# apart from a real one: the two are indistinguishable in the recording, and a
+# researcher reading the JSONL afterwards has no other way to spot a session
+# that ran with the vision stack down. Cleared at every step entry.
+_LAST_CONDITION_BYPASS: str | None = None
+
+
+def _mark_condition_bypass(reason: str) -> None:
+    global _LAST_CONDITION_BYPASS
+    _LAST_CONDITION_BYPASS = reason
+
+
+def _take_condition_bypass() -> str | None:
+    """Read and clear the bypass marker for the step that just finished."""
+    global _LAST_CONDITION_BYPASS
+    reason, _LAST_CONDITION_BYPASS = _LAST_CONDITION_BYPASS, None
+    return reason
+
 
 def _abort_task(reason: str, detail: str | None = None):
     """Hard-abort the running task: stop the parser loop, stop Gazebo AND the real
@@ -2463,6 +2483,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 )
                 return False
             logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
+            _mark_condition_bypass("bridge_unreachable")
             print(f"[CONDITION] Gesture bridge unreachable — bypassing gesture '{gesture}'")
             try:
                 _bridge.notify("/api/human-step-timeout",
@@ -2548,6 +2569,8 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             if _detections_match(state, coco_class, color):
                 if not STRICT_CONDITIONS:
                     print(f"[CONDITION] Object '{obj_name}' detected immediately!")
+                    # Already in frame at step entry: nothing the operator did.
+                    _mark_condition_bypass("object_already_in_frame")
                     return True
                 print(f"[CONDITION] Object '{obj_name}' already in frame — "
                       f"waiting for it to leave and reappear (STRICT_CONDITIONS)")
@@ -2562,6 +2585,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 )
                 return False
             logger.warning("condition_bypassed", extra={"reason": "bridge_unreachable", "block": "find_object_block"})
+            _mark_condition_bypass("bridge_unreachable")
             print(f"[CONDITION] Vision bridge unreachable — bypassing find_object '{obj_name}'")
             try:
                 _bridge.notify("/api/human-step-timeout",
@@ -2574,6 +2598,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         if obj_name in _spawned_in_world and not STRICT_CONDITIONS:
             logger.warning("condition_bypassed", extra={"reason": "object_in_world", "block": "find_object_block"})
             print(f"[CONDITION] Object '{obj_name}' in Gazebo world — bypassing find_object")
+            _mark_condition_bypass("object_in_world")
             return True
         color_note = f" color '{color}'" if color else ""
         print(f"[CONDITION] Waiting for object: '{obj_name}' → COCO '{coco_class}'{color_note} (timeout {timeout}s)...")
@@ -2623,11 +2648,20 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         # Voice recognition happens in the operator's browser (Web Speech API);
         # the matched word is cached in-process by vision_live.process_voice_command.
         # No ROS bridge involved — poll the Django-side cache directly.
-        from backend.functions.vision_live import get_latest_voice, reset_voice
+        from backend.functions.vision_live import (
+            get_latest_voice, reset_voice, set_expected_voice,
+        )
 
         word = condition_block.get("fields", {}).get("VOICE_WORD") or "YES"
         print(f"[CONDITION] Waiting for voice command: {word} (timeout {timeout}s)...")
         reset_voice()  # drop any word heard before this step started (stale replay)
+        # Publish what we are waiting for, so the endpoint that receives the
+        # operator's utterances can record `accepted` with the same meaning the
+        # gesture channel gives it. Cleared right after the loop — on both the
+        # matched and the timed-out exit — because outside a voice step there
+        # is no expected word, and a stale one would mark a later utterance as
+        # accepted for a step that is no longer running.
+        set_expected_voice(word)
         deadline = time.monotonic() + timeout
         detected = False
         while time.monotonic() < deadline:
@@ -2637,6 +2671,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 detected = True
                 break
             _interruptible_sleep(0.5)
+        set_expected_voice(None)
         if not detected:
             print(f"[WARNING] Voice command '{word}' not heard within {timeout}s — continuing")
             try:
@@ -3107,13 +3142,22 @@ def simulation_recursive_blockly_parser(
                 # otherwise still notify human-step-complete and let the task
                 # proceed, the exact failure a human confirm step exists to
                 # prevent (e.g. placing a never-verified item).
+                _take_condition_bypass()  # clear anything left by an earlier step
                 confirmed = _eval_condition_tree(confirm_event, simulate_event)
+                bypass = _take_condition_bypass()
                 if not confirmed:
+                    # "timeout" used to cover three different things: a real
+                    # timeout, an operator Stop, and a STRICT_CONDITIONS abort
+                    # on an unreachable camera. They mean opposite things in
+                    # the analysis — a Stop is not a failure of the channel —
+                    # and the study log had no way to tell them apart.
                     study_log.log_event(
                         "human_step_end",
                         description=task_desc,
                         condition=step_start_payload.get("condition"),
-                        outcome="timeout",
+                        outcome=(
+                            "stopped" if SIMULATION_STOP_EVENT.is_set() else "timeout"
+                        ),
                     )
                     _abort_task(
                         "The task stopped because the operator didn't confirm in time.",
@@ -3124,11 +3168,16 @@ def simulation_recursive_blockly_parser(
                 _bridge.notify("/api/human-step-complete")
             except Exception:
                 pass
+            # A bypass resolved this step without the operator doing anything.
+            # Recorded as its own outcome, with the reason: a fabricated
+            # confirmation that reads as "confirmed" is worse than a missing
+            # one, because nothing downstream can filter it out.
             study_log.log_event(
                 "human_step_end",
                 description=task_desc,
                 condition=step_start_payload.get("condition"),
-                outcome="confirmed",
+                outcome="bypassed" if bypass else "confirmed",
+                **({"bypass_reason": bypass} if bypass else {}),
             )
             _next()
 
@@ -3452,16 +3501,42 @@ def simulation_recursive_blockly_parser(
             macro_task = Task.objects.filter(
                 Q(owner=_RUN_OWNER_ID) | Q(shared=True), id=macro_id
             ).first()
-            if macro_task and macro_task.code:
+            # Task.code is the LEGACY column: nothing has written it since the
+            # lifecycle migration (publish_task/save_draft write only
+            # published_workspace/draft_workspace, and libraries.py creates
+            # tasks without it — "code" there is the name of an API response
+            # field, not the column). Reading it meant every Saved Task block
+            # resolved to None, skipped its whole sub-program, and still
+            # printed "Macro complete" — a claim the run result then repeated
+            # as success. _resolve_runtime_workspace is the read path the rest
+            # of the codebase uses, and for a macro it returns the PUBLISHED
+            # workspace only: a Saved Task must run what its author published,
+            # never their work in progress.
+            macro_workspace = (
+                _resolve_runtime_workspace(macro_task) if macro_task else None
+            )
+            if macro_workspace:
                 simulation_recursive_blockly_parser(
-                    loads(macro_task.code),
+                    macro_workspace,
                     objectsOfUser, actionsOfUser, locationsOfUser,
                     simulate_event, inside_conditional, _macro_depth + 1,
                 )
-            else:
-                print(f"[MACRO] WARNING: macro {macro_id} not found or has no code")
-            print(f"[MACRO] Macro complete: {macro_name}")
-            _next()
+                print(f"[MACRO] Macro complete: {macro_name}")
+                _next()
+                return
+
+            # Nothing to run. Aborting rather than continuing: the operator put
+            # this block in the program deliberately, and skipping it silently
+            # produces a run that reports success while doing less than the
+            # program says — the same failure the pick/place gates exist to
+            # prevent. A deleted or never-published macro is exactly the case
+            # CLAUDE.md flags as unprotected at publish time.
+            print(f"[MACRO] ABORT: macro {macro_id} not found or has no published version")
+            _abort_task(
+                f"'{macro_name}' couldn't run — that saved task has no published "
+                f"version. Open it, publish it, then run this task again.",
+                detail=f"macro {macro_id} ('{macro_name}'): no runtime workspace",
+            )
 
         def _h_when_start():
             print("[LOGIC] Start sequence")
@@ -3637,11 +3712,39 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                 SIMULATION_STOP_EVENT.set()
                 _spawned_in_world.clear()
                 _delete_placed_objects()
+                # Three things can go wrong here and only one of them used to
+                # be visible: the bridge being unreachable was printed, and the
+                # arm refusing to halt was discarded entirely — the response
+                # said success either way. That is the single message an
+                # operator needs from this endpoint, because the correct action
+                # is to reach for the teach-pendant e-stop.
+                halt_warning = None
                 try:
-                    _bridge.stop()
+                    stop_body = _bridge.stop()
+                    hardware_halt = (stop_body or {}).get("hardware_halt")
+                    # None = no hardware node running; a sim-only stop is the
+                    # whole story and nothing needs saying.
+                    if hardware_halt is not None and not hardware_halt.get("ok"):
+                        halt_warning = (
+                            "The simulation stopped, but the robot did not confirm it "
+                            "halted — it may still be moving. Use the teach-pendant "
+                            "e-stop now."
+                        )
+                        logger.error(
+                            "stop_simulation: hardware halt failed: %s",
+                            hardware_halt.get("message"),
+                        )
                 except Exception as e:
                     print(f"[SIMULATOR] Could not forward stop to Flask bridge: {e}")
+                    if _hw_drive_active():
+                        halt_warning = (
+                            "The simulation stopped, but the stop could not be sent to "
+                            "the robot — it may still be moving. Use the teach-pendant "
+                            "e-stop now."
+                        )
                 _set_world_paused(True)
+                if halt_warning:
+                    return error_response(halt_warning)
                 return success_response()
             else:
                 return invalid_request_method()

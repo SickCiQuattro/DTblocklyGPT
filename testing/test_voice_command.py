@@ -226,3 +226,78 @@ def test_wait_for_voice_consumes_on_read(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ── `accepted` must mean "resolved the step" ────────────────────────────────
+#
+# It used to be written from "the word is in the vocabulary", while the gesture
+# channel writes `observed == expected` and the button hardcodes True. Three
+# meanings under one field name, and `analisi.py`'s `primo_tentativo` — the top
+# row of the Part-B measures table — reads it as the strictest of the three.
+#
+# The live consequence: PB-B-voce waits for DONE, and the browser maps the most
+# natural Italian reply ("sì") to YES. Saying "sì" once produced an attempt with
+# accepted=True on a step that then timed out, and the CSV reported
+# tentativi=1, primo_tentativo=SI, scaduto=SI on the same row.
+
+
+def _voice_attempts(monkeypatch):
+    """Capture what the endpoint writes to the study log."""
+    written = []
+    monkeypatch.setattr(
+        vision_live.study_log, "log_event",
+        lambda event, **fields: written.append({"event": event, **fields}),
+    )
+    return written
+
+
+def test_in_vocabulary_word_is_not_accepted_when_another_is_expected(monkeypatch):
+    written = _voice_attempts(monkeypatch)
+    vision_live.set_expected_voice("DONE")
+    try:
+        # What the browser actually sends after mapping "sì" (useVoiceCommand.ts).
+        _post_voice("YES")
+    finally:
+        vision_live.set_expected_voice(None)
+
+    attempt = next(w for w in written if w["event"] == "attempt")
+    assert attempt["value"] == "YES"
+    assert attempt["accepted"] is False, (
+        "una parola del vocabolario ma diversa da quella attesa non risolve il passo"
+    )
+    assert attempt["in_vocabulary"] is True, "resta distinguibile dal rumore"
+    assert attempt["expected"] == "DONE"
+
+
+def test_the_expected_word_is_accepted(monkeypatch):
+    written = _voice_attempts(monkeypatch)
+    vision_live.set_expected_voice("DONE")
+    try:
+        _post_voice("DONE")
+    finally:
+        vision_live.set_expected_voice(None)
+
+    attempt = next(w for w in written if w["event"] == "attempt")
+    assert attempt["accepted"] is True
+
+
+def test_nothing_is_accepted_outside_a_voice_step(monkeypatch):
+    """No step is waiting, so no utterance can have resolved one."""
+    written = _voice_attempts(monkeypatch)
+    vision_live.set_expected_voice(None)
+    _post_voice("DONE")
+
+    attempt = next(w for w in written if w["event"] == "attempt")
+    assert attempt["accepted"] is False
+    assert attempt["expected"] is None
+
+
+def test_out_of_vocabulary_word_is_still_recorded(monkeypatch):
+    """An utterance the browser could not classify is an attempt too — it is
+    the only server-side evidence that the participant tried and was refused."""
+    written = _voice_attempts(monkeypatch)
+    _post_voice("MAYBE")
+
+    attempt = next(w for w in written if w["event"] == "attempt")
+    assert attempt["accepted"] is False
+    assert attempt["in_vocabulary"] is False

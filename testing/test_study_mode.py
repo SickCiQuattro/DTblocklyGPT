@@ -508,3 +508,88 @@ def test_analisi_bootstrap_needs_three_observations():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ─── Outcomes the log must keep apart ────────────────────────────────────────
+#
+# `outcome` used to be two values, "confirmed" and "timeout", and each absorbed
+# things that mean opposite things in the analysis:
+#   - a bypass (camera down, object already in frame) resolved the step with no
+#     participant action, and was written as "confirmed";
+#   - an operator Stop, and a STRICT_CONDITIONS abort, were written as "timeout".
+# Both are indistinguishable from the real thing once in the JSONL, which is the
+# one place the study's measures come from.
+
+
+def test_analisi_marks_a_bypassed_step_for_exclusion(tmp_path):
+    """A fabricated confirmation must never be averaged in: the row describes
+    the system resolving the step, not the participant doing anything."""
+    analisi = _load_analisi()
+    rows = [
+        _event("run_start", 10.0, task_id=3, task_name="PB-C-gesto",
+               target="sim", simulate_event=False),
+        _event("human_step_start", 11.0, condition="gesture", value="THUMBS_UP"),
+        _event("human_step_end", 11.1, condition="gesture",
+               outcome="bypassed", bypass_reason="bridge_unreachable"),
+        _event("run_end", 12.0, task_id=3, task_name="PB-C-gesto", outcome="completed"),
+    ]
+    path = tmp_path / "P01.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    conditions, *_ = analisi.analyse_participant(path)
+
+    assert conditions[0]["esito_passo"] == "bypassed"
+    assert conditions[0]["motivo_bypass"] == "bridge_unreachable"
+    assert conditions[0]["AUTO_DA_SCARTARE"] == "SI", (
+        "un passo risolto dal sistema deve essere escluso dal riepilogo"
+    )
+
+
+def test_analisi_does_not_count_a_stop_as_a_timeout(tmp_path):
+    """The participant pressing Stop is not the channel failing to resolve.
+    Counting it as a timeout would penalise whichever condition happened to be
+    running when someone needed to interrupt."""
+    analisi = _load_analisi()
+    rows = [
+        _event("run_start", 10.0, task_id=2, task_name="PB-B-voce",
+               target="sim", simulate_event=False),
+        _event("human_step_start", 11.0, condition="voice", value="DONE"),
+        _event("human_step_end", 13.0, condition="voice", outcome="stopped"),
+        _event("run_end", 14.0, task_id=2, task_name="PB-B-voce", outcome="stopped"),
+    ]
+    path = tmp_path / "P02.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    conditions, *_ = analisi.analyse_participant(path)
+
+    assert conditions[0]["esito_passo"] == "stopped"
+    assert conditions[0]["scaduto"] == "NO", "uno Stop non è una scadenza"
+
+
+def test_analisi_keeps_one_observation_per_participant_and_condition(tmp_path, capsys):
+    """N=12 within-subject: two runs of the same condition by the same person
+    are not two independent observations, and the medians/CIs below assume they
+    are. The first resolved run is the observation."""
+    analisi = _load_analisi()
+    rows = []
+    for start, dur in ((10.0, 2.0), (30.0, 9.0)):
+        rows += [
+            _event("run_start", start, task_id=1, task_name="PB-A-pulsante",
+                   target="sim", simulate_event=False),
+            _event("human_step_start", start + 1, condition="human_feedback", value=""),
+            _event("attempt", start + 1.5, channel="human_feedback", accepted=True),
+            _event("human_step_end", start + 1 + dur, condition="human_feedback",
+                   outcome="confirmed"),
+            _event("run_end", start + 2 + dur, task_id=1,
+                   task_name="PB-A-pulsante", outcome="completed"),
+        ]
+    path = tmp_path / "P03.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    conditions, *_ = analisi.analyse_participant(path)
+    assert len(conditions) == 2, "il CSV resta per esecuzione"
+
+    analisi.summarise(conditions)
+    out = capsys.readouterr().out
+    assert "n= 1" in out or "n=1" in out, f"una sola osservazione attesa:\n{out}"
+    assert "ripetute ignorate" in out

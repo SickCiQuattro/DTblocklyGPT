@@ -204,8 +204,26 @@ def test_eval_condition_tree_empty_operand_never_satisfied(tree_builder):
 # ─── Macro recursion: cycle A→B→A must abort, not RecursionError ─────────
 
 class _FakeMacroTask:
+    """A macro row shaped the way real rows are shaped.
+
+    This used to set only `.code` — the legacy column — which is what let the
+    macro handler read `.code` unnoticed for as long as it did: the fixture was
+    the only place in the system where that column ever held anything. Nothing
+    has written it since the lifecycle migration (`publish_task` writes
+    `published_workspace`), so every Saved Task block silently ran nothing while
+    reporting "Macro complete".
+
+    `code = None` is deliberate, not an omission: it is what the database
+    actually contains, and it keeps this test honest about which field the
+    runtime is allowed to depend on.
+    """
+
     def __init__(self, code_dict):
-        self.code = json.dumps(code_dict)
+        self.task_type = "macro_task"
+        self.published_workspace = code_dict
+        self.draft_workspace = None
+        self.workspace = None
+        self.code = None
 
 
 class _FakeQuerySet:
@@ -282,3 +300,61 @@ def test_macro_nesting_within_depth_cap_runs_to_completion(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ─── Macro read path: published_workspace, never the legacy `code` column ────
+
+
+def test_macro_runs_its_published_workspace(monkeypatch):
+    """The shape every real row has: `code` empty, `published_workspace` set.
+
+    Before this, the handler read `Task.code`, which no code path has written
+    since the lifecycle migration. Every Saved Task block therefore resolved to
+    nothing, skipped its entire sub-program, printed "Macro complete" and let
+    the run report success — a whole branch of the operator's program silently
+    not executing while the system said it had.
+    """
+    executed = []
+    monkeypatch.setattr(simulate, "MAX_MACRO_DEPTH", 3)
+    monkeypatch.setattr(
+        simulate, "_h_pick_recorder", None, raising=False
+    )
+
+    inner = {"type": "wait_block", "fields": {"SECONDS": 0}}
+    tasks_by_id = {7: _FakeMacroTask(inner)}
+    monkeypatch.setattr(simulate.Task, "objects", _FakeTaskManager(tasks_by_id))
+    monkeypatch.setattr(
+        simulate, "_interruptible_sleep", lambda s: executed.append(("wait", s))
+    )
+
+    simulate._TASK_ABORT_REASON = None
+    simulate.simulation_recursive_blockly_parser(
+        _macro_call(7, "Sotto-programma"), [], [], [], True, False, 0
+    )
+
+    assert executed, "il corpo del macro non è stato eseguito"
+    assert simulate._TASK_ABORT_REASON is None
+
+
+def test_macro_without_a_published_version_aborts(monkeypatch):
+    """Skipping it would report success for a program that did less than it says.
+
+    Same reasoning as the pick/place gates: a step the operator deliberately
+    placed must either run or stop the task, never quietly do nothing.
+    """
+    monkeypatch.setattr(simulate, "MAX_MACRO_DEPTH", 3)
+    unpublished = _FakeMacroTask({"type": "wait_block", "fields": {"SECONDS": 0}})
+    unpublished.published_workspace = None
+    monkeypatch.setattr(simulate.Task, "objects", _FakeTaskManager({8: unpublished}))
+
+    simulate._TASK_ABORT_REASON = None
+    simulate.SIMULATION_STOP_EVENT.clear()
+    try:
+        simulate.simulation_recursive_blockly_parser(
+            _macro_call(8, "Mai pubblicato"), [], [], [], True, False, 0
+        )
+        assert simulate._TASK_ABORT_REASON is not None, "doveva abortire"
+        assert "Mai pubblicato" in simulate._TASK_ABORT_REASON
+    finally:
+        simulate._TASK_ABORT_REASON = None
+        simulate.SIMULATION_STOP_EVENT.clear()
