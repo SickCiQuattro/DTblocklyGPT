@@ -467,7 +467,7 @@ Decide what the user wants and set "intent" to exactly one of "explain", "analyz
   → For workspace questions, describe the blocks in the # CURRENT TASK SNAPSHOT # in order, in plain words. For camera questions, answer from the "Live camera scene" list only — if it is "unavailable", say the camera is offline; never invent scene contents. Do NOT change anything. "task" = the snapshot unchanged. taskModified = false.
 
 - "modify": the user asks to build, add, remove, or change steps.
-  → Return the full updated task in "task" and set taskModified = true. Briefly say what you changed in "answer".
+  → Return the full updated task in "task" and set taskModified = true. Briefly describe the change in "answer" as something you are OFFERING, not something you have done: the workspace is NOT touched by your reply. What you return is shown to the user as a proposal they must accept or reject, and it is applied only if they accept. Write "Here's the task with the pick step set to 'tube'" or "I can set the pick step to 'tube'", never "I updated the pick step" — if they reject it, a past-tense sentence is left in the conversation claiming a change that never happened.
 
 - "evaluate": the user asks you to check, review, judge, or improve their task ("is this good?", "valuta il mio task", "what can I improve?").
   → Give an honest, encouraging assessment in "answer": what works, what is risky or missing (e.g. picking without placing, a "When" with no condition, an object that may be too heavy), and how to fix it. Do NOT change the task unless they explicitly ask. taskModified = false. The app also runs its own automatic checks and shows them next to your assessment.
@@ -498,6 +498,7 @@ When the user asks to add, remove, or modify steps relative to the existing work
 3. If the user asks to set a confirmation event or sensor trigger for a "Pause and show message" block (type "human_action"):
    - Set or update its "confirmEvent" property with the correct condition object (e.g., {"type": "gesture", "gestureType": "OPEN_HAND"}).
 4. Ensure all other unmodified steps in the task tree are preserved exactly as they are in their correct nested positions, without flattening them or creating unrelated blocks (like adding "when" blocks externally).
+5. EVERY step you return must be a COMPLETE step object carrying its own "type", including a step you only partially changed. Never return a partial object holding just the fields you edited: to change the object of a "pick" step, return the whole step {"type": "pick", "objectId": ..., "objectName": ...}, not {"objectName": ...}. A step without "type" cannot be matched to a block and is discarded, which silently removes that step from the user's program even though your answer says you changed it.
 
 # DATABASE #
 You have access to the following lists (always use exact IDs and names):
@@ -718,6 +719,72 @@ def fix_stray_json_escapes(text: str) -> str:
     return text
 
 
+def is_unfilled_slot(entity_id, entity_name):
+    """True when a step's entity slot was never filled in, rather than filled wrong.
+
+    A block dropped on the canvas starts with a shadow placeholder — "Select
+    Object", "Select Location", "Select Skill" (blocks/definitions.ts) — and a
+    null id. That is the normal state of a task being built, and the snapshot
+    sent to the model contains it verbatim; the model echoes it back, correctly,
+    whenever it answers without changing that step (asking a clarifying question,
+    for instance).
+
+    Treating that as "object not found" made it an ERROR, and one error anywhere
+    discards the whole proposal — so asking the assistant a question about a task
+    with any empty slot returned no proposal at all, repeatedly. The user's own
+    unfinished work was being read as a malformed model output.
+
+    The id is the signal, not the label: matching the placeholder text would
+    couple this to UI copy that is meant to be freely editable. A name that IS
+    given but matches nothing in the database stays an error — that is a
+    hallucinated entity, a real fault worth stopping for. Unfilled slots are
+    already surfaced to the user on the canvas itself, by the conformance
+    check's warning icon, and they block Publish there.
+    """
+    if entity_id is not None:
+        return False
+    if not entity_name:
+        return True
+    return str(entity_name).strip().lower().rstrip('.').startswith('select ')
+
+
+def unwrap_branch_envelopes(task):
+    """Flatten `[{"isMain": bool, "steps": [...]}, ...]` into a plain step list.
+
+    The workspace snapshot handed to the model is NOT in the same shape as the
+    `task` we ask it to return. The frontend builds the snapshot with
+    `blocklyToAbstractAll` (utils/blocklyParser.ts), which emits one *branch*
+    envelope per top-level stack — `{isMain, steps}` — while the function
+    schema and the AbstractStep docs describe a flat array of steps.
+
+    The prompt then tells the model, more than once, to return the "task" field
+    exactly matching the snapshot array. Following that instruction produces
+    envelopes, and an envelope has no "type", so validate_step dropped it as a
+    malformed step — taking the entire program with it, since the envelope is
+    usually the only top-level element. The model was doing as it was told.
+
+    Accepting both shapes here is the fix that cannot regress: the snapshot
+    format stays as it is, an echoed snapshot round-trips, and a flat array
+    passes through untouched. Non-main branches are kept too — they are the
+    user's disconnected stacks, and silently dropping them would delete work.
+    """
+    if not isinstance(task, list):
+        return task
+    if not any(
+        isinstance(entry, dict) and "type" not in entry and isinstance(entry.get("steps"), list)
+        for entry in task
+    ):
+        return task
+
+    flattened = []
+    for entry in task:
+        if isinstance(entry, dict) and "type" not in entry and isinstance(entry.get("steps"), list):
+            flattened.extend(entry["steps"])
+        else:
+            flattened.append(entry)
+    return flattened
+
+
 def repair_flattened_steps(steps, warnings=None):
     if not isinstance(steps, list):
         return steps
@@ -878,7 +945,11 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
                (object_name and obj_item.get("name") and obj_item["name"].lower() == object_name.lower()):
                 obj = obj_item
                 break
-        if obj is None:
+        if obj is None and is_unfilled_slot(object_id, object_name):
+            # Slot never filled in — the user's own in-progress state,
+            # echoed back from the snapshot. Keep the step as it is.
+            pass
+        elif obj is None:
             warnings.append({
                 "severity": "error",
                 "message": f"Pick step {step_index}: object '{object_name or object_id}' not found."
@@ -897,7 +968,11 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
                (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
                 loc = loc_item
                 break
-        if loc is None:
+        if loc is None and is_unfilled_slot(location_id, location_name):
+            # Slot never filled in — the user's own in-progress state,
+            # echoed back from the snapshot. Keep the step as it is.
+            pass
+        elif loc is None:
             warnings.append({
                 "severity": "error",
                 "message": f"Place step {step_index}: location '{location_name or location_id}' not found."
@@ -916,7 +991,11 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
                (action_name and act_item.get("name") and act_item["name"].lower() == action_name.lower()):
                 act = act_item
                 break
-        if act is None:
+        if act is None and is_unfilled_slot(action_id, action_name):
+            # Slot never filled in — the user's own in-progress state,
+            # echoed back from the snapshot. Keep the step as it is.
+            pass
+        elif act is None:
             warnings.append({
                 "severity": "error",
                 "message": f"Processing step {step_index}: action '{action_name or action_id}' not found."
@@ -936,7 +1015,10 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
                (location_name and loc_item.get("name") and loc_item["name"].lower() == location_name.lower()):
                 loc = loc_item
                 break
-        if loc is None:
+        if loc is None and is_unfilled_slot(location_id, location_name):
+            # Slot never filled in — same reasoning as the pick/place branches.
+            pass
+        elif loc is None:
             warnings.append({
                 "severity": "error",
                 "message": f"MoveTo step {step_index}: location '{location_name or location_id}' not found."
@@ -1177,6 +1259,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 try:
                     validation_warnings = []
                     if isinstance(llm_task, list) and len(llm_task) > 0:
+                        llm_task = unwrap_branch_envelopes(llm_task)
                         llm_task = repair_flattened_steps(llm_task, validation_warnings)
                     validated_task = []
 
@@ -1225,6 +1308,30 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     is_valid = not any(w["severity"] == "error" for w in validation_warnings)
                     task_modified = response_json.get("taskModified", True)
                     requires_confirmation = task_modified and len(validated_task) > 0 and is_valid
+
+                    # The model said it changed the program, and nothing
+                    # survived validation to show for it. Whatever the cause,
+                    # the user must not be left reading "I updated your task"
+                    # with no proposal under it and a developer-worded warning
+                    # as the only clue — that reads as the app ignoring them.
+                    # Say plainly that it did not go through and that asking
+                    # again usually works, because it does: the failure is in
+                    # the model's output shape, so a fresh attempt often
+                    # produces a well-formed one.
+                    if task_modified and not requires_confirmation:
+                        logger.warning(
+                            "Chat turn claimed a task change but produced nothing "
+                            "applicable (steps=%s, is_valid=%s). Warnings: %s",
+                            len(validated_task), is_valid, validation_warnings,
+                        )
+                        message_parts.append({
+                            "type": "warning",
+                            "content": (
+                                "I could not turn that into blocks, so nothing was "
+                                "changed in your task. Try asking again, or say it "
+                                "in a different way."
+                            ),
+                        })
 
                     # One record per chat turn. "How many times did the operator
                     # have to ask before getting a program worth accepting" is a
