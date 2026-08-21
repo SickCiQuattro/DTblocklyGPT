@@ -1,17 +1,16 @@
 /**
  * KeyboardHelpDialog.tsx
  *
- * Lists Blockly's standard keyboard-navigation shortcuts (verified against the
- * bundled v13.2.0 ShortcutRegistry) so keyboard-only and screen-reader users can
- * discover them. We intentionally use Blockly's standard shortcuts rather than
- * inventing our own, per the Blockly accessibility best-practices guide.
+ * Renders the shortcut list so keyboard-only and screen-reader users can
+ * discover it. The list itself lives in `../appShortcuts` — this file used to
+ * own a hand-maintained copy, which is how it came to document two shortcuts
+ * (`T`, `H`) that do nothing in this integration. Add or change entries there,
+ * not here.
  *
  * This list is the project's WCAG 2.1.4 evidence: single-character shortcuts DO
- * exist (they are Blockly's, and keyboard navigation is force-enabled in
+ * exist (mostly Blockly's, and keyboard navigation is force-enabled in
  * BlocklyEditor), so the criterion is met by the "active only on focus"
- * exception — not by their absence. Re-check this list after any Blockly
- * upgrade: package.json pins `^13.0.0`, so the bundled version can move on a
- * plain `npm install`.
+ * exception — not by their absence.
  */
 import {
   Dialog,
@@ -25,50 +24,12 @@ import { X } from 'lucide-react'
 
 import { KeycapHint } from 'components/KeycapHint'
 
+import { SHORTCUT_ROWS } from '../appShortcuts'
+
 interface KeyboardHelpDialogProps {
   open: boolean
   onClose: () => void
 }
-
-// OS-aware modifier label (Cmd on macOS, Ctrl elsewhere).
-const MOD =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-    ? 'Cmd'
-    : 'Ctrl'
-
-// Blockly v13.2.0 built-in keyboard-navigation defaults, verified against the
-// ShortcutRegistry bindings shipped with the installed package. Single-letter
-// shortcuts only fire while the workspace has focus and you are not typing in a
-// field. MOD resolves to Cmd on macOS, Ctrl elsewhere (Blockly's CTRL_CMD).
-// The last entry (MOD+K) is an app-provided shortcut, not a Blockly default.
-const SHORTCUTS: { keys: string; action: string }[] = [
-  { keys: 'Tab', action: 'Move focus into the blocks workspace' },
-  { keys: 'Arrow keys', action: 'Move between blocks, fields and connections' },
-  { keys: 'W / T', action: 'Jump focus to the Workspace / Toolbox' },
-  { keys: 'N / B', action: 'Go to the next / previous stack' },
-  { keys: 'H / Shift+H', action: 'Jump to the next / previous heading' },
-  { keys: 'Enter / Space', action: 'Edit a field, press a button, or confirm' },
-  { keys: 'M', action: 'Pick up the selected block to move it' },
-  { keys: 'Shift+M', action: 'Pick up the whole stack to move it' },
-  {
-    keys: 'Arrows, then Enter',
-    action: 'While moving: position the block, then drop it (Esc cancels)',
-  },
-  { keys: 'D', action: 'Duplicate the selected block' },
-  { keys: 'X', action: 'Disconnect the selected block' },
-  { keys: 'C', action: 'Clean up / tidy the workspace blocks' },
-  { keys: 'Delete / Backspace', action: 'Delete the selected block' },
-  {
-    keys: `${MOD}+C / ${MOD}+X / ${MOD}+V`,
-    action: 'Copy / cut / paste (paste lands near the focused block)',
-  },
-  { keys: `${MOD}+Z / ${MOD}+Shift+Z`, action: 'Undo / redo' },
-  { keys: `${MOD}+Enter`, action: 'Open the block’s menu (also Shift+F10)' },
-  { keys: 'I / Shift+I', action: 'Announce block info / extended info' },
-  { keys: `${MOD}+J`, action: 'Show the tooltip for the selected block' },
-  { keys: 'Shift+Alt+A', action: 'Toggle screen-reader accessibility mode' },
-  { keys: `${MOD}+K`, action: 'Search and add a block (app shortcut)' },
-]
 
 export const KeyboardHelpDialog = ({
   open,
@@ -96,7 +57,7 @@ export const KeyboardHelpDialog = ({
         when a block is selected and you are not typing in a field.
       </Typography>
       <Stack spacing={1}>
-        {SHORTCUTS.map(({ keys, action }) => (
+        {SHORTCUT_ROWS.map(({ keys, description }) => (
           <Stack
             key={keys}
             direction="row"
@@ -104,7 +65,7 @@ export const KeyboardHelpDialog = ({
             sx={{ alignItems: 'center', justifyContent: 'space-between' }}
           >
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {action}
+              {description}
             </Typography>
             <KeycapHint sx={{ whiteSpace: 'nowrap' }}>{keys}</KeycapHint>
           </Stack>

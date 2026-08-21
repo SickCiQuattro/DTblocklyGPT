@@ -49,3 +49,32 @@ export const getOwnBodyDescendants = (
 
   return filterRealBlocks(result)
 }
+
+/**
+ * Delete a block and everything in its body, leaves first, as one undo step.
+ *
+ * Blockly's own deletion (`BlockSvg.checkAndDelete()` → `dispose(healStack)`,
+ * which is what its Delete shortcut and its context-menu item both run) cascades
+ * from the parent down, and silently leaves a value-input child behind as a
+ * floating orphan when the parent occupies a connection that has a default
+ * shadow configured — a condition slot, for instance. Reproduced by hand.
+ *
+ * Disposing the descendants explicitly first, in reverse order, avoids the
+ * cascade entirely. Every deletion path in the editor must route through here:
+ * this used to run only when a confirmation dialog was shown, which meant the
+ * most common case of all — deleting a single block, where the default
+ * `deleteConfirmMode: 'multiple'` asks nothing — fell through to Blockly and hit
+ * the very bug this exists to avoid.
+ */
+export const disposeBlockWithBody = (block: Blockly.BlockSvg): void => {
+  const descendants = getOwnBodyDescendants(block)
+  Blockly.Events.setGroup(true)
+  try {
+    for (let i = descendants.length - 1; i >= 0; i--) {
+      if (!descendants[i].disposed) descendants[i].dispose(false)
+    }
+    if (!block.disposed) block.dispose(true)
+  } finally {
+    Blockly.Events.setGroup(false)
+  }
+}
