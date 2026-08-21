@@ -535,6 +535,12 @@ def run_metadata() -> dict:
         "chat_py_dirty": bool(git("status", "--porcelain", "--", "backend/functions/chat.py")),
         "cases_sha256": hashlib.sha256(pathlib.Path(CASES_PATH).read_bytes()).hexdigest()[:16],
         "cases_count": sum(1 for line in open(CASES_PATH) if line.strip()),
+        # The golden set is the other half of what a run measures, and it drifts
+        # the same way: its answer key was rewritten on 2026-07-26 mid-campaign.
+        # Tracked separately from chat.py because the two are edited, and
+        # forgotten, independently — the first campaign commit carried chat.py
+        # and left this file behind.
+        "cases_dirty": bool(git("status", "--porcelain", "--", "testing/eval_llm_cases.jsonl")),
         # Latency is a reported result and local models run on a different
         # machine than the cloud runs are launched from, so "which box" is part
         # of what a local number means.
@@ -552,13 +558,19 @@ def warn_if_inputs_are_unfrozen(meta: dict) -> None:
     prompts: within one output file, cases tested earlier answer the old schema
     and cases tested later answer the new one. Nothing flagged it at the time.
     """
-    if not meta.get("chat_py_dirty"):
+    unfrozen = [
+        name for name, key in (
+            ("backend/functions/chat.py", "chat_py_dirty"),
+            ("testing/eval_llm_cases.jsonl", "cases_dirty"),
+        ) if meta.get(key)
+    ]
+    if not unfrozen:
         return
     print(
-        "\n  !! backend/functions/chat.py has uncommitted changes.\n"
-        "     The prompt, schema and validator are read live from that file, so this run\n"
-        "     measures code that is not in any commit — and a further edit mid-run would\n"
-        "     split the results across two prompts without any record of it.\n"
+        f"\n  !! Uncommitted: {', '.join(unfrozen)}\n"
+        "     The prompt, the schema, the validator and the answer key are all read live,\n"
+        "     so this run measures inputs that are not in any commit — and an edit mid-run\n"
+        "     would split the results across two of them with no record of it.\n"
         "     Commit (or stash) before starting a protocol you intend to keep.\n",
         file=sys.stderr,
     )
