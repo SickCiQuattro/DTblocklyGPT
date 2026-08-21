@@ -282,6 +282,7 @@ def load_results(paths, exclude=()):
     """
     merged = defaultdict(list)
     sources = defaultdict(list)
+    provenance = {}
     skipped = []
     for path in paths:
         name = os.path.basename(path)
@@ -290,12 +291,20 @@ def load_results(paths, exclude=()):
             continue
         with open(path) as f:
             data = json.load(f)
+        meta = data.get("_meta")
+        provenance[name] = meta if isinstance(meta, dict) else None
         for spec, results in data.items():
+            # Files carry a "_meta" record (run_metadata in eval_llm_chat.py)
+            # alongside the specs. Skipping by type rather than by name: a dict
+            # here would extend the list with its KEYS, silently turning
+            # provenance into fake results.
+            if not isinstance(results, list):
+                continue
             merged[spec].extend(results)
             sources[spec].append(name)
     if skipped:
         print(f"Esclusi {len(skipped)} file su richiesta: {', '.join(sorted(skipped))}")
-    return merged, sources
+    return merged, sources, provenance
 
 
 def audit_coverage(merged, sources, include_partial=False):
@@ -391,6 +400,77 @@ def report_accuracy(all_results):
             print(f"      {cat}: {_pass_rate(rs):.1f}% (n={len(rs)})")
 
 
+def report_criteria(all_results):
+    """`pass` split back into the five things it is a conjunction of.
+
+    `pass` is intent_ok AND task_modified_ok AND types_ok AND no_errors AND
+    lang_ok, so a wrong label and an invented step produce the same number, and
+    every chart in the chapter is built on that number. The two are not
+    equivalent findings: `intent` selects nothing in the app beyond rendering
+    the evaluation card (the proposal gate reads task_modified), while an
+    invented step is a program the operator would be offered.
+
+    Measured on the archived data: gemini-3.1-flash-lite and
+    gemini-3.5-flash-lite differ by 4.1pp on the composite and are both at
+    98.0% once the label is set aside. Reporting only the composite makes that
+    look like a capability gap.
+    """
+    print("\n" + "=" * 70)
+    print("SCOMPOSIZIONE DI pass NEI CINQUE CRITERI")
+    print("=" * 70)
+    print(f"  {'spec':34s} {'pass':>7s} {'intent':>8s} {'taskMod':>8s} {'types':>7s} {'no_err':>7s} {'lang':>6s}")
+    for spec, results in all_results.items():
+        n = len(results)
+        if not n:
+            continue
+
+        def rate(key):
+            # Older files predate a criterion being recorded; count only what
+            # is present rather than reading a missing key as a failure.
+            seen = [r for r in results if key in r]
+            return (sum(1 for r in seen if r[key]) / len(seen) * 100) if seen else float("nan")
+        print(f"  {spec:34s} {_pass_rate(results):6.1f}% {rate('intent_ok'):7.1f}% "
+              f"{rate('task_modified_ok'):7.1f}% {rate('types_ok'):6.1f}% "
+              f"{rate('no_errors'):6.1f}% {rate('lang_ok'):5.1f}%")
+
+
+def report_provenance(sources_by_file):
+    """Which code produced each file — the check that was missing in July.
+
+    A result file is a measurement of that day's backend/functions/chat.py
+    against that day's golden set, because the harness imports the prompt, the
+    schema and validate_step live. The golden set's answer key was rewritten on
+    2026-07-26 after 17 of 22 specs had already been measured, and nothing in
+    the data said so; reconstructing it afterwards took a day of git archaeology.
+
+    Files written before run_metadata existed have no _meta and are reported as
+    unknown rather than assumed to match.
+    """
+    print("\n" + "=" * 70)
+    print("PROVENIENZA DEI FILE")
+    print("=" * 70)
+    groups = defaultdict(list)
+    for name, meta in sorted(sources_by_file.items()):
+        if meta is None:
+            groups[("sconosciuta", "sconosciuta", None)].append(name)
+        else:
+            groups[(meta.get("chat_py_sha"), meta.get("cases_sha256"), meta.get("chat_py_dirty"))].append(name)
+    if not groups:
+        return
+    majority = max(groups, key=lambda k: len(groups[k]))
+    for key, names in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        chat_sha, cases_sha, dirty = key
+        tag = "  <-- maggioranza" if key == majority else "  <-- DIVERGE"
+        flag = "  [albero sporco]" if dirty else ""
+        print(f"  chat.py={chat_sha} golden={cases_sha}{flag}  {len(names)} file{tag}")
+        if key != majority:
+            for name in sorted(names):
+                print(f"      {name}")
+    if len(groups) > 1:
+        print("\n  Le righe che divergono non sono confrontabili con le altre: sono state")
+        print("  misurate contro un prompt o una chiave di correzione diversi.")
+
+
 def report_determinism(all_results):
     """Run-to-run stability, the numbers behind the determinism claim.
 
@@ -411,7 +491,12 @@ def report_determinism(all_results):
     print("\n" + "=" * 70)
     print("DETERMINISMO FRA ESECUZIONI (deviazione standard campionaria)")
     print("=" * 70)
-    zero = {"cloud": 0, "locale": 0}
+    # Counted on flaky, not on sd. They are not the same claim: sd is the
+    # spread of the per-run pass RATE, and that is zero whenever two cases swap
+    # outcomes between runs — one starts passing, another stops, the rate is
+    # unchanged. "identical case by case" is flaky == 0, which is stricter and
+    # is what the sentence in the chapter actually asserts.
+    identical = {"cloud": 0, "locale": 0}
     total = {"cloud": 0, "locale": 0}
     worst = None
     for spec in sorted(all_results, key=lambda s: len(all_results[s])):
@@ -429,8 +514,8 @@ def report_determinism(all_results):
         flaky = sum(1 for v in by_case.values() if len(set(v)) > 1)
         family = "locale" if _is_local(spec) else "cloud"
         total[family] += 1
-        if sd == 0:
-            zero[family] += 1
+        if flaky == 0:
+            identical[family] += 1
         if worst is None or sd > worst[1]:
             worst = (spec, sd, flaky)
         print(f"  {spec:38s} sd={sd:5.2f}  escursione={max(rates) - min(rates):5.2f}  "
@@ -438,7 +523,7 @@ def report_determinism(all_results):
     print()
     for family in ("locale", "cloud"):
         if total[family]:
-            print(f"  {family}: {zero[family]}/{total[family]} con esiti identici caso per caso")
+            print(f"  {family}: {identical[family]}/{total[family]} con esiti identici caso per caso")
     if worst:
         print(f"  massima variabilità: {worst[0]} (sd={worst[1]:.2f}, {worst[2]} casi variabili)")
 
@@ -1206,7 +1291,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     _apply_thesis_style()
 
-    all_results, sources = load_results(args.json_files, exclude=args.exclude)
+    all_results, sources, provenance = load_results(args.json_files, exclude=args.exclude)
     if not all_results:
         print("No results found in the given JSON file(s).")
         return 1
@@ -1215,7 +1300,9 @@ def main():
         print("Nessuno spec con una esecuzione completa.")
         return 1
 
+    report_provenance(provenance)
     report_accuracy(all_results)
+    report_criteria(all_results)
     report_determinism(all_results)
     report_multilingual(all_results)
     report_latency(all_results, args.out_dir)

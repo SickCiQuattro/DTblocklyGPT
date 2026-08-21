@@ -21,8 +21,12 @@ per-case, per-run results for testing/eval_llm_report.py.
 """
 import argparse
 import json
+import pathlib
+import platform
+import datetime
+import subprocess
+import hashlib
 import os
-import re
 import statistics
 import sys
 import time
@@ -136,6 +140,7 @@ COST_PER_MTOK = {
     "gpt-5-nano": {"input": 0.05, "output": 0.40},
     "gpt-5-mini": {"input": 0.25, "output": 2.00},
     "gpt-5.4-nano": {"input": 0.20, "output": 1.25},
+    "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
     # legacy reference, kept for comparison if someone benchmarks the old default
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
 }
@@ -161,7 +166,7 @@ class OllamaNativeProvider:
     LLMProvider's .complete() signature/return type so run_case() doesn't
     need to know which one it's holding."""
 
-    def __init__(self, model: str, base_url: str, timeout: int = 120, think: bool = False):
+    def __init__(self, model: str, base_url: str, timeout: int = 300, think: bool = False):
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -186,22 +191,34 @@ class OllamaNativeProvider:
             arguments = tool_calls[0]["function"]["arguments"]
             raw_arguments = arguments if isinstance(arguments, dict) else json.loads(arguments or "{}")
         else:
-            content = msg.get("content") or "{}"
+            # Deliberately a bare json.loads with no salvage step, matching
+            # LLMProvider.complete() in chat.py exactly. This measures the
+            # system as built: a reply the app would drop has to score as
+            # dropped here too.
+            #
+            # There WAS a salvage step — a regex pulling JSON out of a
+            # ```json fenced block, added because qwen2.5:14b wraps its answer
+            # in prose. Its comment claimed to mirror chat.py; chat.py has no
+            # such fallback and never had one, so the harness was quietly
+            # more capable than the app, for the two ollama-nothink specs
+            # alone (the ollama:* specs go through LLMProvider and never saw
+            # it). Two rows of a 22-row comparison, scored by a more forgiving
+            # parser than the other twenty.
+            #
+            # It never reached the recorded results — every nothink run
+            # predates it — so no published number moved when it was removed.
+            # If fenced replies are worth tolerating, the fix belongs in
+            # chat.py, where users would get it too; then everything is
+            # re-run against the same parser. Meanwhile unparsed_reply() below
+            # records the shape of what could not be read, which answers
+            # "how often does this actually happen?" without hiding it.
             try:
-                raw_arguments = json.loads(content)
+                raw_arguments = json.loads(msg.get("content") or "{}")
             except Exception:
-                try:
-                    # Some models (observed: qwen2.5:14b) answer with prose
-                    # plus a ```json ... ``` fenced block instead of a bare
-                    # JSON object or a real tool call — mirrors the same
-                    # fallback in chat.py's LLMProvider.complete().
-                    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
-                    raw_arguments = json.loads(fenced.group(1)) if fenced else {}
-                except Exception:
-                    raw_arguments = {}
+                raw_arguments = {}
 
         usage = SimpleNamespace(prompt_tokens=data.get("prompt_eval_count"), completion_tokens=data.get("eval_count"))
-        return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage))
+        return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage, message=msg))
 
 
 # Either provider works with call_with_throttle_and_retry/run_case: same
@@ -220,7 +237,7 @@ def build_provider(spec: str) -> Provider:
             raise ValueError(f"No model for provider '{provider_name}' (spec was '{spec}').")
         # Bypasses the api_key/OpenAI-client path entirely — native Ollama
         # needs no auth and this class isn't an LLMProvider.
-        return OllamaNativeProvider(model=model, base_url=OLLAMA_BASE_URL.replace("/v1", ""), timeout=120, think=False)
+        return OllamaNativeProvider(model=model, base_url=OLLAMA_BASE_URL.replace("/v1", ""), timeout=300, think=False)
 
     if provider_name == "gemini":
         api_key = LLM_API_KEY or GEMINI_API_KEY
@@ -248,12 +265,22 @@ def build_provider(spec: str) -> Provider:
     if not api_key:
         raise ValueError(f"No API key for provider '{provider_name}'.")
 
-    # Ollama on modest local hardware routinely exceeds the 30s that's plenty
-    # for cloud providers (granite4.1:8b/qwen3.5:9b measured 33-41s on a
-    # single well-formed reply) — a short timeout there just turns a slow-but-
-    # correct answer into a spurious ERROR after burning 3x the timeout on
-    # retries that fail identically.
-    timeout = 120 if provider_name == "ollama" else 30
+    # A timeout that is too short does not measure a weak model, it manufactures
+    # a failure: the call is recorded as an ERROR and counted against the model.
+    # Both numbers here were raised after counting how often that happened in
+    # the archived runs — 34 records, of which 24 on gemini:gemma-4-26b-a4b-it
+    # alone, ~10% of its protocol, on a model reported at 57.1% with "the
+    # study's widest IT/EN gap". Those are cited claims resting partly on the
+    # clock.
+    #
+    # Local was already raised to 120s once (granite4.1:8b/qwen3.5:9b answer
+    # correctly in 33-41s), but 12b-class models with reasoning enabled still
+    # ran past it. Cloud stayed at 30s and was never revisited, even though
+    # gemma-4-26b-a4b-it has a heavy tail: median 3.4s, mean 15.3s, stdev 35.2s.
+    #
+    # Raising costs nothing on fast models — the timeout only bites where a
+    # result is being thrown away today.
+    timeout = 300 if provider_name == "ollama" else 90
     return LLMProvider(api_key=api_key, base_url=base_url, model=model, timeout=timeout, max_retries=2)
 
 
@@ -373,6 +400,31 @@ def call_with_throttle_and_retry(provider: Provider, messages, rpm: int, last_ca
     raise RuntimeError("unreachable: retry loop exited without returning or raising")
 
 
+def unparsed_reply(response) -> str:
+    """The model's reply text, for a call this harness extracted nothing from.
+
+    Records hold derived fields only (got_intent, got_types), so a call that
+    produced nothing left no trace of why. A model can then read as broadly
+    incapable with no way, afterwards, to separate a genuinely bad answer from
+    one the harness failed to parse — which is not hypothetical: qwen2.5:14b's
+    runs and the fenced-JSON fallback in OllamaNativeProvider landed in the
+    same commit, and no evidence survives to say which came first.
+
+    Truncated: the point is to recognise the shape of the reply, not to archive
+    transcripts. Both provider shapes go through here — the app's LLMProvider
+    returns the OpenAI response object, OllamaNativeProvider a namespace.
+    """
+    source = response.raw_response
+    message = getattr(source, "message", None)
+    if message is None:
+        choices = getattr(source, "choices", None) or []
+        message = choices[0].message if choices else None
+    if message is None:
+        return ""
+    content = message.get("content") if isinstance(message, dict) else getattr(message, "content", None)
+    return (content or "")[:400]
+
+
 def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_call_at: list) -> dict:
     system_prompt = build_system_prompt(case.get("scene", "unavailable")) + f"\n\n# CURRENT TASK SNAPSHOT #\n{json.dumps(case['snapshot'], ensure_ascii=False)}"
     messages = [
@@ -441,11 +493,75 @@ def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_cal
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "cost_usd": _estimate_cost_usd(provider.model, prompt_tokens, completion_tokens),
+        # Present only when nothing could be parsed out of the reply — the field
+        # a future "was that the model or this harness?" question needs, and
+        # the one whose absence makes that question unanswerable for the runs
+        # recorded before it existed.
+        **({"unparsed_reply": unparsed_reply(response)} if not raw else {}),
         "got_intent": raw.get("intent"),
         "got_task_modified": raw.get("taskModified"),
         "got_types": top_level_types(validated),
         "warnings": [w["message"] for w in warnings if w["severity"] == "error"],
     }
+
+
+def run_metadata() -> dict:
+    """What code produced this file — the question a stale result cannot answer.
+
+    Every run imports the prompt, the tool schema and validate_step live from
+    backend/functions/chat.py, so a result file is a measurement of that day's
+    production code against that day's golden set. Neither was recorded, and
+    reconstructing it afterwards took a full day of git archaeology: the
+    golden set's answer key had been rewritten (58f0c6d, 2026-07-26) after
+    17 of 22 specs were already measured, and nothing in the files said so.
+
+    `chat_py_dirty` matters as much as the SHA: the prompt has been edited in
+    the working tree and used for a run before being committed, which split a
+    single run across two prompts mid-file.
+    """
+    # Repo root, not testing/ — the paths below are repo-relative.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def git(*args):
+        try:
+            return subprocess.run(("git",) + args, capture_output=True, text=True,
+                                  cwd=root).stdout.strip() or None
+        except Exception:
+            return None
+    return {
+        "recorded_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "git_sha": git("rev-parse", "--short", "HEAD"),
+        "chat_py_sha": git("log", "-1", "--format=%h", "--", "backend/functions/chat.py"),
+        "chat_py_dirty": bool(git("status", "--porcelain", "--", "backend/functions/chat.py")),
+        "cases_sha256": hashlib.sha256(pathlib.Path(CASES_PATH).read_bytes()).hexdigest()[:16],
+        "cases_count": sum(1 for line in open(CASES_PATH) if line.strip()),
+        # Latency is a reported result and local models run on a different
+        # machine than the cloud runs are launched from, so "which box" is part
+        # of what a local number means.
+        "host": platform.node(),
+        "arch": platform.machine(),
+    }
+
+
+def warn_if_inputs_are_unfrozen(meta: dict) -> None:
+    """Refuse to start quietly when the prompt is not the committed one.
+
+    A run imports the prompt, the schema and validate_step live from
+    backend/functions/chat.py. On 2026-07-25 that file was edited in the working
+    tree and used before being committed, which split a single run across two
+    prompts: within one output file, cases tested earlier answer the old schema
+    and cases tested later answer the new one. Nothing flagged it at the time.
+    """
+    if not meta.get("chat_py_dirty"):
+        return
+    print(
+        "\n  !! backend/functions/chat.py has uncommitted changes.\n"
+        "     The prompt, schema and validator are read live from that file, so this run\n"
+        "     measures code that is not in any commit — and a further edit mid-run would\n"
+        "     split the results across two prompts without any record of it.\n"
+        "     Commit (or stash) before starting a protocol you intend to keep.\n",
+        file=sys.stderr,
+    )
 
 
 def print_report(model_spec: str, results: list, runs: int):
@@ -526,6 +642,7 @@ def main():
         return 1
 
     cases = load_cases()
+    warn_if_inputs_are_unfrozen(run_metadata())
     if args.start_at:
         skipped = cases[:args.start_at]
         cases = cases[args.start_at:]
@@ -554,7 +671,8 @@ def main():
     if args.json_path:
         os.makedirs(os.path.dirname(args.json_path) or ".", exist_ok=True)
         with open(args.json_path, "w") as f:
-            json.dump(all_results, f, indent=2, ensure_ascii=False)
+            # "_meta" is not a spec; load_results skips non-list values.
+            json.dump({"_meta": run_metadata(), **all_results}, f, indent=2, ensure_ascii=False)
         print(f"\nraw results written to {args.json_path}")
 
     return 0

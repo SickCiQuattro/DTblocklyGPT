@@ -468,6 +468,7 @@ Decide what the user wants and set "intent" to exactly one of "explain", "analyz
 
 - "modify": the user asks to build, add, remove, or change steps.
   → Return the full updated task in "task" and set taskModified = true. Briefly describe the change in "answer" as something you are OFFERING, not something you have done: the workspace is NOT touched by your reply. What you return is shown to the user as a proposal they must accept or reject, and it is applied only if they accept. Write "Here's the task with the pick step set to 'tube'" or "I can set the pick step to 'tube'", never "I updated the pick step" — if they reject it, a past-tense sentence is left in the conversation claiming a change that never happened.
+  → When the request IS a modification but you CANNOT carry it out — the object, location or skill the user named is not in the # DATABASE # lists, or the request is too vague to tie to specific entities ("pick up the thing and put it somewhere") — the intent STAYS "modify". Set taskModified = false, return "task" = the snapshot unchanged, and in "answer" name exactly what is missing and ask for the specific object, location or skill. Do NOT switch to "explain": the user asked to change the task, and "explain" means they asked how something works. Do NOT invent a near-match from the lists to have something to return: proposing the wrong entity is worse than asking.
 
 - "evaluate": the user asks you to check, review, judge, or improve their task ("is this good?", "valuta il mio task", "what can I improve?").
   → Give an honest, encouraging assessment in "answer": what works, what is risky or missing (e.g. picking without placing, a "When" with no condition, an object that may be too heavy), and how to fix it. Do NOT change the task unless they explicitly ask. taskModified = false. The app also runs its own automatic checks and shows them next to your assessment.
@@ -671,7 +672,7 @@ CHATGPT_FUNCTION_MULTIMODAL = {
                 "intent": {
                     "type": "string",
                     "enum": ["explain", "analyze", "modify", "evaluate"],
-                    "description": "What the user wants this turn. 'explain' = describe a block/how it works; 'analyze' = describe the current workspace; 'modify' = add/remove/change steps; 'evaluate' = review/judge the task. See the # HOW YOU HELP # section.",
+                    "description": "What the user wants this turn. 'explain' = describe a block/how it works; 'analyze' = describe the current workspace; 'modify' = add/remove/change steps, INCLUDING when you cannot carry the change out because the entity named does not exist or the request is too vague (then taskModified = false and you ask for the missing entity); 'evaluate' = review/judge the task. See the # HOW YOU HELP # section.",
                 },
                 "lang": {
                     "type": "string",
