@@ -10,8 +10,11 @@ class MessagePart(TypedDict):
 
 
 class AbstractCondition(TypedDict):
-    type: Literal["sensor_signal", "find_object", "human_feedback", "touch_detect", "gesture", "timer", "voice"]
-    sensor: Optional[str]  # for sensor_signal
+    # sensor_signal and touch_detect were retired with their blocks and are no
+    # longer valid here. Nothing imports this module, so the list is
+    # documentation rather than enforcement: the executor is what actually
+    # rejects a retired type, in _wait_for_condition's fallback.
+    type: Literal["find_object", "human_feedback", "gesture", "timer", "voice"]
     objectId: Optional[int]  # for find_object
     objectName: Optional[str]  # for find_object
     gestureType: Optional[Literal["THUMBS_UP", "OPEN_HAND"]]  # for gesture

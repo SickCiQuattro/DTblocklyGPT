@@ -2711,8 +2711,19 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             print("[CONDITION] Operator confirm received!")
         return detected
 
-    # Fallback: sensor_signal, touch_detect → treat as fulfilled
-    return _log_condition(condition_block, simulate_event=True)
+    # Fallback: retired types (sensor_signal, touch_detect) and anything the
+    # five handled types above don't cover. This is the real-wait path, so
+    # returning "fulfilled" here would resume the arm on a condition nobody
+    # checked, and returning False would skip the branch silently. Both are
+    # worse than stopping: abort loudly instead.
+    print(f"[WARNING] Unsupported condition '{block_type}' — aborting task")
+    _abort_task(
+        "This task uses a condition the system can no longer verify — "
+        "replace that step and run it again.",
+        detail=f"unsupported condition type '{block_type}' reached the "
+               f"_wait_for_condition fallback (retired block in a saved workspace)",
+    )
+    return False
 
 
 def _move_to_scan_pose():

@@ -212,9 +212,18 @@ class OllamaNativeProvider:
             except Exception:
                 try:
                     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
-                    raw_arguments = json.loads(fenced.group(1)) if fenced else {}
+                    if not fenced:
+                        raise ValueError("no fenced block found")
+                    raw_arguments = json.loads(fenced.group(1))
                 except Exception:
-                    raw_arguments = {}
+                    try:
+                        # Mirrors the same brace-unwrap salvage in chat.py's
+                        # LLMProvider.complete() — see that comment for the
+                        # measured scope (Qwen2.5 7b/14b, deepseek-r1:14b via
+                        # shared base weights; never seen on cloud).
+                        raw_arguments = json.loads(content.replace("{{", "{").replace("}}", "}"))
+                    except Exception:
+                        raw_arguments = {}
 
         usage = SimpleNamespace(prompt_tokens=data.get("prompt_eval_count"), completion_tokens=data.get("eval_count"))
         return ProviderLLMResponse(answer=raw_arguments.get("answer", ""), raw_arguments=raw_arguments, raw_response=SimpleNamespace(usage=usage, message=msg))

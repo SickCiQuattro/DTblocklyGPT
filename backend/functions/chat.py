@@ -153,9 +153,19 @@ class LLMProvider:
                 # JSON object or a real tool call — extract the fenced
                 # payload before giving up on the whole proposal.
                 fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", arguments_str, re.DOTALL)
-                raw_arguments = json.loads(fenced.group(1)) if fenced else {}
+                if not fenced:
+                    raise ValueError("no fenced block found")
+                raw_arguments = json.loads(fenced.group(1))
             except Exception:
-                raw_arguments = {}
+                try:
+                    # Some models (observed: the Qwen2.5 family via Ollama —
+                    # 7b and 14b measured, deepseek-r1:14b inherits it from
+                    # sharing the same base weights, qwen2.5:3b does not)
+                    # double every curly brace in the JSON body
+                    # ({{"type": "pick"}} instead of {"type": "pick"}),
+                    raw_arguments = json.loads(arguments_str.replace("{{", "{").replace("}}", "}"))
+                except Exception:
+                    raw_arguments = {}
 
         answer = raw_arguments.get("answer", "")
         return ProviderLLMResponse(
