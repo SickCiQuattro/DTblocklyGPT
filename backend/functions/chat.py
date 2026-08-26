@@ -165,7 +165,28 @@ class LLMProvider:
                     # ({{"type": "pick"}} instead of {"type": "pick"}),
                     raw_arguments = json.loads(arguments_str.replace("{{", "{").replace("}}", "}"))
                 except Exception:
-                    raw_arguments = {}
+                    try:
+                        # Some models (observed: qwen2.5:14b, deepseek-r1:14b
+                        # via Ollama) wrap the payload in free-form prose
+                        # instead of either a bare object or a fenced block —
+                        # neither tier above can locate it: the fence regex
+                        # needs literal ``` markers, and the brace-unwrap
+                        # above still runs against the untouched prose, which
+                        # is never valid JSON regardless of the braces inside
+                        # it. Take the span from the first "{" to the last "}"
+                        # in the raw text — works with or without a fence,
+                        # with or without prose before or after it — and
+                        # retry both a plain parse and the same brace-unwrap
+                        # salvage on just that span.
+                        start = arguments_str.index("{")
+                        end = arguments_str.rindex("}") + 1
+                        span = arguments_str[start:end]
+                        try:
+                            raw_arguments = json.loads(span)
+                        except Exception:
+                            raw_arguments = json.loads(span.replace("{{", "{").replace("}}", "}"))
+                    except Exception:
+                        raw_arguments = {}
 
         answer = raw_arguments.get("answer", "")
         return ProviderLLMResponse(

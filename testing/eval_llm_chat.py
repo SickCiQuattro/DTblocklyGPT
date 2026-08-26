@@ -414,13 +414,28 @@ def unparsed_reply(response) -> str:
     Records hold derived fields only (got_intent, got_types), so a call that
     produced nothing left no trace of why. A model can then read as broadly
     incapable with no way, afterwards, to separate a genuinely bad answer from
-    one the harness failed to parse — which is not hypothetical: qwen2.5:14b's
-    runs and the fenced-JSON fallback in OllamaNativeProvider landed in the
-    same commit, and no evidence survives to say which came first.
+    one the harness failed to parse.
 
-    Truncated: the point is to recognise the shape of the reply, not to archive
-    transcripts. Both provider shapes go through here — the app's LLMProvider
-    returns the OpenAI response object, OllamaNativeProvider a namespace.
+    Checks tool_calls when content is empty — a real gap until 2026-08-23:
+    a model that replies through the tool-calling channel (the normal path,
+    not a fallback) has empty message.content by construction, so a call that
+    failed entirely inside the arguments string used to come back as "" here,
+    indistinguishable from a genuinely empty reply. Found on qwen2.5:14b: the
+    outer arguments JSON parsed fine, but its "task" field held a JSON-encoded
+    string instead of a nested array, itself carrying doubled braces on every
+    step — a failure two levels deep that this function couldn't previously
+    surface at all.
+
+    Truncated to 4000 chars (was 400 until 2026-08-24): the point is still to
+    recognise the shape of the reply, not to archive full transcripts, but 400
+    cut every "prose bucket" case (qwen2.5:14b, deepseek-r1:14b) off mid-JSON
+    — every one of deepseek-r1:14b's stored failures hit the cap exactly, so
+    once the extraction fix landed there was nothing left to re-parse from the
+    already-collected files, only from a fresh call. 4000 comfortably covers
+    this golden set's task payloads without turning the field into a
+    transcript archive. Both provider shapes go through here — the app's
+    LLMProvider returns the OpenAI response object, OllamaNativeProvider a
+    namespace.
     """
     source = response.raw_response
     message = getattr(source, "message", None)
@@ -430,7 +445,16 @@ def unparsed_reply(response) -> str:
     if message is None:
         return ""
     content = message.get("content") if isinstance(message, dict) else getattr(message, "content", None)
-    return (content or "")[:400]
+    if content:
+        return content[:4000]
+    tool_calls = message.get("tool_calls") if isinstance(message, dict) else getattr(message, "tool_calls", None)
+    if tool_calls:
+        first = tool_calls[0]
+        function = first.get("function") if isinstance(first, dict) else getattr(first, "function", None)
+        arguments = function.get("arguments") if isinstance(function, dict) else getattr(function, "arguments", None)
+        if arguments:
+            return arguments[:4000]
+    return ""
 
 
 def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_call_at: list) -> dict:
