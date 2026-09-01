@@ -328,6 +328,47 @@
   fill: #757585 !important;
 }
 
+/* ── Highlight: keyboard focus on an unfilled slot ──
+   Blockly marks the focused node with .shadow-block--focused, but ships no styling
+   for it here, so a shadow block reached with the arrow keys looked identical to
+   one nobody was on — the keyboard user had no way to tell where they were.
+   These rules give it the same appearance a click produces (the selectors above
+   fire on .shadow-block--selected, which is added only when the picker opens).
+   Kept as a separate block rather than appended to each selector above so the
+   pointer path and the keyboard path stay legible as two different triggers. */
+.shadow-block--focused.custom-dashed-shadow-start > .blocklyPath {
+  fill: rgba(15, 118, 110, 0.15) !important;
+  stroke: #0f766e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-start text.blocklyText {
+  fill: #0f766e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-workspace > .blocklyPath {
+  fill: rgba(0, 135, 62, 0.15) !important;
+  stroke: #00873e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-workspace text.blocklyText {
+  fill: #00873e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-trigger > .blocklyPath {
+  fill: rgba(209, 72, 30, 0.15) !important;
+  stroke: #d1481e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-trigger text.blocklyText {
+  fill: #d1481e !important;
+}
+.shadow-block--focused.custom-dashed-shadow-sequence > .blocklyPath {
+  fill: rgba(117, 117, 133, 0.15) !important;
+  stroke: #757585 !important;
+}
+.shadow-block--focused.custom-dashed-shadow-sequence text.blocklyText {
+  fill: #757585 !important;
+}
+.shadow-block--focused[class*='custom-dashed-shadow'] > .blocklyPath {
+  fill-opacity: 1 !important;
+  stroke-opacity: 1 !important;
+}
+
 .blockly-orphan > .blocklyPath {
   opacity: 0.7;
 }

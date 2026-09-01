@@ -10,6 +10,8 @@
  */
 import * as Blockly from 'blockly/core'
 
+import { disposeBlockWithBody } from 'utils/blocklySelection'
+
 export type DeleteZoneState = 'idle' | 'drag-intent' | 'hover-confirm'
 
 export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
@@ -41,7 +43,13 @@ export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
     const group = this.activeDragGroup ?? Blockly.utils.idGenerator.genUid()
     Blockly.Events.setGroup(group)
     try {
-      block.dispose(false, true)
+      // Same teardown as the keyboard and context-menu delete paths. Blockly's
+      // own cascade orphans a value-input child whose parent sits in a
+      // connection with a default shadow — a condition slot, for instance — so
+      // dragging a When block to the toolbox could leave its condition behind
+      // as a floating block. This was the last delete path still going
+      // straight to dispose(), which the helper's own docstring forbids.
+      disposeBlockWithBody(block, true)
     } finally {
       Blockly.Events.setGroup(false)
       this.activeDragGroup = null

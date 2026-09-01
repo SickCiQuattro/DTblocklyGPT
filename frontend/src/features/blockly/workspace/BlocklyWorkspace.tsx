@@ -70,6 +70,26 @@ const disableContextMenuItems = () => {
   }
 }
 
+/**
+ * Mark an unfilled slot as the one currently under the cursor.
+ *
+ * Blockly's own `.blocklyActiveFocus` class was the obvious hook and does not
+ * work here: reaching a shadow block redirects focus to its nearest non-shadow
+ * parent (see BlockSvg.showContextMenu), so the placeholder itself never
+ * carries the class. Without this the keyboard user sees no difference between
+ * the slot they are on and every other empty slot, while a mouse user gets the
+ * highlight for free when the picker opens.
+ *
+ * A class of its own rather than reusing `shadow-block--selected`: that one is
+ * owned by the picker's open/close lifecycle (useShadowPicker removes it on
+ * close), and toggling it from here too would let a selection change strip the
+ * highlight off a slot whose picker is still open.
+ */
+const markShadowFocus = (block: Blockly.BlockSvg, on: boolean) => {
+  if (!block.isShadow()) return
+  block.getSvgRoot?.()?.classList.toggle('shadow-block--focused', on)
+}
+
 const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
   let syncingSelection = false
 
@@ -85,12 +105,14 @@ const enableChainSelection = (workspace: Blockly.WorkspaceSvg) => {
         const oldBlock = workspace.getBlockById(selectedEvent.oldElementId)
         if (oldBlock instanceof Blockly.BlockSvg) {
           getOwnBodyDescendants(oldBlock).forEach((b) => b.removeSelect())
+          markShadowFocus(oldBlock, false)
         }
       }
       if (selectedEvent.newElementId) {
         const newBlock = workspace.getBlockById(selectedEvent.newElementId)
         if (newBlock instanceof Blockly.BlockSvg) {
           getOwnBodyDescendants(newBlock).forEach((b) => b.addSelect())
+          markShadowFocus(newBlock, true)
         }
       }
     } finally {

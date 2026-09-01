@@ -33,6 +33,7 @@ import pytest
 FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "src")
 EDITOR = os.path.join(FRONTEND, "features", "blockly", "editor", "BlocklyEditor.tsx")
 SELECTION = os.path.join(FRONTEND, "utils", "blocklySelection.ts")
+DELETE_AREA = os.path.join(FRONTEND, "features", "blockly", "editor", "deleteArea.ts")
 
 SAFE_DISPOSE = "disposeBlockWithBody"
 
@@ -146,6 +147,44 @@ def test_context_menu_delete_covers_both_confirm_branches():
     assert re.search(r"if \(!shouldConfirmDelete\(totalCount\)\)", body), (
         "il ramo senza conferma non e' piu' esplicito. Serve che ENTRAMBI i "
         "rami del gate cancellino, non solo quello che apre il dialogo."
+    )
+
+
+# ─── Path 3: dragging a block onto the toolbox (the delete zone) ─────────────
+
+
+def test_delete_zone_uses_safe_dispose():
+    """The path a participant uses most, and the last one to be routed here.
+
+    `onDrop` called `block.dispose(false, true)` directly for as long as the
+    helper had existed, even though the helper's own docstring says every
+    deletion path must go through it. Dragging a When block onto the toolbox
+    therefore ran precisely the cascade the helper exists to avoid.
+    """
+    body = _strip_comments(_slice_between(_read(DELETE_AREA), "override onDrop", "\n  }"))
+    assert SAFE_DISPOSE in body, (
+        "la delete zone chiama di nuovo dispose() diretta invece di "
+        f"{SAFE_DISPOSE}: trascinare un blocco con un innesto valore sulla "
+        "toolbox puo' lasciare il figlio come blocco fluttuante sul canvas."
+    )
+    assert "block.dispose(" not in body, (
+        "resta una dispose() diretta nella delete zone accanto alla "
+        "cancellazione sicura."
+    )
+
+
+def test_safe_dispose_joins_an_open_event_group():
+    """Otherwise routing the delete zone through it splits the undo in two.
+
+    `onDrop` opens a group so the drag and the disposal undo together. A helper
+    that unconditionally called setGroup(true)/setGroup(false) would close that
+    group early and leave the disposal in a group of its own.
+    """
+    body = _slice_between(_read(SELECTION), f"export const {SAFE_DISPOSE}", "\n}")
+    assert "Blockly.Events.getGroup()" in body, (
+        "la disposizione sicura non consulta piu' il gruppo eventi corrente: "
+        "chiamata da dentro un gruppo aperto lo chiude in anticipo, e "
+        "l'annullamento del trascinamento con cancellazione richiede due Ctrl+Z."
     )
 
 

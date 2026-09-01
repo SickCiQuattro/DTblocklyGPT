@@ -59,7 +59,7 @@ import {
 import { ActionListType } from 'pages/actions/types'
 import { LocationListType } from 'pages/locations/types'
 import { ObjectListType } from 'pages/objects/types'
-import { brand } from 'themes/theme'
+import { editorState } from 'themes/theme'
 import { blocklyToAbstractAll, CustomBlock } from 'utils/blocklyParser'
 import { BlockState as State } from 'utils/blocklyTypes'
 import {
@@ -657,6 +657,26 @@ export const BlocklyEditor = ({
       !!viewSettings?.keyboardMode,
     )
   }, [viewSettings?.keyboardMode])
+
+  // Turn the focus ring off again as soon as the pointer is used.
+  //
+  // Blockly enables keyboard-nav visuals from nineteen of its own code paths
+  // (Tab, every arrow, start-move, the context menu) and from our focusNode
+  // after an insert, but clears them from far fewer. The ring therefore
+  // survived into mouse work: the user clicked around the canvas with a focus
+  // box still drawn, which is not what a pointer user should ever see.
+  //
+  // Skipped when the user has explicitly switched Keyboard mode on — there the
+  // always-on ring is the point, and a stray click must not silently undo a
+  // setting they chose.
+  useEffect(() => {
+    if (viewSettings?.keyboardMode) return
+    const onPointerDown = () =>
+      Blockly.keyboardNavigationController.setIsActive(false)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () =>
+      document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [viewSettings?.keyboardMode])
   const [toolboxDeleteZoneState, setToolboxDeleteZoneState] =
     useState<DeleteZoneState>('idle')
   const [historyState, setHistoryState] = useState({
@@ -798,8 +818,9 @@ export const BlocklyEditor = ({
       if (!workspace || workspace.options.readOnly) return
 
       Blockly.Events.setGroup(true)
+      let newBlock: Blockly.BlockSvg | undefined
       try {
-        const newBlock = Blockly.serialization.blocks.append(state, workspace, {
+        newBlock = Blockly.serialization.blocks.append(state, workspace, {
           recordUndo: true,
         }) as Blockly.BlockSvg
 
@@ -820,6 +841,31 @@ export const BlocklyEditor = ({
 
       syncWorkspacePresentation(workspace)
       syncHistoryState(workspace)
+
+      // Put the cursor ON the block that was just inserted. Without this the
+      // keyboard path dead-ends here: both callers are reached from a dialog,
+      // so focus is wherever it was before the dialog opened — not in the
+      // workspace. Blockly's cursor then has no focused node, which is what
+      // makes the arrow keys do nothing, leaves no visible focus ring, and
+      // stops an unfilled socket from highlighting when you reach it. The
+      // block appears, and the user is stranded next to it.
+      //
+      // focusNode also re-activates keyboard-navigation visuals: Blockly turns
+      // them on from its own arrow/move shortcuts, and none of those can fire
+      // while nothing in the workspace holds focus.
+      //
+      // Deferred a frame on purpose. Both callers run from inside a MUI dialog
+      // that is still mounted at this point — its focus trap pulls focus back
+      // into itself, so focusing synchronously here is undone before the user
+      // ever sees it. Waiting until after the dialog unmounts is what makes the
+      // arrow keys work on the block that was just inserted instead of
+      // stranding the user on the page body.
+      if (newBlock) {
+        const target = newBlock
+        requestAnimationFrame(() => {
+          if (!target.isDisposed()) Blockly.getFocusManager().focusNode(target)
+        })
+      }
     },
     [syncWorkspacePresentation, syncHistoryState],
   )
@@ -1278,20 +1324,33 @@ export const BlocklyEditor = ({
         return
       }
 
-      // Blockly's keyboard-nav focus rings are two separate CSS variables —
-      // --blockly-active-node-color (default #fff200, yellow — the focused
-      // block/field) and --blockly-active-tree-color (default #1379f6, blue —
-      // the focused workspace/toolbox region). Clicking the canvas activates
-      // both at once, so without this a single click shows two
-      // differently-coloured rings. A stylesheet override raced against
-      // Blockly's own injected <style> and lost; an inline style on the
-      // injection div always wins regardless of injection order.
+      // Blockly draws TWO keyboard-nav focus rings from two separate CSS
+      // variables: --blockly-active-node-color outlines the focused
+      // block/field, --blockly-active-tree-color outlines the whole focused
+      // region (workspace or toolbox). Both are live at once, which is why the
+      // canvas showed two boxes rather than one.
+      //
+      // The region ring is switched off. Once the node ring says which block
+      // you are on, a second box around the entire workspace adds no
+      // information and reads as a rendering fault — which is exactly how it
+      // was reported.
+      //
+      // The node ring is the selection amber, not the brand indigo: indigo
+      // means "the robot is executing this block" (block--executing) and must
+      // not also mean "you are here". Amber matches the stroke Blockly
+      // hardcodes for `.blocklySelected > .blocklyPath`, which no theme option
+      // reaches — matching it is what makes the mouse and the arrow keys agree
+      // on one colour.
+      //
+      // Set inline on the injection div rather than in editor.css: a stylesheet
+      // override raced against Blockly's own injected <style> and lost, while
+      // an inline style wins regardless of injection order.
       workspace
         .getInjectionDiv()
-        .style.setProperty('--blockly-active-node-color', brand.primary)
+        .style.setProperty('--blockly-active-node-color', editorState.selection)
       workspace
         .getInjectionDiv()
-        .style.setProperty('--blockly-active-tree-color', brand.primary)
+        .style.setProperty('--blockly-active-tree-color', 'transparent')
 
       // ── Shadow block helpers (local to this workspace instance) ────────────
 
@@ -1708,6 +1767,31 @@ export const BlocklyEditor = ({
           moveEvent.clientY - startY,
         )
         if (distance < DRAG_THRESHOLD_PX) return
+
+        // Wait until the pointer is actually over the canvas before creating
+        // the block.
+        //
+        // The 5px threshold alone fires while the pointer is still inside the
+        // toolbox column, which sits to the LEFT of the injection div. The
+        // block is then created at a negative workspace coordinate — measured
+        // at x=-95 with the pointer at 110 and the canvas starting at 253 — and
+        // Blockly scrolls the workspace to bring that off-canvas block into
+        // view. The scroll moves the canvas out from under the stationary
+        // cursor, so the block ends up displaced by exactly the scroll amount
+        // (measured: 93px scroll, 93px of unexplained gap).
+        //
+        // Requiring the pointer to be inside the canvas keeps the initial
+        // coordinate on-screen, so there is nothing for Blockly to scroll to
+        // and the block starts where the cursor is. The pill stays "picked up"
+        // until then — the drag simply materialises on entering the canvas.
+        const canvas = workspace.getInjectionDiv().getBoundingClientRect()
+        const insideCanvas =
+          moveEvent.clientX >= canvas.left &&
+          moveEvent.clientX <= canvas.right &&
+          moveEvent.clientY >= canvas.top &&
+          moveEvent.clientY <= canvas.bottom
+        if (!insideCanvas) return
+
         suppressDeleteZoneForNextDragRef.current = true
         window.dispatchEvent(new Event('toolboxDragStart'))
         cleanup()

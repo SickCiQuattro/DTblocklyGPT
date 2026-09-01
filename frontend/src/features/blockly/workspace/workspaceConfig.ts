@@ -12,7 +12,7 @@
  */
 import * as Blockly from 'blockly/core'
 
-import { brand, canvasNeutral } from 'themes/theme'
+import { brand, canvasNeutral, editorState } from 'themes/theme'
 
 import './customRender'
 
@@ -28,12 +28,16 @@ const DTheme = Blockly.Theme.defineTheme('DTheme', {
     scrollbarColour: canvasNeutral.scrollbar,
     scrollbarOpacity: 0.8,
 
-    selectedGlowColour: brand.primary,
+    // Selection and the keyboard cursor are amber, never indigo: indigo is
+    // reserved for the block the robot is executing (see editorState in
+    // themes/theme). insertionMarkerColour stays brand indigo — it is the
+    // drop preview during a drag, neither a selection nor an execution state.
+    selectedGlowColour: editorState.selection,
     selectedGlowOpacity: 0.4,
     insertionMarkerColour: brand.primary,
     insertionMarkerOpacity: 0.25,
-    cursorColour: brand.primary,
-    markerColour: brand.primary,
+    cursorColour: editorState.selection,
+    markerColour: editorState.selection,
   },
   // Match the app font instead of Blockly's default sans-serif.
   fontStyle: {

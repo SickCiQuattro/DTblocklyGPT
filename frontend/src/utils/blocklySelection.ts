@@ -66,15 +66,24 @@ export const getOwnBodyDescendants = (
  * `deleteConfirmMode: 'multiple'` asks nothing — fell through to Blockly and hit
  * the very bug this exists to avoid.
  */
-export const disposeBlockWithBody = (block: Blockly.BlockSvg): void => {
+export const disposeBlockWithBody = (
+  block: Blockly.BlockSvg,
+  animate = false,
+): void => {
   const descendants = getOwnBodyDescendants(block)
-  Blockly.Events.setGroup(true)
+  // Join the caller's event group when there is one, instead of always opening
+  // a fresh one. The drag-to-toolbox delete zone groups the disposal with the
+  // drag events that preceded it so the whole gesture undoes in one press;
+  // unconditionally calling setGroup(true)/setGroup(false) here would split
+  // that in two and close the caller's group early.
+  const outerGroup = Blockly.Events.getGroup()
+  if (!outerGroup) Blockly.Events.setGroup(true)
   try {
     for (let i = descendants.length - 1; i >= 0; i--) {
       if (!descendants[i].disposed) descendants[i].dispose(false)
     }
-    if (!block.disposed) block.dispose(true)
+    if (!block.disposed) block.dispose(true, animate)
   } finally {
-    Blockly.Events.setGroup(false)
+    if (!outerGroup) Blockly.Events.setGroup(false)
   }
 }

@@ -15,6 +15,26 @@ export const brand = {
 } as const
 
 /**
+ * Editor state colours, kept apart from `brand` because they encode a rule
+ * rather than an identity:
+ *
+ *   amber  = "you have this selected" (mouse click or keyboard cursor)
+ *   indigo = "the robot is running this right now" (block--executing)
+ *
+ * Selection must never be indigo, or a highlighted block stops telling the
+ * operator whether it is merely picked or actually executing — the one
+ * distinction that matters while a program is running on the real arm.
+ *
+ * The amber matches the stroke Blockly hardcodes for `.blocklySelected >
+ * .blocklyPath`, which no theme option or CSS variable reaches; matching it
+ * here is what keeps the mouse and the arrow keys showing the same colour.
+ */
+export const editorState = {
+  selection: '#FFCC33',
+  executing: '#6366F1',
+} as const
+
+/**
  * Cool slate ramp — UI chrome (surfaces, borders, muted text) used across
  * dialogs, toolbox, and previews. Distinct from the neutral `grey` ramp.
  */

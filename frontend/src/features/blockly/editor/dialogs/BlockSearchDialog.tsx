@@ -52,6 +52,28 @@ export const BlockSearchDialog = ({
     if (open) setQuery('')
   }, [open])
 
+  // Escape closes the palette. Not left to MUI's own escapeKeyDown, and not a
+  // React onKeyDown either: Blockly binds its ShortcutRegistry listener to
+  // `document`, so its `escape` shortcut sees the key even though this dialog
+  // renders in a portal outside the workspace, and consumed it first — the
+  // "esc" hint in the search field was telling the user something untrue.
+  //
+  // `window` in the capture phase is what wins: capture runs outermost-first,
+  // so window fires before document, whatever order the listeners registered
+  // in. stopPropagation then keeps the same press from also reaching Blockly
+  // and cancelling something on the canvas behind the dialog.
+  useEffect(() => {
+    if (!open) return
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', onEscape, true)
+    return () => window.removeEventListener('keydown', onEscape, true)
+  }, [open, onClose])
+
   // Step-insertable blocks in toolbox order + published macros (Saved Tasks).
   const items = useMemo(() => buildSequencePickerItems(macros), [macros])
   const filtered = useMemo(
@@ -92,6 +114,12 @@ export const BlockSearchDialog = ({
       maxWidth="xs"
       fullWidth
       aria-label="Search for a step"
+      // MUI restores focus to whatever opened the dialog when it closes, which
+      // would immediately undo the focusNode() that insertStepBlockAtEnd puts
+      // on the newly inserted block — the user would be dropped back on the
+      // canvas with no cursor. ShadowPickerMenu carries this for the same
+      // reason.
+      disableRestoreFocus
       slotProps={{ paper: { elevation: 0, sx: { ...MENU_PAPER_SX, mt: -10 } } }}
     >
       <DialogContent sx={{ p: 1.5 }}>
