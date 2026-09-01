@@ -61,6 +61,8 @@ The system is composed of four independent processes that must all be running fo
 - **Ubuntu 24.04** (Noble) — native install or WSL2 / Virtual Machine
 - **ROS2 Jazzy** — [official install guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
 - **Gazebo Harmonic** — [official install guide](https://gazebosim.org/docs/harmonic/install_ubuntu/)
+- **Python 3.12 or 3.13** — `pyproject.toml` pins `>=3.12,<3.14`. Ubuntu 24.04 ships 3.12, so a
+  default install already satisfies this; a newer distro shipping 3.14 does not.
 - **Poetry** — [official install guide](https://python-poetry.org/docs/#installation)
 - **Node.js 20.19+** (or 22 LTS) with npm — Vite 8 requires Node `≥20.19` / `≥22.12`; older 20.x fails
 
@@ -195,6 +197,15 @@ git clone https://github.com/RobotWebTools/web_video_server.git
 cd ../..
 ```
 
+> No branch is given because each repository's default branch is already the ROS2 one
+> (`ros2-develop` and `ros2` respectively) — the ROS1 branches are not the default.
+>
+> Both are **moving development branches**, so a clone made later will not necessarily match what
+> this project was built and evaluated against. The versions used were
+> `async_web_server_cpp` at `be0ca7b` (2026-05-06) and `web_video_server` at `20c30ab` (2026-07-02).
+> If `colcon build` fails on a fresh clone, check out those commits before assuming the failure is
+> in this repository.
+
 ### 3. Configure environment files
 
 **Backend** — copy the template and add your LLM API key:
@@ -249,10 +260,18 @@ This installs Django, `ikpy`, `ultralytics`, `mediapipe`, `hand-gesture-engine`,
 ### 5. Install frontend dependencies (npm)
 
 ```bash
-npm install --legacy-peer-deps
+npm ci --legacy-peer-deps
 ```
 
 > The `--legacy-peer-deps` flag is required due to ESLint/React peer dependency conflicts.
+>
+> **Use `npm ci`, not `npm install`, to reproduce the environment this project was developed and
+> evaluated on.** `package-lock.json` is committed; `npm ci` installs exactly what it pins, while
+> `npm install` is free to move any dependency up within its caret range and rewrite the lockfile.
+> That is not hypothetical here: `blockly` is declared as `^13.0.0`, and the editor's keyboard
+> layer depends on shortcut names that a Blockly release can rename — the drift check in
+> `features/blockly/editor/appShortcuts.ts` exists because of it. Run `npm install` only when you
+> intend to take updates, and re-run `npm run lint` plus the keyboard shortcuts afterwards.
 
 ### 6. Download the gesture recognition model
 

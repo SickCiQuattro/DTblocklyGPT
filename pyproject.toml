@@ -37,6 +37,13 @@ hand-gesture-engine = "^0.1.1"
 ultralytics = "^8.4.62"
 pyyaml = "^6.0.3"
 torchvision = "^0.27.0"
+# Exact pin, not a caret range, and deliberately so: nothing in this project
+# imports mediapipe directly — it is a transitive dependency of
+# hand-gesture-engine, which declares it without a version bound. PyPI is on
+# 1.x, so without this line a fresh `poetry lock` would pull a new major of the
+# vision library the gesture pipeline runs on (vision_live.py::GestureEngine)
+# with nothing here to catch the change. Bump it only alongside a gesture
+# re-validation, not as routine housekeeping.
 mediapipe = "0.10.14"
 ikpy = "^3.4.2"
 requests = "^2.32.0"

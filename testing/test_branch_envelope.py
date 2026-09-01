@@ -47,7 +47,7 @@ def test_unwraps_the_shape_captured_in_the_log():
                     "condition": {"type": "find_object", "objectId": 25, "objectName": "green tube"},
                     "do": [
                         {"type": "pick", "objectId": 25, "objectName": "green tube"},
-                        {"type": "place", "locationId": 1, "locationName": "collection rack"},
+                        {"type": "place", "locationId": 1, "locationName": "cup"},
                     ],
                 }
             ],
