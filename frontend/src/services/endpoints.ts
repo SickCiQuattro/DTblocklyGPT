@@ -76,7 +76,8 @@ export const endpoints = {
   human: {
     confirm: `${HUMAN_API}/confirm/`,
   },
-  // Alias for legacy references in macroApi.ts / formTask.tsx — same endpoints
+  // Alias kept for formTask.tsx — same endpoints as `task` above.
+  // (macroApi.ts, the other caller, was removed: it never had a call site.)
   get macro() {
     return this.task
   },

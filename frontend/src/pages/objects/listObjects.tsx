@@ -1,3 +1,20 @@
+/**
+ * Paginated list of objects, with search, delete and a link to the matching form.
+ *
+ * One of seven sibling list pages (pages/*\/list*.tsx). Two patterns recur in
+ * all of them and are worth reading once here rather than re-deriving per file:
+ *
+ * - **The empty `.catch` after a delete is deliberate.** `fetchApi` already
+ *   raises a toast for the failure; the handler exists only so the rejection is
+ *   not unhandled. Adding error UI there would double-report it.
+ * - **The page index is clamped, not trusted.** A result set that shrinks under
+ *   a stale page — a search, a filter, another tab deleting a row — used to
+ *   render the "nothing found" empty state while rows existed on an earlier
+ *   page. The effect below clamps the index instead of misreporting.
+ *
+ * `listTasks.tsx` is the exception: it carries the task lifecycle (draft /
+ * published / published_with_draft) and its own actions, so it is much larger.
+ */
 import React, { useEffect, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'

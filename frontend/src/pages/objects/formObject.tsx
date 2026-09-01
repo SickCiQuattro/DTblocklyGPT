@@ -1,3 +1,17 @@
+/**
+ * objects (name, keywords, physical dimensions and weight used by the grasp planner)
+ *
+ * One of six sibling CRUD forms (pages/{objects,actions,locations,robots,users,myrobots}/form*.tsx)
+ * that all share the same shape: Formik state + a yup schema, submitted through
+ * `fetchApi` from services/api.ts.
+ *
+ * The one part that is not boilerplate is the duplicate-name branch. `fetchApi`
+ * RESOLVES on 400/409 instead of rejecting (see the LANDMINE comment in
+ * services/api.ts), so a name collision arrives as a normal `.then()` carrying
+ * a flag in the payload — never as a `.catch()`. These forms therefore inspect
+ * the response body and push the error onto the field with `setFieldError`.
+ * Reading the collision from a rejected promise would silently never fire.
+ */
 import React from 'react'
 import {
   Alert,

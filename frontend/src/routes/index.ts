@@ -7,11 +7,12 @@ import { ManagerRoutes } from './AdminRoutes'
 import { UserRoutes } from './UserRoutes'
 import { AuthRoutes } from './AuthRoutes'
 import { MainRoutes } from './MainRoutes'
+import { MeasureRoutes } from './MeasureRoutes'
 
 export const Routes = () => {
   const { group } = getFromLocalStorage(LocalStorageKey.USER)
 
-  const defaultRoutes = [MainRoutes, AuthRoutes, UserRoutes]
+  const defaultRoutes = [MainRoutes, AuthRoutes, UserRoutes, MeasureRoutes]
   const routes =
     group === USER_GROUP.MANAGER
       ? [...defaultRoutes, ManagerRoutes]

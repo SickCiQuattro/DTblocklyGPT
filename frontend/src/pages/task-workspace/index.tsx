@@ -674,12 +674,20 @@ export const UnifiedWorkspace = () => {
       dispatch(triggerRename(false)) // Reset immediately to prevent multiple triggers
       if (isReadOnly) return
       if (id && taskData && taskData.name !== activeTaskName) {
-        fetchApi({
+        fetchApi<{ nameAlreadyExists?: boolean }>({
           url: endpoints.home.libraries.task,
           method: MethodHTTP.PUT,
           body: { ...taskData, name: activeTaskName },
         })
-          .then(async () => {
+          .then(async (res) => {
+            // The endpoint answers a taken name with 400 + nameAlreadyExists,
+            // and fetchApi RESOLVES on 400 (services/api.ts) — so this branch
+            // runs for a rename that did not happen. It used to flash "Saved
+            // at HH:mm" next to the red error toast fetchApi had just fired.
+            // The refetch still runs: it puts the real, unchanged name back in
+            // the header, which is the honest thing to show once the rename
+            // was refused.
+            const renamed = !res?.nameAlreadyExists
             const updatedTask = await mutateTask()
             if (updatedTask) {
               dispatch(
@@ -690,6 +698,7 @@ export const UnifiedWorkspace = () => {
                 }),
               )
             }
+            if (!renamed) return
             void mutate({ url: endpoints.home.libraries.tasks })
             dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
             dispatch(triggerSavedFlash(true))
