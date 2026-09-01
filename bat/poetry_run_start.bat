@@ -1,1 +1,0 @@
-cd C:\Users\kinno\git\DTblocklyGPT-jazzy-harmonic && poetry run start
