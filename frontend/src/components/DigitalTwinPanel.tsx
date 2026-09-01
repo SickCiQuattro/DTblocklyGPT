@@ -42,7 +42,9 @@ import { toggleSim, toggleRobotPanelWidth } from 'store/reducers/task'
 import {
   RECOGNIZED_GESTURES,
   RECOGNIZED_VOICE_COMMANDS,
+  NOTHING_RECOGNIZED,
   gestureLabel,
+  spokenExample,
   voiceLabel,
 } from 'constants/recognitionRegistry'
 import { UI_TEXT } from 'constants/uiVocabulary'
@@ -53,7 +55,6 @@ import {
   stopSimulation as stopSimAction,
   setSimulationCompleted,
   setSimulationError,
-  setSimulationProgress,
   setSimulationMessage,
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
@@ -159,11 +160,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // STUDY_MODE forces 'live' and hides the toggle. During a user study an
   // accidental auto run is unrecoverable: every confirmation channel reports
   // success without the participant doing anything, and the resulting data is
-  // indistinguishable from real data after the fact. Opt-in via
-  // VITE_STUDY_MODE so ordinary development keeps the auto default.
-  const [runMode, setRunMode] = useState<'auto' | 'live'>(
-    STUDY_MODE ? 'live' : 'auto',
-  )
+  // indistinguishable from real data after the fact.
+  //
+  // 'live' is also the default everywhere else, not just under STUDY_MODE. The
+  // old 'auto' default meant a task built with "resume on a thumbs up" did not
+  // wait for one: the simulation quietly answered on the operator's behalf and
+  // ran straight past the step they had just programmed. That teaches the wrong
+  // model of what the robot does, and it is precisely the prediction the study
+  // asks participants to make about the physical arm. Skipping the wait is a
+  // deliberate shortcut for working without a camera, so it is opt-IN.
+  const [runMode, setRunMode] = useState<'auto' | 'live'>('live')
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
   )
@@ -210,7 +216,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     objectDetection,
     humanStep,
     blockStep,
-    blockStepsCompleted,
+    macroContext,
+    resetMacroContext,
     connected,
   } = useRosEvents()
   const webcam = useWebcamVision()
@@ -221,54 +228,70 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // the one on screen (getBlockById returns null).
   useEffect(() => {
     if (!workspace || !blockStep) return
-    if (blockStep.phase === 'start') {
-      clearExecutingHighlights(workspace)
-      highlightExecutingBlock(workspace, blockStep.blockId)
-    } else {
-      clearExecutingHighlights(workspace)
-    }
-  }, [blockStep, workspace])
 
-  // Live progress feedback — block_step 'end' events already exist
-  // server-side (_notify_block_step in simulate.py) but nothing consumed
-  // them into simulation.progress/message before, so the STATUS line sat
-  // frozen on "Starting…" for the whole run, which can legitimately take
-  // minutes. Capped short of 100 — a step count is a lower bound on
-  // total steps (loops repeat the same block id), not an exact fraction, so
-  // it must not claim completion before setSimulationCompleted does.
-  // Counted in useRosEvents, not here: under the polling transport a whole
-  // burst of block_step events collapses into one re-render carrying only the
-  // last one, so counting effect firings silently dropped most steps — and
-  // whenever the surviving event was a 'start' it dropped the update
-  // altogether, leaving STATUS on "Starting simulation…" for the whole run
-  // (confirmed live 2026-07-30). blockStepsCompleted is monotonic across
-  // runs, hence the per-run baseline.
-  const stepsBaselineRef = useRef(0)
-  useEffect(() => {
-    if (simulation.isRunning) stepsBaselineRef.current = blockStepsCompleted
-    // blockStepsCompleted intentionally omitted: the baseline must be sampled
-    // when the run starts, not re-sampled on every step (that would pin it to
-    // the live value and make progress permanently 0).
-    // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [simulation.isRunning])
+    // Events for a block that is not on THIS canvas are ignored outright — not
+    // treated as "nothing is running".
+    //
+    // A Saved Task executes blocks belonging to another task's workspace, and
+    // those emit their own start/end with ids this canvas has never seen.
+    // Clearing on them wiped the macro block's own highlight a few milliseconds
+    // after it appeared, so a running Saved Task looked like it was doing
+    // nothing at all — the highlight was being switched off by its own
+    // children.
+    // While a Saved Task is running, its block stays lit and inner events are
+    // ignored entirely. Two separate reasons, both fatal on their own:
+    //   - the inner blocks are not on this canvas, so highlighting them is a
+    //     no-op while CLEARING on them switched the macro's own glow off;
+    //   - the macro's own event rarely survives a polling burst, so waiting for
+    //     it to re-arrive would leave the block dark most of the time.
+    // macroContext is maintained at socket level and does survive.
+    if (macroContext) {
+      clearExecutingHighlights(workspace)
+      highlightExecutingBlock(workspace, macroContext.blockId)
+      return
+    }
+
+    if (!workspace.getBlockById(blockStep.blockId)) return
+
+    clearExecutingHighlights(workspace)
+    if (blockStep.phase === 'start') {
+      highlightExecutingBlock(workspace, blockStep.blockId)
+    }
+  }, [blockStep, macroContext, workspace])
+
+  // Live STATUS feedback — block_step events already exist server-side
+  // (_notify_block_step in simulate.py) but nothing consumed them before, so
+  // the line sat frozen on "Starting…" for the whole run, which can
+  // legitimately take minutes.
+  //
   // Driven by ANY block_step, not only 'end'. Requiring 'end' meant a run
   // whose events all arrived as 'start' (or whose only surviving event in a
-  // polled burst was a 'start') never moved the STATUS line off "Starting
-  // simulation…" — indistinguishable from a run that never began. The step
-  // COUNT still comes from completed steps; the label comes from whatever is
-  // executing right now, so the line moves as soon as anything arrives.
+  // polled burst was a 'start') never moved off "Starting simulation…" —
+  // indistinguishable from a run that never began (confirmed live 2026-07-30).
   useEffect(() => {
     if (!simulation.isRunning || !blockStep) return
-    const steps = blockStepsCompleted - stepsBaselineRef.current
-    const label = humanizeBlockType(blockStep.blockType)
+
+    // While a Saved Task runs, its own line wins over the inner block's name:
+    // those inner blocks belong to another task's workspace, so naming them
+    // here told the operator nothing about where the run actually was.
+    // macroContext comes from useRosEvents rather than from `blockStep`
+    // because the polling transport collapses each burst to its LAST event,
+    // which is always an inner block — the macro's own event never survived.
+    //
+    // The line carries no run-wide "N done" tally. It had no denominator, so
+    // "Pick up — 1 done" answered a question nobody asked while sitting next
+    // to the macro's "step 3 of 3", which does have one: two different
+    // vocabularies for progress on the same line. What is running is the
+    // question this line answers; where the run is, the highlighted block on
+    // the canvas already shows.
     dispatch(
-      setSimulationProgress({
-        progress: Math.min(95, steps * 5),
-        message: steps > 0 ? `${label} — ${steps} done` : label,
-      }),
+      setSimulationMessage(
+        macroContext
+          ? `Saved task “${macroContext.name}” — step ${macroContext.step} of ${macroContext.total}`
+          : humanizeBlockType(blockStep.blockType),
+      ),
     )
-    // eslint-disable-next-line @eslint-react/exhaustive-deps
-  }, [blockStep, blockStepsCompleted, simulation.isRunning])
+  }, [blockStep, macroContext, simulation.isRunning, dispatch])
 
   // A condition wait (when_block on gesture/voice/confirm/find_object) can
   // legitimately hold the STATUS line frozen for its whole timeout (up to
@@ -286,8 +309,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     switch (humanStep.condition) {
       case 'gesture':
         return `Waiting for gesture "${gestureLabel(humanStep.value)}"…`
-      case 'voice':
-        return `Waiting for voice command "${voiceLabel(humanStep.value)}"…`
+      case 'voice': {
+        // The word to SAY, not just the block's label: the recognizer listens
+        // in SPEECH_LANG, so an English label in front of an Italian-speaking
+        // operator names the step without telling them what to utter.
+        const say = spokenExample(humanStep.value)
+        const label = voiceLabel(humanStep.value)
+        return say && say.toLowerCase() !== label.toLowerCase()
+          ? `Waiting for voice command "${label}" — say “${say}”…`
+          : `Waiting for voice command "${label}"…`
+      }
       case 'object':
         return `Waiting to find "${humanStep.value}"…`
       default:
@@ -302,11 +333,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
   // Safety-net cleanup when the run stops (the last block's `end` also clears).
   // Kept separate so `isRunning` isn't a dependency of the per-step effect.
+  // resetMacroContext belongs here rather than in the hook's own event
+  // handling: a Stop, or any abort inside a Saved Task, means the macro's
+  // 'end' event never fires, and the stale context would then hijack the next
+  // run's highlight and STATUS line.
   useEffect(() => {
-    if (!simulation.isRunning && workspace) {
-      clearExecutingHighlights(workspace)
+    if (!simulation.isRunning) {
+      if (workspace) clearExecutingHighlights(workspace)
+      resetMacroContext()
     }
-  }, [simulation.isRunning, workspace])
+  }, [simulation.isRunning, workspace, resetMacroContext])
 
   // What this task's own blocks actually need — drives which permission a
   // live run asks for (never both by default) and which preflight note to
@@ -772,13 +808,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           : 'Robot not connected — check the hardware connection before running.',
     })
   }
+  // Worded with the switch's own name. "Execute live" / "auto mode" were the
+  // names of an earlier control and survived its rename, so this notice named
+  // a setting the operator could no longer find anywhere on screen.
   if (taskHasHumanStep && runMode === 'auto') {
     preflightIssues.push({
       text: needsCameraOrVoice
-        ? 'This task uses gesture or voice recognition. In auto mode the step completes on its own.'
-        : 'This task waits for the operator. In auto mode the step completes on its own, without waiting.',
+        ? 'This task uses gesture or voice recognition, but human steps are set to be answered automatically — the step will complete without you.'
+        : 'This task waits for the operator, but human steps are set to be answered automatically — it will not wait.',
       action: {
-        label: 'Switch to Execute live',
+        label: 'Answer them myself',
         onClick: () => setRunMode('live'),
       },
     })
@@ -2058,6 +2097,275 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           )}
         </Box>
 
+        {/* ── RUN — only on the Task Execution tab; the Test recognition
+              sandbox is a diagnostic space with no run affordance at all ── */}
+        {liveView === 'simulation' && (
+          <Box>
+            <SectionLabel>Run</SectionLabel>
+
+            <Box
+              sx={{
+                padding: '10px 14px',
+                background: panel.chrome,
+                borderRadius: '8px',
+                border: `1px solid ${panel.hairlineStrong}`,
+                mb: 1.5,
+              }}
+            >
+              <Typography
+                sx={{
+                  fontFamily: "'Geist Mono', monospace",
+                  fontSize: '0.68rem',
+                  color: panel.textDim,
+                  marginBottom: '3px',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                STATUS
+                {/* Live-event link state. A dead SocketIO connection and a run
+                    that simply isn't progressing look identical on this line
+                    otherwise — that ambiguity cost two debugging rounds on
+                    2026-07-30, since block_step events reaching the bridge
+                    says nothing about them reaching the browser. */}
+                {simulation.isRunning && !connected && (
+                  <Box
+                    component="span"
+                    sx={{ color: panel.errorLight, ml: 1, letterSpacing: 0 }}
+                  >
+                    · events offline
+                  </Box>
+                )}
+              </Typography>
+              <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
+                {simulation.isRunning && (
+                  <CircularProgress size={11} sx={{ color: panel.primary }} />
+                )}
+                {/* The panel's live region for run progress, and the only one
+                    that announces the start of a human step — the overlay below
+                    is purely visual, so without this a screen-reader user is
+                    told the wait EXPIRED but never that it began.
+                    Deliberately on this always-mounted element rather than on
+                    the overlay: a live region inserted into the DOM already
+                    populated is announced unreliably, while a persistent one
+                    whose text changes is not. The message already names the
+                    channel (see humanStepLabel above), which is the part the
+                    operator needs. */}
+                <Typography
+                  role="status"
+                  aria-live="polite"
+                  sx={{
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                    color: simulation.isRunning
+                      ? panel.primaryLight
+                      : panel.muted,
+                  }}
+                >
+                  {simulation.message}
+                </Typography>
+              </Stack>
+            </Box>
+
+            {/* Pre-flight controls only. All of these are disabled once a run
+              starts, and together they push EVENTS — whose gesture/voice
+              readouts are the only live ones on screen — below the fold on a
+              laptop viewport exactly while they are updating. STATUS stays,
+              and the safety line that still applies mid-run (the teach-pendant
+              e-stop) lives in the footer, which is always visible. */}
+            {!simulation.isRunning && (
+              <>
+                <Stack
+                  direction="row"
+                  sx={{ alignItems: 'center', gap: 1, mb: 1 }}
+                >
+                  <Typography
+                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                  >
+                    Mode
+                  </Typography>
+                  <SegmentedControl
+                    dark
+                    aria-label="Mode"
+                    value={executionTarget}
+                    exclusive
+                    disabled={simulation.isRunning}
+                    onChange={(_, v) => v && setExecutionTarget(v)}
+                    options={[
+                      {
+                        value: 'sim',
+                        label: UI_TEXT.simulate,
+                        icon: <MonitorPlay size={13} />,
+                        activeColor: panel.success,
+                      },
+                      {
+                        value: 'real',
+                        label: UI_TEXT.runOnRobot,
+                        icon: <Cpu size={13} />,
+                        activeColor: panel.warning,
+                      },
+                    ]}
+                  />
+                </Stack>
+
+                {/* Event handling folds into the target choice instead of being a
+                separate, unrelated-sounding "Events" control: on Simulation
+                it's an optional convenience switch; on Real robot it's not a
+                choice at all (auto-completing a physical gesture/voice wait
+                makes no sense and is unsafe), so the switch is replaced by a
+                plain safety notice and runMode is forced to 'live'. */}
+                {executionTarget === 'sim' && !STUDY_MODE ? (
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mb: 1,
+                    }}
+                  >
+                    <Box>
+                      <Typography
+                        sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                      >
+                        Answer human steps automatically
+                      </Typography>
+                      <Typography
+                        sx={{ fontSize: '0.65rem', color: panel.muted }}
+                      >
+                        The simulation will not wait for a gesture, a voice
+                        command or the Confirm button. Use it when no camera or
+                        microphone is available.
+                      </Typography>
+                    </Box>
+                    <Switch
+                      size="small"
+                      checked={runMode === 'auto'}
+                      disabled={simulation.isRunning}
+                      onChange={(e) =>
+                        setRunMode(e.target.checked ? 'auto' : 'live')
+                      }
+                      sx={{
+                        ...panelSwitchOffSx,
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: panel.primary,
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track':
+                          {
+                            backgroundColor: panel.primary,
+                          },
+                      }}
+                    />
+                  </Stack>
+                ) : executionTarget === 'sim' ? (
+                  // Study mode on simulation: no toggle to offer, but the absence
+                  // of one must not read as "the setting is missing".
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: panel.primaryTint(0.12),
+                      border: `1px solid ${panel.primaryTint(0.4)}`,
+                      mb: 1,
+                    }}
+                  >
+                    <AlertTriangle size={15} color={panel.primary} />
+                    <Typography
+                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                    >
+                      Study mode — every operator step must be performed live.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: panel.warningTint(0.12),
+                      border: `1px solid ${panel.warningTint(0.4)}`,
+                      mb: 1,
+                    }}
+                  >
+                    <AlertTriangle size={15} color={panel.warning} />
+                    <Typography
+                      sx={{ fontSize: '0.72rem', color: panel.warningLight }}
+                    >
+                      Live hardware — the real robot will move. Gestures and
+                      voice commands must be performed live.
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Only what this task actually uses — never both by default —
+                and said up front, since the browser's own permission prompt
+                gives no context for why it's asking. */}
+                {runMode === 'live' && needsCameraOrVoice && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: panel.primaryTint(0.08),
+                      border: `1px solid ${panel.primaryTint(0.25)}`,
+                      mb: 1,
+                    }}
+                  >
+                    {taskNeedsCamera ? (
+                      <Camera size={15} color={panel.primary} />
+                    ) : (
+                      <Mic size={15} color={panel.primary} />
+                    )}
+                    <Typography
+                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                    >
+                      Run will ask for{' '}
+                      {taskNeedsCamera && taskNeedsVoice
+                        ? 'camera and microphone access'
+                        : taskNeedsCamera
+                          ? 'camera access'
+                          : 'microphone access'}{' '}
+                      — gestures/voice must really happen.
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Both targets get an explicit, honest note — silence on the
+                Simulation side would read as "probably fine" rather than the
+                actual guarantee (the physical arm cannot move from this button,
+                full stop). Progressive disclosure only for the extra hardware
+                badge/select, which only matters once "Real robot" is chosen. */}
+                {executionTarget === 'sim' && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: panel.successTint(0.1),
+                      border: `1px solid ${panel.successTint(0.3)}`,
+                      mb: 1,
+                    }}
+                  >
+                    <MonitorPlay size={15} color={panel.success} />
+                    <Typography
+                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                    >
+                      Twin only — the physical arm never moves from this button.
+                    </Typography>
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+        )}
+
         {/* ── EVENTS — only while events can actually happen ── */}
         {eventsVisible && (
           <Box>
@@ -2157,7 +2465,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         .slice(0, 2)
                         .map((d) => d.class)
                         .join(', ')
-                    : 'none'}
+                    : NOTHING_RECOGNIZED}
                 </Typography>
               </Stack>
 
@@ -2203,253 +2511,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       ? 'microphone permission denied'
                       : voice.lastError
                         ? 'heard, but send failed — retry'
-                        : voice.word || (voice.active ? 'listening…' : 'idle')}
+                        : voice.word
+                          ? voiceLabel(voice.word)
+                          : voice.active
+                            ? 'Listening…'
+                            : NOTHING_RECOGNIZED}
                 </Typography>
               </Stack>
             </Stack>
-          </Box>
-        )}
-
-        {/* ── RUN — only on the Task Execution tab; the Test recognition
-              sandbox is a diagnostic space with no run affordance at all ── */}
-        {liveView === 'simulation' && (
-          <Box>
-            <SectionLabel>Run</SectionLabel>
-
-            <Box
-              sx={{
-                padding: '10px 14px',
-                background: panel.chrome,
-                borderRadius: '8px',
-                border: `1px solid ${panel.hairlineStrong}`,
-                mb: 1.5,
-              }}
-            >
-              <Typography
-                sx={{
-                  fontFamily: "'Geist Mono', monospace",
-                  fontSize: '0.68rem',
-                  color: panel.textDim,
-                  marginBottom: '3px',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                STATUS
-                {/* Live-event link state. A dead SocketIO connection and a run
-                    that simply isn't progressing look identical on this line
-                    otherwise — that ambiguity cost two debugging rounds on
-                    2026-07-30, since block_step events reaching the bridge
-                    says nothing about them reaching the browser. */}
-                {simulation.isRunning && !connected && (
-                  <Box
-                    component="span"
-                    sx={{ color: panel.errorLight, ml: 1, letterSpacing: 0 }}
-                  >
-                    · events offline
-                  </Box>
-                )}
-              </Typography>
-              <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1}>
-                {simulation.isRunning && (
-                  <CircularProgress size={11} sx={{ color: panel.primary }} />
-                )}
-                {/* The panel's live region for run progress, and the only one
-                    that announces the start of a human step — the overlay below
-                    is purely visual, so without this a screen-reader user is
-                    told the wait EXPIRED but never that it began.
-                    Deliberately on this always-mounted element rather than on
-                    the overlay: a live region inserted into the DOM already
-                    populated is announced unreliably, while a persistent one
-                    whose text changes is not. The message already names the
-                    channel (see humanStepLabel above), which is the part the
-                    operator needs. */}
-                <Typography
-                  role="status"
-                  aria-live="polite"
-                  sx={{
-                    fontSize: '0.8rem',
-                    fontWeight: 500,
-                    color: simulation.isRunning
-                      ? panel.primaryLight
-                      : panel.muted,
-                  }}
-                >
-                  {simulation.message}
-                </Typography>
-              </Stack>
-            </Box>
-
-            <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1 }}>
-              <Typography sx={{ fontSize: '0.78rem', color: panel.textDim }}>
-                Mode
-              </Typography>
-              <SegmentedControl
-                dark
-                aria-label="Mode"
-                value={executionTarget}
-                exclusive
-                disabled={simulation.isRunning}
-                onChange={(_, v) => v && setExecutionTarget(v)}
-                options={[
-                  {
-                    value: 'sim',
-                    label: UI_TEXT.simulate,
-                    icon: <MonitorPlay size={13} />,
-                    activeColor: panel.success,
-                  },
-                  {
-                    value: 'real',
-                    label: UI_TEXT.runOnRobot,
-                    icon: <Cpu size={13} />,
-                    activeColor: panel.warning,
-                  },
-                ]}
-              />
-            </Stack>
-
-            {/* Event handling folds into the target choice instead of being a
-              separate, unrelated-sounding "Events" control: on Simulation
-              it's an optional convenience switch; on Real robot it's not a
-              choice at all (auto-completing a physical gesture/voice wait
-              makes no sense and is unsafe), so the switch is replaced by a
-              plain safety notice and runMode is forced to 'live'. */}
-            {executionTarget === 'sim' && !STUDY_MODE ? (
-              <Stack
-                direction="row"
-                sx={{
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  mb: 1,
-                }}
-              >
-                <Box>
-                  <Typography
-                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
-                  >
-                    Auto-complete gesture/voice steps
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
-                    Skip the camera/microphone requirements during simulation.
-                  </Typography>
-                </Box>
-                <Switch
-                  size="small"
-                  checked={runMode === 'auto'}
-                  disabled={simulation.isRunning}
-                  onChange={(e) =>
-                    setRunMode(e.target.checked ? 'auto' : 'live')
-                  }
-                  sx={{
-                    ...panelSwitchOffSx,
-                    '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: panel.primary,
-                    },
-                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: panel.primary,
-                    },
-                  }}
-                />
-              </Stack>
-            ) : executionTarget === 'sim' ? (
-              // Study mode on simulation: no toggle to offer, but the absence
-              // of one must not read as "the setting is missing".
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: panel.primaryTint(0.12),
-                  border: `1px solid ${panel.primaryTint(0.4)}`,
-                  mb: 1,
-                }}
-              >
-                <AlertTriangle size={15} color={panel.primary} />
-                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
-                  Study mode — every operator step must be performed live.
-                </Typography>
-              </Box>
-            ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: panel.warningTint(0.12),
-                  border: `1px solid ${panel.warningTint(0.4)}`,
-                  mb: 1,
-                }}
-              >
-                <AlertTriangle size={15} color={panel.warning} />
-                <Typography
-                  sx={{ fontSize: '0.72rem', color: panel.warningLight }}
-                >
-                  Live hardware — the real robot will move. Gestures and voice
-                  commands must be performed live.
-                </Typography>
-              </Box>
-            )}
-
-            {/* Only what this task actually uses — never both by default —
-              and said up front, since the browser's own permission prompt
-              gives no context for why it's asking. */}
-            {runMode === 'live' && needsCameraOrVoice && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: panel.primaryTint(0.08),
-                  border: `1px solid ${panel.primaryTint(0.25)}`,
-                  mb: 1,
-                }}
-              >
-                {taskNeedsCamera ? (
-                  <Camera size={15} color={panel.primary} />
-                ) : (
-                  <Mic size={15} color={panel.primary} />
-                )}
-                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
-                  Run will ask for{' '}
-                  {taskNeedsCamera && taskNeedsVoice
-                    ? 'camera and microphone access'
-                    : taskNeedsCamera
-                      ? 'camera access'
-                      : 'microphone access'}{' '}
-                  — gestures/voice must really happen.
-                </Typography>
-              </Box>
-            )}
-
-            {/* Both targets get an explicit, honest note — silence on the
-              Simulation side would read as "probably fine" rather than the
-              actual guarantee (the physical arm cannot move from this button,
-              full stop). Progressive disclosure only for the extra hardware
-              badge/select, which only matters once "Real robot" is chosen. */}
-            {executionTarget === 'sim' && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  background: panel.successTint(0.1),
-                  border: `1px solid ${panel.successTint(0.3)}`,
-                  mb: 1,
-                }}
-              >
-                <MonitorPlay size={15} color={panel.success} />
-                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
-                  Twin only — the physical arm never moves from this button.
-                </Typography>
-              </Box>
-            )}
           </Box>
         )}
       </Box>

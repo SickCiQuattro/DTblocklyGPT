@@ -4,7 +4,6 @@ import { UI_TEXT } from 'constants/uiVocabulary'
 
 export interface SimulationState {
   isRunning: boolean
-  progress: number // 0-100
   message: string
   // Which target the last/current run is for — lets sibling components
   // (StatusBar) distinguish "Simulation running" from "Robot running"
@@ -14,7 +13,6 @@ export interface SimulationState {
 
 export const initialState: SimulationState = {
   isRunning: false,
-  progress: 0,
   // Mode-neutral — 'Simulation not started' read wrong once executionTarget
   // is 'real' (nothing being simulated on the real robot). The reducers
   // below pick target-specific wording once a target is actually known.
@@ -28,32 +26,20 @@ export const simulationSlice = createSlice({
   reducers: {
     startSimulation(state, action: PayloadAction<'sim' | 'real'>) {
       state.isRunning = true
-      state.progress = 0
       state.message =
         action.payload === 'real' ? 'Starting run...' : 'Starting simulation...'
       state.executionTarget = action.payload
     },
     stopSimulation(state) {
       state.isRunning = false
-      state.progress = 0
       state.message =
         state.executionTarget === 'real' ? 'Run stopped' : 'Simulation stopped'
-    },
-    setSimulationProgress(
-      state,
-      action: PayloadAction<{ progress: number; message?: string }>,
-    ) {
-      state.progress = action.payload.progress
-      if (action.payload.message) {
-        state.message = action.payload.message
-      }
     },
     setSimulationMessage(state, action: PayloadAction<string>) {
       state.message = action.payload
     },
     setSimulationCompleted(state) {
       state.isRunning = false
-      state.progress = 100
       state.message =
         state.executionTarget === 'real'
           ? UI_TEXT.taskCompletedOnRobot
@@ -61,7 +47,6 @@ export const simulationSlice = createSlice({
     },
     setSimulationError(state, action: PayloadAction<string>) {
       state.isRunning = false
-      state.progress = 0
       state.message = action.payload
     },
     // This slice is a single global instance, not scoped per task —
@@ -78,7 +63,6 @@ export const simulationSlice = createSlice({
 export const {
   startSimulation,
   stopSimulation,
-  setSimulationProgress,
   setSimulationMessage,
   setSimulationCompleted,
   setSimulationError,
