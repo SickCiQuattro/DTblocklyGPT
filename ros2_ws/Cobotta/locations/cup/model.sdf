@@ -1,29 +1,234 @@
 <?xml version="1.0" ?>
-<!--
-Copyright 2020 Google LLC.
+<sdf version="1.7">
+  <!--
+    Transparent plastic cup used as a place target. Built from primitives, not
+    a mesh, for the same reason tube_rack is: get_location_profile() in
+    simulate.py derives floor_height / is_container by scanning collisions for
+    box and cylinder geometry, and returns is_container=False for anything
+    mesh-based. A mesh location therefore always falls back to the "hover
+    above the rim and let go" branch, which is what every non-rack location in
+    this folder used to do.
 
-This work is licensed under the Creative Commons Attribution 4.0
-International License. To view a copy of this license, visit
-http://creativecommons.org/licenses/by/4.0/ or send a letter
-to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
--->
-<sdf version="1.6">
-  <model name="Room_Essentials_Mug_White_Yellow">
-    <link name="link_0">
-      <visual name="visual">
-        <geometry>
-          <mesh>
-            <uri>meshes/model.obj</uri>
-          </mesh>
-        </geometry>
-      </visual>
-      <collision name="collision_0">
-        <geometry>
-          <mesh>
-            <uri>meshes/model.obj</uri>
-          </mesh>
-        </geometry>
+    Measured on the physical cup: base 55 mm outside diameter,
+    mouth 80 mm. HEIGHT IS NOT A MEASURED VALUE — 120 mm is a
+    plausible figure for a cup with those two diameters. Measure the real one
+    and change H below; nothing else in the file needs to move, and nothing in
+    the backend hard-codes this height (resolve_location_metrics reads the SDF).
+
+    Geometry: 12 tapered wall panels approximating a truncated cone, half-angle
+    5.95 deg, panel slant length 120.6 mm. The floor is a
+    square plate inscribed in the base circle rather than a cylinder, because
+    only a BOX collision can be recognized as the container floor — a cylinder
+    contributes to the rim height and nothing else. A tube is placed at the
+    cup's centre, so the square's smaller footprint is not a constraint.
+
+    Chosen over the Google Scanned Objects mug that used to occupy this folder,
+    which was a non-static mesh: it drifted under physics and offered no
+    container semantics.
+  -->
+  <model name="cup">
+    <static>true</static>
+
+    <link name="link">
+
+      <!-- Container floor. Must be a box, and must stay thin relative to its
+           own width (the detector requires size_z < min(size_x, size_y) / 2),
+           or the cup stops reading as a container. -->
+      <collision name="col_floor">
+        <pose>0 0 0.00100 0 0 0</pose>
+        <geometry><box><size>0.03811 0.03811 0.00200</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
       </collision>
+      <visual name="vis_floor">
+        <pose>0 0 0.00100 0 0 0</pose>
+        <geometry><cylinder><radius>0.02750</radius><length>0.00200</length></cylinder></geometry>
+        <material>
+          <ambient>0.70 0.78 0.85 0.45</ambient>
+          <diffuse>0.70 0.78 0.85 0.45</diffuse>
+        </material>
+        <transparency>0.55</transparency>
+      </visual>
+
+      <collision name="col_wall_0">
+        <pose>0.03375 0.00000 0.06000 0 0.10379 0.00000</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_0">
+        <pose>0.03375 0.00000 0.06000 0 0.10379 0.00000</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_1">
+        <pose>0.02923 0.01687 0.06000 0 0.10379 0.52360</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_1">
+        <pose>0.02923 0.01687 0.06000 0 0.10379 0.52360</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_2">
+        <pose>0.01688 0.02923 0.06000 0 0.10379 1.04720</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_2">
+        <pose>0.01688 0.02923 0.06000 0 0.10379 1.04720</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_3">
+        <pose>0.00000 0.03375 0.06000 0 0.10379 1.57080</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_3">
+        <pose>0.00000 0.03375 0.06000 0 0.10379 1.57080</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_4">
+        <pose>-0.01687 0.02923 0.06000 0 0.10379 2.09440</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_4">
+        <pose>-0.01687 0.02923 0.06000 0 0.10379 2.09440</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_5">
+        <pose>-0.02923 0.01687 0.06000 0 0.10379 2.61799</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_5">
+        <pose>-0.02923 0.01687 0.06000 0 0.10379 2.61799</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_6">
+        <pose>-0.03375 0.00000 0.06000 0 0.10379 3.14159</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_6">
+        <pose>-0.03375 0.00000 0.06000 0 0.10379 3.14159</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_7">
+        <pose>-0.02923 -0.01687 0.06000 0 0.10379 3.66519</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_7">
+        <pose>-0.02923 -0.01687 0.06000 0 0.10379 3.66519</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_8">
+        <pose>-0.01688 -0.02923 0.06000 0 0.10379 4.18879</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_8">
+        <pose>-0.01688 -0.02923 0.06000 0 0.10379 4.18879</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_9">
+        <pose>-0.00000 -0.03375 0.06000 0 0.10379 4.71239</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_9">
+        <pose>-0.00000 -0.03375 0.06000 0 0.10379 4.71239</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_10">
+        <pose>0.01688 -0.02923 0.06000 0 0.10379 5.23599</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_10">
+        <pose>0.01688 -0.02923 0.06000 0 0.10379 5.23599</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
+      <collision name="col_wall_11">
+        <pose>0.02923 -0.01688 0.06000 0 0.10379 5.75959</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <surface><friction><ode><mu>0.9</mu><mu2>0.9</mu2></ode></friction></surface>
+      </collision>
+      <visual name="vis_wall_11">
+        <pose>0.02923 -0.01688 0.06000 0 0.10379 5.75959</pose>
+        <geometry><box><size>0.00200 0.01953 0.12065</size></box></geometry>
+        <material>
+          <ambient>0.75 0.82 0.88 0.30</ambient>
+          <diffuse>0.75 0.82 0.88 0.30</diffuse>
+          <specular>0.9 0.9 0.9 1</specular>
+        </material>
+        <transparency>0.70</transparency>
+      </visual>
     </link>
   </model>
 </sdf>

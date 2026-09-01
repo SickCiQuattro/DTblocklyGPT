@@ -20,7 +20,7 @@ Catalog (owner-scoped, shared=True):
     redundant demo props, and `sample bowl` existed only to demonstrate an
     infeasible-width object — see REMOVED_OBJECTS for DB cleanup of rows
     seeded by an older version of this command).
-  Locations (4): tube rack (3-slot rack), collection rack (taught pose,
+  Locations (4): tube rack (4-slot rack), cup (taught pose,
     ex 'collector' — renamed in place on --reset to keep the pose),
     waste bin (ex 'box'), sample tray (ex 'plate').
   Skills (2): Inspect sample (ex 'reaction-checking', real taught waypoints
@@ -83,7 +83,11 @@ REMOVED_OBJECTS = ["red tube", "beaker", "sample bowl"]
 
 LOCATIONS = [
     {"name": "tube rack", "keywords": ["portaprovette", "rack", "tube rack"]},
-    {"name": "collection rack", "keywords": ["collection", "output rack"]},
+    # Replaced the mesh-based "collection rack" 2026-09-01: that rack does not
+    # exist in the physical cell, and its Gazebo model used a concave collision
+    # mesh that made the physics engine log an entity error on every spawn. The
+    # cup is a real object on the bench, and its model is built from primitives.
+    {"name": "cup", "keywords": ["bicchiere", "cup", "beaker"]},
     {"name": "waste bin", "keywords": ["cestino", "bin", "trash"]},
     {"name": "sample tray", "keywords": ["vassoio", "tray"]},
 ]
@@ -91,7 +95,8 @@ LOCATIONS = [
 # Old -> new name, applied on --reset by renaming rows in place (not
 # delete+recreate) so taught data — e.g. collector's joint-angle position —
 # survives the rename.
-RENAME_LOCATIONS = {"collector": "collection rack", "box": "waste bin", "plate": "sample tray"}
+RENAME_LOCATIONS = {"collector": "cup", "collection rack": "cup",
+                    "box": "waste bin", "plate": "sample tray"}
 RENAME_ACTIONS = {"reaction-checking": "Inspect sample", "shaking": "Shake sample"}
 RENAME_OBJECTS = {
     "test tube": "tube",
@@ -117,9 +122,9 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--owner", type=int, default=None,
-                             help="Owner user ID (default: operator1 or lowest-id user)")
+                            help="Owner user ID (default: operator1 or lowest-id user)")
         parser.add_argument("--reset", action="store_true",
-                             help="Wipe tasks/objects and trim locations/skills to the pharma set before seeding")
+                            help="Wipe tasks/objects and trim locations/skills to the pharma set before seeding")
 
     def handle(self, *args, **options):
         owner_id = options["owner"]
@@ -378,7 +383,7 @@ class Command(BaseCommand):
 
         tube = objs["tube"]
         blue_tt, yellow_tt, green_tt = objs["blue tube"], objs["yellow tube"], objs["green tube"]
-        tube_rack, collection_rack, waste_bin = locs["tube rack"], locs["collection rack"], locs["waste bin"]
+        tube_rack, cup, waste_bin = locs["tube rack"], locs["cup"], locs["waste bin"]
         inspect, shake = acts["Inspect sample"], acts["Shake sample"]
         medicine = objs["medicine bottle"]
 
@@ -398,9 +403,9 @@ class Command(BaseCommand):
             },
             {
                 "name": "Shake and check sample",
-                "description": "Picks up a tube, shakes it, holds it up to the camera for inspection, then sets it in the collection rack.",
+                "description": "Picks up a tube, shakes it, holds it up to the camera for inspection, then sets it in the cup.",
                 "workspace": workspace(
-                    pick(tube), proc(shake), proc(inspect), place(collection_rack),
+                    pick(tube), proc(shake), proc(inspect), place(cup),
                 ),
             },
             {
@@ -415,11 +420,11 @@ class Command(BaseCommand):
             },
             {
                 "name": "Verify and store medicine",
-                "description": "Picks up the medicine bottle, waits for the operator to check the label and give a thumbs up, then places it in the collection rack.",
+                "description": "Picks up the medicine bottle, waits for the operator to check the label and give a thumbs up, then places it in the cup.",
                 "workspace": workspace(
                     pick(medicine),
                     human("Check the label and give a thumbs up", confirm=gesture("THUMBS_UP")),
-                    place(collection_rack),
+                    place(cup),
                 ),
             },
             {
@@ -465,8 +470,8 @@ class Command(BaseCommand):
             },
             {
                 "name": "Sort green tube by camera",
-                "description": "Waits for a green tube in view, then moves it to the collection rack.",
-                "workspace": workspace(when(find(green_tt), pick(green_tt), place(collection_rack))),
+                "description": "Waits for a green tube in view, then moves it to the cup.",
+                "workspace": workspace(when(find(green_tt), pick(green_tt), place(cup))),
             },
         ]
 

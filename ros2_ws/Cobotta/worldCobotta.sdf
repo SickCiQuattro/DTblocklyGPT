@@ -182,33 +182,6 @@
     </light>
 
 
-    <!-- * testing objects for pick and place tasks -->
-    <!-- <include>
-      <name>flaskholder1</name>
-      <static>false</static>
-      <pose>-9.05 -1.48 1.065 0 0 0</pose>
-      <uri>
-        model://locations/collector/model.sdf
-      </uri>
-    </include>
-
-    <include>
-      <name>flaskholder2</name>
-      <static>false</static>
-      <pose>-8.8 -1.41 1.065 0 0 0</pose>
-      <uri>
-        model://locations/collector/model.sdf
-      </uri>
-    </include>
-
-    <include>
-      <name>flask</name>
-      <static>false</static>
-      <pose>-9.05 -1.48 1.065 0 0 0</pose>
-      <uri>
-        model://objects/flask/model.sdf
-      </uri>
-    </include> -->
 
     <include>
       <name>Cobotta</name>
