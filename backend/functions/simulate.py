@@ -1,5 +1,7 @@
 from backend.functions.task import _resolve_runtime_workspace
 from backend.block_types import (
+    WHEN_START,
+    BooleanItems,
     LogicItems,
     StepsItems,
     EventsItems,
@@ -937,19 +939,19 @@ def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: floa
 
 
 def resolve_location_metrics(sdf_name: str) -> float:
-    # Fallback heights (m) for locations whose SDF has no usable collision
-    # geometry — only the current catalog folder names (see seed_library.py
-    # LOCATIONS) are looked up by _h_place; other entries here are for
-    # ros2_ws/Cobotta/locations/ folders that exist but aren't in the
-    # catalog (not wired to any DB row).
+    # Fallback heights (m), one per catalog location (seed_library.py
+    # LOCATIONS). Every one of them is now built from primitives, so
+    # get_sdf_dimensions answers for all four and none of these is reached in
+    # practice — they stay as a backstop for a location folder whose SDF has
+    # no usable collision geometry.
+    #
+    # The pot/pulvis/divider/pillbox entries that used to sit here described
+    # model folders that no DB row pointed at; the folders went in the same
+    # sweep, and a fallback height for a location that cannot be selected is
+    # a lookup nothing can perform.
     location_heights = {
-        "cup": 0.08,
-        "pot": 0.06,
-        "pulvis": 0.05,
-        "divider": 0.05,
-        "pillbox": 0.04,
+        "cup": 0.12,
         "tube_rack": 0.045,
-        "collection_rack": 0.06,
         "waste_bin": 0.08,
         "sample_tray": 0.02,
     }
@@ -1953,7 +1955,11 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
         print(str(e))
 
 
-def simulate_ros_place(picked_obj_name: str = "", objectsOfUser=None, location_name: str = "collection rack"):
+# No defaults: every parameter is always supplied by the one production caller
+# and by the tests. location_name in particular used to default to a catalog
+# entry ("collection rack") that has since been replaced — a default naming a
+# location folder is a silent trap the moment the catalog changes under it.
+def simulate_ros_place(picked_obj_name: str, objectsOfUser, location_name: str):
     try:
         # Sync state from ROS. Abort if it fails — a stale IK seed risks
         # singularities / collisions on the descent.
@@ -2474,7 +2480,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         try:
             _bridge.get_vision_state()
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
-                 requests.exceptions.HTTPError):
+                requests.exceptions.HTTPError):
             if STRICT_CONDITIONS:
                 logger.warning("condition_failed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
                 _abort_task(
@@ -2844,21 +2850,21 @@ def _eval_condition_tree(block: dict, simulate_event: bool) -> bool:
     btype = block.get("type", "")
     inputs = block.get("inputs", {})
 
-    if btype == "logic_and_block":
+    if btype == BooleanItems.AND.value:
         a_block = inputs.get("A", {}).get("block")
         b_block = inputs.get("B", {}).get("block")
         if a_block is None or b_block is None:
             return False
         return _eval_condition_tree(a_block, simulate_event) and _eval_condition_tree(b_block, simulate_event)
 
-    if btype == "logic_or_block":
+    if btype == BooleanItems.OR.value:
         a_block = inputs.get("A", {}).get("block")
         b_block = inputs.get("B", {}).get("block")
         if a_block is None or b_block is None:
             return False
         return _eval_condition_tree(a_block, simulate_event) or _eval_condition_tree(b_block, simulate_event)
 
-    if btype == "logic_not_block":
+    if btype == BooleanItems.NOT.value:
         bool_block = inputs.get("BOOL", {}).get("block")
         if bool_block is None:
             return False
@@ -2882,22 +2888,46 @@ def _resolve_condition(condition_block: dict, simulate_event: bool) -> bool:
 # Leaf action blocks whose execution is mirrored to the frontend as a live
 # "block_step" highlight (start before the handler, end after it). Containers
 # (repeat/when) are intentionally excluded — only the running action glows.
+#
+# A Saved Task is the exception to that rule, and included on purpose. The
+# reason containers are excluded is that their children are on the canvas: the
+# inner block lights up, so the operator can see where the run is. A macro's
+# children live in ANOTHER task's workspace and are not displayed at all, so
+# excluding it left nothing highlighted for the whole time the sub-program ran
+# — the canvas looked idle while the robot moved. The inner blocks still emit
+# their own events; those ids are not on this canvas and highlightExecutingBlock
+# no-ops on a block it cannot find, so they cost nothing.
 HIGHLIGHTABLE_BLOCKS = {
     StepsItems.PICK.value, StepsItems.PLACE.value, StepsItems.PROCESSING.value,
     StepsItems.MOVE_TO.value, StepsItems.GRIPPER.value, StepsItems.OPEN_GRIPPER.value,
     StepsItems.CLOSE_GRIPPER.value, StepsItems.WAIT.value,
     StepsItems.HUMAN_ACTION.value, StepsItems.NOTIFY_ACTION.value,
+    MacroItems.MACRO_TASK.value,
 }
 
 
-def _notify_block_step(block_id, block_type, phase):
-    """Fire-and-forget block-execution highlight event (non-fatal)."""
+def _notify_block_step(block_id, block_type, phase, **extra):
+    """Fire-and-forget block-execution highlight event (non-fatal).
+
+    `extra` carries optional per-block detail (currently the Saved Task progress
+    fields) on the same channel rather than a second event type: the frontend
+    already re-highlights on every 'start' for the same id, so re-announcing a
+    block with new detail costs one redundant class toggle.
+
+    It is NOT free of plumbing, despite riding an existing channel: the Flask
+    bridge rebuilds this payload field by field (`/block-step` in
+    blueprints/flask_api.py), so a key not named there is dropped in transit
+    with no error at either end. Adding a field here means adding it there too,
+    and rebuilding the ROS package — which is exactly how the macro progress
+    fields came to be sent by the backend and never seen by the browser.
+    """
     try:
         _bridge.notify("/api/block-step", {
             "kind": "block",
             "blockId": block_id,
             "blockType": block_type,
             "phase": phase,
+            **extra,
         })
     except Exception:
         pass
@@ -3527,12 +3557,103 @@ def simulation_recursive_blockly_parser(
                 _resolve_runtime_workspace(macro_task) if macro_task else None
             )
             if macro_workspace:
-                simulation_recursive_blockly_parser(
-                    macro_workspace,
-                    objectsOfUser, actionsOfUser, locationsOfUser,
-                    simulate_event, inside_conditional, _macro_depth + 1,
+                # A published workspace is the flat array of top-level blocks
+                # (getBlocklyStructure returns `.blocks.blocks`), while the
+                # parser takes ONE block. simulate_task unwraps that list at the
+                # top level; this branch did not, so every macro run died on
+                # `code["type"]` with "list indices must be integers". Same
+                # shape as the legacy-column bug above: the read path was fixed
+                # without matching the shape it now returns.
+                blocks = (
+                    macro_workspace
+                    if isinstance(macro_workspace, list)
+                    else [macro_workspace]
                 )
+                # Progress for the Saved Task, announced on the macro's own
+                # block. Its inner blocks live in another task's workspace and
+                # are not on this canvas, so without this the operator watches
+                # one block glow for the whole sub-program with no way to tell
+                # what it is doing or how far along it is — the one place in a
+                # run where the canvas cannot answer that by itself.
+                #
+                # The chain is flattened here rather than counting the entries
+                # of `blocks`: in Blockly a connected sequence is ONE top-level
+                # block with the rest hanging off `next`, so a three-step macro
+                # arrives as a single root and reported "step 1 of 1".
+                #
+                # `when_start` is walked but not counted — it is the editor's
+                # start marker, not something the author put in the program
+                # (analisi.py excludes it from block counts for the same
+                # reason).
+                #
+                # Reported as "step N of M", never a percentage: M counts the
+                # chain, while a `repeat 5 times` inside it executes its body
+                # five times. "the 3rd of the 4 things this saved task does"
+                # stays true whatever those things expand to at runtime.
+                chain = []
+                for root in blocks:
+                    node = root
+                    while isinstance(node, dict):
+                        chain.append(node)
+                        node = (node.get("next") or {}).get("block")
+
+                macro_total = sum(1 for b in chain if b.get("type") != WHEN_START)
+                own_id = code.get("id")
+                macro_index = 0
+                for chain_block in chain:
+                    if chain_block.get("type") != WHEN_START:
+                        macro_index += 1
+                        # Depth guard for the same reason as the wrapper above:
+                        # a macro nested inside a macro is not on this canvas
+                        # either, and its progress would hijack the line the
+                        # outer one is using.
+                        if own_id and _macro_depth == 0:
+                            _notify_block_step(
+                                own_id, block_type, "start",
+                                macroName=macro_name,
+                                macroStep=macro_index,
+                                macroTotal=macro_total,
+                            )
+                    # `next` is stripped so the parser runs THIS block only —
+                    # the chain is being walked here, and letting _next() follow
+                    # it too would execute every remaining step once per step.
+                    single = {k: v for k, v in chain_block.items() if k != "next"}
+                    simulation_recursive_blockly_parser(
+                        single,
+                        objectsOfUser, actionsOfUser, locationsOfUser,
+                        simulate_event, inside_conditional, _macro_depth + 1,
+                    )
+                    # Stop at the first failure instead of running the rest of
+                    # the macro's blocks against an already-aborted run.
+                    if _TASK_ABORT_REASON or SIMULATION_STOP_EVENT.is_set():
+                        break
+
+                # "Macro complete" must not be printed over a macro that
+                # aborted: the log then claims the sub-program ran while the
+                # run result says it failed, which is what made the original
+                # silent-skip bug so hard to see.
+                if _TASK_ABORT_REASON or SIMULATION_STOP_EVENT.is_set():
+                    print(f"[MACRO] Macro stopped before finishing: {macro_name}")
+                    return
                 print(f"[MACRO] Macro complete: {macro_name}")
+
+                # Close the Saved Task BEFORE continuing the chain.
+                #
+                # Every handler calls _next() from inside itself, so the rest of
+                # the program runs nested within this call and the wrapper's own
+                # "end" for this block does not fire until the whole run is
+                # over. For an ordinary block that is invisible — the next
+                # block's "start" replaces its highlight. For a macro it is not:
+                # the frontend pins the highlight and the STATUS line to the
+                # macro while its context is open, precisely so the macro's
+                # inner blocks cannot steal them, so without this the run
+                # finished with the macro still lit and stuck on its last step.
+                #
+                # The wrapper still emits its own "end" later; clearing an
+                # already-cleared context is a no-op.
+                if own_id and _macro_depth == 0:
+                    _notify_block_step(own_id, block_type, "end")
+
                 _next()
                 return
 
@@ -3570,18 +3691,45 @@ def simulation_recursive_blockly_parser(
             StepsItems.CLOSE_GRIPPER.value: _h_close_gripper,
             StepsItems.WAIT.value: _h_wait,
             MacroItems.MACRO_TASK.value: _h_macro,
-            "when_start": _h_when_start,
+            WHEN_START: _h_when_start,
         }
 
         handler = BLOCK_HANDLERS.get(block_type)
         if handler is not None:
             block_id = code.get("id")
-            emit_highlight = bool(block_id) and block_type in HIGHLIGHTABLE_BLOCKS
+            # Only blocks on the operator's own canvas are announced.
+            #
+            # A Saved Task executes blocks belonging to ANOTHER task's
+            # workspace: their ids are not on this canvas, so highlighting them
+            # is a no-op, but they were still counted, and a 3-step macro made
+            # the run-wide "N done" jump by four on a canvas holding three
+            # blocks. The macro reports its own progress separately, which is
+            # the honest way to describe a sub-program: as one step of this
+            # program that is N steps into itself. Fewer events also matters on
+            # the polling transport, where a burst collapses to its last event.
+            emit_highlight = (
+                bool(block_id)
+                and block_type in HIGHLIGHTABLE_BLOCKS
+                and _macro_depth == 0
+            )
+            # The macro owns its own "end": it fires when the sub-program
+            # finishes, whereas the wrapper's `finally` below only runs after
+            # _next() has taken the whole rest of the program with it. Letting
+            # both through counted the macro twice.
+            emit_end = emit_highlight and block_type != MacroItems.MACRO_TASK.value
             if emit_highlight:
                 _notify_block_step(block_id, block_type, "start")
-            handler()
-            if emit_highlight:
-                _notify_block_step(block_id, block_type, "end")
+            try:
+                handler()
+            finally:
+                # In a finally so a handler that raises still clears its
+                # highlight. Without it the "end" event is skipped and the block
+                # keeps glowing after the run has aborted — the canvas showing a
+                # step still in progress while the run reports failure. Harmless
+                # to miss on a fast leaf block, much less so on a Saved Task,
+                # which now highlights for as long as its whole sub-program runs.
+                if emit_end:
+                    _notify_block_step(block_id, block_type, "end")
         else:
             print(f"[WARNING] Block type unknown or ignored: {block_type}")
 

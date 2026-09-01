@@ -336,6 +336,152 @@ def test_macro_runs_its_published_workspace(monkeypatch):
     assert simulate._TASK_ABORT_REASON is None
 
 
+def test_macro_published_as_a_list_of_blocks_runs(monkeypatch):
+    """The shape `publish_task` actually stores: a LIST of top-level blocks.
+
+    `getBlocklyStructure()` returns `.blocks.blocks`, a flat array, and that is
+    what reaches `published_workspace`. `simulate_task` unwraps that list before
+    calling the parser; the macro handler did not, so every real macro run died
+    on `code["type"]` with "list indices must be integers, not str" — while the
+    log still printed "Macro complete".
+
+    The sibling test above passes a single dict and therefore never touched this
+    path: the fixture, not the runtime, was what made the old shape look
+    supported. Two blocks here, so a handler that unwrapped only the first would
+    still fail.
+    """
+    executed = []
+    monkeypatch.setattr(simulate, "MAX_MACRO_DEPTH", 3)
+
+    published_as_list = [
+        {"type": "wait_block", "fields": {"SECONDS": 1}},
+        {"type": "wait_block", "fields": {"SECONDS": 2}},
+    ]
+    tasks_by_id = {9: _FakeMacroTask(published_as_list)}
+    monkeypatch.setattr(simulate.Task, "objects", _FakeTaskManager(tasks_by_id))
+    monkeypatch.setattr(
+        simulate, "_interruptible_sleep", lambda s: executed.append(s)
+    )
+
+    simulate._TASK_ABORT_REASON = None
+    simulate.SIMULATION_STOP_EVENT.clear()
+    simulate.simulation_recursive_blockly_parser(
+        _macro_call(9, "Lista"), [], [], [], True, False, 0
+    )
+
+    assert simulate._TASK_ABORT_REASON is None, simulate._TASK_ABORT_REASON
+    assert executed == [1, 2], f"attesi entrambi i blocchi, eseguito {executed}"
+
+
+def test_macro_reports_step_progress_not_a_percentage(monkeypatch):
+    """A running Saved Task announces "step N of M" on its own block.
+
+    Its inner blocks belong to another task's workspace and never appear on the
+    canvas, so the macro block is the only thing the operator can see while the
+    sub-program runs — hence the progress rides on that block's own id.
+
+    Asserted as counts, never a fraction: the total is a count of TOP-LEVEL
+    blocks, and a macro containing `repeat 5 times` executes far more steps than
+    it contains. A percentage derived from this denominator would be wrong the
+    moment a loop appears, which is exactly the kind of confidently-false
+    readout this codebase keeps having to remove.
+    """
+    events = []
+    monkeypatch.setattr(simulate, "MAX_MACRO_DEPTH", 3)
+    monkeypatch.setattr(
+        simulate, "_notify_block_step",
+        lambda block_id, block_type, phase, **extra: events.append((phase, extra)),
+    )
+
+    # The shape Blockly actually stores: ONE top-level block, the rest chained
+    # through `next`, behind a `when_start` marker. Counting the top-level
+    # entries instead of the chain reported "step 1 of 1" for this very macro.
+    published = [
+        {
+            "type": "when_start",
+            "next": {"block": {
+                "type": "wait_block", "fields": {"SECONDS": 1},
+                "next": {"block": {
+                    "type": "wait_block", "fields": {"SECONDS": 2},
+                    "next": {"block": {"type": "wait_block", "fields": {"SECONDS": 3}}},
+                }},
+            }},
+        }
+    ]
+    monkeypatch.setattr(
+        simulate.Task, "objects", _FakeTaskManager({4: _FakeMacroTask(published)})
+    )
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda s: None)
+
+    simulate._TASK_ABORT_REASON = None
+    simulate.SIMULATION_STOP_EVENT.clear()
+    # `id` matters: the progress rides on the macro block's own id, and
+    # _h_macro skips the notify when there is none. Real workspaces always carry
+    # one; _macro_call omits it, which is why this passes it explicitly.
+    call = {**_macro_call(4, "Sotto-compito"), "id": "macro-block-1"}
+    simulate.simulation_recursive_blockly_parser(
+        call, [], [], [], True, False, 0
+    )
+
+    progress = [e for _, e in events if "macroStep" in e]
+    assert [e["macroStep"] for e in progress] == [1, 2, 3]
+    assert {e["macroTotal"] for e in progress} == {3}
+    assert {e["macroName"] for e in progress} == {"Sotto-compito"}
+
+
+def test_macro_closes_before_the_blocks_that_follow_it(monkeypatch):
+    """The macro's "end" must precede the next block's "start".
+
+    Every handler calls _next() from inside itself, so the rest of the program
+    runs nested within the macro's own call and the parser's wrapper does not
+    emit the macro's "end" until the entire run is over. That is invisible for
+    an ordinary block — the next "start" replaces its highlight — but the
+    frontend deliberately pins both the highlight and the STATUS line to a
+    running Saved Task so its inner blocks cannot steal them. Without an
+    explicit close the run ended with the macro still lit and the status frozen
+    on its final step.
+    """
+    seq = []
+    monkeypatch.setattr(simulate, "MAX_MACRO_DEPTH", 3)
+    monkeypatch.setattr(
+        simulate, "_notify_block_step",
+        lambda block_id, block_type, phase, **extra: seq.append((phase, block_type)),
+    )
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda s: None)
+
+    # Inner blocks carry ids, as real ones do. Without them `emit_highlight`
+    # is false for the id alone and the assertion below passes whatever the
+    # depth guard does — the fixture, not the runtime, would be under test.
+    published = [
+        {"type": "wait_block", "id": "inner-1", "fields": {"SECONDS": 1}}
+    ]
+    monkeypatch.setattr(
+        simulate.Task, "objects", _FakeTaskManager({8: _FakeMacroTask(published)})
+    )
+
+    simulate._TASK_ABORT_REASON = None
+    simulate.SIMULATION_STOP_EVENT.clear()
+    call = {
+        **_macro_call(8, "Sotto"), "id": "macro-1",
+        "next": {"block": {"type": "wait_block", "id": "after-1",
+                           "fields": {"SECONDS": 2}}},
+    }
+    simulate.simulation_recursive_blockly_parser(call, [], [], [], True, False, 0)
+
+    macro_end = seq.index(("end", "macro_task_block"))
+    following = seq.index(("start", "wait_block"), macro_end)
+    assert macro_end < following, seq
+
+    # One 'end' per block ON THE CANVAS — the macro and the block after it.
+    # The macro's inner blocks emit nothing (their ids are not on this canvas)
+    # and the macro emits exactly one end, not two. Before this, the run-wide
+    # "N done" counter advanced by five for a canvas holding two blocks.
+    assert [t for p, t in seq if p == "end"] == [
+        "macro_task_block",
+        "wait_block",
+    ], seq
+
+
 def test_macro_without_a_published_version_aborts(monkeypatch):
     """Skipping it would report success for a program that did less than it says.
 

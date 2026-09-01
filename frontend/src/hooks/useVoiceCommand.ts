@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
+import { SPEECH_LANG, matchVoiceKeyword } from 'constants/recognitionRegistry'
 import { endpoints } from 'services/endpoints'
 import SpeechRecognition, {
   useSpeechRecognition,
@@ -17,8 +18,9 @@ import SpeechRecognition, {
  * command (YES/NO/DONE/PROCEED) to the backend, which caches it for the
  * simulation loop to poll. No audio ever leaves the browser to our server.
  *
- * Recognizer language follows navigator.language (same as the chat composer),
- * so the Italian synonyms below are actually reachable on an it-* locale.
+ * Recognizer language is SPEECH_LANG (constants/recognitionRegistry), the same
+ * constant the chat composer uses — they share one recognition session, so
+ * whichever starts last would otherwise decide the language for both.
  *
  * `enabled` must reflect "this specific run/test needs voice right now" —
  * the hook owns start/stop/cleanup entirely, including stopping on unmount,
@@ -28,34 +30,6 @@ import SpeechRecognition, {
 export type VoiceWord = 'YES' | 'NO' | 'DONE' | 'PROCEED'
 
 const OWNER = 'voice-command-block'
-
-// command → spoken synonyms (lowercase). English first, Italian as a bonus.
-const VOICE_KEYWORDS: Record<VoiceWord, string[]> = {
-  YES: ['yes', 'yeah', 'yep', 'si', 'sì'],
-  NO: ['no', 'nope'],
-  DONE: ['done', 'finished', 'complete', 'fatto', 'completato'],
-  PROCEED: ['proceed', 'go', 'next', 'continue', 'procedi', 'vai', 'avanti'],
-}
-
-/**
- * Return the command whose synonym appears LAST in the transcript (so "no,
- * proceed" resolves to PROCEED — what the speaker actually ended on, not
- * whichever command happens to sort first). Punctuation is stripped before
- * tokenising so a final "Yes." still matches.
- */
-const matchVoiceKeyword = (transcript: string): VoiceWord | null => {
-  const words = transcript
-    .toLowerCase()
-    .replace(/[.,!?;:]/g, '')
-    .split(/\s+/)
-  let found: VoiceWord | null = null
-  for (const w of words) {
-    for (const cmd of Object.keys(VOICE_KEYWORDS) as VoiceWord[]) {
-      if (VOICE_KEYWORDS[cmd].includes(w)) found = cmd
-    }
-  }
-  return found
-}
 
 export const useVoiceCommand = (enabled: boolean) => {
   const {
@@ -100,7 +74,7 @@ export const useVoiceCommand = (enabled: boolean) => {
   // revised by the recognizer and can flip after a command already fired.
   useEffect(() => {
     if (!enabled || !finalTranscript) return
-    const matched = matchVoiceKeyword(finalTranscript)
+    const matched = matchVoiceKeyword(finalTranscript) as VoiceWord | null
     if (!matched) return
     resetTranscript() // clear so the same word can be said again later
     void report(matched).then((ok) => {
@@ -116,7 +90,11 @@ export const useVoiceCommand = (enabled: boolean) => {
   useEffect(() => {
     if (!enabled) return
     if (!browserSupportsSpeechRecognition) return
-    void SpeechRecognition.startListening({ owner: OWNER, continuous: true })
+    void SpeechRecognition.startListening({
+      owner: OWNER,
+      continuous: true,
+      language: SPEECH_LANG,
+    })
     return () => {
       void SpeechRecognition.stopListening(OWNER)
       setWord('')

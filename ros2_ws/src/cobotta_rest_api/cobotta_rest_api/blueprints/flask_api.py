@@ -383,13 +383,24 @@ def blockStep():
     # topic; `kind: "block"` makes polling_socket route it to the block_step
     # socket channel instead of the human-step overlay.
     data = request.get_json(silent=True) or {}
-    flask_pub.publish_step_status({
+    payload = {
         "kind": "block",
         "blockId": data.get("blockId", ""),
         "blockType": data.get("blockType", ""),
         "phase": data.get("phase", ""),
         "timestamp": time.time(),
-    })
+    }
+    # Saved Task (macro) progress, forwarded only when present.
+    #
+    # This relay rebuilds the payload field by field rather than passing the
+    # body through, so anything not named here is silently dropped. That is what
+    # happened to these three: the backend sent them, the browser never saw
+    # them, and the macro's step counter simply never appeared with no error
+    # anywhere. Any future field on this channel needs a line here too.
+    for key in ("macroName", "macroStep", "macroTotal"):
+        if data.get(key) is not None:
+            payload[key] = data[key]
+    flask_pub.publish_step_status(payload)
     return jsonify({"status": "ok"})
 
 
