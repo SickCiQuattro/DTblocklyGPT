@@ -97,8 +97,24 @@ let finalTranscript = ''
 // repeated network errors fire error->end immediately). Cap attempts; reset
 // the counter on any real result, which proves the recognizer is actually
 // healthy.
+//
+// "Any real result" is not enough on its own, and that was a live bug. Chrome
+// ends a continuous session by itself after a stretch of silence, and the
+// voice-command block turns the mic on when the RUN starts, not when the voice
+// step is reached (DigitalTwinPanel: voiceActive). So an operator waiting
+// quietly through thirty seconds of robot motion produced five silent
+// session-ends, no onresult to reset the counter, and the recognizer gave up
+// before the step that needed it ever began — the mic was already dead when
+// they finally spoke. That is why voice "did not always work" while gestures,
+// which have no session lifecycle, always did.
+//
+// A session that ran for a while before ending proves the recognizer was
+// alive, exactly as a result does. Only restarts that come straight back
+// indicate a dead mic, so the counter is reset by duration as well.
 let restartAttempts = 0
+let sessionStartedAt = 0
 const MAX_RESTART_ATTEMPTS = 5
+const HEALTHY_SESSION_MS = 1000
 
 let recognition: SpeechRecognitionLike | null = null
 
@@ -141,6 +157,12 @@ const getRecognition = (): SpeechRecognitionLike | null => {
 
   recognition.onend = () => {
     if (listenRequests.size > 0 && recognition) {
+      // A session that lasted proves the recognizer is healthy — see the
+      // note on restartAttempts. Silence-driven ends are the normal case
+      // while the operator waits, and must not count toward the cap.
+      if (Date.now() - sessionStartedAt > HEALTHY_SESSION_MS) {
+        restartAttempts = 0
+      }
       if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
         // Give up instead of spinning forever on a dead mic — listenRequests
         // stays populated so a caller can tell the difference from a clean
@@ -149,6 +171,7 @@ const getRecognition = (): SpeechRecognitionLike | null => {
         return
       }
       restartAttempts += 1
+      sessionStartedAt = Date.now()
       try {
         recognition.start()
       } catch {
@@ -183,6 +206,7 @@ const SpeechRecognitionController = {
     rec.lang = language || navigator.language || 'en-US'
     listenRequests.add(owner)
     restartAttempts = 0
+    sessionStartedAt = Date.now()
     try {
       rec.start()
     } catch {

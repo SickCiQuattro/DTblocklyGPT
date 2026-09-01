@@ -9,6 +9,7 @@ Covers the voice-command fixes:
 - simulate._wait_for_condition (voice): drains stale words before waiting and
   consumes on read (stale replay / one-word-satisfies-many), a null
   VOICE_WORD field falls back to the default, timeout never aborts
+- the browser recognizer's restart budget (source-parsed, see the last section)
 """
 import sys
 import os
@@ -301,3 +302,126 @@ def test_out_of_vocabulary_word_is_still_recorded(monkeypatch):
     attempt = next(w for w in written if w["event"] == "attempt")
     assert attempt["accepted"] is False
     assert attempt["in_vocabulary"] is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Browser-side recognizer lifecycle.
+#
+# The bug this guards is invisible from the backend: the voice-command block
+# turns the microphone on when the RUN starts, not when the voice step is
+# reached, and Chrome ends a continuous recognition session by itself after a
+# stretch of silence. Every such end used to spend one of five restart
+# attempts, and only a recognized RESULT reset the counter — so an operator
+# waiting quietly through half a minute of robot motion exhausted the budget
+# and the recognizer gave up before the step that needed it began. Gestures
+# never showed this because MediaPipe has no session lifecycle.
+#
+# There is no JS test runner in this project (same constraint as
+# test_block_delete_paths.py / test_wcag_contrast.py), so this parses the
+# TypeScript source and checks the property that broke: a session that lasted
+# resets the budget, not only a result.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SPEECH_TS = os.path.join(
+    os.path.dirname(__file__), "..", "frontend", "src", "utils", "speechRecognition.ts"
+)
+
+
+def _speech_source() -> str:
+    return open(_SPEECH_TS, encoding="utf-8").read()
+
+
+def _onend_body(source: str) -> str:
+    start = source.index("recognition.onend")
+    return source[start:source.index("return recognition", start)]
+
+
+def test_a_lasting_session_resets_the_restart_budget():
+    body = _onend_body(_speech_source())
+    assert "sessionStartedAt" in body and "restartAttempts = 0" in body, (
+        "onend non azzera piu' il budget in base alla DURATA della sessione. "
+        "Senza, ogni chiusura per silenzio consuma un tentativo e il "
+        "riconoscitore muore mentre l'operatore aspetta in silenzio il passo "
+        "vocale — che e' il caso normale, non un guasto."
+    )
+
+
+def test_the_budget_still_exists_for_a_dead_mic():
+    """The duration reset must not become 'never give up'.
+
+    The cap is what stops an audio-capture/network failure — which fires
+    error->end immediately — from spinning forever.
+    """
+    body = _onend_body(_speech_source())
+    assert "restartAttempts >= MAX_RESTART_ATTEMPTS" in body, (
+        "il tetto ai riavvii e' sparito: un microfono morto rilancia "
+        "all'infinito."
+    )
+    assert "restartAttempts += 1" in body, "il contatore non viene piu' incrementato"
+
+
+def test_session_start_is_stamped_on_every_start():
+    """Both entry points must stamp it, or the first end mis-measures itself."""
+    source = _speech_source()
+    assert source.count("sessionStartedAt = Date.now()") >= 2, (
+        "sessionStartedAt viene marcato in un solo punto: startListening e "
+        "il riavvio dentro onend devono marcarlo entrambi, altrimenti la "
+        "durata della prima sessione e' misurata da zero."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recognizer language.
+#
+# The Web Speech API takes ONE language and the browser allows ONE recognition
+# session, shared by the voice-command block and the chat dictation button. It
+# used to be read from navigator.language in both, which made a study result
+# depend on the locale of the laptop the session ran on — silently, since
+# nothing on screen says which language is being listened for.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_REGISTRY_TS = os.path.join(
+    os.path.dirname(__file__), "..", "frontend", "src", "constants", "recognitionRegistry.ts"
+)
+_VOICE_HOOK_TS = os.path.join(
+    os.path.dirname(__file__), "..", "frontend", "src", "hooks", "useVoiceCommand.ts"
+)
+_COMPOSER_TSX = os.path.join(
+    os.path.dirname(__file__), "..", "frontend", "src", "components", "ChatComposer.tsx"
+)
+
+
+def test_no_consumer_reads_the_browser_locale_for_recognition():
+    """navigator.language must not decide what the recognizer listens for."""
+    for path in (_VOICE_HOOK_TS, _COMPOSER_TSX):
+        src = open(path, encoding="utf-8").read()
+        assert "navigator.language" not in src, (
+            f"{os.path.basename(path)} torna a leggere navigator.language: "
+            "l'esito di una sessione tornerebbe a dipendere dal locale del "
+            "portatile, e i due consumatori condividono una sola sessione di "
+            "riconoscimento, quindi l'ultimo che parte decide per entrambi."
+        )
+
+
+def test_both_consumers_share_one_pinned_language():
+    for path in (_VOICE_HOOK_TS, _COMPOSER_TSX):
+        src = open(path, encoding="utf-8").read()
+        assert "SPEECH_LANG" in src, (
+            f"{os.path.basename(path)} non usa piu' SPEECH_LANG: due lingue "
+            "diverse sulla stessa istanza condivisa significano che quale "
+            "delle due vale dipende dall'ordine di avvio."
+        )
+
+
+def test_every_command_has_a_spoken_form_in_both_languages():
+    """The prompt tells the operator what to utter — it must have something to
+    say for each command, in whichever language is pinned."""
+    src = open(_REGISTRY_TS, encoding="utf-8").read()
+    block = src[src.index("VOICE_KEYWORDS"):src.index("ITALIAN_FORMS")]
+    for code, italian in (("YES", "sì"), ("DONE", "fatto"), ("PROCEED", "procedi")):
+        assert code in block, f"comando {code} sparito dal vocabolario"
+        assert italian in block, (
+            f"la forma italiana '{italian}' di {code} non e' piu' nel "
+            "vocabolario: con SPEECH_LANG=it-IT l'operatore non avrebbe nulla "
+            "di pronunciabile da dire."
+        )

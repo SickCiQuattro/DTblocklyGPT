@@ -3,6 +3,7 @@ import { TextField, IconButton } from '@mui/material'
 import { useTheme, alpha } from '@mui/material/styles'
 import { ArrowUp, Mic, Square } from 'lucide-react'
 
+import { SPEECH_LANG } from 'constants/recognitionRegistry'
 import SpeechRecognition from 'utils/speechRecognition'
 
 interface ChatComposerProps {
@@ -38,8 +39,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const startRecording = () => {
     SpeechRecognition.startListening({
       owner: 'chat-composer',
-      // Match the speaker's own language (browser/OS locale) — no UI toggle.
-      language: navigator.language || 'en-US',
+      // The same pinned language the voice-command block uses: one browser
+      // recognition session is shared between them, so two different values
+      // would mean whichever started last silently decided for both.
+      language: SPEECH_LANG,
       continuous: true,
     })
     setIsRecording(true)

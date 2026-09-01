@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 
 export interface ObjectDetection {
@@ -20,6 +20,28 @@ export interface BlockStepStatus {
   blockType: string
   phase: 'start' | 'end'
   timestamp?: number
+  /**
+   * Present only while a Saved Task (macro) is running, re-announced on the
+   * macro's own block as it advances (see _h_macro in simulate.py). The macro's
+   * inner blocks are in another task's workspace and never appear on this
+   * canvas, so this is the only signal of what it is doing.
+   *
+   * `macroStep`/`macroTotal` count TOP-LEVEL blocks, deliberately not a
+   * percentage: a macro containing `repeat 5 times` runs far more steps than
+   * its block count, so a fraction derived from the count would be wrong.
+   */
+  macroName?: string
+  macroStep?: number
+  macroTotal?: number
+}
+
+/** The Saved Task currently executing, or null. */
+export interface MacroContext {
+  /** Id of the macro block on the operator's canvas — what to keep highlighted. */
+  blockId: string
+  name: string
+  step: number
+  total: number
 }
 
 // Same host as the Django backend (VITE_BACKEND_HOST) — the polling_socket_node
@@ -38,18 +60,15 @@ export function useRosEvents() {
   })
   const [humanStep, setHumanStep] = useState<HumanStepStatus | null>(null)
   const [blockStep, setBlockStep] = useState<BlockStepStatus | null>(null)
-  // Monotonic count of completed ('end') block steps. blockStep alone can't
-  // be counted by a consumer: the SocketIO transport here is polling (no
-  // websocket server installed alongside polling_socket_node), so every
-  // event emitted between two polls is delivered as one burst, and React
-  // collapses the burst into a single re-render holding only the LAST event.
-  // Counting effect firings therefore loses every intermediate 'end' — and
-  // when the surviving event is a 'start', loses the update entirely. This
-  // counter is incremented inside the handler with a functional update, so
-  // it sees every event regardless of batching. Never reset here (a reset on
-  // reconnect would look like backwards progress); consumers take their own
-  // baseline at run start.
-  const [blockStepsCompleted, setBlockStepsCompleted] = useState(0)
+  // Tracked HERE, inside the socket handler, rather than in a consumer effect
+  // watching `blockStep`. The transport is polling (no websocket server runs
+  // alongside polling_socket_node), so every event emitted between two polls
+  // arrives as one burst and React collapses the burst into a single
+  // re-render holding only the LAST event — which during a Saved Task is
+  // always one of its inner blocks, never the macro's own event. A consumer
+  // watching `blockStep` therefore never saw the macro at all, so it neither
+  // stayed highlighted nor showed its step count.
+  const [macroContext, setMacroContext] = useState<MacroContext | null>(null)
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
@@ -67,6 +86,7 @@ export function useRosEvents() {
       // disconnect and into the next run or task — its banner has no
       // isRunning guard downstream, so it would stay up forever.
       setHumanStep(null)
+      setMacroContext(null)
     })
 
     socket.on('gesture_detected', (data: string) => {
@@ -90,7 +110,20 @@ export function useRosEvents() {
 
     socket.on('block_step', (data: BlockStepStatus) => {
       setBlockStep(data)
-      if (data?.phase === 'end') setBlockStepsCompleted((n) => n + 1)
+
+      if (data?.macroName && data.macroTotal) {
+        setMacroContext({
+          blockId: data.blockId,
+          name: data.macroName,
+          step: data.macroStep ?? 0,
+          total: data.macroTotal,
+        })
+      } else if (
+        data?.phase === 'end' &&
+        data.blockType === 'macro_task_block'
+      ) {
+        setMacroContext(null)
+      }
     })
 
     return () => {
@@ -98,12 +131,21 @@ export function useRosEvents() {
     }
   }, [])
 
+  // A macro's context is cleared by its own 'end' event, which never arrives
+  // when a run is stopped or aborted partway through a Saved Task. It then
+  // survived into the NEXT run, where the consumer highlights whatever block
+  // id it names and ignores every real event — so the run after a stopped
+  // macro lit the wrong block and reported the old macro's step count for its
+  // whole duration. The consumer resets this when a run ends.
+  const resetMacroContext = useCallback(() => setMacroContext(null), [])
+
   return {
     gesture,
     objectDetection,
     humanStep,
     blockStep,
-    blockStepsCompleted,
+    macroContext,
+    resetMacroContext,
     connected,
   }
 }
