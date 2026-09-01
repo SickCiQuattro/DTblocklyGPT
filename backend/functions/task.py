@@ -63,6 +63,7 @@ from typing import Any, Tuple
 # NOTE: task.py still uses a fixed Pick→[Processing]→Place chain; the
 # enums from block_types cover only the subset task.py currently handles.
 from backend.block_types import (
+    BooleanItems,
     LogicItems,
     MacroItems,
     StepsItems,
@@ -180,15 +181,15 @@ def hardware_recursive_blockly_parser(
             btype = condition_block.get("type", "")
             inputs = condition_block.get("inputs", {})
 
-            if btype == "logic_and_block":
+            if btype == BooleanItems.AND.value:
                 a = _hh_eval_condition(inputs.get("A", {}).get("block"))
                 b = _hh_eval_condition(inputs.get("B", {}).get("block"))
                 return a and b
-            if btype == "logic_or_block":
+            if btype == BooleanItems.OR.value:
                 a = _hh_eval_condition(inputs.get("A", {}).get("block"))
                 b = _hh_eval_condition(inputs.get("B", {}).get("block"))
                 return a or b
-            if btype == "logic_not_block":
+            if btype == BooleanItems.NOT.value:
                 return not _hh_eval_condition(inputs.get("BOOL", {}).get("block"))
 
             if btype == EventsItems.FIND.value:
