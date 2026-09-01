@@ -61,9 +61,9 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
   },
   {
     id: 10,
-    name: 'Operator confirms',
+    name: 'Confirm button pressed',
     description:
-      'Waits until the operator presses Confirm in the robot panel — no camera or microphone needed.',
+      'Checks if the Confirm button in the robot panel has been pressed — no camera or microphone needed.',
     group: 'Conditions',
     keywords: ['confirm', 'press', 'button', 'manual', 'operator'],
     blockType: 'human_feedback_block',
@@ -197,7 +197,7 @@ export const buildSequencePickerItems = (
     },
     {
       id: -5,
-      name: 'Open Gripper',
+      name: 'Open gripper',
       description: 'Open the robot gripper',
       keywords: ['gripper', 'open', 'release', 'hand'],
       blockType: 'open_gripper_block',
@@ -205,7 +205,7 @@ export const buildSequencePickerItems = (
     },
     {
       id: -10,
-      name: 'Close Gripper',
+      name: 'Close gripper',
       description: 'Close the robot gripper',
       keywords: ['gripper', 'close', 'grip', 'hand'],
       blockType: 'close_gripper_block',

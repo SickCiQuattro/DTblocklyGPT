@@ -136,14 +136,14 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'open_gripper_block',
-        label: 'Open Gripper',
+        label: 'Open gripper',
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.open_gripper_block,
         outputs: 'None',
       },
       {
         type: 'close_gripper_block',
-        label: 'Close Gripper',
+        label: 'Close gripper',
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.close_gripper_block,
         outputs: 'None',
@@ -245,7 +245,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'human_feedback_block',
-        label: 'Operator confirms',
+        label: 'Confirm button pressed',
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.human_feedback_block,
         outputs: 'Yes or No',

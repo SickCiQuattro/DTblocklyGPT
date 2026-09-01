@@ -12,17 +12,20 @@ export const blockDescriptionsByType = {
     'Checks if the operator says a specific word (like "yes" or "done").',
   timer_block: 'Checks if the set amount of time has passed.',
   human_feedback_block:
-    'Waits until the operator presses Confirm in the robot panel.',
+    'Checks if the Confirm button in the robot panel has been pressed.',
   pick_block: 'Tells the robot to pick up the chosen object.',
   // MAPPING REFERENCE:
   // - processing_block ➔ Represents the 'Execute Skill' visual block
   processing_block:
-    'Makes the robot run a custom skill (like shaking or dispensing).',
+    'Tells the robot to run a custom skill (like shaking or dispensing).',
   place_block: 'Tells the robot to place the object at the chosen destination.',
-  move_to_block: 'Moves the robot to a specific location or safe area.',
-  gripper_block: "Opens or closes the robot's gripper.",
-  open_gripper_block: "Opens the robot's gripper.",
-  close_gripper_block: "Closes the robot's gripper.",
+  move_to_block:
+    'Tells the robot to move to a location, without picking anything up.',
+  gripper_block: 'Tells the robot to open or close its gripper.',
+  open_gripper_block:
+    'Tells the robot to open its gripper and release what it is holding.',
+  close_gripper_block:
+    'Tells the robot to close its gripper and grip what is in front of it.',
   human_action_block:
     'Stops the robot and shows a message on screen. The robot waits for the chosen condition before resuming.',
   repeat_block: 'Repeats these steps a specific number of times.',
@@ -37,7 +40,8 @@ export const blockDescriptionsByType = {
   logic_or_block: 'True when at least one of the two conditions is true.',
   logic_not_block:
     'Reverses the result: true becomes false, false becomes true.',
-  wait_block: 'Pauses the robot for a set number of seconds before continuing.',
+  wait_block:
+    'Tells the robot to wait a set number of seconds before continuing.',
   when_start:
     'This is the starting point of the program. Connect the first block below.',
 } as const

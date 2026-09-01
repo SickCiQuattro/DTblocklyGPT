@@ -161,7 +161,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'human_feedback_block',
-    message0: '%1 Operator confirms',
+    message0: '%1 Confirm button pressed',
     args0: [iconConfig(CHECK_CIRCLE_ICON_URI, 'Confirm')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
@@ -294,7 +294,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'open_gripper_block',
-    message0: '%1 Open Gripper',
+    message0: '%1 Open gripper',
     args0: [iconConfig(BOT_ICON_URI, 'ROBOT:')],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
@@ -303,7 +303,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'close_gripper_block',
-    message0: '%1 Close Gripper',
+    message0: '%1 Close gripper',
     args0: [iconConfig(BOT_ICON_URI, 'ROBOT:')],
     previousStatement: ['robot_sequence', 'logic_sequence'],
     nextStatement: ['robot_sequence', 'logic_sequence'],
