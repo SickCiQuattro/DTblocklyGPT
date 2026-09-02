@@ -59,7 +59,11 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
+import { toast } from 'react-toastify'
+import useSWR from 'swr'
+
 import { useVoiceCommand } from 'hooks/useVoiceCommand'
+import { MacroWorkspaces, recognitionNeedsOf } from 'utils/runRecognitionNeeds'
 import {
   highlightExecutingBlock,
   clearExecutingHighlights,
@@ -354,18 +358,35 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // a full tree walk. isRunning is in the key so the value is still fresh
   // exactly when runNeedsRef below freezes it — that effect fires on the
   // same dependency.
-  const taskNeedsCameraLive = useMemo(
-    () =>
-      !!workspace?.getAllBlocks(false).some((b) => b.type === 'gesture_block'),
-    [workspace, simulation.isRunning],
+  //
+  // Saved Tasks are followed, not just the blocks on this canvas. Their steps
+  // live in another task's workspace, so scanning the canvas alone reported
+  // "needs nothing" for a task whose only gesture step sits inside a macro:
+  // the webcam never started and the step waited its whole timeout while the
+  // operator gestured at a camera that was off. Same for voice.
+  //
+  // The macro workspaces come from the same SWR key the editor already holds
+  // (graphic.macroList returns published_workspace), so this costs no request.
+  const { data: dataMacros = [] } = useSWR<
+    { id: number; published_workspace?: unknown }[],
+    Error
+  >({ url: endpoints.graphic.macroList })
+
+  const macroWorkspaces = useMemo(() => {
+    const map: MacroWorkspaces = new Map()
+    dataMacros.forEach((m) => {
+      if (m?.id !== undefined) map.set(`${m.id}`, m.published_workspace)
+    })
+    return map
+  }, [dataMacros])
+
+  const runNeedsLive = useMemo(
+    () => recognitionNeedsOf(workspace, macroWorkspaces),
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
+    [workspace, macroWorkspaces, simulation.isRunning],
   )
-  const taskNeedsVoiceLive = useMemo(
-    () =>
-      !!workspace
-        ?.getAllBlocks(false)
-        .some((b) => b.type === 'voice_command_block'),
-    [workspace, simulation.isRunning],
-  )
+  const taskNeedsCameraLive = runNeedsLive.camera
+  const taskNeedsVoiceLive = runNeedsLive.voice
 
   // Freeze what a run needs at the moment it starts: `workspace` is the live
   // editor (draft) canvas, still mutable while a run is in flight (toolbox
@@ -400,20 +421,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // warning only about gesture and voice left button-confirm and find_object
   // silently self-completing: the run looks successful and nothing in the
   // recording shows otherwise.
-  const taskHasHumanStep = useMemo(
-    () =>
-      !!workspace
-        ?.getAllBlocks(false)
-        .some(
-          (b) =>
-            b.type === 'human_action_block' ||
-            b.type === 'gesture_block' ||
-            b.type === 'voice_command_block' ||
-            b.type === 'find_object_block' ||
-            b.type === 'human_feedback_block',
-        ),
-    [workspace, simulation.isRunning],
-  )
+  // Follows Saved Tasks, same as the camera/voice needs above and for the same
+  // reason: a task whose only operator step is inside a macro would otherwise
+  // never warn that auto mode is about to answer it.
+  const taskHasHumanStep = runNeedsLive.humanStep
 
   // The webcam/mic run whenever the sandbox toggle is on OR a live run
   // needs them for this task — one lifecycle, regardless of which reason.
@@ -656,8 +667,21 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     // If the request itself fails, the arm may still be moving even though
     // the panel says otherwise — that must not stay a console-only error,
     // since the teach-pendant e-stop is the operator's real fallback here.
-    fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST }).catch(
-      (error: unknown) => {
+    fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST })
+      .then(() => {
+        // Say it succeeded. The STATUS line reads "stopped" the moment the
+        // button is pressed — optimistically, before the round trip — so on
+        // its own it cannot tell the operator whether the robot actually got
+        // the message. On a hardware run that difference is the whole point,
+        // and the sentence names what the arm is still doing: a halt stops
+        // motion, it does not open the gripper, so anything held stays held.
+        toast.success(
+          executionTarget === 'real'
+            ? 'Robot halted. It is still holding whatever was in the gripper.'
+            : 'Simulation stopped.',
+        )
+      })
+      .catch((error: unknown) => {
         console.error('Error stopping simulation:', error)
         // Prefer the server's own wording when it has any. Two different
         // things reach this handler and they call for different actions: the
@@ -672,8 +696,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             'The stop request failed to reach the robot — it may still be moving. ' +
               'Use the teach-pendant e-stop now if the real arm is running.',
         )
-      },
-    )
+      })
   }
   const handleClose = () => dispatch(toggleSim())
 
@@ -2684,7 +2707,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         title="Run on the real robot?"
         message="The physical arm will move for real, not just in the simulation. Before confirming: make sure the area around the robot is clear. If anything looks wrong once it starts, use the red e-stop button on the teach pendant — that stops the arm immediately."
         confirmLabel={UI_TEXT.runOnRobot}
-        tone="danger"
+        // Amber, not terracotta: starting the arm is consequential, not
+        // destructive, and red is the Stop button once it is running.
+        tone="caution"
         confirmOnEnter={false}
         onConfirm={confirmAndRun}
         onCancel={() => setConfirmRealRun(false)}
