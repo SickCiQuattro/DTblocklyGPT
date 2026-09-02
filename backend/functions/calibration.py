@@ -212,6 +212,25 @@ _REAL_PROFILE = {
 # inherit the sim-tuned value. Real-hardware runs work only insofar as the
 # sim geometry happens to approximate the physical cell closely enough.
 
+# Extra release height per location, in metres, added to whatever
+# resolve_place_z() computes from the model's own geometry. Zero for anything
+# not listed.
+#
+# This is a per-location knob on purpose. The clearance terms inside
+# resolve_place_z (+0.003 into a container, +0.02 above a rim) are shared by
+# every location, so raising one of those to help the cup would also drop tubes
+# into the tube rack from 2 cm up — a rack slot has 1.3 mm of side clearance and
+# wants the release as low as it can get, which is the opposite requirement.
+#
+# cup: measured on the physical cell 2026-09-01. The computed descent puts the
+# tube's base essentially on the cup floor, and the operator asked for 2 cm of
+# air under it — a transparent cup flexes and the tube can catch its wall on the
+# way down.
+PLACE_Z_OFFSETS: dict[str, float] = {
+    "cup": 0.020,
+}
+
+
 # Guard against a profile drifting out of sync with the baseline key set.
 assert _SIM_PROFILE.keys() == _REAL_PROFILE.keys(), (
     "calibration profiles must expose the same keys: "

@@ -330,26 +330,51 @@ def _reset_placed_registry():
     simulate._placed_seq = 0
 
 
-def test_persist_placed_object_deletes_then_creates(monkeypatch):
-    calls = []
+def test_persist_placed_object_removes_then_creates(monkeypatch):
+    """Removal first, spawn second, and the removal is the WAITING one.
 
-    def record(cmd, **kw):
-        calls.append(cmd)
-        return True
-
-    monkeypatch.setattr(simulate, "launch_wsl_ros_command", record)
+    The seam moved: the bare `gz service .../remove` this used to inspect now
+    lives inside remove_entity_and_wait, which also polls the world until the
+    entity is really gone. Patching it here keeps the test about ordering and
+    naming — spawning placed_N on top of a live "object" interpenetrates two
+    colliders — instead of about how the wait is implemented.
+    """
+    removed, created = [], []
+    monkeypatch.setattr(simulate, "remove_entity_and_wait",
+                        lambda name, **kw: removed.append(name) or True)
+    monkeypatch.setattr(simulate, "launch_wsl_ros_command",
+                        lambda cmd, **kw: created.append(cmd) or True)
 
     ok = _real_persist_placed_object("tube", 1.0, 2.0, 3.0, yaw=0.0)
 
     assert ok is True
-    assert len(calls) == 2
-    # First call removes the reusable "object" entity, second spawns placed_1.
-    assert "remove" in calls[0] and 'name: "object"' in calls[0]
-    assert "create" in calls[1] and 'name: "placed_1"' in calls[1]
+    assert removed == ["object"]
+    assert len(created) == 1
+    assert "create" in created[0] and 'name: "placed_1"' in created[0]
     assert simulate._placed_in_world == ["placed_1"]
 
 
+def test_persist_placed_object_gives_up_when_the_entity_will_not_go_away(monkeypatch):
+    """No spawn on top of a corpse.
+
+    An "object" still in the world after the wait means the physics engine is
+    about to rename the newcomer and hold a dangling reference — the
+    Physics.cc:2967 storm. Skipping persistence loses a placed tube; spawning
+    anyway corrupts the rest of the session.
+    """
+    monkeypatch.setattr(simulate, "remove_entity_and_wait", lambda name, **kw: False)
+    spawns = []
+    monkeypatch.setattr(
+        simulate, "launch_wsl_ros_command", lambda cmd, **kw: spawns.append(cmd) or True
+    )
+
+    assert _real_persist_placed_object("tube", 1.0, 2.0, 3.0) is False
+    assert spawns == []
+    assert simulate._placed_in_world == []
+
+
 def test_persist_placed_object_increments_across_calls(monkeypatch):
+    monkeypatch.setattr(simulate, "remove_entity_and_wait", lambda name, **kw: True)
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", lambda *a, **kw: True)
 
     _real_persist_placed_object("tube", 0, 0, 0)
@@ -377,10 +402,37 @@ def test_delete_placed_objects_sweeps_registry(monkeypatch):
     simulate._placed_in_world = ["placed_1", "placed_2"]
     calls = []
     monkeypatch.setattr(simulate, "launch_wsl_ros_command",
-                         lambda cmd, **kw: calls.append(cmd) or True)
+                        lambda cmd, **kw: calls.append(cmd) or True)
 
     simulate._delete_placed_objects()
 
     assert len(calls) == 2
     assert all('name: "placed_' in c for c in calls)
     assert simulate._placed_in_world == []
+
+
+# ── per-location release height ──────────────────────────────────────────────
+
+def test_cup_release_is_raised_and_the_rack_is_not():
+    """The 2 cm the cup asked for must not reach the tube rack.
+
+    The clearance terms inside resolve_place_z are shared by every location, so
+    the tempting fix — bump the +0.003 container clearance — would also release
+    tubes into the rack from 2 cm up. A rack slot has 1.3 mm of side clearance
+    and wants the release as low as it will go: the opposite requirement, which
+    is why the offset is keyed by location.
+    """
+    from backend.functions.calibration import PLACE_Z_OFFSETS
+
+    tube_height = 0.10
+    cup = simulate.resolve_place_z("cup", tube_height)
+    rack = simulate.resolve_place_z("tube rack", tube_height)
+
+    assert PLACE_Z_OFFSETS["cup"] == pytest.approx(0.020)
+    assert cup == pytest.approx(
+        simulate.PICK_Z_REF_OFFSET + 0.002 + 0.003 + 0.07 + 0.020, abs=1e-4
+    )
+    assert "tube_rack" not in PLACE_Z_OFFSETS
+    assert rack == pytest.approx(
+        simulate.PICK_Z_REF_OFFSET + 0.0005 + 0.003 + 0.07, abs=1e-4
+    )

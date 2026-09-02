@@ -22,10 +22,22 @@ interface ConfirmDialogProps {
   title?: string
   /** Confirm button label. Default "Confirm". */
   confirmLabel?: string
-  /** 'danger' (default) for destructive actions (terracotta accent), 'default' for neutral confirms (primary indigo). */
-  tone?: 'danger' | 'default'
-  /** Defaults to false for 'danger' tone, true for 'default' — a destructive dialog shouldn't
-   * autofocus its own confirm button and fire on a stray Enter. Pass explicitly to override. */
+  /**
+   * 'danger' (default) — destructive: something is deleted or overwritten.
+   *   Terracotta, the palette's documented delete affordance.
+   * 'caution' — consequential but not destructive: the PHYSICAL ARM will move.
+   *   Amber, the same colour the robot panel's run button and its live-hardware
+   *   banner already carry, so one colour means one thing across the app.
+   * 'default' — ordinary confirm. Primary indigo.
+   *
+   * Starting the real robot used to be 'danger', which was wrong twice: it is
+   * not destructive, and red is already the Stop button during a run — the two
+   * opposite actions shared a colour on a cell with a physical arm in it.
+   */
+  tone?: 'danger' | 'caution' | 'default'
+  /** Defaults to true only for the 'default' tone — neither a destructive
+   * dialog nor one that moves the real arm should autofocus its own confirm
+   * button and fire on a stray Enter. Pass explicitly to override. */
   confirmOnEnter?: boolean
   /** Set while the confirmed action is in flight — shows a spinner on Confirm,
    * disables both buttons, and blocks closing via backdrop/Escape so the
@@ -35,24 +47,46 @@ interface ConfirmDialogProps {
 
 // .dark, not .main — .main fails WCAG 1.4.3 with white text (accent 3.70:1,
 // primary 4.47:1); .dark clears it (4.62:1 / 6.29:1).
-const confirmButtonSx = (tone: 'danger' | 'default') => (theme: Theme) => ({
-  textTransform: 'none' as const,
-  backgroundColor:
-    tone === 'danger' ? theme.palette.accent.dark : theme.palette.primary.dark,
-  color:
-    tone === 'danger'
-      ? theme.palette.accent.contrastText
-      : theme.palette.primary.contrastText,
-  fontWeight: 600,
-  borderRadius: '8px',
-  px: 2,
-  '&:hover': {
-    backgroundColor:
-      tone === 'danger'
-        ? theme.palette.accent.darker
-        : theme.palette.primary.darker,
-  },
-})
+// .dark/.darker, not .main — see the note above on contrast. Amber is the
+// exception that proves it: warning.main with white text is 2.15:1, so the
+// caution tone pairs warning.main with the theme's designated ink
+// (warning.contrastText), the same pairing the robot panel's run button uses.
+const TONE_COLOURS = (theme: Theme) =>
+  ({
+    danger: {
+      bg: theme.palette.accent.dark,
+      bgHover: theme.palette.accent.darker,
+      ink: theme.palette.accent.contrastText,
+    },
+    caution: {
+      // main, not dark — on amber the ink pairing gets WORSE as the colour
+      // darkens: main/ink is 7.94:1, dark/ink 5.35:1, darker/ink 3.40:1, which
+      // fails AA. So this goes the opposite way from the other two tones, and
+      // lands on exactly the pair the robot panel's run button already uses.
+      bg: theme.palette.warning.main,
+      bgHover: theme.palette.warning.dark,
+      ink: theme.palette.warning.contrastText,
+    },
+    default: {
+      bg: theme.palette.primary.dark,
+      bgHover: theme.palette.primary.darker,
+      ink: theme.palette.primary.contrastText,
+    },
+  }) as const
+
+const confirmButtonSx =
+  (tone: 'danger' | 'caution' | 'default') => (theme: Theme) => {
+    const c = TONE_COLOURS(theme)[tone]
+    return {
+      textTransform: 'none' as const,
+      backgroundColor: c.bg,
+      color: c.ink,
+      fontWeight: 600,
+      borderRadius: '8px',
+      px: 2,
+      '&:hover': { backgroundColor: c.bgHover },
+    }
+  }
 
 const cancelButtonSx = (theme: Theme) => ({
   textTransform: 'none' as const,
@@ -80,7 +114,9 @@ export const ConfirmDialog = ({
   title = 'Confirm',
   confirmLabel = 'Confirm',
   tone = 'danger',
-  confirmOnEnter = tone !== 'danger',
+  // Neither a destructive dialog nor one that starts the physical arm should
+  // fire on a stray Enter; only an ordinary confirm may.
+  confirmOnEnter = tone === 'default',
   loading = false,
 }: ConfirmDialogProps) => (
   <Dialog

@@ -47,11 +47,32 @@ def _linear(channel: int) -> float:
     return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
 
 
+def _luminance(hex_colour: str) -> float:
+    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+
+
 def contrast_vs_white(hex_colour: str) -> float:
     """WCAG relative-luminance contrast ratio against #FFFFFF."""
-    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
-    luminance = 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
-    return 1.05 / (luminance + 0.05)
+    return 1.05 / (_luminance(hex_colour) + 0.05)
+
+
+def contrast_ratio(a: str, b: str) -> float:
+    """WCAG contrast between two arbitrary colours.
+
+    Needed for the amber tones: their pairing is ink-on-colour, not
+    white-on-colour, so contrast_vs_white says nothing about them.
+    """
+    la, lb = _luminance(a), _luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _read_source(relative_path: str) -> str:
+    return open(
+        os.path.join(os.path.dirname(__file__), "..", relative_path),
+        encoding="utf-8",
+    ).read()
 
 
 def palette_entries() -> list[tuple[str, str, float | None]]:
@@ -102,3 +123,39 @@ def test_documented_ratio_matches_computed(name, hex_colour, documented):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ── ConfirmDialog tones ───────────────────────────────────────────────────────
+
+
+def test_the_caution_tone_pairs_amber_with_ink_at_its_lightest():
+    """Amber is the one ramp where darkening HURTS the ink pairing.
+
+    main/ink 7.94:1, dark/ink 5.35:1, darker/ink 3.40:1 — the last fails AA.
+    The other two dialog tones go darker for contrast; caution must go the
+    other way, and it lands on the same pair the robot panel's run button uses.
+    A future "make it darker for emphasis" edit is exactly what this catches.
+    """
+    ink = "#1A1A2E"
+    assert contrast_ratio("#F59E0B", ink) >= 4.5   # warning.main  — resting
+    assert contrast_ratio("#D97706", ink) >= 4.5   # warning.dark  — hover
+    assert contrast_ratio("#B45309", ink) < 4.5    # warning.darker — must NOT be used
+
+    src = _read_source("frontend/src/components/ConfirmDialog.tsx")
+    caution = src[src.index("caution: {"):src.index("default: {")]
+    assert "warning.main" in caution and "warning.dark" in caution
+    assert "warning.darker" not in caution, (
+        "il tono caution usa warning.darker: 3.40:1 con l'inchiostro, sotto AA."
+    )
+
+
+def test_starting_the_arm_is_not_the_destructive_colour():
+    """Red is the Stop button during a run. If the dialog that STARTS the arm
+    were also red, the two opposite actions would share a colour on a cell with
+    a physical robot in it."""
+    src = _read_source("frontend/src/components/DigitalTwinPanel.tsx")
+    dialog = src[src.index('title="Run on the real robot?"'):]
+    dialog = dialog[:dialog.index("/>")]
+    assert 'tone="caution"' in dialog, (
+        "il dialogo di avvio del robot reale non e' piu' in tono caution"
+    )
