@@ -552,3 +552,54 @@ def test_rack_constants_match_the_shared_rack_sdf():
     xs = sorted(float(w.find("pose").text.split()[0]) for w in walls)
     thickness = float(w0.find(".//box/size").text.split()[0])
     assert calibration.RACK_SLOT_INNER_W == pytest.approx(xs[1] - xs[0] - thickness, abs=1e-4)
+
+
+def test_wait_for_sim_arrival_does_not_sleep_the_nominal_first(monkeypatch):
+    """The dead time between actions, pinned.
+
+    This used to sleep the move's nominal duration and only THEN look at the
+    twin, so a move could never finish faster than its nominal time even when
+    Gazebo had already arrived. On a hardware run that was the whole cost:
+    move_path starts the twin, move_target blocks for the real arm's entire
+    motion, _verify_hw_arrival confirms it — and only then did this sleep 1.8s
+    more per move, with the physical arm parked at its target. Eight moves per
+    pick-and-place made it ~14s of standing still.
+
+    Asserted on the sleeps requested rather than on wall time: the file's
+    _no_real_sleep fixture stubs _interruptible_sleep, so elapsed time here
+    measures nothing.
+    """
+    slept = []
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda s: slept.append(s))
+    mock_bridge = MagicMock()
+    # Already at the target, exactly as after the real arm's blocking move.
+    mock_bridge.get_actual_joints.return_value = [10.0] * 6
+    monkeypatch.setattr(simulate, "_bridge", mock_bridge)
+
+    simulate._wait_for_sim_arrival([10.0] * 6, 2.0)
+
+    assert not any(s >= 1.0 for s in slept), (
+        f"ha chiesto di dormire {slept} con il gemello gia' a destinazione: la "
+        "durata nominale e' tornata a essere un pavimento invece di un tetto."
+    )
+
+
+def test_wait_for_sim_arrival_still_honours_the_nominal_without_a_feed(monkeypatch):
+    """The fallback the nominal sleep was there for in the first place.
+
+    With no usable joint feed there is nothing to poll, and returning at once
+    would let the parser command the next move while the twin is still
+    executing this one.
+    """
+    slept = []
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda s: slept.append(s))
+    mock_bridge = MagicMock()
+    mock_bridge.get_actual_joints.return_value = []  # feed unusable
+    monkeypatch.setattr(simulate, "_bridge", mock_bridge)
+
+    simulate._wait_for_sim_arrival([10.0] * 6, 2.0)
+
+    assert slept and slept[0] > 1.5, (
+        f"senza feed ha atteso {slept}: l'attesa nominale non e' piu' "
+        "garantita, e il movimento successivo parte sopra questo."
+    )

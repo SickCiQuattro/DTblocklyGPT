@@ -48,6 +48,7 @@ from backend.functions.calibration import (
     SAFE_INTERMEDIATE_POSE,
     SCAN_POSE,
     LOCATION_PROFILES,
+    PLACE_Z_OFFSETS,
     PICK_RACK_PROFILE,
     RACK_RIM_H,
     RACK_SLOT_INNER_W,
@@ -1048,9 +1049,14 @@ def resolve_place_z(location_name: str, height_m: float) -> float:
     else:
         z_grip = height_m / 2.0
 
+    # Per-location release height (calibration.PLACE_Z_OFFSETS), applied to
+    # both branches: how high to let go at a given location is a property of
+    # that location, not of how its base height happened to be derived.
+    extra = PLACE_Z_OFFSETS.get(safe_loc_name, 0.0)
+
     if is_container and floor_height is not None:
-        return PICK_Z_REF_OFFSET + floor_height + 0.003 + z_grip
-    return PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip
+        return PICK_Z_REF_OFFSET + floor_height + 0.003 + z_grip + extra
+    return PICK_Z_REF_OFFSET + loc_height + 0.02 + z_grip + extra
 
 
 # All block type identifiers: shared source of truth
@@ -1360,17 +1366,36 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
 
 
 def _wait_for_sim_arrival(target_joints, nominal_s):
-    """Sleep a move's nominal duration, then wait for the Gazebo twin to
-    actually reach the commanded pose.
+    """Wait for the Gazebo twin to reach the commanded pose, up to a budget.
 
     Deliberately NOT a safety gate, unlike _verify_hw_arrival: it never aborts.
-    A missing or stalled joint feed just falls back to the nominal sleep that
-    was the whole wait before, so this can only ever make the parser wait
-    longer than it used to, never shorter. See SIM_ARRIVAL_TOL_DEG for why the
-    nominal sleep alone is not enough (sim time vs wall time).
+    A missing or stalled joint feed falls back to sleeping out whatever remains
+    of the move's nominal duration, which was the entire wait before the twin
+    was polled at all. See SIM_ARRIVAL_TOL_DEG for why that sleep alone is not
+    enough (sim time vs wall time).
+
+    Polls from the START rather than sleeping the nominal duration first. That
+    ordering was the single biggest source of dead time in a run, and it cost
+    the most exactly where it was least justified — a hardware run:
+
+        move_path()      → the twin starts executing
+        move_target()    → BLOCKS for the real arm's whole motion
+        _verify_hw_arrival() → confirms the real arm arrived
+        ...then this slept the nominal duration all over again
+
+    The twin has been moving through that entire blocking window, so by the
+    time this is reached it has usually already arrived — and the parser then
+    stood still for another 1.5-2s per move with the physical arm parked at its
+    target. Six to ten moves per pick-and-place made that tens of seconds of
+    nothing happening, which is what an operator sees as "long gaps between
+    actions".
+
+    Polling first cannot overshoot: at t=0 the twin is still at the previous
+    pose, so the tolerance check only passes immediately for a move shorter
+    than SIM_ARRIVAL_TOL_DEG, which is a move that needed no wait anyway.
     """
-    _interruptible_sleep(nominal_s)
-    deadline = time.monotonic() + SIM_ARRIVAL_MAX_EXTRA_S
+    deadline = time.monotonic() + nominal_s + SIM_ARRIVAL_MAX_EXTRA_S
+    started = time.monotonic()
     last_seen = None
     prev = None
     still_samples = 0
@@ -1380,10 +1405,14 @@ def _wait_for_sim_arrival(target_joints, nominal_s):
         try:
             actual = _bridge.get_actual_joints()
         except Exception:
-            return  # no joint feed — nominal sleep already elapsed
+            # No joint feed: fall back to the guarantee this function had
+            # before it polled anything — the move's nominal duration.
+            _interruptible_sleep(max(0.0, nominal_s - (time.monotonic() - started)))
+            return
         # Fewer than 6 values means the feed isn't usable (or is a test double);
         # don't burn the whole extra budget polling something that can't answer.
         if not isinstance(actual, (list, tuple)) or len(actual) < 6:
+            _interruptible_sleep(max(0.0, nominal_s - (time.monotonic() - started)))
             return
         last_seen = list(actual[:6])
         if max(abs(t - a) for t, a in zip(target_joints, last_seen)) <= SIM_ARRIVAL_TOL_DEG:
@@ -2261,8 +2290,6 @@ def reset_simulation_world():
         # on a fresh run can read the previous run's gripper aperture instead
         # of "no data yet".
         _LAST_HW_HAND_MM = None
-        delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-        delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
 
         # Reset slot cycling counters and spawned-object tracking.
         simulation_recursive_blockly_parser.place_slot_index = 0
@@ -2288,12 +2315,12 @@ def reset_simulation_world():
         detach_object_from_gripper()
         _interruptible_sleep(0.2)
 
-        # Delete failures are tolerated — entities may not exist on first run.
-        if not launch_wsl_ros_command(delete_object):
-            print("[SIMULATOR] reset: delete 'object' failed (may not exist)")
-        _interruptible_sleep(0.3)
-        if not launch_wsl_ros_command(delete_location):
-            print("[SIMULATOR] reset: delete 'location' failed (may not exist)")
+        # Wait for the removals instead of sleeping a fixed 0.3s at them. A
+        # missing entity is fine (first run of the session); an entity that is
+        # STILL THERE afterwards is not, and used to be indistinguishable —
+        # both printed nothing and the next spawn landed on top.
+        remove_entity_and_wait("object")
+        remove_entity_and_wait("location")
 
         _delete_placed_objects()
         _interruptible_sleep(1.0)
@@ -2315,15 +2342,15 @@ def delete_spawned_object_and_place():
     reset_simulation_world()/stop_simulation().
     """
     try:
-        delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-        delete_location = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "location"'"""
         # Detach before delete: prevents stale weld state across repeated runs.
         print("[GRASP] Cleanup: detaching welded child before removing 'object'")
         detach_object_from_gripper()
         _interruptible_sleep(0.2)
-        launch_wsl_ros_command(delete_object)
-        launch_wsl_ros_command(delete_location)
-        _interruptible_sleep(0.4)
+        # Waited on, not slept at — this runs BETWEEN two picks in the same
+        # run, so the next spawn follows immediately and the window this
+        # closes is at its narrowest exactly here.
+        remove_entity_and_wait("object")
+        remove_entity_and_wait("location")
         _spawned_in_world.clear()
     except Exception as e:
         print(str(e))
@@ -2345,11 +2372,9 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     if safe_sdf_name is None:
         print(f"[SIMULATOR] persist-placed: unsafe object name '{sdf_name}' — skipping persistence")
         return False
-    delete_object = """gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 5000 --req 'type: MODEL, name: "object"'"""
-    if not launch_wsl_ros_command(delete_object, expect_reply_true=True):
-        print("[SIMULATOR] persist-placed: delete 'object' failed — skipping persistence")
+    if not remove_entity_and_wait("object"):
+        print("[SIMULATOR] persist-placed: 'object' did not go away — skipping persistence")
         return False
-    _interruptible_sleep(0.2)
 
     _placed_seq += 1
     placed_name = f"placed_{_placed_seq}"
@@ -2371,6 +2396,48 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     print(f"[SIMULATOR] Persisted placed object '{placed_name}' ({sdf_name}) at "
           f"x={x:.4f} y={y:.4f} z={z:.4f}")
     return True
+
+
+def remove_entity_and_wait(name: str, timeout_s: float = 4.0) -> bool:
+    """Remove a Gazebo model and block until it is really gone.
+
+    `gz service .../remove` returning true means the removal was ACCEPTED, not
+    that it happened: gz-sim applies entity removals at the end of an update
+    cycle. Creating a same-named model inside that window is the failure this
+    exists to prevent, and it is not theoretical — the physics engine says so
+    itself:
+
+        Msg [NameManager::issueNewName] The name [object/link] is a duplicate,
+        so it has been renamed to [object/link(1)]
+
+    Once that happens the DetachableJoint plugin and the Physics system are
+    holding a reference to the corpse: the `Physics.cc:2967 ... entity ptr with
+    an ID of [N] does not exist` storm runs for the rest of the session, and
+    the weld silently refuses. Reproduced in an isolated world at roughly one
+    remove-then-recreate cycle in five, which is exactly the rate an operator
+    starting and stopping a run repeatedly would meet.
+
+    Returns True when the world no longer lists `name` (including when it never
+    did). False means the model is still there after `timeout_s`, and the
+    caller must NOT spawn over it — that is the corrupted-world case, and a
+    clear abort beats a run that behaves strangely for reasons nobody can see.
+    """
+    launch_wsl_ros_command(
+        'gz service -s /world/worldCobotta/remove --reqtype gz.msgs.Entity '
+        '--reptype gz.msgs.Boolean --timeout 5000 '
+        f"--req 'type: MODEL, name: \"{name}\"'"
+    )
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        listing = _shell_output("gz model --list") or ""
+        # A failed/timed-out listing is not evidence of absence. Retry rather
+        # than reading "the service did not answer" as "the model is gone".
+        if "Available models" in listing:
+            if not any(line.strip() == f"- {name}" for line in listing.splitlines()):
+                return True
+        time.sleep(0.25)
+    print(f"[SIMULATOR] '{name}' still present {timeout_s:.0f}s after remove")
+    return False
 
 
 def _delete_placed_objects():
