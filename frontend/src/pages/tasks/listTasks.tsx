@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import useSWR from 'swr'
 import { toast } from 'react-toastify'
-import { alpha } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import {
   Box,
   Button,
@@ -63,6 +63,35 @@ import { AnalyzeTaskModal } from './analyzeTaskModal'
 
 // Menu/status icon colors sourced once from the design-system tokens (these
 // render inside several sub-components without direct theme access).
+/** The compact per-task summary the list endpoint now ships (backend/utils/
+ * task_summary.py). Optional: an older server, or a task saved before the
+ * field existed, simply renders no strip rather than an empty one. */
+interface TaskUses {
+  steps: number
+  movesRobot: boolean
+  needsCamera: boolean
+  needsVoice: boolean
+  usesSavedTask: boolean
+}
+
+const GRID_SX = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+  gap: 2,
+} as const
+
+const SCROLL_AREA_SX = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: 'auto',
+  // Not `auto`: a horizontal bar here would only ever mean the grid
+  // mis-measured itself, and auto-fill columns cannot legitimately overflow
+  // sideways.
+  overflowX: 'hidden',
+  p: 2,
+  m: -2,
+} as const
+
 const tokenPalette = ThemeOption()
 
 const CARD_PAGE_SIZE_OPTIONS = [12, 24, 48]
@@ -423,49 +452,28 @@ const TaskCard = ({
             </Typography>
           )}
         </Box>
+        {/* Was a bordered, tinted pill with icon AND label — the loudest thing
+            on the card after the name, for a binary that is nearly always the
+            same value and that an operator almost never acts on. Demoted to a
+            bare icon: still present, still explained on hover, no longer
+            competing with what the program actually does. */}
         <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{
-              alignItems: 'center',
-              flexShrink: 0,
-              px: 1,
-              py: 0.25,
-              borderRadius: '999px',
-              border: '1px solid',
-              borderColor: row.shared
-                ? alpha(tokenPalette.success.main, 0.3)
-                : 'divider',
-              bgcolor: row.shared
-                ? alpha(tokenPalette.success.main, 0.08)
-                : 'transparent',
-            }}
-          >
+          <Box sx={{ flexShrink: 0, display: 'flex', pt: 0.25 }}>
             {row.shared ? (
-              <Share2 size={13} color={tokenPalette.success.darker} />
+              <Share2 size={14} color={tokenPalette.slate[400]} />
             ) : (
-              <Lock size={13} color={tokenPalette.slate[500]} />
+              <Lock size={14} color={tokenPalette.slate[300]} />
             )}
-            <Typography
-              sx={{
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                color: row.shared
-                  ? tokenPalette.success.darker
-                  : tokenPalette.slate[500],
-              }}
-            >
-              {row.shared ? 'Shared' : 'Private'}
-            </Typography>
-          </Stack>
+          </Box>
         </Tooltip>
       </Stack>
+
+      <UsesStrip uses={(row as any).uses} />
 
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
         <TaskStatusChip status={(row as any).status} />
         <Typography variant="caption" color="text.secondary">
-          Modified {formatDateTimeShortFrontend(row.last_modified)}
+          {formatDateTimeShortFrontend(row.last_modified)}
         </Typography>
       </Stack>
 
@@ -485,6 +493,80 @@ const TaskCard = ({
     </Paper>
   </Tooltip>
 )
+
+/**
+ * What this program touches, in one mono row.
+ *
+ * The signature element of this page, and the reason it is here rather than a
+ * decorative flourish: an operator standing next to the arm is choosing what to
+ * open, and the fact that decides whether they clear the bench first — does
+ * this one move the robot — was previously visible only after opening it. The
+ * list already showed name, status and date; it showed nothing about
+ * consequence.
+ *
+ * Amber is not a highlight colour here. It carries the meaning the robot panel
+ * already gave it — "this reaches the physical arm" — so the same colour means
+ * the same thing on the card, in the run button, and in the live-hardware
+ * banner. Everything else stays slate: one loud thing per card, and it is the
+ * one with a physical consequence.
+ *
+ * Geist Mono, matching the robot panel's STATUS readout. It is what makes the
+ * home page read as a control surface rather than a list of documents.
+ */
+const UsesStrip = ({ uses }: { uses?: TaskUses }) => {
+  const theme = useTheme()
+  if (!uses) return null
+
+  const items: { key: string; label: string; amber?: boolean }[] = [
+    {
+      key: 'steps',
+      label: `${uses.steps} ${uses.steps === 1 ? 'step' : 'steps'}`,
+    },
+  ]
+  if (uses.movesRobot)
+    items.push({ key: 'arm', label: 'moves arm', amber: true })
+  if (uses.needsCamera) items.push({ key: 'cam', label: 'camera' })
+  if (uses.needsVoice) items.push({ key: 'mic', label: 'voice' })
+  if (uses.usesSavedTask) items.push({ key: 'macro', label: 'saved task' })
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 0.5 }}
+    >
+      {items.map((item, i) => (
+        <React.Fragment key={item.key}>
+          {i > 0 && (
+            <Box
+              aria-hidden
+              sx={{
+                width: 3,
+                height: 3,
+                borderRadius: '50%',
+                bgcolor: 'divider',
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <Typography
+            component="span"
+            sx={{
+              fontFamily: "'Geist Mono', monospace",
+              fontSize: '0.68rem',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              color: item.amber
+                ? theme.palette.warning.darker
+                : tokenPalette.slate[500],
+            }}
+          >
+            {item.label}
+          </Typography>
+        </React.Fragment>
+      ))}
+    </Stack>
+  )
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -705,102 +787,142 @@ const ListTasks = () => {
   }
 
   return (
-    <MainCard>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
-          {userName ? `Welcome back, ${userName}` : 'Welcome back'}
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-          {liveStatusLine}
-        </Typography>
-      </Box>
+    // Fills the layout's content area instead of growing past it, so the
+    // header, the filter/search band and the pagination stay put while only
+    // the card grid scrolls. MainCard defaults to flexShrink:0 (its comment
+    // explains why: so an ancestor's overflow:auto can scroll a long page) —
+    // this page wants the opposite, and says so here rather than changing the
+    // shared component for every other page that does want the default.
+    <MainCard
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        flexShrink: 1,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      contentSX={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
+      {/* ── Band 1: who you are, what is waiting, and the one thing to do ──
+          New task sits here, alone, instead of at the end of a row of three
+          controls. Position is what makes a primary action primary: it used to
+          be the last item in a right-aligned chain of search + filter + button,
+          which is the least prominent slot in a left-to-right scan, and it wore
+          the same contained-primary styling as the "Retry" button in the error
+          state. */}
+      <Stack
+        direction="row"
+        sx={{
+          mb: 3,
+          gap: 2,
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          flexShrink: 0,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h3" component="h1" sx={{ fontWeight: 600 }}>
+            {userName ? `Welcome back, ${userName}` : 'Welcome back'}
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+            {liveStatusLine}
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          startIcon={<Plus size={18} />}
+          onClick={handleAdd}
+          id="btn-add-task"
+          sx={{ flexShrink: 0, px: 2.5, fontWeight: 600 }}
+        >
+          New task
+        </Button>
+      </Stack>
 
-      {/* ── Toolbar ──
-          No standalone row counter here — it would be a third count on
-          screen at once alongside the welcome-back summary above and the
-          per-status numbers on the filter tabs below. */}
+      {/* ── Band 2: scope, then query ──
+          Filter first and flush LEFT, against the edge of the cards it
+          governs; search right. The two were the other way round and both
+          pinned to the right edge, far from the content they act on. The
+          filter answers "what am I looking at", search answers "which one" —
+          reversing them asked the operator to search inside a set they had not
+          chosen yet. No standalone row counter: the counts live on the tabs. */}
       <Stack
         direction="row"
         sx={{
           mb: 2.5,
+          pb: 2,
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           gap: 1.5,
           flexWrap: 'wrap',
+          flexShrink: 0,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         }}
       >
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
-          <OutlinedInput
-            inputRef={searchInputRef}
-            size="small"
-            placeholder="Search tasks…"
-            aria-label="Search tasks"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
+        <SegmentedControl
+          exclusive
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(_e, v) => {
+            if (v) {
+              setStatusFilter(v)
               setPage(0)
-            }}
-            startAdornment={
-              <InputAdornment position="start">
-                <Search size={16} />
-              </InputAdornment>
             }
-            endAdornment={
-              <InputAdornment position="end">
-                <KeycapHint>{modKey()}K</KeycapHint>
-              </InputAdornment>
-            }
-            sx={{ width: 260 }}
-          />
-          <SegmentedControl
-            exclusive
-            aria-label="Filter by status"
-            value={statusFilter}
-            onChange={(_e, v) => {
-              if (v) {
-                setStatusFilter(v)
-                setPage(0)
-              }
-            }}
-            options={[
-              { value: 'all', label: `All ${rows.length}` },
-              { value: 'draft', label: `${UI_TEXT.draft} ${draftCount}` },
-              {
-                value: 'published',
-                label: `${UI_TEXT.published} ${publishedCount}`,
-              },
-            ]}
-          />
-          <Button
-            variant="contained"
-            color="primary"
-            size="medium"
-            startIcon={<Plus size={16} />}
-            onClick={handleAdd}
-            id="btn-add-task"
-          >
-            New Task
-          </Button>
-        </Stack>
+          }}
+          options={[
+            { value: 'all', label: `All ${rows.length}` },
+            { value: 'draft', label: `${UI_TEXT.draft} ${draftCount}` },
+            {
+              value: 'published',
+              label: `${UI_TEXT.published} ${publishedCount}`,
+            },
+          ]}
+        />
+        <OutlinedInput
+          inputRef={searchInputRef}
+          size="small"
+          placeholder="Search tasks…"
+          aria-label="Search tasks"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(0)
+          }}
+          startAdornment={
+            <InputAdornment position="start">
+              <Search size={16} />
+            </InputAdornment>
+          }
+          endAdornment={
+            <InputAdornment position="end">
+              <KeycapHint>{modKey()}K</KeycapHint>
+            </InputAdornment>
+          }
+          sx={{ width: 260, maxWidth: '100%' }}
+        />
       </Stack>
 
       {/* ── Card grid ── */}
+      {/* The only thing on this page that scrolls. `flex:1 + minHeight:0` lets
+          the browser measure what is left after the two bands and the
+          pagination — the old `calc(100vh - 280px)` was a hand-guessed header
+          height, and editing the header invalidated it silently.
+
+          `p:2 / m:-2` cancel each other out on layout but give the cards two
+          spare pixels inside the scroll box, so the hover lift is not clipped
+          at the edges. */}
       {isLoadingTasks ? (
-        <Box
-          sx={{
-            maxHeight: 'calc(100vh - 280px)',
-            overflow: 'auto',
-            p: 2,
-            m: -2,
-          }}
-        >
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 2,
-            }}
-          >
+        <Box sx={SCROLL_AREA_SX}>
+          <Box sx={GRID_SX}>
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton
                 key={i}
@@ -834,7 +956,7 @@ const ListTasks = () => {
             onClick={handleAdd}
             id="btn-add-task-empty"
           >
-            New Task
+            New task
           </Button>
         </Stack>
       ) : filteredRows.length === 0 ? (
@@ -851,21 +973,8 @@ const ListTasks = () => {
         </Stack>
       ) : (
         <>
-          <Box
-            sx={{
-              maxHeight: 'calc(100vh - 280px)',
-              overflow: 'auto',
-              p: 2,
-              m: -2,
-            }}
-          >
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: 2,
-              }}
-            >
+          <Box sx={SCROLL_AREA_SX}>
+            <Box sx={GRID_SX}>
               {paginated.map((row) => (
                 <TaskCard
                   key={row.id}

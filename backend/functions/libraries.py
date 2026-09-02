@@ -1,4 +1,5 @@
 from django.http import HttpResponse, HttpRequest
+from backend.utils.task_summary import summarize_task
 from backend.utils.response import (
     HttpMethod,
     invalid_request_method,
@@ -23,22 +24,36 @@ def get_task_list(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.GET.value:
-                tasks = (
+                rows = (
                     Task.objects.filter(Q(owner=request.user) | Q(shared=True))
-                    .values(
-                        "id",
-                        "name",
-                        "description",
-                        "last_modified",
-                        "owner",
-                        "owner__username",
-                        "shared",
-                        "task_type",
-                        "status",
-                        "signature",
+                    .only(
+                        "id", "name", "description", "last_modified", "owner",
+                        "shared", "task_type", "status", "signature",
+                        "published_workspace", "draft_workspace",
                     )
+                    .select_related("owner")
                     .order_by("-last_modified")
                 )
+                # `uses` is a handful of booleans derived from the workspace, not
+                # the workspace itself: the card needs to say whether a program
+                # moves the arm and what it waits for, and shipping the blocks to
+                # say it would turn a ~5 KB list into hundreds.
+                tasks = [
+                    {
+                        "id": t.id,
+                        "name": t.name,
+                        "description": t.description,
+                        "last_modified": t.last_modified,
+                        "owner": t.owner_id,
+                        "owner__username": t.owner.username if t.owner else None,
+                        "shared": t.shared,
+                        "task_type": t.task_type,
+                        "status": t.status,
+                        "signature": t.signature,
+                        "uses": summarize_task(t),
+                    }
+                    for t in rows
+                ]
                 return success_response(tasks)
             else:
                 return invalid_request_method()
