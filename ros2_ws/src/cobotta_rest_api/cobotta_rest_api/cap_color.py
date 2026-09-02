@@ -30,12 +30,31 @@ import cv2
 import numpy as np
 
 # OpenCV hue range is 0-179; red wraps around the origin.
+#
+# Boundaries measured on this rig, not taken from a textbook hue wheel. The
+# caps were sampled across the seven frames in testing/out/vision_check
+# (Rob_test*), post-white-balance, and the classes separate cleanly:
+#
+#     orange   6- 15      yellow  24- 51
+#     green   68- 96      blue   108-116
+#
+# The textbook values that used to sit here put the yellow/green boundary at
+# 35/40, which cuts the yellow class in half: this cell's yellow cap is a
+# fluorescent yellow-green that measures 24-51, so roughly three frames in
+# five it landed in `green` and a "provetta gialla" step never matched. The
+# boundaries below sit in the gaps between the measured clusters (19, 57, 99),
+# which leaves every class at least six hue units of margin.
+#
+# `red` is deliberately narrow. No red object exists in the catalogue any more
+# (seed_library.REMOVED_OBJECTS), so the only thing a wide red band can do here
+# is capture the orange caps, which measure 6-15 — and the red tube rack, which
+# is background. Widen it again only alongside a red object that needs it.
 COLOR_BINS = {
-    "red": ((0, 10), (170, 179)),
-    "orange": ((11, 19),),
-    "yellow": ((20, 35),),
-    "green": ((40, 85),),
-    "blue": ((95, 130),),
+    "red": ((0, 4), (170, 179)),
+    "orange": ((5, 19),),
+    "yellow": ((20, 57),),
+    "green": ((58, 99),),
+    "blue": ((100, 135),),
 }
 
 SAT_MIN = 80
@@ -56,7 +75,16 @@ CAP_REGION_FRACTION = 0.35
 # ring), and how close a cap_region hue has to be to that background hue to
 # be treated as "background bleed" rather than the cap's own colour.
 BACKGROUND_MARGIN_PX = 15
-BACKGROUND_HUE_TOLERANCE = 12
+# Measured, not guessed. Real background bleed sits at distance 0 from the
+# sampled background hue — it IS that background. The orange caps sit at 6-13
+# from it, because the tubes stand in the RED RACK and the background ring
+# samples the rack (hue 1-3), not the wall. At the old ±12 the exclusion
+# swallowed the cap: saturated coverage fell from ~65% to under 3% and the
+# answer became None on three frames out of four. A tolerance of 4 still drops
+# genuine bleed (see test_cap_color.py's grey-cap-on-red case, which is the
+# false positive this exclusion exists for) while leaving a cap that merely
+# sits near the background on the hue wheel.
+BACKGROUND_HUE_TOLERANCE = 4
 # Need at least this many saturated background pixels to trust the sample —
 # a background with almost no saturated pixels has nothing worth excluding.
 MIN_BACKGROUND_SATURATED_PX = 10
