@@ -34,15 +34,15 @@
   width: 240px;
   min-width: 240px;
   height: 100%;
-  background-color: #FFFFFF;
-  border-right: 1px solid #E2E8F0;
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
 .custom-toolbox.is-deleting {
-  border-right-color: #EF4444;
+  border-right-color: #ef4444;
   box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.26);
 }
 
@@ -51,13 +51,13 @@
   padding: 6px 12px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #E2E8F0;
-  background-color: #F8FAFC;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
 }
 
 .custom-toolbox.is-deleting .custom-toolbox__header {
-  border-bottom-color: #FCA5A5;
-  background: linear-gradient(180deg, #FFF1F2, #FFE7EA);
+  border-bottom-color: #fca5a5;
+  background: linear-gradient(180deg, #fff1f2, #ffe7ea);
 }
 
 .custom-toolbox__header-content {
@@ -80,17 +80,21 @@
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.12em;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
 }
 
 .custom-toolbox__header-subtitle {
   /* was #94A3B8 (2.56:1 on white, fails AA) — matches theme text.secondary */
-  color: #5A6270;
+  color: #5a6270;
   font-size: 0.63rem;
   line-height: 1.25;
   font-weight: 500;
   letter-spacing: 0.02em;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
 }
 
 .custom-toolbox__header-delete-badge {
@@ -107,14 +111,14 @@
 }
 
 .custom-toolbox__header-delete-icon {
-  color: #E1592F;
+  color: #e1592f;
   font-size: 1.14rem !important;
   flex-shrink: 0;
 }
 
 .custom-toolbox.is-deleting .custom-toolbox__header-label,
 .custom-toolbox.is-deleting .custom-toolbox__header-subtitle {
-  color: #E1592F;
+  color: #e1592f;
 }
 
 .custom-toolbox__scroll {
@@ -126,7 +130,7 @@
   flex-direction: column;
   gap: 8px;
   scrollbar-width: thin;
-  scrollbar-color: #CBD5E1 transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 /* Hide the scrollbar track but keep functionality */
@@ -137,7 +141,7 @@
   background: transparent;
 }
 .custom-toolbox__scroll::-webkit-scrollbar-thumb {
-  background-color: #CBD5E1;
+  background-color: #cbd5e1;
   border-radius: 2px;
 }
 
@@ -147,27 +151,27 @@
   border-radius: 10px !important;
   overflow: hidden;
   margin: 0 !important;
-  border: 1px solid #E2E8F0;
-  background-color: #FFFFFF;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   flex-shrink: 0;
 }
 
 .toolbox-category__header {
   padding: 0 10px !important;
-  background-color: #FFFFFF !important;
+  background-color: #ffffff !important;
   min-height: 42px !important;
   transition: background-color 0.18s ease;
 }
 
 .toolbox-category__header:hover {
-  background-color: #F8FAFC !important;
+  background-color: #f8fafc !important;
 }
 
 .toolbox-category__header.Mui-expanded {
   min-height: 42px !important;
-  background-color: #FFFFFF !important;
-  border-bottom: 1px solid #E2E8F0;
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .toolbox-category__header .MuiAccordionSummary-content {
@@ -200,23 +204,25 @@
 }
 
 .toolbox-category__name {
-  color: #0F172A !important;
+  color: #0f172a !important;
   font-size: 0.83rem !important;
   font-weight: 600 !important;
   line-height: 1.2;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .toolbox-category__chevron {
-  color: #64748B;
+  color: #64748b;
   font-size: 1.1rem !important;
 }
 
 .toolbox-category__body {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   padding: 8px !important;
   display: flex;
   flex-direction: column;
@@ -224,7 +230,7 @@
   max-height: 260px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #CBD5E1 transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .toolbox-category__body::-webkit-scrollbar {
@@ -236,7 +242,7 @@
 }
 
 .toolbox-category__body::-webkit-scrollbar-thumb {
-  background-color: #CBD5E1;
+  background-color: #cbd5e1;
   border-radius: 2px;
 }
 
@@ -248,8 +254,8 @@
   position: sticky;
   top: -8px;
   z-index: 3;
-  background: #FFFFFF;
-  border-bottom: 1px solid #CBD5E1;
+  background: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
   margin: -8px -8px 2px;
   flex-shrink: 0;
 }
@@ -259,7 +265,7 @@
   min-width: 0;
   min-height: 30px;
   border: none;
-  border-bottom: 1px solid #CBD5E1;
+  border-bottom: 1px solid #cbd5e1;
   border-radius: 1px 1px 0 0;
   background: transparent;
   color: #475569;
@@ -277,11 +283,11 @@
 .toolbox-category-tab--inactive {
   background: transparent;
   color: #475569;
-  border-bottom-color: #CBD5E1;
+  border-bottom-color: #cbd5e1;
 }
 
 .toolbox-category-tab--inactive:hover {
-  background: #F8FAFC;
+  background: #f8fafc;
 }
 
 .toolbox-category-tab__label {
@@ -305,11 +311,10 @@
 .toolbox-category-tab--objects.toolbox-category-tab--active,
 .toolbox-category-tab--positions.toolbox-category-tab--active,
 .toolbox-category-tab--actions.toolbox-category-tab--active {
-  background: #E8FEF5;
-  color: #007A54;
-  border-bottom: 2px solid #00873E;
+  background: #e8fef5;
+  color: #007a54;
+  border-bottom: 2px solid #00873e;
 }
-
 
 /* ─── Block Pill ──────────────────────────────────────────────────────────── */
 
@@ -321,16 +326,19 @@
   cursor: grab;
   user-select: none;
   touch-action: none;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #e2e8f0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
   min-height: 32px;
-  background-color: #FFFFFF;
+  background-color: #ffffff;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .toolbox-pill {
-    transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s ease, border-color 0.2s ease;
+    transition:
+      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.15s ease,
+      border-color 0.2s ease;
   }
 }
 
@@ -347,7 +355,7 @@
 }
 
 .toolbox-pill:focus-visible {
-  outline: 2px solid #6366F1;
+  outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
 
@@ -355,7 +363,12 @@
   color: #334155;
   font-size: 0.74rem;
   font-weight: 500;
-  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Geist',
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -365,20 +378,20 @@
 /* ─── Block Preview Tooltip ──────────────────────────────────────────────── */
 
 .toolbox-preview-popper .MuiTooltip-arrow {
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .toolbox-preview-popper .MuiTooltip-arrow::before {
-  border: 1px solid #E2E8F0;
+  border: 1px solid #e2e8f0;
   box-sizing: border-box;
 }
 
 .toolbox-preview-tooltip {
   /* Same elevation as MENU_PAPER_SX (editor/menuStyles.ts) — one shadow
      language for every popover/menu/tooltip in the editor. */
-  background-color: #FFFFFF !important;
-  border: 1px solid #E2E8F0;
-  color: #0F172A !important;
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0;
+  color: #0f172a !important;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
   border-radius: 12px;
   padding: 8px !important;
@@ -407,8 +420,8 @@
   border-radius: 999px;
   /* Neutral fallback until the per-category inline style overrides it —
      avoids a flash of arbitrary blue for categories whose color fails to parse. */
-  border: 1px solid #E2E8F0;
-  background: #F1F5F9;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
   color: #334155;
   font-size: 0.62rem;
   font-weight: 700;
@@ -423,7 +436,7 @@
 
 .toolbox-preview-card__title {
   margin: 0;
-  color: #0F172A;
+  color: #0f172a;
   font-size: 0.96rem;
   font-weight: 600;
   line-height: 1.2;
@@ -434,9 +447,13 @@
   height: 142px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #E2E8F0;
-  background-color: #F8FAFC;
-  background-image: radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.20) 1px, transparent 0);
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(100, 116, 139, 0.2) 1px,
+    transparent 0
+  );
   background-size: 10px 10px;
 }
 
@@ -481,14 +498,14 @@
   gap: 6px;
   margin: 0 -8px -8px;
   padding: 6px 8px;
-  border-top: 1px solid #E2E8F0;
-  background-color: #F1F5F9;
+  border-top: 1px solid #e2e8f0;
+  background-color: #f1f5f9;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
 
 .toolbox-preview-card__footer-icon {
-  color: #64748B;
+  color: #64748b;
   font-size: 0.95rem !important;
 }
 
@@ -560,16 +577,21 @@
   transition: color 0.22s ease;
 }
 
-.custom-toolbox__delete-overlay--drag-intent .custom-toolbox__delete-overlay-icon,
-.custom-toolbox__delete-overlay--drag-intent .custom-toolbox__delete-overlay-text {
+.custom-toolbox__delete-overlay--drag-intent
+  .custom-toolbox__delete-overlay-icon,
+.custom-toolbox__delete-overlay--drag-intent
+  .custom-toolbox__delete-overlay-text {
   color: #475569;
 }
 
-.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-icon,
-.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-text {
-  color: #FFFFFF;
+.custom-toolbox__delete-overlay--hover-confirm
+  .custom-toolbox__delete-overlay-icon,
+.custom-toolbox__delete-overlay--hover-confirm
+  .custom-toolbox__delete-overlay-text {
+  color: #ffffff;
 }
 
-.custom-toolbox__delete-overlay--hover-confirm .custom-toolbox__delete-overlay-icon {
+.custom-toolbox__delete-overlay--hover-confirm
+  .custom-toolbox__delete-overlay-icon {
   transform: scale(1.18) translateY(-3px);
 }
