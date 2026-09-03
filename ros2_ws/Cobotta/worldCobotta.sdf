@@ -315,7 +315,28 @@
             </clip>
           </camera>
           <always_on>true</always_on>
-          <update_rate>15</update_rate>
+          <!-- 5, not 15. Measured on the dev VM (no GPU, llvmpipe software
+               rasterisation) 2026-09-03: this one number is the simulation's
+               whole speed budget.
+
+                 camera 15Hz .......... RTF 0.398
+                 camera  5Hz .......... RTF 0.954
+                 no camera at all ..... RTF 1.000
+
+               Everything else that looked expensive is not. The ODE solver
+               (`world`, the exact LCP one) and a 1ms step were both measured
+               against their cheaper alternatives — quickstep, and a 2ms step —
+               and each bought under 5%, well inside the noise of what the
+               camera decides. So the solver and the step stay as they were
+               rather than trading contact accuracy for nothing: this cell
+               places 18mm tubes into 2mm-walled containers, and the
+               calibration is tuned against this physics.
+
+               Resolution stays 640x480 on purpose. The frames feed YOLO and
+               the cap-colour classifier as well as the operator's live view,
+               and dropping pixels would change what the vision pipeline can
+               see. Dropping the RATE does not. -->
+          <update_rate>5</update_rate>
           <topic>/gz/camera/image</topic>
           <visualize>false</visualize>
         </sensor>

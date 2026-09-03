@@ -22,11 +22,33 @@ def _spawner(names, timeout=40):
     # on a slow VM the gripper_controller's switch could time out (10s) while
     # already active underneath, so its spawner exited 1 on a harmless retry
     # and looked like a crash even though the stack came up fine.
+    #
+    # --service-call-timeout / --switch-timeout: the same race came back in a
+    # worse shape on 2026-09-03, because grouping the switch did not make the
+    # CALL any less likely to time out — it only made one call carry all three
+    # controllers. Observed:
+    #
+    #   [WARN] Failed getting a result from calling switch_controller in 10.0
+    #   [WARN] Controller 'joint_state_broadcaster' is already active.
+    #   [ERROR] Aborting, no controller is switched! (::STRICT switch)
+    #
+    # The first call SUCCEEDED server-side and only its reply was late. The
+    # retry then found one controller already active, and a STRICT group switch
+    # refuses the whole group if any member is — so arm_controller and
+    # gripper_controller were left inactive and the arm silently ignored every
+    # move-joints for the rest of the session, answering "ok" to each one.
+    #
+    # `--controller-manager-timeout` does NOT cover this: it governs waiting
+    # for the controller_manager service to appear, not the switch call, whose
+    # own default is 10s. Both are raised here because on this VM a cold start
+    # under Gazebo load routinely takes longer than that.
     return Node(
         package="controller_manager",
         executable="spawner",
         arguments=[*names, "--controller-manager", "/controller_manager",
                    "--controller-manager-timeout", str(timeout),
+                   "--service-call-timeout", "40",
+                   "--switch-timeout", "40",
                    "--activate-as-group"],
         output="screen",
     )
