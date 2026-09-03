@@ -23,10 +23,14 @@ export function countRealBlocks(
  * Returns all blocks that logically "belong" to the given root block:
  * blocks connected via inputList (the body), recursively.
  * Does NOT include blocks attached via the root's nextConnection
- * (those are siblings in the chain, not children of the root).
+ * (those are siblings in the chain, not children of the root) — unless
+ * `includeFollowing` is set, which is what a drag needs: dragging a block
+ * detaches it *with* everything under it, so for that gesture the trailing
+ * chain is part of what the operator is holding, not a sibling left behind.
  */
 export const getOwnBodyDescendants = (
   block: Blockly.BlockSvg,
+  includeFollowing = false,
 ): Blockly.BlockSvg[] => {
   const result: Blockly.BlockSvg[] = []
   const queue: Blockly.Block[] = []
@@ -34,6 +38,10 @@ export const getOwnBodyDescendants = (
   for (const input of block.inputList) {
     const child = input.connection?.targetBlock()
     if (child) queue.push(child)
+  }
+  if (includeFollowing) {
+    const following = block.nextConnection?.targetBlock()
+    if (following) queue.push(following)
   }
 
   while (queue.length > 0) {
@@ -65,12 +73,26 @@ export const getOwnBodyDescendants = (
  * most common case of all — deleting a single block, where the default
  * `deleteConfirmMode: 'multiple'` asks nothing — fell through to Blockly and hit
  * the very bug this exists to avoid.
+ *
+ * `healStack` is the difference between the two gestures, and getting it wrong
+ * is visible to the operator:
+ *
+ *  - Delete key and context menu remove ONE block from a stack that is still
+ *    assembled. Healing is the whole point — the steps below it close the gap
+ *    and the program stays connected. This is the default.
+ *  - The delete zone receives a block a drag already detached, and a drag
+ *    carries everything below along with it. There is no stack left to heal:
+ *    healing there re-parents the trailing steps onto nothing, so they survive
+ *    the delete and land back on the canvas as a floating stack — the operator
+ *    dropped six blocks on the toolbox and five came back. Hence `false`, plus
+ *    the trailing chain in the descendant sweep so those blocks are disposed
+ *    leaf-first too rather than by the cascade this helper exists to avoid.
  */
 export const disposeBlockWithBody = (
   block: Blockly.BlockSvg,
-  animate = false,
+  { animate = false, healStack = true } = {},
 ): void => {
-  const descendants = getOwnBodyDescendants(block)
+  const descendants = getOwnBodyDescendants(block, !healStack)
   // Join the caller's event group when there is one, instead of always opening
   // a fresh one. The drag-to-toolbox delete zone groups the disposal with the
   // drag events that preceded it so the whole gesture undoes in one press;
@@ -82,7 +104,7 @@ export const disposeBlockWithBody = (
     for (let i = descendants.length - 1; i >= 0; i--) {
       if (!descendants[i].disposed) descendants[i].dispose(false)
     }
-    if (!block.disposed) block.dispose(true, animate)
+    if (!block.disposed) block.dispose(healStack, animate)
   } finally {
     if (!outerGroup) Blockly.Events.setGroup(false)
   }

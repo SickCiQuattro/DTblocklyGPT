@@ -109,7 +109,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'find_object_block',
-    message0: '%1 Object detected %2',
+    message0: '%1 an object is detected: %2',
     args0: [
       iconConfig(SCAN_EYE_ICON_URI, 'Detect'),
       { type: 'input_value', name: 'OBJECT', check: 'object_block' },
@@ -120,7 +120,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'gesture_block',
-    message0: '%1 Gesture detected %2',
+    message0: '%1 a gesture is detected: %2',
     args0: [
       iconConfig(SCAN_EYE_ICON_URI, 'Detect'),
       {
@@ -135,7 +135,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'voice_command_block',
-    message0: '%1 Voice command %2',
+    message0: '%1 a voice command is heard: %2',
     args0: [
       iconConfig(MIC_ICON_URI, 'Voice'),
       {
@@ -161,7 +161,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'human_feedback_block',
-    message0: '%1 Confirm button pressed',
+    message0: '%1 the Confirm button is pressed',
     args0: [iconConfig(CHECK_CIRCLE_ICON_URI, 'Confirm')],
     output: 'Boolean',
     colour: blocksColours.eventsConditions,
@@ -401,21 +401,35 @@ Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_until_block',
     extensions: ['collapsed_summary'],
-    message0: '%1 Repeat until %2',
-    args0: [
-      iconConfig(REPEAT2_ICON_URI, 'Repeat'),
-      {
-        type: 'input_value',
-        name: 'CONDITION',
-        check: 'Boolean',
-      },
-    ],
+    // Reads in EXECUTION order — steps first, exit check last — because that
+    // is also what the block does: it is a do-until, so the steps always run
+    // at least once before the condition is looked at.
+    //
+    // "Repeat until %condition" put the exit test above the body and left the
+    // stopping implicit. With conditions phrased as events ("Confirm button
+    // pressed", "Gesture detected"), operators read it as "repeat each time
+    // they press" just as readily as "repeat until they press" — reported
+    // during workspace testing. "Stop when" states the action instead of
+    // implying it, and cannot carry the other reading.
+    //
+    // Input NAMES are unchanged (CONDITION, DO), so every saved workspace
+    // still loads: this is a rendering change, not a schema one.
+    message0: '%1 Repeat',
+    args0: [iconConfig(REPEAT2_ICON_URI, 'Repeat')],
     message1: 'Do %1',
     args1: [
       {
         type: 'input_statement',
         name: 'DO',
         check: ['robot_sequence', 'logic_sequence'],
+      },
+    ],
+    message2: 'Stop when %1',
+    args2: [
+      {
+        type: 'input_value',
+        name: 'CONDITION',
+        check: 'Boolean',
       },
     ],
     previousStatement: ['robot_sequence', 'logic_sequence'],
@@ -495,7 +509,11 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'macro_task_block',
-    message0: '%1 Do: %2',
+    // 'Saved task:', not 'Do:'. The pill in the toolbox says "Saved Task";
+    // the block said only "Do: controllo e preparazione", which names no
+    // concept at all — the operator had nothing on the canvas telling them
+    // this step runs a whole other program.
+    message0: '%1 Saved task: %2',
     args0: [
       iconConfig(WORKFLOW_ICON_URI, 'TASK:'),
       { type: 'field_label_serializable', name: 'name', text: '' },

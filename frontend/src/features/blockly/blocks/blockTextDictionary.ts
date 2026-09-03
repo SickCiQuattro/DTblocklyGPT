@@ -4,6 +4,12 @@
  * - block description strings in the custom toolbox UI
  */
 export const blockDescriptionsByType = {
+  object_block:
+    'One of the objects in your library — drop it into a step that needs to know which object.',
+  location_block:
+    'One of the places in your library — drop it into a step that needs to know where.',
+  action_block:
+    'One of the skills in your library — a movement the robot has already been taught.',
   find_object_block:
     'Checks if the camera can currently see the chosen object.',
   gesture_block:
@@ -33,7 +39,8 @@ export const blockDescriptionsByType = {
   when_otherwise_block:
     'Runs the first steps if the condition is true, otherwise runs the second steps.',
   macro_task_block: 'Runs all the steps of a previously saved task.',
-  repeat_until_block: 'Repeats these steps until a specific event happens.',
+  repeat_until_block:
+    'Runs these steps, then checks. Repeats until the event happens, so the steps always run at least once.',
   notify_action_block:
     'Shows a message on screen while the robot keeps working. Use this to guide the person to prepare for the next step.',
   logic_and_block: 'True only when both conditions are true at the same time.',

@@ -34,6 +34,7 @@ FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "src")
 EDITOR = os.path.join(FRONTEND, "features", "blockly", "editor", "BlocklyEditor.tsx")
 SELECTION = os.path.join(FRONTEND, "utils", "blocklySelection.ts")
 DELETE_AREA = os.path.join(FRONTEND, "features", "blockly", "editor", "deleteArea.ts")
+WORKSPACE = os.path.join(FRONTEND, "features", "blockly", "workspace", "BlocklyWorkspace.tsx")
 
 SAFE_DISPOSE = "disposeBlockWithBody"
 
@@ -171,6 +172,63 @@ def test_delete_zone_uses_safe_dispose():
         "resta una dispose() diretta nella delete zone accanto alla "
         "cancellazione sicura."
     )
+
+
+def test_delete_zone_takes_the_blocks_below_the_dragged_one():
+    """A drag holds the whole stack; dropping it on the toolbox must delete it all.
+
+    Routing this path through the safe disposal fixed the orphaned value-input
+    children and introduced a worse bug in the same edit, because the helper
+    defaults to `healStack: true` — right for the Delete key, which removes one
+    block from a stack that is still assembled and wants the gap closed, and
+    wrong here. A drag has already detached the block *with everything under
+    it*, so there is no stack left to heal: Blockly re-parented the trailing
+    blocks onto nothing and they survived as a floating stack. The operator drags
+    six blocks onto the toolbox and five come back.
+
+    Two halves, and both are needed: the dispose call must not heal, and the
+    descendant sweep must include the trailing chain — otherwise those blocks go
+    down Blockly's cascade, which is the orphaning this helper exists to avoid.
+    """
+    drop = _strip_comments(_slice_between(_read(DELETE_AREA), "override onDrop", "\n  }"))
+    assert re.search(r"healStack:\s*false", drop), (
+        "la delete zone non passa piu' healStack: false. Con la guarigione "
+        "attiva i blocchi agganciati sotto a quello trascinato non vengono "
+        "cancellati con lui: ricompaiono sul canvas come pila fluttuante."
+    )
+
+    helper = _strip_comments(_slice_between(_read(SELECTION), f"export const {SAFE_DISPOSE}", "\n}"))
+    assert re.search(r"getOwnBodyDescendants\(block,\s*!healStack\)", helper), (
+        "la disposizione sicura non estende piu' la raccolta dei discendenti "
+        "alla catena successiva quando non guarisce la pila: quei blocchi "
+        "finiscono nella cascata di Blockly invece che nella disposizione "
+        "foglie-per-prime, ed e' esattamente cio' che orfana i figli negli "
+        "innesti valore."
+    )
+
+    sweep = _strip_comments(
+        _slice_between(_read(SELECTION), "export const getOwnBodyDescendants", "\n}")
+    )
+    assert "includeFollowing" in sweep and "nextConnection" in sweep, (
+        "getOwnBodyDescendants non sa piu' includere la catena successiva: "
+        "la delete zone non ha modo di raccogliere i blocchi trascinati sotto "
+        "a quello afferrato."
+    )
+
+
+def test_selection_highlight_still_stops_at_the_dragged_block():
+    """The same sweep drives the selection halo, and there it must NOT follow next.
+
+    Clicking a step highlights that step and its body. Following the next chain
+    would light up the entire rest of the program — so the trailing chain has to
+    stay opt-in, never the default.
+    """
+    editor = _strip_comments(_read(WORKSPACE))
+    for call in re.findall(r"getOwnBodyDescendants\((.*?)\)", editor):
+        assert "," not in call, (
+            "l'evidenziazione della selezione ora segue la catena successiva: "
+            "selezionare uno step accende tutto il resto del programma."
+        )
 
 
 def test_safe_dispose_joins_an_open_event_group():

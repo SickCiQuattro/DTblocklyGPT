@@ -71,7 +71,10 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'repeat_until_block',
-        label: 'Repeat until',
+        // 'Repeat', not 'Repeat until': the block itself reads
+        // "Repeat / Do / Stop when", so a pill saying "Repeat until"
+        // promised words the block does not contain.
+        label: 'Repeat',
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.repeat_until_block,
         inputs: 'Condition to wait for | Steps to repeat',

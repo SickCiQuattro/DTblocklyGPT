@@ -49,7 +49,12 @@ export class CustomToolboxDeleteArea extends Blockly.DeleteArea {
       // dragging a When block to the toolbox could leave its condition behind
       // as a floating block. This was the last delete path still going
       // straight to dispose(), which the helper's own docstring forbids.
-      disposeBlockWithBody(block, true)
+      //
+      // healStack: false because a drag has already detached this block and
+      // brought every block under it along. Healing would hand those trailing
+      // blocks back to the canvas instead of deleting them — the operator drags
+      // a stack onto the toolbox and watches most of it reappear.
+      disposeBlockWithBody(block, { animate: true, healStack: false })
     } finally {
       Blockly.Events.setGroup(false)
       this.activeDragGroup = null
