@@ -46,6 +46,9 @@ export function useWebcamVision(): WebcamVisionState {
   const inFlightRef = useRef(false)
   const detectObjectsRef = useRef(false)
   const captureFailuresRef = useRef(0)
+  // Bumped by every start() and by anything that cancels one, so a start()
+  // resolving late can tell that it has been superseded.
+  const startEpochRef = useRef(0)
 
   const [gesture, setGesture] = useState<string>('NONE')
   const [detections, setDetections] = useState<WebcamDetection[]>([])
@@ -152,6 +155,10 @@ export function useWebcamVision(): WebcamVisionState {
       }
       setError(null)
       captureFailuresRef.current = 0
+      // Claim this attempt. Anything that cancels the camera — stop(), or
+      // another start() for a different device — bumps the epoch, and the
+      // await below rechecks it before taking ownership of the stream.
+      const epoch = ++startEpochRef.current
       try {
         const videoConstraints: MediaTrackConstraints = {
           width: { ideal: 640 },
@@ -162,6 +169,13 @@ export function useWebcamVision(): WebcamVisionState {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: videoConstraints,
         })
+        if (startEpochRef.current !== epoch) {
+          // Superseded while we were awaiting. Release what we just acquired:
+          // nobody else holds a reference to it, so this is the only chance to
+          // turn the camera off.
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
         streamRef.current = stream
 
         const track = stream.getVideoTracks()[0]
@@ -218,6 +232,15 @@ export function useWebcamVision(): WebcamVisionState {
   )
 
   const stop = useCallback(() => {
+    // Invalidate any start() still waiting on getUserMedia. Without this the
+    // camera survives a Stop: getUserMedia can take seconds (permission
+    // prompt, sensor warm-up), and a start() that resolves AFTER a stop used
+    // to assign its brand-new live stream to streamRef and set active — with
+    // nothing left to switch it off, because `cameraActive` had already gone
+    // false and the effect that calls stop() will not fire again. The camera
+    // light stayed on with the run finished. Reported 2026-09-03, and it hits
+    // a hardware run exactly the same way.
+    startEpochRef.current += 1
     activeRef.current = false
     setActive(false)
     if (streamRef.current) {
@@ -243,6 +266,7 @@ export function useWebcamVision(): WebcamVisionState {
 
   const selectDevice = useCallback(
     async (deviceId: string) => {
+      startEpochRef.current += 1
       activeRef.current = false
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop())
@@ -259,6 +283,7 @@ export function useWebcamVision(): WebcamVisionState {
 
   useEffect(() => {
     return () => {
+      startEpochRef.current += 1
       activeRef.current = false
       streamRef.current?.getTracks().forEach((t) => t.stop())
     }
