@@ -927,6 +927,7 @@ export const UnifiedWorkspace = () => {
 
       {/* Digital Twin Panel slide-in (Step 8) */}
       <DigitalTwinPanel
+        followRunningBlock={viewSettings.followRunningBlock}
         taskId={id || ''}
         // activeTaskStatus (Redux), not taskData.status (SWR). The autosave
         // path deliberately skips the refetch — a mutateTask() on every

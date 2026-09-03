@@ -16,6 +16,15 @@ export interface ViewSettings {
   snapToGrid: boolean
   /** Hide the blocks sidebar (toolbox) — add blocks with Cmd/Ctrl+K instead. */
   toolboxCollapsed: boolean
+  /**
+   * Scroll the canvas to the step the robot is running, when it is off-screen.
+   *
+   * Off by default. An earlier always-on version was removed because it
+   * recentred on every step and fought whoever was panning; this one only
+   * intervenes when the running block is actually outside the viewport, and
+   * even then it is opt-in.
+   */
+  followRunningBlock: boolean
 }
 
 export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
@@ -26,6 +35,7 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   gridVisible: true,
   snapToGrid: true,
   toolboxCollapsed: false,
+  followRunningBlock: false,
 }
 
 const STORAGE_KEY = 'dtblockly.viewSettings'

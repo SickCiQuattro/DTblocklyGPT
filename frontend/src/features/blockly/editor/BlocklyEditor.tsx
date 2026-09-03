@@ -2321,6 +2321,15 @@ export const BlocklyEditor = ({
               />
 
               <SettingSwitch
+                label="Follow the running step"
+                caption="Scrolls to the step the robot is on, but only when it has gone off-screen."
+                checked={viewSettings.followRunningBlock}
+                onChange={(value) =>
+                  onViewSettingsChange({ followRunningBlock: value })
+                }
+              />
+
+              <SettingSwitch
                 label="Show start block"
                 caption="Hiding the start block also stops highlighting steps that aren't connected to the program."
                 checked={viewSettings.showStartBlock}

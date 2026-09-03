@@ -159,3 +159,65 @@ def test_starting_the_arm_is_not_the_destructive_colour():
     assert 'tone="caution"' in dialog, (
         "il dialogo di avvio del robot reale non e' piu' in tono caution"
     )
+
+
+# ── Live-execution highlight ─────────────────────────────────────────────────
+
+
+def test_the_running_block_outline_separates_from_every_block_colour():
+    """The highlight cannot be a palette colour, and this is why.
+
+    palette.ts tunes all eight colours to clear 4.5:1 against white LABEL text,
+    which lands them all at roughly the same relative luminance (0.115–0.183).
+    Two colours of equal luminance contrast at ~1:1 regardless of hue — so the
+    indigo outline this used to have measured 1.01:1 against eventsConditions,
+    1.02:1 against macroTasks, and 1.42:1 at its very best. An operator asked
+    why the running block was hard to spot; it was not a matter of taste.
+
+    Lightness is the only free dimension, and white is the end of it.
+    """
+    css = _read_source("frontend/src/features/blockly/styles/editor.css")
+    block = css[css.index(".block--executing > .blocklyPath"):]
+    block = block[:block.index("@keyframes blockExecuting")]
+    stroke = re.search(r"stroke:\s*(#[0-9a-fA-F]{3,8})", block)
+    assert stroke, "il contorno del blocco in esecuzione non e' piu' un colore esplicito"
+
+    worst = min(
+        (contrast_ratio(stroke.group(1), hex_colour), name)
+        for name, hex_colour, _ in palette_entries()
+    )
+    assert worst[0] >= 4.5, (
+        f"il contorno {stroke.group(1)} rende {worst[0]:.2f}:1 su "
+        f"'{worst[1]}': sotto AA, e l'operatore non distingue il blocco in "
+        f"esecuzione dagli altri."
+    )
+
+
+def test_the_running_block_glow_separates_from_the_canvas():
+    """White clears the block fill and disappears on the canvas (1.04:1), so
+    the glow carries that half. Two colours because there are two backgrounds,
+    not for decoration."""
+    css = _read_source("frontend/src/features/blockly/styles/editor.css")
+    frames = css[css.index("@keyframes blockExecuting"):]
+    frames = frames[:frames.index("@media")]
+    glow = re.search(r"rgba\((\d+),\s*(\d+),\s*(\d+)", frames)
+    assert glow, "l'alone non e' piu' un rgba() leggibile"
+    hexv = "#%02X%02X%02X" % tuple(int(glow.group(i)) for i in (1, 2, 3))
+    assert contrast_ratio(hexv, "#FAFAFB") >= 3.0, (
+        f"l'alone {hexv} rende {contrast_ratio(hexv, '#FAFAFB'):.2f}:1 sul "
+        "fondo della tela: il blocco in esecuzione non si stacca da essa."
+    )
+
+
+def test_the_glow_is_never_fully_transparent():
+    """It used to animate 0 → 0.7 → 0, so the highlight was invisible for half
+    of every cycle no matter what colour it was."""
+    css = _read_source("frontend/src/features/blockly/styles/editor.css")
+    frames = css[css.index("@keyframes blockExecuting"):]
+    frames = frames[:frames.index("@media")]
+    alphas = [float(a) for a in re.findall(r"rgba\([^)]*,\s*([\d.]+)\)", frames)]
+    assert alphas, "nessun alone trovato nell'animazione"
+    assert min(alphas) >= 0.3, (
+        f"l'alone scende a {min(alphas)}: il blocco in esecuzione torna a "
+        "sparire per una parte di ogni ciclo."
+    )

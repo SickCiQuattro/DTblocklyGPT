@@ -37,6 +37,37 @@ export function highlightExecutingBlock(
   }
 }
 
+/**
+ * Bring the running block into view — but ONLY when it is off-screen.
+ *
+ * That condition is the whole design. An always-recentring version existed
+ * before and was removed because it yanked the canvas on every step, including
+ * the ones already in front of the operator, and fought anyone trying to pan.
+ * Scrolling only when the block has actually left the viewport makes the
+ * canvas hold still exactly when holding still is what the operator wants.
+ *
+ * No-ops if the block is gone (a macro's inner blocks live in another task's
+ * workspace and are never on this canvas).
+ */
+export function scrollRunningBlockIntoView(
+  ws: Blockly.WorkspaceSvg,
+  blockId: string,
+): void {
+  const block = ws.getBlockById(blockId)
+  if (!block || !(block instanceof Blockly.BlockSvg)) return
+
+  const view = ws.getMetricsManager().getViewMetrics(true)
+  const bounds = block.getBoundingRectangle()
+  const fullyVisible =
+    bounds.left >= view.left &&
+    bounds.right <= view.left + view.width &&
+    bounds.top >= view.top &&
+    bounds.bottom <= view.top + view.height
+  if (fullyVisible) return
+
+  ws.scrollBoundsIntoView(bounds, 40)
+}
+
 /** Remove every execution highlight from the workspace. */
 export function clearExecutingHighlights(ws: Blockly.WorkspaceSvg): void {
   for (const block of ws.getAllBlocks(false)) {

@@ -2,140 +2,145 @@
 
 /* Skip-link: hidden until keyboard-focused, then visible top-left. */
 .skip-to-workspace {
-    position: absolute;
-    left: 8px;
-    top: -48px;
-    z-index: 2000;
-    padding: 8px 14px;
-    border-radius: 8px;
-    background: #4F46E5;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: top 0.15s ease;
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 2000;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
 }
 .skip-to-workspace:focus {
-    top: 8px;
-    outline: 2px solid #fff;
-    outline-offset: 2px;
+  top: 8px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 /* ─── Layout ──────────────────────────────────────────────────────────────── */
 
 .custom-dragdrop-layout {
-    position: relative;
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    border-radius: 16px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
-    background-color: #FFFFFF;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.06);
+  background-color: #ffffff;
 }
 
 .custom-dragdrop-workspace-wrapper {
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
 }
 
 /* ─── Floating Workspace Controls ─────────────────────────────────────────── */
 
 .workspace-controls-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 35;
-    pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
 }
 
 .workspace-controls-group {
-    position: absolute;
-    display: flex;
-    gap: 6px;
-    padding: 6px;
-    border-radius: 12px;
-    border: 1px solid #E2E8F0;
-    background: #FFFFFF;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-    pointer-events: auto;
+  position: absolute;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
 }
 
 .workspace-controls-group--top-left {
-    top: 12px;
-    left: 12px;
+  top: 12px;
+  left: 12px;
 }
 
 .workspace-controls-group--top-right {
-    top: 12px;
-    right: 12px;
+  top: 12px;
+  right: 12px;
 }
 
 .workspace-controls-group--bottom-right {
-    right: 12px;
-    bottom: 12px;
-    flex-direction: column;
+  right: 12px;
+  bottom: 12px;
+  flex-direction: column;
 }
 
 .workspace-control-button {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px !important;
-    border: 1px solid #E2E8F0 !important;
-    color: #334155 !important;
-    background-color: #FFFFFF !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .workspace-control-button:hover {
-    transform: translateY(-1px);
-    background-color: #F8FAFC !important;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+  background-color: #f8fafc !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 .workspace-control-button.Mui-disabled {
-    opacity: 0.45;
-    color: #94A3B8 !important;
+  opacity: 0.45;
+  color: #94a3b8 !important;
 }
 
 /* Pressed/active look for toggles (e.g. toolbox hidden) — indigo, matches the
    nav active-pill so "on" reads at a glance. */
 .workspace-control-button--active {
-    background-color: rgba(99, 102, 241, 0.12) !important;
-    border-color: rgba(99, 102, 241, 0.35) !important;
-    color: #6366F1 !important;
+  background-color: rgba(99, 102, 241, 0.12) !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+  color: #6366f1 !important;
 }
 
 .workspace-control-button--active:hover {
-    background-color: rgba(99, 102, 241, 0.18) !important;
+  background-color: rgba(99, 102, 241, 0.18) !important;
 }
 
 /* Hairline that separates concepts inside a control group (history | menu). */
 .workspace-controls-divider {
-    width: 1px;
-    align-self: stretch;
-    margin: 2px 2px;
-    background: rgba(15, 23, 42, 0.1);
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: rgba(15, 23, 42, 0.1);
 }
 
 /* ─── Blockly Workspace ───────────────────────────────────────────────────── */
 
 #blocklyDiv {
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    overflow: hidden;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .blocklySvg {
-    height: 100%;
-    width: 100%;
-    /* Matches canvasNeutral.bg (themes/theme/index.ts) — one canvas color. */
-    background-color: #FAFAFB !important;
+  height: 100%;
+  width: 100%;
+  /* Matches canvasNeutral.bg (themes/theme/index.ts) — one canvas color. */
+  background-color: #fafafb !important;
 }
 
 /* Blockly hardcodes a #c6c6c6 stroke on this rect (fill is themeable via
@@ -145,7 +150,7 @@
    that doesn't match the card's own 1px divider border. The card border is
    the only edge this UI needs. */
 .blocklyMainBackground {
-    stroke: none !important;
+  stroke: none !important;
 }
 
 /* Blockly's keyboard-nav focus ring colors (--blockly-active-node-color,
@@ -157,53 +162,59 @@
 
 .blocklyZoom,
 .blocklyTrash {
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .blocklyScrollbarHorizontal,
 .blocklyScrollbarVertical {
-    opacity: 0.5;
-    transition: opacity 0.2s;
+  opacity: 0.5;
+  transition: opacity 0.2s;
 }
 
 .blocklyScrollbarHorizontal:hover,
 .blocklyScrollbarVertical:hover {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 /* ─── Native Blockly Tooltip ─────────────────────────────────────────────── */
 
 .blocklyTooltipDiv {
-    background: rgba(255, 255, 255, 0.96) !important;
-    border: 1px solid rgba(148, 163, 184, 0.35) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16) !important;
-    color: #0F172A !important;
-    font-size: 0.75rem !important;
-    font-weight: 500 !important;
-    line-height: 1.45 !important;
-    letter-spacing: 0.01em;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    max-width: 320px;
-    padding: 8px 10px !important;
-    pointer-events: none;
-    white-space: pre-wrap;
-    z-index: 1200;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16) !important;
+  color: #0f172a !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0.01em;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  max-width: 320px;
+  padding: 8px 10px !important;
+  pointer-events: none;
+  white-space: pre-wrap;
+  z-index: 1200;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .blocklyTooltipDiv:empty {
-    display: none;
+  display: none;
 }
 
 /* ─── Custom Delete Area Feedback ─────────────────────────────────────────── */
 
 .custom-toolbox--delete-over {
-    box-shadow:
-        inset 0 0 0 2px #DC2626,
-        0 0 0 1px rgba(220, 38, 38, 0.35);
-    background: linear-gradient(180deg, rgba(254, 242, 242, 0.88), rgba(255, 255, 255, 0.98));
+  box-shadow:
+    inset 0 0 0 2px #dc2626,
+    0 0 0 1px rgba(220, 38, 38, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(254, 242, 242, 0.88),
+    rgba(255, 255, 255, 0.98)
+  );
 }
 
 /* ==========================================================================
@@ -219,7 +230,9 @@
   stroke-dasharray: 6, 5 !important;
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
-  transition: fill 0.18s ease, stroke 0.18s ease;
+  transition:
+    fill 0.18s ease,
+    stroke 0.18s ease;
 }
 
 .custom-dashed-shadow-workspace > .blocklyPath {
@@ -232,7 +245,7 @@
      4.5:1 AA contrast text needs. Hex is also 1-2% darker than the
      block-fill value for the same reason: that one was tuned against pure
      white, this canvas is very slightly darker. */
-  fill: #00853D !important;
+  fill: #00853d !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -244,7 +257,7 @@
 .custom-dashed-shadow-trigger text.blocklyText {
   /* See .custom-dashed-shadow-workspace above: solid, slightly darker than
      the block-fill value, for AA contrast on the near-white canvas. */
-  fill: #CC461D !important;
+  fill: #cc461d !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -267,7 +280,9 @@
   stroke-dasharray: 6, 5 !important;
   fill-opacity: 1 !important;
   stroke-opacity: 1 !important;
-  transition: fill 0.18s ease, stroke 0.18s ease;
+  transition:
+    fill 0.18s ease,
+    stroke 0.18s ease;
   fill: rgba(15, 118, 110, 0.06) !important;
   stroke: rgba(15, 118, 110, 0.45) !important;
 }
@@ -275,7 +290,7 @@
   /* See .custom-dashed-shadow-workspace above: solid for AA contrast.
      No darkening needed here — #0F766E already clears 4.5:1 at full
      opacity on the near-white canvas (5.25:1). */
-  fill: #0F766E !important;
+  fill: #0f766e !important;
   font-weight: 700 !important;
   font-size: 13px !important;
 }
@@ -284,11 +299,11 @@
 .shadow-block--drag-target.custom-dashed-shadow-start > .blocklyPath,
 .shadow-block--selected.custom-dashed-shadow-start > .blocklyPath {
   fill: rgba(15, 118, 110, 0.15) !important;
-  stroke: #0F766E !important;
+  stroke: #0f766e !important;
 }
 .shadow-block--drag-target.custom-dashed-shadow-start text.blocklyText,
 .shadow-block--selected.custom-dashed-shadow-start text.blocklyText {
-  fill: #0F766E !important;
+  fill: #0f766e !important;
 }
 
 /* ── Highlight ── */
@@ -301,21 +316,21 @@
 .shadow-block--drag-target.custom-dashed-shadow-workspace > .blocklyPath,
 .shadow-block--selected.custom-dashed-shadow-workspace > .blocklyPath {
   fill: rgba(0, 135, 62, 0.15) !important;
-  stroke: #00873E !important;
+  stroke: #00873e !important;
 }
 .shadow-block--drag-target.custom-dashed-shadow-workspace text.blocklyText,
 .shadow-block--selected.custom-dashed-shadow-workspace text.blocklyText {
-  fill: #00873E !important;
+  fill: #00873e !important;
 }
 
 .shadow-block--drag-target.custom-dashed-shadow-trigger > .blocklyPath,
 .shadow-block--selected.custom-dashed-shadow-trigger > .blocklyPath {
   fill: rgba(209, 72, 30, 0.15) !important;
-  stroke: #D1481E !important;
+  stroke: #d1481e !important;
 }
 .shadow-block--drag-target.custom-dashed-shadow-trigger text.blocklyText,
 .shadow-block--selected.custom-dashed-shadow-trigger text.blocklyText {
-  fill: #D1481E !important;
+  fill: #d1481e !important;
 }
 
 .shadow-block--drag-target.custom-dashed-shadow-sequence > .blocklyPath,
@@ -383,24 +398,50 @@
    Applied to the block currently being run by the robot (block_step events)
    and its connected object/location. Independent of the yellow selection.
    ========================================================================== */
+/* White stroke, indigo glow — two colours because there are two backgrounds
+   to separate from, and no single colour clears both.
+
+   The outline used to be indigo (#6366F1) and measured 1.01–1.42:1 against
+   EVERY block fill in the palette. Not a poor choice of hue: palette.ts is
+   tuned so all eight colours clear 4.5:1 against white LABEL text, which puts
+   them all at roughly the same relative luminance (0.115–0.183). Two colours
+   of equal luminance contrast at ~1:1 whatever their hue, so no palette colour
+   can ever outline a block visibly. The only free dimension is lightness, and
+   that is the one the palette's AA guarantee pins.
+
+   So: white against the block (4.51:1 at worst, 6.35:1 at best), and the
+   indigo glow against the canvas (#FAFAFB, 4.28:1) where white would vanish
+   at 1.04:1. Each colour does the job it is actually good at.
+
+   The glow never reaches zero. It used to animate 0 → 0.7 → 0, so even a
+   perfect colour was invisible for half of every cycle. */
 .block--executing > .blocklyPath,
 .block--executing-entity > .blocklyPath {
-  stroke: #6366f1 !important;
-  stroke-width: 2.5px !important;
+  stroke: #ffffff !important;
+  /* 2px, not 3. The stroke is centred on the block's path, so half of it lies
+     outside the block on the canvas where white reads 1.04:1 and contributes
+     nothing — a thicker line mostly buys a wider invisible half and a heavier
+     look. Contrast against the fill is a property of the colour, not of the
+     width, so the 4.51:1 worst case is unchanged. */
+  stroke-width: 2px !important;
   animation: blockExecuting 1.4s ease-in-out infinite;
 }
 
 @keyframes blockExecuting {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(99, 102, 241, 0)); }
-  50%      { filter: drop-shadow(0 0 7px rgba(99, 102, 241, 0.7)); }
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px rgba(99, 102, 241, 0.95));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .block--executing > .blocklyPath,
   .block--executing-entity > .blocklyPath {
     animation: none;
-    stroke-width: 3px !important;
-    filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.55));
+    filter: drop-shadow(0 0 7px rgba(99, 102, 241, 0.75));
   }
 }
 
@@ -421,9 +462,9 @@
   font-size: 13px;
   padding: 10px 14px;
   gap: 10px;
-  color: #0F172A;
-  background-color: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  color: #0f172a;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
   max-width: 320px;
@@ -434,7 +475,7 @@
 }
 
 .blocklyToast .blocklyToastCloseButton {
-  color: #64748B;
+  color: #64748b;
   border-radius: 6px;
   padding: 3px;
   flex-shrink: 0;
@@ -461,12 +502,12 @@
 }
 
 .blocklyToast .blocklyToastCloseButton:hover {
-  background-color: #F1F5F9;
-  color: #0F172A;
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 .blocklyToast .blocklyToastCloseButton:focus-visible {
-  outline: 2px solid #6366F1;
+  outline: 2px solid #6366f1;
   outline-offset: 1px;
 }
 
