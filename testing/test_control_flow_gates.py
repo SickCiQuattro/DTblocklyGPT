@@ -134,7 +134,13 @@ def test_find_object_with_unresolved_object_slot_does_not_crash(monkeypatch):
 
 def test_when_block_live_condition_sends_human_step_start_and_complete(monkeypatch):
     mock_bridge = MagicMock()
-    mock_bridge.get_vision_state.return_value = {"gesture": "THUMBS_UP", "gesture_age_s": 0.0}
+    # Empty hand first, then the gesture: _wait_for_condition requires a
+    # transition, so a hand already raised when the wait starts is a leftover
+    # from an earlier step and no longer satisfies it.
+    mock_bridge.get_vision_state.side_effect = [
+        {"gesture": "NONE", "gesture_age_s": 0.0},
+        {"gesture": "NONE", "gesture_age_s": 0.0},
+    ] + [{"gesture": "THUMBS_UP", "gesture_age_s": 0.0}] * 50
     monkeypatch.setattr(simulate, "_bridge", mock_bridge)
 
     condition_block = {

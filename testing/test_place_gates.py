@@ -351,7 +351,7 @@ def test_persist_placed_object_removes_then_creates(monkeypatch):
     assert removed == ["object"]
     assert len(created) == 1
     assert "create" in created[0] and 'name: "placed_1"' in created[0]
-    assert simulate._placed_in_world == ["placed_1"]
+    assert simulate._placed_in_world == [("placed_1", None)]
 
 
 def test_persist_placed_object_gives_up_when_the_entity_will_not_go_away(monkeypatch):
@@ -380,26 +380,38 @@ def test_persist_placed_object_increments_across_calls(monkeypatch):
     _real_persist_placed_object("tube", 0, 0, 0)
     _real_persist_placed_object("tube", 0, 0, 0)
 
-    assert simulate._placed_in_world == ["placed_1", "placed_2"]
+    assert simulate._placed_in_world == [("placed_1", None), ("placed_2", None)]
 
 
 def test_persist_placed_object_skips_spawn_on_delete_failure(monkeypatch):
-    calls = []
+    """A failed delete must not be followed by a spawn.
 
-    def record(cmd, **kw):
-        calls.append(cmd)
-        return "remove" not in cmd  # delete fails, would-be create succeeds
-    monkeypatch.setattr(simulate, "launch_wsl_ros_command", record)
+    The removal is stubbed at `remove_entity_and_wait` rather than by making
+    the raw `gz` command fail. Making the command fail is not enough: the
+    helper ignores that return and decides by POLLING the world, so this test
+    reached a real `gz model --list` and therefore passed only on a machine
+    with no simulator running — and started failing the moment one was up,
+    for reasons that had nothing to do with what it is checking. The helper's
+    own polling is covered by test_entity_removal_wait.py.
+    """
+    calls = []
+    monkeypatch.setattr(simulate, "launch_wsl_ros_command",
+                        lambda cmd, **kw: calls.append(cmd) or True)
+    monkeypatch.setattr(simulate, "remove_entity_and_wait",
+                        lambda name, **kw: False)
 
     ok = _real_persist_placed_object("tube", 0, 0, 0)
 
     assert ok is False
-    assert len(calls) == 1  # never reached the create call
+    assert not any("/create" in c for c in calls), (
+        "ha spawnato la copia persistente anche se la rimozione e' fallita: "
+        "i due modelli si compenetrano e Gazebo li fa esplodere"
+    )
     assert simulate._placed_in_world == []
 
 
 def test_delete_placed_objects_sweeps_registry(monkeypatch):
-    simulate._placed_in_world = ["placed_1", "placed_2"]
+    simulate._placed_in_world = [("placed_1", "cup"), ("placed_2", "cup")]
     calls = []
     monkeypatch.setattr(simulate, "launch_wsl_ros_command",
                         lambda cmd, **kw: calls.append(cmd) or True)

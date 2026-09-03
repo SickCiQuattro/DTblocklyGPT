@@ -216,12 +216,20 @@ class _FakeMacroTask:
     `code = None` is deliberate, not an omission: it is what the database
     actually contains, and it keeps this test honest about which field the
     runtime is allowed to depend on.
+
+    `status` is here for the same reason. The handler now names it when a macro
+    exists but has nothing published, because "exists but unpublished" and
+    "does not exist at all" are different faults with different remedies and
+    used to share one message. A double missing a field the real row always has
+    turns that into an AttributeError swallowed by the parser's blanket except,
+    which is how a fixture gap becomes a generic "stopped unexpectedly".
     """
 
-    def __init__(self, code_dict):
+    def __init__(self, code_dict, status="draft"):
         self.task_type = "macro_task"
         self.published_workspace = code_dict
         self.draft_workspace = None
+        self.status = status
         self.workspace = None
         self.code = None
 
