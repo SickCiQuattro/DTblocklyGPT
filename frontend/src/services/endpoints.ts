@@ -63,6 +63,7 @@ export const endpoints = {
   task: {
     simulate: `${TASK_API}/simulate/`,
     stop: `${TASK_API}/simulate/stop/`,
+    runState: `${TASK_API}/simulate/state/`,
     hardwareStatus: `${TASK_API}/hardware-status/`,
     analyze: `${TASK_API}/analyze/`,
     saveDraft: `${TASK_API}/save-draft/`,

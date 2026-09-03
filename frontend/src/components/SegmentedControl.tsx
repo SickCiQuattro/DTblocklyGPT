@@ -72,6 +72,31 @@ export const SegmentedControl = ({
                   : 'background.paper',
               },
             },
+            // Disabled has to be written here, not left to MUI. ToggleButton's
+            // own `&.Mui-disabled { color: action.disabled }` is a (0,2,0)
+            // rule; the two rules above are descendant selectors at (0,3,0)
+            // and win, so a disabled group kept the exact colours of an
+            // enabled one. The robot panel locks its Live-view control for the
+            // whole duration of a run — the operator clicked a control that
+            // looked live, got no cursor change, no hover, no response, while
+            // an arm was moving. Silent non-response is the worst answer a
+            // control can give.
+            //
+            // Both states are restyled: an unselected pill fades, and the
+            // SELECTED pill has to lose its accent fill too, or the one
+            // segment the eye goes to still reads as available.
+            '&.Mui-disabled': {
+              color: dark ? 'rgba(255,255,255,0.28)' : 'text.disabled',
+            },
+            '&.Mui-selected.Mui-disabled': {
+              color: dark ? 'rgba(255,255,255,0.45)' : 'text.disabled',
+              bgcolor: dark ? 'rgba(255,255,255,0.05)' : 'grey.200',
+            },
+          },
+          // The capsule itself recedes, so the whole control reads as one
+          // locked object rather than as pills that happen to be pale.
+          '&.Mui-disabled, &:has(.Mui-disabled)': {
+            bgcolor: dark ? 'rgba(255,255,255,0.03)' : 'grey.50',
           },
         },
         ...(Array.isArray(sx) ? sx : [sx]),

@@ -31,10 +31,14 @@ import {
   Maximize2,
   Minimize2,
   Info,
+  ScanEye,
+  Clock,
+  User,
 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import * as Blockly from 'blockly/core'
 import { useTheme } from '@mui/material/styles'
+import useSWR from 'swr'
 
 import { TaskStatus } from 'pages/tasks/types'
 import { useAppSelector } from 'store/reducers'
@@ -59,20 +63,24 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
-import { toast } from 'react-toastify'
-import useSWR from 'swr'
-
 import { useVoiceCommand } from 'hooks/useVoiceCommand'
 import { MacroWorkspaces, recognitionNeedsOf } from 'utils/runRecognitionNeeds'
 import {
   highlightExecutingBlock,
+  scrollRunningBlockIntoView,
   clearExecutingHighlights,
 } from 'features/blockly/utils/blockHighlight'
 import { blockMetaByType } from 'features/blockly/toolbox/toolboxRegistry'
 import { SegmentedControl } from 'components/SegmentedControl'
 import { ConfirmDialog } from 'components/ConfirmDialog'
 
-import { panel } from './digitalTwin/panelTokens'
+import { gestureIcon } from 'constants/gestureIcons'
+import { panel, panelType } from './digitalTwin/panelTokens'
+import {
+  MESSAGE_TTL_MS,
+  PanelMessage,
+  type RuntimeTone,
+} from './digitalTwin/PanelMessage'
 
 // STATUS label for a running block. Uses the toolbox's own type→label map so
 // the status line says what the palette says ("Execute skill", not
@@ -90,6 +98,18 @@ const humanizeBlockType = (blockType?: string): string => {
 // state here (see checked-state sx at each call site) — off-state falls back
 // to the default light-theme thumb/track (solid white circle), which stands
 // out against this panel's dark surface. This covers the off state instead.
+// The video frame's geometry. Two values depend on each other here, so they
+// are named rather than repeated.
+//
+// An absolutely-positioned `inset: 0` child fills its ancestor's PADDING box,
+// and the padding box of a bordered rounded rect has a corner radius of
+// (outer radius − border width) — not the outer radius. `borderRadius:
+// 'inherit'` handed the overlays the OUTER 10px inside a 9px curve, so each
+// corner was over-rounded and let a sliver of the frame through.
+const VIDEO_RADIUS_PX = 10
+const VIDEO_BORDER_PX = 1
+const VIDEO_INNER_RADIUS = `${VIDEO_RADIUS_PX - VIDEO_BORDER_PX}px`
+
 const panelSwitchOffSx = {
   '& .MuiSwitch-switchBase': { color: panel.textDim },
   '& .MuiSwitch-track': { backgroundColor: panel.hairlineStrong },
@@ -112,6 +132,9 @@ const MJPEG_URL =
 const STUDY_MODE = import.meta.env.VITE_STUDY_MODE === '1'
 
 interface DigitalTwinPanelProps {
+  /** Scroll the canvas to the running step when it goes off-screen.
+   *  Opt-in (viewSettings.followRunningBlock); off by default. */
+  followRunningBlock?: boolean
   taskId: string
   taskStatus?: TaskStatus
   /** Live editor workspace, used to highlight the block currently executing. */
@@ -125,7 +148,7 @@ interface DigitalTwinPanelProps {
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <Typography
     sx={{
-      fontSize: '0.68rem',
+      fontSize: panelType.micro,
       fontWeight: 700,
       letterSpacing: '0.08em',
       textTransform: 'uppercase',
@@ -138,6 +161,7 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
 )
 
 export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
+  followRunningBlock = false,
   taskId,
   taskStatus,
   workspace,
@@ -185,14 +209,29 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // proxy is down, indistinguishable from a slow-starting simulation.
   const [feedError, setFeedError] = useState(false)
   const [stepCompleted, setStepCompleted] = useState(false)
-  const [countdown, setCountdown] = useState<number | null>(null)
+  // Milliseconds left, not whole seconds: the bar reads this directly, so it
+  // moves ten times a second instead of stepping 3.3% once a second. The
+  // number on screen still shows whole seconds.
+  const [remainingMs, setRemainingMs] = useState<number | null>(null)
   const [confirmSending, setConfirmSending] = useState(false)
+  // True from the moment Stop is pressed until the server says the previous
+  // run has actually let go of the world. Not a timer: the teardown can be a
+  // gz subprocess, a blocking b-CAP move on the real arm, or a bridge POST
+  // waiting out its own timeout, and "long enough" changes with the machine
+  // and with what the run was doing when it was stopped.
+  const [stopping, setStopping] = useState(false)
+  const stoppingPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [notifyBanner, setNotifyBanner] = useState<string | null>(null)
+  // Slot 1 (over the video), not a banner: a "Show message" is authored content
+  // addressed to the operator while they are watching the arm, and a banner at
+  // the top of a scrollable body is exactly where they are not looking.
+  const [notifyPill, setNotifyPill] = useState<string | null>(null)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [runResult, setRunResult] = useState<{
     ok: boolean
     text: string
+    /** Open consequence — stays until dismissed. See MESSAGE_TTL_MS. */
+    sticky?: boolean
   } | null>(null)
   const wasRunningRef = useRef(false)
   // Aborts the in-flight /api/task/simulate/ POST on Stop or unmount — without
@@ -252,6 +291,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (macroContext) {
       clearExecutingHighlights(workspace)
       highlightExecutingBlock(workspace, macroContext.blockId)
+      if (followRunningBlock) {
+        scrollRunningBlockIntoView(workspace, macroContext.blockId)
+      }
       return
     }
 
@@ -260,8 +302,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     clearExecutingHighlights(workspace)
     if (blockStep.phase === 'start') {
       highlightExecutingBlock(workspace, blockStep.blockId)
+      if (followRunningBlock) {
+        scrollRunningBlockIntoView(workspace, blockStep.blockId)
+      }
     }
-  }, [blockStep, macroContext, workspace])
+  }, [blockStep, macroContext, workspace, followRunningBlock])
 
   // Live STATUS feedback — block_step events already exist server-side
   // (_notify_block_step in simulate.py) but nothing consumed them before, so
@@ -464,51 +509,53 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (simulation.isRunning) setTestCameraOn(false)
   }, [simulation.isRunning])
 
-  // Countdown ticker
+  // Countdown ticker, driven by a DEADLINE rather than by decrementing a
+  // counter. A subtracting counter drifts: setInterval fires late under load,
+  // and this panel re-renders at several Hz during a live run, so the number
+  // on screen slowly fell behind the deadline the backend actually enforces.
+  // Reading the clock each tick cannot drift, and it also survives a tab
+  // being throttled in the background.
   useEffect(() => {
     if (humanStep?.status === 'started' && humanStep.timeout) {
-      setCountdown(humanStep.timeout)
+      const deadline = performance.now() + humanStep.timeout * 1000
+      const tick = () =>
+        setRemainingMs(Math.max(0, deadline - performance.now()))
+      tick()
       if (countdownRef.current) clearInterval(countdownRef.current)
-      countdownRef.current = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === null || prev <= 1) {
-            if (countdownRef.current) clearInterval(countdownRef.current)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
+      countdownRef.current = setInterval(tick, 100)
     } else {
       if (countdownRef.current) clearInterval(countdownRef.current)
-      setCountdown(null)
+      setRemainingMs(null)
     }
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current)
     }
   }, [humanStep?.status, humanStep?.timeout])
 
-  // Step completed flash
+  // Step completed flash — an event with nothing left to handle, so it takes
+  // the shared transient lifetime rather than a hand-picked 2s.
   useEffect(() => {
     if (humanStep?.status !== 'completed') return
     setStepCompleted(true)
-    const t = setTimeout(() => setStepCompleted(false), 2000)
+    const t = setTimeout(() => setStepCompleted(false), MESSAGE_TTL_MS)
     return () => clearTimeout(t)
   }, [humanStep])
 
-  // Notify banner (auto-dismisses) — benign, informational only. A task
-  // abort must not look like this: it uses the separate error banner
-  // below, which stays up until the operator dismisses it.
+  // "Show message" — authored text, shown over the live view (slot 1), because
+  // that is where the operator is looking during a run. It used to be a banner
+  // at the top of the scroll body: a plain flex child with no sticky and no
+  // scroll-into-view, so it could appear off-screen and delete itself four
+  // seconds later, and mounting it shoved the whole video down ~44px mid-run.
   useEffect(() => {
     if (humanStep?.status !== 'notify') return
-    setNotifyBanner(humanStep.description || 'Notification')
-    const t = setTimeout(() => setNotifyBanner(null), 4000)
+    setNotifyPill(humanStep.description || 'Notification')
+    const t = setTimeout(() => setNotifyPill(null), MESSAGE_TTL_MS)
     return () => clearTimeout(t)
   }, [humanStep])
 
-  // Error banner (task aborted) — persistent until the operator closes it,
-  // distinct styling from the informational notify banner above. A stopped
-  // task with no visible reason (or one that silently disappears after 4s)
-  // is worse than no banner at all.
+  // Task aborted — an event with an open consequence, so it stays until the
+  // operator dismisses it. A stopped task with no visible reason (or one that
+  // silently disappears) is worse than no message at all.
   useEffect(() => {
     if (humanStep?.status !== 'error') return
     setErrorBanner(
@@ -516,13 +563,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     )
   }, [humanStep])
 
-  // Run-result banner: without this, a run silently flips back to idle with
-  // no feedback (the peak-end payoff of the whole flow), see peer message
-  // text below. Skip the user's own "Simulation/Run stopped" — that's
-  // already self-evident from having just pressed Stop. The reducer
-  // (simulation.ts) already picks target-specific wording ("Task completed
-  // on robot" vs "Simulation completed"), so simulation.message itself is
-  // the final display text — no need to re-derive it from executionTarget.
+  // Run result: without this, a run silently flips back to idle with no
+  // feedback (the peak-end payoff of the whole flow). Skip the operator's own
+  // "Simulation/Run stopped" — the stop handler owns that message, because only
+  // it knows whether the robot actually acknowledged the halt. The reducer
+  // (simulation.ts) already picks target-specific wording ("Task completed on
+  // robot" vs "Simulation completed"), so simulation.message is the final
+  // display text — no need to re-derive it from executionTarget.
   useEffect(() => {
     const wasRunning = wasRunningRef.current
     wasRunningRef.current = simulation.isRunning
@@ -538,9 +585,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         simulation.message === UI_TEXT.taskCompletedOnRobot,
       text: simulation.message,
     })
-    const t = setTimeout(() => setRunResult(null), 5000)
-    return () => clearTimeout(t)
   }, [simulation.isRunning, simulation.message])
+
+  // One place expires a run result, whoever set it — the effect above or the
+  // stop handler. Per-setter timers are how "Simulation stopped." would have
+  // stayed on screen forever: the handler set it, and only the effect had a
+  // timer. `sticky` opts out, for a result the operator must acknowledge.
+  useEffect(() => {
+    if (!runResult || runResult.sticky) return
+    const t = setTimeout(() => setRunResult(null), MESSAGE_TTL_MS)
+    return () => clearTimeout(t)
+  }, [runResult])
 
   // A fresh run starts with an empty feed again — without this the "Starting
   // simulation…" spinner would only ever show on the very first run.
@@ -658,9 +713,47 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }
 
+  /** Poll until the run lock is free, then let Run light up again. */
+  const waitForRunToRelease = () => {
+    if (stoppingPollRef.current) clearInterval(stoppingPollRef.current)
+    setStopping(true)
+    const started = Date.now()
+    const check = async () => {
+      try {
+        const res: { running?: boolean } | undefined = await fetchApi({
+          url: endpoints.task.runState,
+          method: MethodHTTP.GET,
+        })
+        // Give up waiting after 30s rather than leaving Run disabled forever
+        // on a teardown that never reports done — a stuck button is worse
+        // than a 409 the operator can retry past.
+        if (res?.running === false || Date.now() - started > 30000) {
+          if (stoppingPollRef.current) clearInterval(stoppingPollRef.current)
+          stoppingPollRef.current = null
+          setStopping(false)
+        }
+      } catch {
+        // The state probe failing is not a reason to strand the button.
+        if (stoppingPollRef.current) clearInterval(stoppingPollRef.current)
+        stoppingPollRef.current = null
+        setStopping(false)
+      }
+    }
+    void check()
+    stoppingPollRef.current = setInterval(() => void check(), 500)
+  }
+
+  useEffect(
+    () => () => {
+      if (stoppingPollRef.current) clearInterval(stoppingPollRef.current)
+    },
+    [],
+  )
+
   const stopSimulation = () => {
     runAbortRef.current?.abort()
     dispatch(stopSimAction())
+    waitForRunToRelease()
     // stop_simulation() halts the parser, Gazebo, and — if a hardware run is
     // in flight — the real arm via the halt channel. Optimistic: the UI
     // reflects "stopped" immediately rather than waiting on the round trip.
@@ -669,16 +762,29 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     // since the teach-pendant e-stop is the operator's real fallback here.
     fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST })
       .then(() => {
-        // Say it succeeded. The STATUS line reads "stopped" the moment the
-        // button is pressed — optimistically, before the round trip — so on
-        // its own it cannot tell the operator whether the robot actually got
-        // the message. On a hardware run that difference is the whole point,
-        // and the sentence names what the arm is still doing: a halt stops
-        // motion, it does not open the gripper, so anything held stays held.
-        toast.success(
+        // Say it succeeded, in the same place the failure lands. This used to
+        // be a global toast while the failure was an in-panel banner: the two
+        // halves of one button press arrived in two different parts of the
+        // screen, and the operator who just pressed Stop is looking at one.
+        //
+        // The STATUS line reads "stopped" the moment the button is pressed —
+        // optimistically, before the round trip — so on its own it cannot tell
+        // the operator whether the robot actually got the message. On a
+        // hardware run that difference is the whole point, and the sentence
+        // names what the arm is still doing: a halt stops motion, it does not
+        // open the gripper, so anything held stays held.
+        //
+        // Sticky on hardware, transient on the twin — the duration rule: an
+        // arm still gripping something is an open consequence, a stopped
+        // simulation is not.
+        setRunResult(
           executionTarget === 'real'
-            ? 'Robot halted. It is still holding whatever was in the gripper.'
-            : 'Simulation stopped.',
+            ? {
+                ok: true,
+                text: 'Robot halted. It is still holding whatever was in the gripper.',
+                sticky: true,
+              }
+            : { ok: true, text: 'Simulation stopped' },
         )
       })
       .catch((error: unknown) => {
@@ -768,6 +874,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const isHumanStepActive =
     humanStep?.status === 'started' && simulation.isRunning
   const isGestureStep = isHumanStepActive && humanStep?.condition === 'gesture'
+  // The backend's own wire value is 'object' (see _condition_payload in
+  // simulate.py) — not 'find_object', which is the BLOCK type. Guarding on
+  // both would put a branch here that can never be taken.
+  const isObjectStep = isHumanStepActive && humanStep?.condition === 'object'
   // Guarded by isRunning, not just status — otherwise a timeout banner from
   // the run that just ended stays pinned up through the next run/task.
   const isTimeout = humanStep?.status === 'timeout' && simulation.isRunning
@@ -777,6 +887,36 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       ? humanStep.value
       : null
   const gestureMatch = !!(expectedGesture && activeGesture === expectedGesture)
+  // The mark on the human-step overlay: the channel this step is waiting on,
+  // never a hand.
+  //
+  // It WAS a hand, harmlessly, until `Hand` was given a second job as the icon
+  // for the OPEN_HAND gesture. After that, a step asking the operator to press
+  // a button showed them an open palm — which in this panel's own vocabulary
+  // now reads as "make this hand shape". The wrong instruction, in the one
+  // place the operator is under a deadline.
+  //
+  // Gesture and object steps never reach this overlay (they are excluded so
+  // the camera stays visible), so the channels here are exactly these three
+  // plus a bare wait. Mic and Clock are the marks this panel and the chat
+  // preview already use for voice and time; `User` is the "Pause and show
+  // message" block's own icon in the toolbox, which ties the runtime moment
+  // back to the block on the canvas.
+  const WaitIcon =
+    humanStep?.condition === 'voice'
+      ? Mic
+      : humanStep?.condition === 'timer'
+        ? Clock
+        : User
+  // Both of these name a gesture, so both must draw THAT gesture. `Hand` is
+  // the fallback only while nothing is detected, where there is no value to
+  // misread. Hoisted out of the JSX: a component identity built inside the
+  // markup is a fresh type on every render, which remounts the icon.
+  const EventsGestureIcon =
+    (gestureActive && gestureIcon(activeGesture)) || Hand
+  const SandboxGestureIcon = gestureIcon(webcam.gesture) || Hand
+  const RequiredGestureIcon = gestureIcon(expectedGesture)
+  const DetectedGestureIcon = gestureIcon(gestureActive ? activeGesture : null)
 
   // Put focus on the Confirm button the moment a button-confirmed human step
   // starts. The STATUS line already announces the wait, but announcing it is
@@ -791,11 +931,73 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     if (needsButtonConfirm) confirmButtonRef.current?.focus()
   }, [needsButtonConfirm])
 
+  // ── Slot 3: OUTCOME ────────────────────────────────────────────────────
+  // One region, one message, priority = the order of this array. It replaces
+  // four near-identical banner blocks each guarded by a hand-maintained chain
+  // of `&& !otherBanner` conditions — a chain that had to be edited in four
+  // places to add a fifth message, and silently allowed two to stack if one
+  // was missed.
+  //
+  // `RuntimeTone` has no amber: see PanelMessage. That is why the timeout is
+  // info here and was amber before — it states what did not happen, it does
+  // not claim the arm is involved. When a timeout *does* abort the run, the
+  // abort itself arrives as `errorBanner` and outranks it in this very list.
+  const outcomeBanner: {
+    key: string
+    tone: RuntimeTone
+    text: string
+    onDismiss?: () => void
+  } | null =
+    [
+      errorBanner && {
+        key: 'error',
+        tone: 'danger' as const,
+        text: errorBanner,
+        onDismiss: () => setErrorBanner(null),
+      },
+      isTimeout && {
+        key: 'timeout',
+        tone: 'info' as const,
+        text: `Timeout: ${
+          humanStep?.condition === 'gesture'
+            ? `gesture "${gestureLabel(humanStep?.value)}" not detected`
+            : humanStep?.condition === 'voice'
+              ? `voice command "${voiceLabel(humanStep?.value)}" not heard`
+              : humanStep?.condition === 'human_feedback'
+                ? 'operator confirmation not received'
+                : `object "${humanStep?.value}" not detected`
+        }`,
+      },
+      runResult && {
+        key: 'result',
+        tone: (runResult.ok ? 'success' : 'danger') as RuntimeTone,
+        text: runResult.text,
+        ...(runResult.sticky ? { onDismiss: () => setRunResult(null) } : {}),
+      },
+    ].find(Boolean) || null
+
+  // ── Slot 1: NOW ────────────────────────────────────────────────────────
+  // Same pattern as the outcome banner: priority is the order of the array,
+  // and the slot holds one thing. Authored text outranks the panel's own ack.
+  const videoPill: { tone: 'info' | 'success'; text: string } | null =
+    [
+      notifyPill && { tone: 'info' as const, text: notifyPill },
+      stepCompleted && { tone: 'success' as const, text: 'Step completed' },
+    ].find(Boolean) || null
+
   // Fallback matches the backend's own default (CONDITION_TIMEOUT_S). It only
   // applies if a payload arrives without a timeout; a mismatched fallback here
   // is how the countdown came to disagree with the enforced deadline before.
   const timeoutTotal = humanStep?.timeout ?? 30
-  const countdownPct = countdown !== null ? (countdown / timeoutTotal) * 100 : 0
+  const countdown = remainingMs === null ? null : Math.ceil(remainingMs / 1000)
+  const countdownPct =
+    remainingMs === null ? 0 : (remainingMs / (timeoutTotal * 1000)) * 100
+  // Thresholds as FRACTIONS of this step's own budget, not as absolute
+  // seconds. The old `countdown < 10` / `< 20` were tuned to a 30s timeout and
+  // silently mistune themselves the moment CONDITION_TIMEOUT_S changes: at 15s
+  // the bar would open amber and spend two thirds of its life red, warning
+  // permanently about nothing.
+  const countdownIsCritical = countdownPct <= 20
 
   // The self-view (webcam mirrored into the main video area, see the
   // Simulation-view render below) replaces the old "auto-switch to the
@@ -810,6 +1012,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // does nothing.
   interface PreflightIssue {
     text: string
+    /** Reserved amber: only an issue about the physical arm. Default is info. */
+    tone?: 'hardware'
     action?: { label: string; onClick: () => void }
   }
   const preflightIssues: PreflightIssue[] = []
@@ -825,6 +1029,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }
   if (executionTarget === 'real' && !hardwareArmed) {
     preflightIssues.push({
+      // The one pre-flight issue that IS about the arm, so the one that keeps
+      // amber.
+      tone: 'hardware',
       text:
         hwStatus === null
           ? 'Checking the robot connection…'
@@ -909,7 +1116,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             id="digital-twin-title"
             sx={{
               fontWeight: 600,
-              fontSize: '0.9rem',
+              fontSize: panelType.body,
               letterSpacing: '-0.01em',
             }}
           >
@@ -939,13 +1146,47 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             />
             <Typography
               sx={{
-                fontSize: '0.68rem',
+                fontSize: panelType.micro,
                 color: connected ? panel.textDim : panel.warningLight,
               }}
             >
               {connected ? 'Connected' : 'Offline'}
             </Typography>
           </Stack>
+          {/* The panel reserves amber for one meaning — the physical arm is
+              involved — and enforces it in the type system. Then it put every
+              amber cue inside the `!simulation.isRunning` gate, so all of them
+              unmounted at the exact moment the arm started moving. The one
+              period the meaning applies was the one period it was not on
+              screen; what survived was a 10.5px grey caption.
+
+              This chip lives in the header, outside every gate, and intensifies
+              rather than disappears once the run starts. */}
+          {executionTarget === 'real' && (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{
+                alignItems: 'center',
+                px: 1,
+                py: 0.25,
+                borderRadius: '999px',
+                bgcolor: panel.warningTint(simulation.isRunning ? 0.24 : 0.12),
+                border: `1px solid ${panel.warningTint(simulation.isRunning ? 0.7 : 0.4)}`,
+              }}
+            >
+              <Cpu size={12} color={panel.warning} />
+              <Typography
+                sx={{
+                  fontSize: panelType.micro,
+                  fontWeight: 600,
+                  color: panel.warningLight,
+                }}
+              >
+                {simulation.isRunning ? 'Arm live' : 'Real robot'}
+              </Typography>
+            </Stack>
+          )}
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
           <Tooltip title={isWide ? 'Standard width' : 'Wide'}>
@@ -968,6 +1209,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             size="small"
             aria-label="Close robot panel"
             sx={{
+              width: 36,
+              height: 36,
               color: panel.iconMuted,
               '&:hover': { color: panel.white, background: panel.hover },
             }}
@@ -988,131 +1231,31 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           overflowY: 'auto',
         }}
       >
-        {/* One banner at a time — error > timeout > notify > run result, so a
-            new one never buries an older, higher-priority one underneath it. */}
-        {/* ── Run-result banner (transient) ── */}
-        {runResult && !errorBanner && !isTimeout && !notifyBanner && (
+        {/* ── Slot 3: OUTCOME — one region, one message ──
+            `sticky` rather than a plain flex child: these appear mid-run and
+            at run end, and a banner that lives at the top of a scrollable body
+            is off-screen the moment the operator has scrolled down to STATUS
+            or the Events readouts. The negative `top` cancels the body's own
+            14px padding so it pins flush. */}
+        {outcomeBanner && (
           <Box
-            role="status"
-            aria-live="polite"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 14px',
-              background: runResult.ok
-                ? panel.successTint(0.12)
-                : panel.errorTint(0.12),
-              border: `1px solid ${runResult.ok ? panel.successTint(0.35) : panel.errorTint(0.35)}`,
-              borderRadius: '8px',
+              position: 'sticky',
+              top: '-14px',
+              zIndex: 2,
+              paddingTop: '14px',
+              marginTop: '-14px',
+              background: panel.surface,
             }}
           >
-            {runResult.ok ? (
-              <CheckCircle2 size={15} color={panel.successLight} />
-            ) : (
-              <AlertTriangle size={15} color={panel.errorLight} />
-            )}
-            <Typography
-              sx={{
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                color: runResult.ok ? panel.successLight : panel.errorLight,
-              }}
+            <PanelMessage
+              key={outcomeBanner.key}
+              tone={outcomeBanner.tone}
+              announce
+              onDismiss={outcomeBanner.onDismiss}
             >
-              {runResult.text}
-            </Typography>
-          </Box>
-        )}
-
-        {/* ── Notify banner (transient) ── */}
-        {notifyBanner && !errorBanner && !isTimeout && (
-          <Box
-            role="status"
-            aria-live="polite"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 14px',
-              background: panel.primaryTint(0.1),
-              border: `1px solid ${panel.primaryTint(0.3)}`,
-              borderRadius: '8px',
-            }}
-          >
-            <Bell size={15} color={panel.primaryLight} />
-            <Typography sx={{ fontSize: '0.78rem', color: panel.primaryFaint }}>
-              {notifyBanner}
-            </Typography>
-          </Box>
-        )}
-
-        {/* ── Error banner (task aborted, persistent) ── */}
-        {errorBanner && (
-          <Box
-            role="alert"
-            aria-live="assertive"
-            sx={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '10px',
-              padding: '10px 14px',
-              background: panel.errorTint(0.1),
-              border: `1px solid ${panel.errorTint(0.3)}`,
-              borderRadius: '8px',
-            }}
-          >
-            <AlertTriangle
-              size={15}
-              color={panel.error}
-              style={{ marginTop: '1px', flexShrink: 0 }}
-            />
-            <Typography
-              sx={{ fontSize: '0.78rem', color: panel.error, flex: 1 }}
-            >
-              {errorBanner}
-            </Typography>
-            <IconButton
-              size="small"
-              aria-label="Dismiss"
-              onClick={() => setErrorBanner(null)}
-              sx={{ padding: '2px', marginTop: '-2px' }}
-            >
-              <X size={14} color={panel.error} />
-            </IconButton>
-          </Box>
-        )}
-
-        {/* ── Timeout warning ── */}
-        {isTimeout && !errorBanner && (
-          <Box
-            role="status"
-            aria-live="polite"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 14px',
-              background: panel.warningTint(0.12),
-              border: `1px solid ${panel.warningTint(0.3)}`,
-              borderRadius: '8px',
-            }}
-          >
-            <AlertTriangle size={15} color={panel.warning} />
-            <Typography sx={{ fontSize: '0.78rem', color: panel.warningLight }}>
-              Timeout:{' '}
-              {humanStep?.condition === 'gesture'
-                ? `gesture "${gestureLabel(humanStep?.value)}" not detected`
-                : humanStep?.condition === 'voice'
-                  ? `voice command "${voiceLabel(humanStep?.value)}" not heard`
-                  : humanStep?.condition === 'human_feedback'
-                    ? 'operator confirmation not received'
-                    : `object "${humanStep?.value}" not detected`}
-              {/* Whether the run continues or stops depends on where this
-                  condition was used (e.g. a bare "When" step continues; a
-                  "Pause and show message" confirm now stops the task) — the
-                  persistent error banner above is the authoritative signal
-                  for that, so this banner only states what timed out. */}
-            </Typography>
+              {outcomeBanner.text}
+            </PanelMessage>
           </Box>
         )}
 
@@ -1127,22 +1270,37 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
             }}
           >
             <SectionLabel>Live view</SectionLabel>
-            <SegmentedControl
-              dark
-              aria-label="Live view"
-              value={liveView}
-              exclusive
-              // Locked to Task Execution during a run — that tab is also the
-              // only place Stop lives, so switching away while the robot
-              // (real or simulated) is moving would strand the operator
-              // without it.
-              disabled={simulation.isRunning}
-              onChange={(_, v) => v && setLiveView(v)}
-              options={[
-                { value: 'simulation', label: 'Task Execution' },
-                { value: 'camera', label: 'Test recognition' },
-              ]}
-            />
+            {/* The span is load-bearing: a disabled child swallows the
+                pointer events a Tooltip listens for, so without it the
+                explanation never appears — which is the whole point here.
+                Saying WHY a control is locked is the other half of showing
+                that it is; the disabled styling lives in SegmentedControl. */}
+            <Tooltip
+              title={
+                simulation.isRunning
+                  ? 'Locked while the robot is running — Stop lives on this tab'
+                  : ''
+              }
+            >
+              <span>
+                <SegmentedControl
+                  dark
+                  aria-label="Live view"
+                  value={liveView}
+                  exclusive
+                  // Locked to the Robot view during a run — that tab is also
+                  // the only place Stop lives, so switching away while the
+                  // robot (real or simulated) is moving would strand the
+                  // operator without it.
+                  disabled={simulation.isRunning}
+                  onChange={(_, v) => v && setLiveView(v)}
+                  options={[
+                    { value: 'simulation', label: UI_TEXT.liveViewRobot },
+                    { value: 'camera', label: UI_TEXT.liveViewSandbox },
+                  ]}
+                />
+              </span>
+            </Tooltip>
           </Stack>
 
           {liveView === 'simulation' ? (
@@ -1153,9 +1311,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   width: '100%',
                   aspectRatio: '4/3',
                   background: panel.videoBg,
-                  borderRadius: '10px',
+                  borderRadius: `${VIDEO_RADIUS_PX}px`,
                   overflow: 'hidden',
-                  border: `1px solid ${panel.hairlineStrong}`,
+                  border: `${VIDEO_BORDER_PX}px solid ${panel.hairlineStrong}`,
                   flexShrink: 0,
                 }}
               >
@@ -1188,6 +1346,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           justifyContent: 'center',
                           flexDirection: 'column',
                           gap: 1,
+                          // Ground: this covers the operator's own webcam
+                          // picture, which is a lit room. Without it the text
+                          // measured 2.56:1 on a bright frame.
+                          background: panel.overlayScrim,
+                          borderRadius: VIDEO_INNER_RADIUS,
                         }}
                       >
                         <CircularProgress
@@ -1195,9 +1358,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           sx={{ color: panel.primary }}
                         />
                         <Typography
-                          sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                          sx={{
+                            fontSize: panelType.small,
+                            color: panel.textDim,
+                          }}
                         >
-                          Starting camera...
+                          Starting camera…
                         </Typography>
                       </Box>
                     )}
@@ -1212,12 +1378,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           flexDirection: 'column',
                           gap: 1,
                           padding: '16px',
+                          background: panel.overlayScrim,
+                          borderRadius: VIDEO_INNER_RADIUS,
                         }}
                       >
                         <VideoOff size={22} color={panel.errorLight} />
                         <Typography
                           sx={{
-                            fontSize: '0.72rem',
+                            fontSize: panelType.small,
                             color: panel.errorLight,
                             textAlign: 'center',
                           }}
@@ -1263,7 +1431,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                             <VideoOff size={20} color={panel.errorLight} />
                             <Typography
                               sx={{
-                                fontSize: '0.72rem',
+                                fontSize: panelType.small,
                                 color: panel.errorLight,
                                 textAlign: 'center',
                               }}
@@ -1286,9 +1454,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                                 connected look like a run stuck at step zero
                                 (misread live as a frozen STATUS, 2026-07-30). */}
                             <Typography
-                              sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                              sx={{
+                                fontSize: panelType.small,
+                                color: panel.textDim,
+                              }}
                             >
-                              Connecting to camera feed...
+                              Connecting to camera feed…
                             </Typography>
                           </>
                         )}
@@ -1309,7 +1480,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   >
                     <Camera size={28} color={panel.border} />
                     <Typography
-                      sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                      sx={{ fontSize: panelType.body, color: panel.textDim }}
                     >
                       Start a simulation to see the robot here
                     </Typography>
@@ -1321,14 +1492,32 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     themselves, and this scrim's blur/full-cover background
                     would hide it completely. The Required/Detected card
                     below the video already carries the instruction for that
-                    case, so nothing is lost by not duplicating it here. */}
-                {isHumanStepActive && !isGestureStep && (
+                    case, so nothing is lost by not duplicating it here.
+
+                    Skipped for an OBJECT wait too, for exactly the same
+                    reason and it took longer to notice: the step says "show
+                    the camera a blue tube", and the panel answered by blurring
+                    the camera's picture. Aiming an object at a lens is a
+                    closed loop — you move it and watch what happens — and
+                    covering the feed turns it into guessing until the 30s
+                    timeout fires. The Objects readout that would close the
+                    loop instead lives in EVENTS, below the fold on a laptop.
+                    These steps get the bar below rather than a scrim. */}
+                {isHumanStepActive && !isGestureStep && !isObjectStep && (
                   <Box
                     sx={{
                       position: 'absolute',
                       inset: 0,
                       background: panel.overlayScrim,
-                      backdropFilter: 'blur(4px)',
+                      // No backdrop-filter. It was the visible half of the
+                      // corner defect: Chromium paints a blurred backdrop
+                      // clipped to the element's SQUARE border box, not to its
+                      // border-radius, so each corner showed a bright blurred
+                      // crescent of the frame underneath — exactly the white
+                      // slivers. And it was buying nothing: at 0.92 opacity
+                      // only 8% of the backdrop comes through, so the blur was
+                      // decoration paying for a compositor layer and a bug.
+                      borderRadius: VIDEO_INNER_RADIUS,
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -1346,8 +1535,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   >
                     <Box
                       sx={{
-                        width: 44,
-                        height: 44,
+                        width: 32,
+                        height: 32,
                         borderRadius: '50%',
                         background: panel.primaryTint(0.15),
                         border: `2px solid ${panel.primaryTint(0.5)}`,
@@ -1356,11 +1545,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         justifyContent: 'center',
                       }}
                     >
-                      <Hand size={22} color={panel.primaryLight} />
+                      <WaitIcon size={17} color={panel.primaryFaint} />
                     </Box>
                     <Typography
                       sx={{
-                        fontSize: '0.875rem',
+                        fontSize: panelType.lead,
                         fontWeight: 600,
                         textAlign: 'center',
                         color: panel.text,
@@ -1384,57 +1573,219 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         sx={{ color: panel.primary }}
                       />
                       <Typography
-                        sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                        sx={{ fontSize: panelType.body, color: panel.text }}
                       >
-                        {humanStepLabel ?? 'Waiting for operator...'}
+                        {humanStepLabel ?? 'Waiting for operator confirmation…'}
                       </Typography>
+                      {/* The seconds belong next to the thing they constrain.
+                          The countdown card lives below the video, ~250px from
+                          the Confirm button at this panel width — two fixations
+                          for a person who has thirty seconds and is also
+                          watching an arm. The bar down there stays: it is the
+                          shape of time passing. This is the number. */}
+                      {countdown !== null && (
+                        <Typography
+                          sx={{
+                            fontSize: panelType.body,
+                            fontFamily: "'Geist Mono', monospace",
+                            fontWeight: 600,
+                            color: countdownIsCritical
+                              ? panel.errorLight
+                              : panel.textDim,
+                          }}
+                        >
+                          {countdown}s
+                        </Typography>
+                      )}
                     </Stack>
                     {humanStep?.condition === 'human_feedback' && (
                       <Button
                         ref={confirmButtonRef}
                         variant="contained"
-                        size="small"
                         onClick={handleConfirmHumanStep}
                         disabled={confirmSending}
+                        startIcon={
+                          confirmSending ? (
+                            <CircularProgress size={16} color="inherit" />
+                          ) : (
+                            <CheckCircle2 size={18} />
+                          )
+                        }
                         sx={{
-                          mt: 0.5,
-                          bgcolor: panel.primary,
-                          '&:hover': { bgcolor: panel.primary },
+                          mt: 1,
+                          minWidth: 200,
+                          minHeight: 48,
+                          fontSize: panelType.body,
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          // NO bgcolor override. The theme's containedPrimary
+                          // is primary.dark precisely because primary.main
+                          // renders white text at 4.47:1 and fails AA
+                          // (themes/overrides/Button.ts) — the override that
+                          // used to be here reintroduced that exact failure on
+                          // the one control an operator must find under a
+                          // 30-second deadline. primary.dark is 6.29:1.
+                          //
+                          // Not green either, though green would also pass:
+                          // this panel already spends green on "Twin only",
+                          // "Ready to run" and the simulate button, all
+                          // meaning "safe". This is the app's primary action,
+                          // so it wears the app's primary colour.
+                          '&.Mui-disabled': {
+                            // The theme's disabled fill is grey[200] on a
+                            // white page. On this dark scrim that rendered a
+                            // near-white slab with #d9d9d9 text — 1.24:1, and
+                            // brighter than anything around it.
+                            bgcolor: panel.primaryTint(0.25),
+                            color: panel.text,
+                          },
                         }}
                       >
-                        Confirm
+                        {confirmSending ? 'Sending…' : 'Confirm'}
                       </Button>
                     )}
                   </Box>
                 )}
 
-                {/* Step completed flash */}
-                {stepCompleted && (
+                {/* ── Slot 1: NOW — one pill, over the live view ──
+                    Both messages that report on this instant share this one
+                    place: the operator's eye is on the video during a run, and
+                    an overlay cannot be scrolled away or push the video down
+                    the way a flex-child banner did.
+
+                    A "Show message" outranks the automatic step-completed ack:
+                    the first is text a person wrote for this moment, the second
+                    is the panel talking about itself. They can be a few hundred
+                    milliseconds apart — a confirmed step followed straight into
+                    a notify — and only one of them is worth the interruption.
+
+                    Not a live region: the STATUS line below is the panel's
+                    single announcer for run progress, and a second one here
+                    would say the same thing twice (see its own comment). */}
+                {/* Object wait: a bar, not a scrim. Pinned to the bottom
+                    edge so the arm and the object stay visible above it, and
+                    carrying the live detection so the operator can aim rather
+                    than guess. `overlayChip` for the same reason as everything
+                    else on this video — it must be readable over a near-white
+                    Gazebo frame and over a real room. */}
+                {isObjectStep && (
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{
+                      position: 'absolute',
+                      left: 8,
+                      right: 8,
+                      bottom: 8,
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: panel.overlayChip,
+                      border: `1px solid ${panel.primaryTint(0.5)}`,
+                    }}
+                  >
+                    <ScanEye
+                      size={16}
+                      color={
+                        activeDetections.length > 0
+                          ? panel.successLight
+                          : panel.primaryFaint
+                      }
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Typography
+                      sx={{
+                        fontSize: panelType.small,
+                        color: panel.text,
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                      noWrap
+                    >
+                      {humanStepLabel ?? 'Show the object to the camera'}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        fontSize: panelType.small,
+                        fontFamily: "'Geist Mono', monospace",
+                        fontWeight: 600,
+                        color:
+                          activeDetections.length > 0
+                            ? panel.successLight
+                            : panel.textDim,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {activeDetections.length > 0
+                        ? activeDetections
+                            .slice(0, 2)
+                            .map((d) => d.class)
+                            .join(', ')
+                        : '—'}
+                    </Typography>
+                  </Stack>
+                )}
+
+                {videoPill && (
                   <Box
                     sx={{
                       position: 'absolute',
                       top: 12,
                       left: '50%',
                       transform: 'translateX(-50%)',
+                      maxWidth: 'calc(100% - 24px)',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0.8,
                       padding: '6px 14px',
-                      background: panel.successTint(0.15),
-                      border: `1px solid ${panel.successTint(0.4)}`,
+                      // Its own ground, not the video's. As a tint this
+                      // measured 1.22:1 (success) and 1.59:1 (notify) over the
+                      // Gazebo frame — the operator's own authored message,
+                      // invisible. The tone moved into the border and the
+                      // icon, which is where it can survive an opaque chip.
+                      background: panel.overlayChip,
+                      border: `1px solid ${
+                        videoPill.tone === 'success'
+                          ? panel.successTint(0.55)
+                          : panel.primaryTint(0.55)
+                      }`,
                       borderRadius: '20px',
-                      backdropFilter: 'blur(8px)',
+                      '@media (prefers-reduced-motion: no-preference)': {
+                        animation: 'dt-pill-in 0.2s ease',
+                      },
+                      '@keyframes dt-pill-in': {
+                        from: {
+                          opacity: 0,
+                          transform: 'translate(-50%, -6px)',
+                        },
+                        to: { opacity: 1, transform: 'translate(-50%, 0)' },
+                      },
                     }}
                   >
-                    <CheckCircle2 size={13} color={panel.success} />
+                    {videoPill.tone === 'success' ? (
+                      <CheckCircle2
+                        size={13}
+                        color={panel.success}
+                        style={{ flexShrink: 0 }}
+                      />
+                    ) : (
+                      <Bell
+                        size={13}
+                        color={panel.primaryLight}
+                        style={{ flexShrink: 0 }}
+                      />
+                    )}
                     <Typography
                       sx={{
-                        fontSize: '0.72rem',
-                        color: panel.successLight,
+                        fontSize: panelType.small,
+                        color:
+                          videoPill.tone === 'success'
+                            ? panel.successLight
+                            : panel.primaryFaint,
                         fontWeight: 500,
                       }}
                     >
-                      Step completed
+                      {videoPill.text}
                     </Typography>
                   </Box>
                 )}
@@ -1467,8 +1818,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     <Box>
                       <Typography
                         sx={{
-                          fontSize: '0.62rem',
-                          color: panel.muted,
+                          fontSize: panelType.micro,
+                          color: panel.textDim,
                           letterSpacing: '0.07em',
                           textTransform: 'uppercase',
                           mb: 0.3,
@@ -1478,7 +1829,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       </Typography>
                       <Typography
                         sx={{
-                          fontSize: '1.05rem',
+                          fontSize: panelType.display,
                           fontWeight: 700,
                           fontFamily: "'Geist Mono', monospace",
                           color: gestureMatch
@@ -1489,12 +1840,27 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       >
                         {gestureLabel(expectedGesture)}
                       </Typography>
+                      {/* The word names the gesture; the drawing is what
+                          actually tells the operator what to do with their
+                          hand. Under a countdown, in a second language, the
+                          drawing is the faster of the two to read. */}
+                      {RequiredGestureIcon && (
+                        <RequiredGestureIcon
+                          size={30}
+                          color={
+                            gestureMatch
+                              ? panel.successLight
+                              : panel.primaryFaint
+                          }
+                          style={{ marginTop: 4 }}
+                        />
+                      )}
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
                       <Typography
                         sx={{
-                          fontSize: '0.62rem',
-                          color: panel.muted,
+                          fontSize: panelType.micro,
+                          color: panel.textDim,
                           letterSpacing: '0.07em',
                           textTransform: 'uppercase',
                           mb: 0.3,
@@ -1504,7 +1870,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       </Typography>
                       <Typography
                         sx={{
-                          fontSize: '1.05rem',
+                          fontSize: panelType.display,
                           fontWeight: 700,
                           fontFamily: "'Geist Mono', monospace",
                           color: gestureMatch
@@ -1516,6 +1882,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       >
                         {gestureLabel(activeGesture)}
                       </Typography>
+                      {DetectedGestureIcon && (
+                        <DetectedGestureIcon
+                          size={30}
+                          color={
+                            gestureMatch
+                              ? panel.successLight
+                              : gestureActive
+                                ? panel.primaryLight
+                                : panel.textDim
+                          }
+                          style={{ marginTop: 4 }}
+                        />
+                      )}
                     </Box>
                   </Stack>
                 </Box>
@@ -1529,36 +1908,71 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   feedback they gave, not only in how they were answered. */}
               {isHumanStepActive && countdown !== null && (
                 <Box sx={{ mt: 1.5 }}>
+                  {/* Two colours, not three. Amber is taken: across this panel
+                      it means "this reaches the physical arm" — the run button,
+                      the live-hardware banner, the confirm dialog. Spending it
+                      on "twenty seconds left" gave the same colour a second,
+                      unrelated meaning on the same screen, for a state the
+                      operator cannot act on differently. Indigo is the app's
+                      neutral running colour and is what this is: time passing.
+                      Red enters only in the last fifth, where "about to
+                      expire" IS actionable. */}
                   <LinearProgress
                     variant="determinate"
                     value={countdownPct}
-                    aria-live="polite"
-                    aria-label={`${countdown} seconds remaining`}
+                    aria-hidden
                     sx={{
-                      height: 3,
-                      borderRadius: 2,
+                      height: 6,
+                      borderRadius: 3,
                       mb: 0.5,
                       backgroundColor: panel.trackBg,
                       '& .MuiLinearProgress-bar': {
-                        backgroundColor:
-                          countdown < 10
-                            ? panel.error
-                            : countdown < 20
-                              ? panel.warning
-                              : panel.primary,
+                        backgroundColor: countdownIsCritical
+                          ? panel.error
+                          : panel.primary,
                         borderRadius: 2,
+                        // Linear, and matched to the 100ms tick: MUI's default
+                        // easing makes each tick accelerate then settle, which
+                        // at ten ticks a second reads as jitter rather than as
+                        // a bar draining evenly.
+                        transition: 'transform 100ms linear',
+                      },
+                      '@media (prefers-reduced-motion: reduce)': {
+                        '& .MuiLinearProgress-bar': { transition: 'none' },
                       },
                     }}
                   />
                   <Typography
                     sx={{
-                      fontSize: '0.68rem',
-                      color: countdown < 10 ? panel.errorLight : panel.muted,
+                      fontSize: panelType.display,
+                      fontFamily: "'Geist Mono', monospace",
+                      color: countdownIsCritical
+                        ? panel.errorLight
+                        : panel.muted,
                       textAlign: 'right',
                     }}
                   >
                     {countdown}s
                   </Typography>
+                  {/* The bar and the number are silent to a screen reader —
+                      announcing a value that changes ten times a second (or
+                      even once a second) is unusable. This says something only
+                      when it becomes worth saying. */}
+                  <Box
+                    component="span"
+                    role="status"
+                    aria-live="polite"
+                    sx={{
+                      position: 'absolute',
+                      width: 1,
+                      height: 1,
+                      overflow: 'hidden',
+                      clip: 'rect(0 0 0 0)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {countdownIsCritical ? 'Time is almost up' : ''}
+                  </Box>
                 </Box>
               )}
             </>
@@ -1584,7 +1998,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   color={panel.primaryLight}
                   style={{ flexShrink: 0, marginTop: 1 }}
                 />
-                <Typography sx={{ fontSize: '0.72rem', color: panel.textDim }}>
+                <Typography
+                  sx={{ fontSize: panelType.small, color: panel.textDim }}
+                >
                   Test recognition — try the webcam, gestures, and voice
                   commands before running the task. Nothing here moves the real
                   arm or changes the workspace.
@@ -1600,11 +2016,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               >
                 <Box>
                   <Typography
-                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                    sx={{ fontSize: panelType.body, color: panel.textDim }}
                   >
                     Camera
                   </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.muted }}
+                  >
                     {testCameraOn && webcam.active
                       ? 'Webcam on — detecting gestures'
                       : 'Try it out any time — see how gesture recognition works before running the task'}
@@ -1614,7 +2032,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   title={
                     testCameraOn
                       ? 'Webcam on — gestures must really happen'
-                      : 'Gesture events auto-completed'
+                      : 'Gesture conditions auto-completed'
                   }
                 >
                   <Switch
@@ -1648,11 +2066,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               >
                 <Box>
                   <Typography
-                    sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                    sx={{ fontSize: panelType.body, color: panel.textDim }}
                   >
                     Object detection
                   </Typography>
-                  <Typography sx={{ fontSize: '0.62rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.muted }}
+                  >
                     Looks for objects in this webcam feed — never affects real
                     task runs (those use the robot camera only)
                   </Typography>
@@ -1699,11 +2119,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               >
                 <Box>
                   <Typography
-                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                    sx={{ fontSize: panelType.body, color: panel.textDim }}
                   >
                     Voice
                   </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.muted }}
+                  >
                     {!voice.browserSupported
                       ? 'Not supported in this browser (Chrome only)'
                       : testVoiceOn
@@ -1715,7 +2137,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   title={
                     testVoiceOn
                       ? 'Microphone on — voice events must really happen'
-                      : 'Voice events auto-completed'
+                      : 'Voice conditions auto-completed'
                   }
                 >
                   <span>
@@ -1755,7 +2177,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <Camera size={28} color={panel.border} />
                   <Typography
-                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                    sx={{ fontSize: panelType.small, color: panel.textDim }}
                   >
                     Turn on the camera above to test gesture &amp; object
                     recognition
@@ -1807,9 +2229,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         sx={{ color: panel.primary }}
                       />
                       <Typography
-                        sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                        sx={{ fontSize: panelType.small, color: panel.textDim }}
                       >
-                        Starting camera...
+                        Starting camera…
                       </Typography>
                     </Box>
                   )}
@@ -1830,7 +2252,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       <VideoOff size={22} color={panel.errorLight} />
                       <Typography
                         sx={{
-                          fontSize: '0.72rem',
+                          fontSize: panelType.small,
                           color: panel.errorLight,
                           textAlign: 'center',
                         }}
@@ -1860,21 +2282,21 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                             alignItems: 'center',
                             gap: 0.5,
                             padding: '3px 8px',
-                            background: panel.primaryTint(0.85),
+                            background: panel.overlayChip,
+                            border: `1px solid ${panel.primaryTint(0.6)}`,
                             borderRadius: '12px',
-                            backdropFilter: 'blur(6px)',
                           }}
                         >
-                          <Hand size={11} color={panel.white} />
+                          <SandboxGestureIcon size={11} color={panel.white} />
                           <Typography
                             sx={{
-                              fontSize: '0.65rem',
+                              fontSize: panelType.micro,
                               fontWeight: 600,
                               color: panel.white,
                               fontFamily: "'Geist Mono', monospace",
                             }}
                           >
-                            {webcam.gesture}
+                            {gestureLabel(webcam.gesture)}
                           </Typography>
                         </Box>
                       )}
@@ -1886,15 +2308,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                             alignItems: 'center',
                             gap: 0.5,
                             padding: '3px 8px',
-                            background: panel.successTint(0.8),
+                            background: panel.overlayChip,
+                            border: `1px solid ${panel.successTint(0.6)}`,
                             borderRadius: '12px',
-                            backdropFilter: 'blur(6px)',
                           }}
                         >
                           <Eye size={11} color={panel.white} />
                           <Typography
                             sx={{
-                              fontSize: '0.65rem',
+                              fontSize: panelType.micro,
                               fontWeight: 600,
                               color: panel.white,
                               fontFamily: "'Geist Mono', monospace",
@@ -1911,16 +2333,23 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     sx={{
                       position: 'absolute',
                       top: 8,
-                      left: 10,
-                      right: 8,
+                      left: 8,
+                      maxWidth: 'calc(100% - 16px)',
                       overflow: 'hidden',
+                      // 50%-white text with no ground at all measured exactly
+                      // 1.00:1 on a bright frame — the same colour as what was
+                      // behind it. This is the one element that was not merely
+                      // low-contrast but literally invisible.
+                      background: panel.overlayChip,
+                      borderRadius: '6px',
+                      padding: '3px 8px',
                     }}
                   >
                     <Typography
                       noWrap
                       sx={{
-                        fontSize: '0.6rem',
-                        color: panel.videoLabel,
+                        fontSize: panelType.micro,
+                        color: panel.textDim,
                         letterSpacing: '0.07em',
                         textTransform: 'uppercase',
                       }}
@@ -1974,7 +2403,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     onChange={(e) => webcam.selectDevice(e.target.value)}
                     sx={{
                       color: panel.text,
-                      fontSize: '0.82rem',
+                      fontSize: panelType.small,
                       // MuiInputBase's global override (themes/overrides/InputBase.ts)
                       // forces background:'white' on every input app-wide — fine on
                       // the light theme, but it beats this field's dark-panel text
@@ -2001,7 +2430,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                             border: `1px solid ${panel.hairlineStrong}`,
                             '& .MuiMenuItem-root': {
                               color: panel.text,
-                              fontSize: '0.82rem',
+                              fontSize: panelType.small,
                               whiteSpace: 'normal',
                               wordBreak: 'break-word',
                             },
@@ -2044,7 +2473,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               >
                 <Typography
                   sx={{
-                    fontSize: '0.65rem',
+                    fontSize: panelType.micro,
                     fontWeight: 700,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
@@ -2058,28 +2487,38 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   direction="row"
                   sx={{ flexWrap: 'wrap', gap: '6px', mb: 1.2 }}
                 >
-                  {RECOGNIZED_GESTURES.map((g) => (
-                    <Box
-                      key={g.code}
-                      sx={{
-                        padding: '3px 9px',
-                        borderRadius: '12px',
-                        border: `1px solid ${panel.hairlineStrong}`,
-                        background: panel.chrome,
-                      }}
-                    >
-                      <Typography
-                        sx={{ fontSize: '0.68rem', color: panel.textDim }}
+                  {RECOGNIZED_GESTURES.map((g) => {
+                    const Icon = gestureIcon(g.code)
+                    return (
+                      <Stack
+                        key={g.code}
+                        direction="row"
+                        spacing={0.6}
+                        sx={{
+                          alignItems: 'center',
+                          padding: '4px 9px',
+                          borderRadius: '12px',
+                          border: `1px solid ${panel.hairlineStrong}`,
+                          background: panel.chrome,
+                        }}
                       >
-                        {g.label}
-                      </Typography>
-                    </Box>
-                  ))}
+                        {Icon && <Icon size={15} style={{ flexShrink: 0 }} />}
+                        <Typography
+                          sx={{
+                            fontSize: panelType.small,
+                            color: panel.textDim,
+                          }}
+                        >
+                          {g.label}
+                        </Typography>
+                      </Stack>
+                    )
+                  })}
                 </Stack>
 
                 <Typography
                   sx={{
-                    fontSize: '0.65rem',
+                    fontSize: panelType.micro,
                     fontWeight: 700,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
@@ -2104,7 +2543,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       }}
                     >
                       <Typography
-                        sx={{ fontSize: '0.68rem', color: panel.textDim }}
+                        sx={{ fontSize: panelType.small, color: panel.textDim }}
                       >
                         {v.label}
                       </Typography>
@@ -2112,7 +2551,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   ))}
                 </Stack>
 
-                <Typography sx={{ fontSize: '0.65rem', color: panel.muted }}>
+                <Typography
+                  sx={{ fontSize: panelType.micro, color: panel.muted }}
+                >
                   The robot's camera looks for objects here.
                 </Typography>
               </Box>
@@ -2120,7 +2561,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           )}
         </Box>
 
-        {/* ── RUN — only on the Task Execution tab; the Test recognition
+        {/* ── RUN — only on the Robot tab; the Test recognition
               sandbox is a diagnostic space with no run affordance at all ── */}
         {liveView === 'simulation' && (
           <Box>
@@ -2138,7 +2579,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               <Typography
                 sx={{
                   fontFamily: "'Geist Mono', monospace",
-                  fontSize: '0.68rem',
+                  fontSize: panelType.micro,
                   color: panel.textDim,
                   marginBottom: '3px',
                   letterSpacing: '0.05em',
@@ -2177,7 +2618,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   role="status"
                   aria-live="polite"
                   sx={{
-                    fontSize: '0.8rem',
+                    fontSize: panelType.body,
                     fontWeight: 500,
                     color: simulation.isRunning
                       ? panel.primaryLight
@@ -2202,7 +2643,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   sx={{ alignItems: 'center', gap: 1, mb: 1 }}
                 >
                   <Typography
-                    sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                    sx={{ fontSize: panelType.body, color: panel.textDim }}
                   >
                     Mode
                   </Typography>
@@ -2216,13 +2657,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     options={[
                       {
                         value: 'sim',
-                        label: UI_TEXT.simulate,
+                        label: UI_TEXT.targetSimulation,
                         icon: <MonitorPlay size={13} />,
                         activeColor: panel.success,
                       },
                       {
                         value: 'real',
-                        label: UI_TEXT.runOnRobot,
+                        label: UI_TEXT.targetRobot,
                         icon: <Cpu size={13} />,
                         activeColor: panel.warning,
                       },
@@ -2247,12 +2688,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   >
                     <Box>
                       <Typography
-                        sx={{ fontSize: '0.78rem', color: panel.textDim }}
+                        sx={{ fontSize: panelType.body, color: panel.textDim }}
                       >
                         Answer human steps automatically
                       </Typography>
                       <Typography
-                        sx={{ fontSize: '0.65rem', color: panel.muted }}
+                        sx={{ fontSize: panelType.micro, color: panel.muted }}
                       >
                         The simulation will not wait for a gesture, a voice
                         command or the Confirm button. Use it when no camera or
@@ -2279,47 +2720,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     />
                   </Stack>
                 ) : executionTarget === 'sim' ? (
-                  // Study mode on simulation: no toggle to offer, but the absence
-                  // of one must not read as "the setting is missing".
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: panel.primaryTint(0.12),
-                      border: `1px solid ${panel.primaryTint(0.4)}`,
-                      mb: 1,
-                    }}
-                  >
-                    <AlertTriangle size={15} color={panel.primary} />
-                    <Typography
-                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
-                    >
+                  // Study mode on simulation: no toggle to offer, but the
+                  // absence of one must not read as "the setting is missing".
+                  <Box sx={{ mb: 1 }}>
+                    <PanelMessage tone="info" dense>
                       Study mode — every operator step must be performed live.
-                    </Typography>
+                    </PanelMessage>
                   </Box>
                 ) : (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: panel.warningTint(0.12),
-                      border: `1px solid ${panel.warningTint(0.4)}`,
-                      mb: 1,
-                    }}
-                  >
-                    <AlertTriangle size={15} color={panel.warning} />
-                    <Typography
-                      sx={{ fontSize: '0.72rem', color: panel.warningLight }}
-                    >
+                  <Box sx={{ mb: 1 }}>
+                    <PanelMessage tone="hardware" dense>
                       Live hardware — the real robot will move. Gestures and
                       voice commands must be performed live.
-                    </Typography>
+                    </PanelMessage>
                   </Box>
                 )}
 
@@ -2327,25 +2740,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 and said up front, since the browser's own permission prompt
                 gives no context for why it's asking. */}
                 {runMode === 'live' && needsCameraOrVoice && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: panel.primaryTint(0.08),
-                      border: `1px solid ${panel.primaryTint(0.25)}`,
-                      mb: 1,
-                    }}
-                  >
-                    {taskNeedsCamera ? (
-                      <Camera size={15} color={panel.primary} />
-                    ) : (
-                      <Mic size={15} color={panel.primary} />
-                    )}
-                    <Typography
-                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
+                  <Box sx={{ mb: 1 }}>
+                    <PanelMessage
+                      tone="info"
+                      dense
+                      icon={taskNeedsCamera ? Camera : Mic}
                     >
                       Run will ask for{' '}
                       {taskNeedsCamera && taskNeedsVoice
@@ -2354,7 +2753,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           ? 'camera access'
                           : 'microphone access'}{' '}
                       — gestures/voice must really happen.
-                    </Typography>
+                    </PanelMessage>
                   </Box>
                 )}
 
@@ -2362,26 +2761,18 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 Simulation side would read as "probably fine" rather than the
                 actual guarantee (the physical arm cannot move from this button,
                 full stop). Progressive disclosure only for the extra hardware
-                badge/select, which only matters once "Real robot" is chosen. */}
+                badge/select, which only matters once "Real robot" is chosen.
+
+                Green, not amber, and that is the whole colour rule in one
+                place: this notice sits directly under the "Live hardware"
+                amber one on the other target, and if both were amber the
+                reserved meaning ("the arm moves") would be carried by the
+                sentence that promises the opposite. */}
                 {executionTarget === 'sim' && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: panel.successTint(0.1),
-                      border: `1px solid ${panel.successTint(0.3)}`,
-                      mb: 1,
-                    }}
-                  >
-                    <MonitorPlay size={15} color={panel.success} />
-                    <Typography
-                      sx={{ fontSize: '0.72rem', color: panel.textDim }}
-                    >
+                  <Box sx={{ mb: 1 }}>
+                    <PanelMessage tone="success" dense icon={MonitorPlay}>
                       Twin only — the physical arm never moves from this button.
-                    </Typography>
+                    </PanelMessage>
                   </Box>
                 )}
               </>
@@ -2392,7 +2783,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         {/* ── EVENTS — only while events can actually happen ── */}
         {eventsVisible && (
           <Box>
-            <SectionLabel>Events</SectionLabel>
+            <SectionLabel>Conditions</SectionLabel>
             <Stack spacing={1}>
               <Stack
                 direction="row"
@@ -2414,17 +2805,24 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   sx={{ alignItems: 'center' }}
                   spacing={0.8}
                 >
-                  <Hand
+                  {/* The live gesture's own icon, not a generic hand: a
+                      static `Hand` here reads as "Open hand" now that it is
+                      that gesture's icon, so the channel label claimed a
+                      specific value. Falls back to `Hand` only while nothing
+                      is detected, where there is no value to misread. */}
+                  <EventsGestureIcon
                     size={13}
                     color={gestureActive ? panel.primaryLight : panel.textDim}
                   />
-                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.textDim }}
+                  >
                     Gesture
                   </Typography>
                 </Stack>
                 <Typography
                   sx={{
-                    fontSize: '0.78rem',
+                    fontSize: panelType.body,
                     fontWeight: 600,
                     color: gestureActive ? panel.primaryFaint : panel.textDim,
                     fontFamily: "'Geist Mono', monospace",
@@ -2468,13 +2866,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         : panel.textDim
                     }
                   />
-                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.textDim }}
+                  >
                     Objects
                   </Typography>
                 </Stack>
                 <Typography
                   sx={{
-                    fontSize: '0.78rem',
+                    fontSize: panelType.body,
                     fontWeight: 600,
                     color:
                       activeDetections.length > 0
@@ -2516,13 +2916,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     size={13}
                     color={voice.word ? panel.primaryLight : panel.textDim}
                   />
-                  <Typography sx={{ fontSize: '0.72rem', color: panel.muted }}>
+                  <Typography
+                    sx={{ fontSize: panelType.micro, color: panel.textDim }}
+                  >
                     Voice
                   </Typography>
                 </Stack>
                 <Typography
                   sx={{
-                    fontSize: '0.78rem',
+                    fontSize: panelType.body,
                     fontWeight: 600,
                     color: voice.word ? panel.primaryFaint : panel.textDim,
                     fontFamily: "'Geist Mono', monospace",
@@ -2560,9 +2962,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           <Button
             fullWidth
             onClick={simulation.isRunning ? stopSimulation : handleRun}
+            // `stopping` holds Run down until the server confirms the previous
+            // run let go. Pressing it a second earlier used to return 409 and
+            // surface as a red error, or — worse and silently — start a run
+            // into a world the previous Stop was still tearing down.
             disabled={
               !simulation.isRunning &&
-              (!canRun || (executionTarget === 'real' && !hardwareArmed))
+              (stopping ||
+                !canRun ||
+                (executionTarget === 'real' && !hardwareArmed))
             }
             variant="contained"
             color={simulation.isRunning ? 'error' : 'primary'}
@@ -2573,7 +2981,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               borderRadius: '8px',
               textTransform: 'none',
               fontWeight: 600,
-              fontSize: '0.85rem',
+              fontSize: panelType.body,
               py: 1,
               boxShadow: 'none',
               '&:hover': { boxShadow: 'none' },
@@ -2617,21 +3025,34 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           >
             {simulation.isRunning
               ? 'Stop'
-              : executionTarget === 'real'
-                ? UI_TEXT.runOnRobot
-                : UI_TEXT.startSimulation}
+              : stopping
+                ? 'Stopping…'
+                : executionTarget === 'real'
+                  ? UI_TEXT.runOnRobot
+                  : UI_TEXT.startSimulation}
           </Button>
           {executionTarget === 'real' && (
-            <Typography
-              sx={{
-                fontSize: '0.66rem',
-                color: panel.textDim,
-                mt: 0.8,
-                textAlign: 'center',
-              }}
+            <Stack
+              direction="row"
+              spacing={0.6}
+              sx={{ alignItems: 'center', justifyContent: 'center', mt: 1 }}
             >
-              Use the teach-pendant e-stop to stop the arm immediately.
-            </Typography>
+              <AlertTriangle
+                size={13}
+                color={panel.warning}
+                style={{ flexShrink: 0 }}
+              />
+              <Typography
+                sx={{
+                  fontSize: panelType.small,
+                  fontWeight: 500,
+                  color: panel.warningLight,
+                  textAlign: 'center',
+                }}
+              >
+                Use the teach-pendant e-stop to stop the arm immediately.
+              </Typography>
+            </Stack>
           )}
           {!simulation.isRunning &&
             (preflightIssues.length > 0 ? (
@@ -2647,15 +3068,34 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       flexWrap: 'wrap',
                     }}
                   >
-                    <AlertTriangle
-                      size={12}
-                      color={panel.warning}
-                      style={{ flexShrink: 0 }}
-                    />
+                    {/* Amber only when the arm is the problem. The other
+                        pre-flight issues — a draft task, auto-answered human
+                        steps, a browser without speech — are things to know,
+                        not things the arm is doing, and they used to sit here
+                        in the same amber as the hardware ones. What makes them
+                        read as blockers is where they are (directly under a
+                        disabled Run) and that they carry a fix, not the
+                        colour. */}
+                    {issue.tone === 'hardware' ? (
+                      <AlertTriangle
+                        size={12}
+                        color={panel.warning}
+                        style={{ flexShrink: 0 }}
+                      />
+                    ) : (
+                      <Info
+                        size={12}
+                        color={panel.primaryLight}
+                        style={{ flexShrink: 0 }}
+                      />
+                    )}
                     <Typography
                       sx={{
-                        fontSize: '0.66rem',
-                        color: panel.warningLight,
+                        fontSize: panelType.small,
+                        color:
+                          issue.tone === 'hardware'
+                            ? panel.warningLight
+                            : panel.textDim,
                         textAlign: 'center',
                       }}
                     >
@@ -2666,12 +3106,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         size="small"
                         onClick={issue.action.onClick}
                         sx={{
-                          fontSize: '0.64rem',
-                          minWidth: 0,
-                          py: 0,
-                          px: 0.6,
+                          fontSize: panelType.small,
+                          minHeight: 32,
+                          py: 0.4,
+                          px: 1,
                           textTransform: 'none',
-                          color: panel.primaryLight,
+                          fontWeight: 600,
+                          color: panel.primaryFaint,
+                          border: `1px solid ${panel.primaryTint(0.35)}`,
                         }}
                       >
                         {issue.action.label}
@@ -2692,7 +3134,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
               >
                 <CheckCircle2 size={12} color={panel.success} />
                 <Typography
-                  sx={{ fontSize: '0.66rem', color: panel.successLight }}
+                  sx={{ fontSize: panelType.small, color: panel.successLight }}
                 >
                   Ready to run
                 </Typography>

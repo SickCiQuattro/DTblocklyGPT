@@ -18,8 +18,29 @@
  */
 
 export const UI_TEXT = {
-  // Execution — two verbs, always the same two, never "Run in:"/"Real
-  // robot"/"Run simulation" variants.
+  // Execution. Three questions, three vocabularies, and they must not borrow
+  // each other's words — this is what "Task Execution" (a tab), "Simulate" (a
+  // mode) and "Start simulation" (a button) were: three names for one thing,
+  // in front of an operator who has to learn the app in one session.
+  //
+  //   WHERE it runs  → a noun, on the mode control:  Simulation / Real robot
+  //   DO it          → a verb, on the button:        Start simulation / Run on robot
+  //   WHAT I'm seeing→ a noun, on the live-view tab: Robot / Test recognition
+  //
+  // The worst offender was not the tab: the mode's own label and the button's
+  // label were the SAME STRING for a hardware run. The operator chose "Run on
+  // robot" and then pressed "Run on robot", with no way to tell a setting from
+  // an action. Nouns for the setting fixed that without inventing a word.
+  //
+  // "Test recognition" stays exactly as it is — testing/recognition_plan.py
+  // instructs an observer to count trials "off the app's own 'Test
+  // recognition' panel", so renaming it would silently break the study
+  // protocol's own reference.
+  targetSimulation: 'Simulation',
+  targetRobot: 'Real robot',
+  liveViewRobot: 'Robot',
+  liveViewSandbox: 'Test recognition',
+  /** Verb form, for a card action ("Simulate this task"). Not the mode label. */
   simulate: 'Simulate',
   runOnRobot: 'Run on robot',
   startSimulation: 'Start simulation',

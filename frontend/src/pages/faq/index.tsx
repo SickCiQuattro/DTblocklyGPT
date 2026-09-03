@@ -51,8 +51,8 @@ const Faq = () => {
       <h2>Testing before you run</h2>
       <p>
         Open the <b>Robot</b> panel (top right) to test your task. It has two
-        views: <b>Task Execution</b> shows the robot moving once a run starts,
-        and <b>Test recognition</b> turns on your camera so you can check that
+        views: <b>Robot</b> shows the robot moving once a run starts, and{' '}
+        <b>Test recognition</b> turns on your camera so you can check that
         gesture, voice, and object detection actually work — you can try this
         any time, even before running anything.
       </p>
