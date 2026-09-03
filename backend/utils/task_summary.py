@@ -16,6 +16,7 @@ the dead `code` column.
 """
 from backend.block_types import (
     EventsItems,
+    LogicItems,
     MacroItems,
     StepsItems,
 )
@@ -38,9 +39,29 @@ _MOTION_BLOCKS = {
     StepsItems.CLOSE_GRIPPER.value,
 }
 
-# Not a step: the "When task starts" hat every workspace is rooted in. Counting
-# it would make an empty program read as one step.
-_NOT_A_STEP = {"when_start"}
+# What counts as a step, by name rather than by structure.
+#
+# Structure cannot answer this: in a serialized Blockly workspace a statement
+# input and a value input have the identical shape, `inputs: {NAME: {block:
+# {...}}}`. So a walk that counts every node carrying a `type` counts the
+# PARAMETERS too — the object a pick picks up, the location a place places at,
+# the skill a processing step runs — plus every shadow placeholder sitting in
+# an unfilled slot, plus the condition of a `when`.
+#
+# Measured on the checked-in database: a four-step task ("saved task, pick,
+# processing, place") reported **7**, because its three parameter blocks were
+# counted as steps. The card said "7 steps" about a program with four. An
+# operator uses that number to judge how long a task will take before opening
+# it, so it has to mean what it says.
+#
+# The `when_start` hat is excluded for the same reason `analisi.py` excludes
+# it: it is the editor's start marker, not something the author put in the
+# program. Counting it would make an empty program read as one step.
+_STEP_BLOCKS = (
+    {item.value for item in StepsItems}
+    | {item.value for item in LogicItems}
+    | {item.value for item in MacroItems}
+)
 
 
 def _walk_types(node, out: set) -> None:
@@ -64,11 +85,17 @@ def _walk_types(node, out: set) -> None:
 
 
 def _count_blocks(node) -> int:
+    """Steps in a workspace, counted at every nesting depth.
+
+    Still structural about *where* it looks — a step inside a loop body inside
+    a conditional counts exactly like a top-level one — but no longer
+    structural about *what* counts. See `_STEP_BLOCKS`.
+    """
     if isinstance(node, list):
         return sum(_count_blocks(child) for child in node)
     if not isinstance(node, dict):
         return 0
-    total = 1 if isinstance(node.get("type"), str) and node["type"] not in _NOT_A_STEP else 0
+    total = 1 if node.get("type") in _STEP_BLOCKS else 0
     return total + sum(_count_blocks(child) for child in node.values())
 
 
