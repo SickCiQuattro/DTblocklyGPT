@@ -68,6 +68,17 @@
       <!-- Cap: visual only, no collision — keeps grasp geometry identical to plain tube
            (grasp_center_offset/max_grasp_width in object.meta.json fully override the
            grasp plan regardless of this cap's own size, so it is purely cosmetic).
+
+           Cosmetic cuts both ways, and this is where it bit: max_grasp_width was set
+           to 26mm, this cap's diameter. The fingers close to width-minus-clearance, so
+           they stopped at 22mm around the 15mm body they actually meet — 7mm of air on
+           the diameter, and a tube that hung under an open gripper while the weld
+           reported a successful pick. The width must describe whatever has COLLISION at
+           the grasp height, never what is drawn there. 26mm also exceeded
+           RACK_SLOT_INNER_W, so rack_lift_for_width perched the tube 35mm above the
+           rack rather than seating it in a slot, from the same one number. Now 18mm,
+           matching blue_tube's identical 15mm body. Guarded by
+           test_grasp_planner.py::test_fingers_close_at_least_onto_the_object.
            2026-07-29: body lengthened +20mm (0.11->0.13) so the cap pose is raised by
            half that (+10mm, cylinder is centered at the body's own origin) to stay at
            the new top instead of sinking into the body. Cap made shorter/flatter
