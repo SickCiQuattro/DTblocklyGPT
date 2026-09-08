@@ -343,8 +343,14 @@ def humanStepStart():
 
 @bp.route("/human-step-complete", methods=["POST"])
 def humanStepComplete():
+    # Optional description: what completed the step, when the panel's generic
+    # "Step completed" would not say enough. A simulated object detection uses
+    # it to name what was found and to say it was simulated. Absent for an
+    # ordinary confirm, where the operator already knows what they just did.
+    data = request.get_json(silent=True) or {}
     flask_pub.publish_step_status({
         "status": "completed",
+        "description": data.get("description", ""),
         "timestamp": time.time(),
     })
     return jsonify({"status": "ok"})
@@ -353,10 +359,19 @@ def humanStepComplete():
 @bp.route("/human-step-timeout", methods=["POST"])
 def humanStepTimeout():
     data = request.get_json(silent=True) or {}
+    # bypass_reason is forwarded, not dropped. This one endpoint carries two
+    # opposite outcomes: a real timeout, where the condition was never met and
+    # the step gave up, and a BYPASS, where the condition was auto-satisfied
+    # because the system could not observe it (unreachable bridge, no detector
+    # running, object already in frame). simulate.py sends both here and the
+    # payload built here kept only the first, so the panel announced
+    # 'Timeout: object "tube" not detected' for a step that had in fact passed
+    # and let the run continue.
     flask_pub.publish_step_status({
         "status": "timeout",
         "condition": data.get("condition", ""),
         "value": data.get("value", ""),
+        "bypass_reason": data.get("bypass_reason"),
         "timestamp": time.time(),
     })
     return jsonify({"status": "ok"})

@@ -349,4 +349,25 @@ class BridgeNodeROS(Node):
             gesture_age = time.monotonic() - self._latest_gesture_time
         with self._object_lock:
             detections = list(self._latest_detections)
-        return {"gesture": gesture, "detections": detections, "gesture_age_s": round(gesture_age, 2)}
+            object_age = time.monotonic() - self._latest_object_time
+        # object_age_s is what tells "vision_node is running and sees nothing"
+        # apart from "vision_node is not running at all". Both used to arrive
+        # here as detections: [], and a find_object step then waited out its
+        # whole timeout before reporting that the OPERATOR had not confirmed —
+        # blaming a person for a detector that was never listening.
+        #
+        # The age is meaningful because vision_node publishes on every cycle
+        # (~2 Hz) whether or not it found anything, including an empty list
+        # when the camera itself fails. A recent message therefore proves the
+        # node is alive, which is the only claim the caller needs.
+        #
+        # Never-seen reports as a very large age rather than None: the
+        # timestamp starts at 0.0 and monotonic() does not, so "no message
+        # ever" already reads as "extremely stale". Same shape as gesture_age_s
+        # above, which has always worked that way.
+        return {
+            "gesture": gesture,
+            "detections": detections,
+            "gesture_age_s": round(gesture_age, 2),
+            "object_age_s": round(object_age, 2),
+        }
