@@ -17,6 +17,10 @@ import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { normalizeKeywords } from '../../utils/keywords'
 import { blocksColours } from '../../blocks/palette'
+import {
+  blockDescriptionsByType,
+  blockLabelsByType,
+} from '../../blocks/blockTextDictionary'
 
 import {
   DIRECT_BLOCK_TYPES,
@@ -30,42 +34,50 @@ import {
 /**
  * Fixed list of condition/trigger blocks shown in the picker when the user
  * clicks a `shadow_trigger_block` slot (Boolean input inside when/repeat-until).
+ *
+ * Names and descriptions come from blockTextDictionary, the same source the
+ * toolbox pills and the Blockly tooltips read. This list used to carry its own
+ * copies, which is how "Worker shows a hand gesture" ended up here while every
+ * other surface said "operator" — a third word for the person at the cell, in
+ * front of someone learning the app in one session.
+ *
+ * `keywords` stay local: they are search synonyms, not names, and they are the
+ * reason a rename does not break search. Typing "until" still finds Repeat.
  */
 export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
   {
     id: 2,
-    name: 'Object detected',
-    description: 'Camera checks if a specific object is visible.',
+    name: blockLabelsByType.find_object_block,
+    description: blockDescriptionsByType.find_object_block,
     group: 'Conditions',
     paramHint: 'object',
-    keywords: ['object', 'vision', 'camera', 'find'],
+    keywords: ['object', 'vision', 'camera', 'find', 'see', 'detect'],
     blockType: 'find_object_block',
   },
   {
     id: 4,
-    name: 'Gesture detected',
-    description: 'Worker shows a specific hand gesture to the camera.',
+    name: blockLabelsByType.gesture_block,
+    description: blockDescriptionsByType.gesture_block,
     group: 'Conditions',
     paramHint: 'gesture type',
-    keywords: ['gesture', 'camera', 'hand'],
+    keywords: ['gesture', 'camera', 'hand', 'thumbs', 'wave'],
     blockType: 'gesture_block',
   },
   {
     id: 9,
-    name: 'Voice command',
-    description: 'Operator says a specific word (yes, no, done, proceed).',
+    name: blockLabelsByType.voice_command_block,
+    description: blockDescriptionsByType.voice_command_block,
     group: 'Conditions',
     paramHint: 'word',
-    keywords: ['voice', 'say', 'word', 'speak', 'speech'],
+    keywords: ['voice', 'say', 'word', 'speak', 'speech', 'yes', 'no', 'done'],
     blockType: 'voice_command_block',
   },
   {
     id: 10,
-    name: 'Confirm button pressed',
-    description:
-      'Checks if the Confirm button in the robot panel has been pressed — no camera or microphone needed.',
+    name: blockLabelsByType.human_feedback_block,
+    description: blockDescriptionsByType.human_feedback_block,
     group: 'Conditions',
-    keywords: ['confirm', 'press', 'button', 'manual', 'operator'],
+    keywords: ['confirm', 'press', 'button', 'manual', 'operator', 'click'],
     blockType: 'human_feedback_block',
   },
   // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
@@ -126,44 +138,49 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
 export const buildSequencePickerItems = (
   macros: TaskType[],
 ): ShadowPickerItem[] => {
-  // Order mirrors the toolbox: Task Flow → Robot Actions → Operator.
+  // Order mirrors the toolbox: Task Flow → Robot Actions → Human Actions.
+  //
+  // Names and descriptions come from blockTextDictionary — see the note on
+  // TRIGGER_PICKER_ITEMS. `keywords` are local search synonyms and carry the
+  // words a rename dropped: "until" still finds Repeat, "notify" still finds
+  // Show message.
   const staticItems: ShadowPickerItem[] = [
     {
       id: -9,
-      name: 'Repeat times',
-      description: 'Repeat a sequence a fixed number of times',
+      name: blockLabelsByType.repeat_block,
+      description: blockDescriptionsByType.repeat_block,
       keywords: ['repeat', 'loop', 'times', 'count'],
       blockType: 'repeat_block',
       group: 'Task Flow',
     },
     {
       id: -11,
-      name: 'Repeat until',
-      description: 'Repeat until a condition is met',
-      keywords: ['repeat', 'until', 'condition', 'while'],
+      name: blockLabelsByType.repeat_until_block,
+      description: blockDescriptionsByType.repeat_until_block,
+      keywords: ['repeat', 'until', 'condition', 'while', 'stop', 'loop'],
       blockType: 'repeat_until_block',
       group: 'Task Flow',
     },
     {
       id: -12,
-      name: 'When',
-      description: 'Execute steps only when a condition is true',
-      keywords: ['when', 'if', 'condition'],
+      name: blockLabelsByType.when_block,
+      description: blockDescriptionsByType.when_block,
+      keywords: ['when', 'if', 'condition', 'do'],
       blockType: 'when_block',
       group: 'Task Flow',
     },
     {
       id: -13,
-      name: 'When / Otherwise',
-      description: 'Execute different steps based on a condition',
-      keywords: ['when', 'otherwise', 'if', 'else'],
+      name: blockLabelsByType.when_otherwise_block,
+      description: blockDescriptionsByType.when_otherwise_block,
+      keywords: ['when', 'otherwise', 'if', 'else', 'do'],
       blockType: 'when_otherwise_block',
       group: 'Task Flow',
     },
     {
       id: -1,
-      name: 'Pick up',
-      description: 'Pick up an object with the robot arm',
+      name: blockLabelsByType.pick_block,
+      description: blockDescriptionsByType.pick_block,
       keywords: ['pick', 'grab', 'grasp', 'object'],
       blockType: 'pick_block',
       group: 'Robot Actions',
@@ -173,65 +190,65 @@ export const buildSequencePickerItems = (
       // MAPPING REFERENCE:
       // - User-facing block name: 'Execute skill'
       // - Internally creates a 'processing_block' (which maps to /actions DB records)
-      name: 'Execute skill',
-      description: 'Run a pre-configured skill',
+      name: blockLabelsByType.processing_block,
+      description: blockDescriptionsByType.processing_block,
       keywords: ['run', 'skill', 'routine', 'execute', 'perform'],
       blockType: 'processing_block',
       group: 'Robot Actions',
     },
     {
       id: -3,
-      name: 'Place at',
-      description: 'Place the held object at a destination',
+      name: blockLabelsByType.place_block,
+      description: blockDescriptionsByType.place_block,
       keywords: ['place', 'put', 'deposit', 'location'],
       blockType: 'place_block',
       group: 'Robot Actions',
     },
     {
       id: -4,
-      name: 'Move to',
-      description: 'Move the robot to a specific location',
+      name: blockLabelsByType.move_to_block,
+      description: blockDescriptionsByType.move_to_block,
       keywords: ['move', 'go', 'navigate', 'location'],
       blockType: 'move_to_block',
       group: 'Robot Actions',
     },
     {
       id: -5,
-      name: 'Open gripper',
-      description: 'Open the robot gripper',
-      keywords: ['gripper', 'open', 'release', 'hand'],
+      name: blockLabelsByType.open_gripper_block,
+      description: blockDescriptionsByType.open_gripper_block,
+      keywords: ['gripper', 'open', 'release', 'hand', 'drop'],
       blockType: 'open_gripper_block',
       group: 'Robot Actions',
     },
     {
       id: -10,
-      name: 'Close gripper',
-      description: 'Close the robot gripper',
+      name: blockLabelsByType.close_gripper_block,
+      description: blockDescriptionsByType.close_gripper_block,
       keywords: ['gripper', 'close', 'grip', 'hand'],
       blockType: 'close_gripper_block',
       group: 'Robot Actions',
     },
     {
       id: -6,
-      name: 'Wait',
-      description: 'Pause execution for a set amount of time',
+      name: blockLabelsByType.wait_block,
+      description: blockDescriptionsByType.wait_block,
       keywords: ['wait', 'pause', 'delay', 'seconds'],
       blockType: 'wait_block',
       group: 'Robot Actions',
     },
     {
       id: -7,
-      name: 'Pause and show',
-      description: 'Pause and prompt a human operator to act',
-      keywords: ['human', 'pause', 'operator', 'show'],
+      name: blockLabelsByType.human_action_block,
+      description: blockDescriptionsByType.human_action_block,
+      keywords: ['human', 'pause', 'operator', 'show', 'message', 'confirm'],
       blockType: 'human_action_block',
       group: 'Human Actions',
     },
     {
       id: -8,
-      name: 'Show message',
-      description: 'Display a notification and continue',
-      keywords: ['notify', 'message', 'info', 'continue'],
+      name: blockLabelsByType.notify_action_block,
+      description: blockDescriptionsByType.notify_action_block,
+      keywords: ['notify', 'message', 'info', 'continue', 'show'],
       blockType: 'notify_action_block',
       group: 'Human Actions',
     },

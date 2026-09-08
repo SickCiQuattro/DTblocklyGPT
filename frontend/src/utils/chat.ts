@@ -30,9 +30,22 @@ export interface MessageType {
   intent?: ChatIntent
 }
 
+// The example names things that are ACTUALLY in the library.
+//
+// It used to read "pick up the flask and place it in the rack". There is no
+// flask in the catalogue — the objects are tubes and a medicine bottle — and
+// the destination is "tube rack", not "rack". So the first sentence a
+// first-time operator reads is an instruction that does not work: type it
+// verbatim and the assistant either reports that the object does not exist or
+// invents one. That is a bad first turn anywhere, and worse in a study where a
+// task is deliberately chat-only, because the failure looks like the operator's.
+//
+// "blue tube" and "sample tray" are seeded by seed_library.py and are the
+// names the operator will see in the Library. Keep them in step with that
+// command: an example is only useful while its nouns resolve.
 export const INITIAL_MESSAGE_1: MessageType = {
   id: 0,
-  text: 'Tell me what the robot should do — e.g. "pick up the flask and place it in the rack" — and I\'ll build the blocks for you.',
+  text: 'Tell me what the robot should do — e.g. "pick up the blue tube and place it on the sample tray" — and I\'ll build the blocks for you.',
   user: UserChatEnum.ROBOT,
   // null, not dayjs() — this is a module-level const evaluated once at import
   // time, so a fixed timestamp would freeze at app-start time forever.

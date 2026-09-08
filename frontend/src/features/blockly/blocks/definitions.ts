@@ -45,6 +45,7 @@ import {
 
 import './mutators'
 import './collapseSummary'
+import { HUMAN_MESSAGE_FIELD_EXTENSION } from './messageFieldWidth'
 import {
   GESTURE_DROPDOWN_OPTIONS,
   VOICE_DROPDOWN_OPTIONS,
@@ -168,8 +169,22 @@ Blockly.defineBlocksWithJsonArray([
     tooltip: blockDescriptionsByType.human_feedback_block,
   },
   {
+    // Lowercase, as Scratch writes it, and for the reason Bau et al. give via
+    // Stefik & Siebert: capitalised logical operators are hard-to-learn jargon,
+    // and these read as code to someone who does not write any.
+    //
+    // These blocks have no toolbox pill — they were hidden on the advisor's
+    // feedback — but the chat still emits them: the prompt documents "and" /
+    // "or" / "not" as valid conditions and validate_condition accepts them. So
+    // they arrive on a canvas the operator never chose them for, which is the
+    // one place in this vocabulary where machine notation actually reaches the
+    // screen.
+    //
+    // The operands are whole clauses ("a gesture is detected", "5 seconds have
+    // passed"), so lowercase composes into a readable sentence on its own:
+    // "When a gesture is detected and 5 seconds have passed."
     type: 'logic_and_block',
-    message0: '%1 AND %2',
+    message0: '%1 and %2',
     args0: [
       { type: 'input_value', name: 'A', check: 'Boolean' },
       { type: 'input_value', name: 'B', check: 'Boolean' },
@@ -181,7 +196,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'logic_or_block',
-    message0: '%1 OR %2',
+    message0: '%1 or %2',
     args0: [
       { type: 'input_value', name: 'A', check: 'Boolean' },
       { type: 'input_value', name: 'B', check: 'Boolean' },
@@ -193,7 +208,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'logic_not_block',
-    message0: 'NOT %1',
+    message0: 'not %1',
     args0: [{ type: 'input_value', name: 'BOOL', check: 'Boolean' }],
     output: 'Boolean',
     inputsInline: true,
@@ -330,6 +345,7 @@ Blockly.defineBlocksWithJsonArray([
 Blockly.defineBlocksWithJsonArray([
   {
     type: 'human_action_block',
+    extensions: [HUMAN_MESSAGE_FIELD_EXTENSION],
     message0: '%1 Pause and show: \n%2\n',
     args0: [
       iconConfig(USER_ICON_URI, 'HUMAN:'),
@@ -355,6 +371,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   {
     type: 'notify_action_block',
+    extensions: [HUMAN_MESSAGE_FIELD_EXTENSION],
     message0: '%1 Show message and continue: \n%2',
     args0: [
       iconConfig(USER_ICON_URI, 'HUMAN:'),

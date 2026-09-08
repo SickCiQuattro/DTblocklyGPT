@@ -97,8 +97,14 @@ export const UnifiedWorkspace = () => {
   // Redux layout/sync states
   const chatOpen = useAppSelector((state) => state.task.chatOpen)
   const simOpen = useAppSelector((state) => state.task.simOpen)
+  // Read here, not only inside the panel: the workspace has to reserve exactly
+  // as much room as the panel takes, or the panel overlaps it.
+  const robotPanelWidth = useAppSelector((state) => state.task.robotPanelWidth)
   const codeOpen = useAppSelector((state) => state.task.codeOpen)
   const activeTaskName = useAppSelector((state) => state.task.activeTaskName)
+  const activeTaskDescription = useAppSelector(
+    (state) => state.task.activeTaskDescription,
+  )
   useDocumentTitle(activeTaskName || 'Task')
   const activeTaskStatus = useAppSelector(
     (state) => state.task.activeTaskStatus,
@@ -171,22 +177,41 @@ export const UnifiedWorkspace = () => {
   const preRunLayoutRef = useRef<{
     drawerOpen: boolean
     toolboxCollapsed: boolean
+    chatOpen: boolean
   } | null>(null)
   useEffect(() => {
     if (isSimulationRunning && !preRunLayoutRef.current) {
       preRunLayoutRef.current = {
         drawerOpen,
         toolboxCollapsed: viewSettings.toolboxCollapsed,
+        chatOpen,
       }
       if (drawerOpen) dispatch(openDrawer(false))
       if (!viewSettings.toolboxCollapsed) {
         updateViewSettings({ toolboxCollapsed: true })
       }
+      // Copilot joins the other two, and it is the one that matters most.
+      //
+      // The robot panel used to float over everything, so starting a run put
+      // the live view on top of whatever was open and nothing had to move.
+      // Once the panel became a column with room reserved for it, an open
+      // Copilot stopped being covered and started competing: three surfaces
+      // dividing a viewport, with the workspace — the one showing which block
+      // is running — squeezed between them.
+      //
+      // Nothing an operator does with Copilot happens DURING a run: it writes
+      // blocks into a workspace that is executing and cannot be edited. So it
+      // is the safest of the three to fold away, and the one whose absence
+      // gives the run the most room.
+      if (chatOpen) dispatch(toggleChat())
     } else if (!isSimulationRunning && preRunLayoutRef.current) {
       const snapshot = preRunLayoutRef.current
       preRunLayoutRef.current = null
       dispatch(openDrawer(snapshot.drawerOpen))
       updateViewSettings({ toolboxCollapsed: snapshot.toolboxCollapsed })
+      // Restored, not left closed: the operator did not close it, the run did,
+      // and a panel that never comes back teaches them to stop opening it.
+      if (snapshot.chatOpen !== chatOpen) dispatch(toggleChat())
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [isSimulationRunning])
@@ -285,6 +310,7 @@ export const UnifiedWorkspace = () => {
           status: taskData.status,
           isReadOnly: taskIsReadOnly,
           ownerUsername: taskData.owner__username ?? null,
+          description: taskData.description ?? '',
         }),
       )
       // lastSaved is a single global Redux flag with no per-task scope, so
@@ -293,8 +319,13 @@ export const UnifiedWorkspace = () => {
       // leaks a previous task's save time into this one when navigating
       // task-to-task without a remount. Seed it from the record's own
       // last_modified so it reflects reality until the next real save.
+      //
+      // HH:mm, not HH:mm:ss. Autosave fires roughly every two seconds while
+      // the operator works, and every one of those rewrote the seconds digit
+      // in the corner of the screen — constant peripheral motion carrying a
+      // figure nobody acts on. The minute is the answer to "is my work safe".
       if (taskData.last_modified) {
-        dispatch(setLastSaved(dayjs(taskData.last_modified).format('HH:mm:ss')))
+        dispatch(setLastSaved(dayjs(taskData.last_modified).format('HH:mm')))
       }
       // Same per-visit leak as lastSaved: loading a task must not inherit
       // "unsaved edits" from whatever was open before. The deserialize below
@@ -317,6 +348,7 @@ export const UnifiedWorkspace = () => {
           id: null,
           name: 'New Task',
           status: 'draft',
+          description: '',
         }),
       )
       // Same leak as above, the other direction: a brand-new task has never
@@ -492,7 +524,7 @@ export const UnifiedWorkspace = () => {
           }
           void mutate({ url: endpoints.home.libraries.tasks })
         }
-        dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
+        dispatch(setLastSaved(dayjs().format('HH:mm')))
         dispatch(triggerSavedFlash(true))
         dispatch(setSaveError(false))
         // The just-saved structure is now what would run — Run can trust
@@ -665,19 +697,30 @@ export const UnifiedWorkspace = () => {
     return () => document.removeEventListener('keydown', onKey)
   }, [dispatch])
 
-  // Rename-only trigger listener — a header title edit updates just the
-  // name metadata. It must never go through saveTaskToBackend/triggerSave,
-  // which also (re)publishes the whole workspace whenever it happens to
-  // pass conformance — a rename shouldn't have that side effect.
+  // Metadata-only trigger listener — a header edit to the task's NAME or its
+  // DESCRIPTION. It must never go through saveTaskToBackend/triggerSave, which
+  // also (re)publishes the whole workspace whenever it happens to pass
+  // conformance; retitling a task should not have that side effect.
+  //
+  // The action is still called triggerRename because its contract has not
+  // changed: one PUT of the task's own fields, no workspace, no publish.
   useEffect(() => {
     if (renameTriggered) {
       dispatch(triggerRename(false)) // Reset immediately to prevent multiple triggers
       if (isReadOnly) return
-      if (id && taskData && taskData.name !== activeTaskName) {
+      const changed =
+        !!taskData &&
+        (taskData.name !== activeTaskName ||
+          (taskData.description ?? '') !== activeTaskDescription)
+      if (id && taskData && changed) {
         fetchApi<{ nameAlreadyExists?: boolean }>({
           url: endpoints.home.libraries.task,
           method: MethodHTTP.PUT,
-          body: { ...taskData, name: activeTaskName },
+          body: {
+            ...taskData,
+            name: activeTaskName,
+            description: activeTaskDescription,
+          },
         })
           .then(async (res) => {
             // The endpoint answers a taken name with 400 + nameAlreadyExists,
@@ -695,17 +738,20 @@ export const UnifiedWorkspace = () => {
                   id: updatedTask.id.toString(),
                   name: updatedTask.name,
                   status: updatedTask.status,
+                  // From the server's copy, so a description refused along
+                  // with a duplicate name is put back the way the name is.
+                  description: updatedTask.description ?? '',
                 }),
               )
             }
             if (!renamed) return
             void mutate({ url: endpoints.home.libraries.tasks })
-            dispatch(setLastSaved(dayjs().format('HH:mm:ss')))
+            dispatch(setLastSaved(dayjs().format('HH:mm')))
             dispatch(triggerSavedFlash(true))
           })
           .catch((err) => {
-            console.error('Failed to rename task:', err)
-            toast.error('Failed to rename task')
+            console.error('Failed to save task details:', err)
+            toast.error("Couldn't save the task's name or description")
           })
       }
     }
@@ -714,6 +760,7 @@ export const UnifiedWorkspace = () => {
     id,
     taskData,
     activeTaskName,
+    activeTaskDescription,
     dispatch,
     mutateTask,
     mutate,
@@ -734,7 +781,7 @@ export const UnifiedWorkspace = () => {
           body: { id: Number(id) },
         })
           .then(async () => {
-            toast.success('Draft discarded successfully')
+            toast.success('Draft discarded')
             // Wait for the refetch to land before clearing editorDataTask —
             // the repopulate effect (below) only fills in initialDataTask
             // when editorDataTask is null, so clearing it first (before
@@ -818,8 +865,64 @@ export const UnifiedWorkspace = () => {
           flex: 1,
           overflow: 'hidden',
           width: '100%',
-          gap: '12px',
-          p: '12px',
+          gap: 'var(--layout-gutter)',
+          p: 'var(--layout-gutter)',
+          // Room for the robot panel, reserved HERE and not on the workspace.
+          //
+          // The panel is `position: fixed`, so it covers whatever is under it.
+          // The workspace child used to carry `width: calc(100% - 35vw)` to
+          // make space — and that never did anything: the child is `flex: 1`,
+          // which sets flex-basis 0 and grow 1, and in a flex row the flex
+          // sizing wins over `width`. So the canvas always spanned the full row
+          // and everything anchored to its right edge went under the panel,
+          // which is where the zoom and fit-to-screen controls live. The
+          // controls appeared to move only when the Copilot panel opened,
+          // because that one is a real flex sibling.
+          //
+          // Padding on the container is the fix that keeps working: it shrinks
+          // the row's content box, flex then distributes what is left, and it
+          // stays correct whichever side Copilot is on and whatever width it
+          // has been dragged to.
+          //
+          // TWO gutters, not one, and getting this wrong is what removed the
+          // space between Copilot and the robot panel entirely. The panel's own
+          // 12px inset is the distance from it to the VIEWPORT EDGE — it is not
+          // the gap between the panel and whatever sits to its left. Reserving
+          // only `width + inset` put the row's content boundary exactly on the
+          // panel's left edge, so the two cards touched.
+          //
+          // width + inset + gutter is what leaves the same 12px here as the
+          // `gap` above leaves between Copilot and the workspace.
+          //
+          // Mirrors the panel's own clamp: it never takes more than what is
+          // left over the workspace's minimum, so this can follow the request
+          // without repeating the arithmetic.
+          // Reads the SAME custom property the panel sizes itself from, so the
+          // two move in the same frame. It used to read `robotPanelWidth` out
+          // of Redux, which is only written when a drag ends — so mid-drag the
+          // panel moved and the workspace did not, and everything caught up in
+          // one jump on release.
+          paddingRight: simOpen
+            ? `calc(min(var(--robot-panel-width, 520px), calc(64vh + 32px), calc(100vw - 584px - var(--copilot-width, 0px))) + var(--layout-gutter) * 2)`
+            : 'var(--layout-gutter)',
+          // Animated when the panel OPENS or CLOSES, never while it is being
+          // dragged.
+          //
+          // Copilot is a flex sibling, so the gap beside it is a real `gap`
+          // property: change its width and the workspace re-lays out in the
+          // same pass, and the spacing is constant by construction. The robot
+          // panel is `position: fixed`, so nothing links it to the workspace —
+          // the gap is synthesised by this padding computing the same number
+          // the panel computes for its width. Two independent values that have
+          // to agree.
+          //
+          // This 300ms tween broke that agreement on every drag frame: the
+          // panel followed the pointer instantly while the padding eased
+          // towards it, so the gap visibly grew and shrank and the workspace
+          // arrived late. The panel's own width tween is disabled the same way
+          // for the same reason.
+          transition: 'padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          'html[data-panel-resizing] &': { transition: 'none' },
           bgcolor: 'background.default',
           boxSizing: 'border-box',
         }}
@@ -827,11 +930,15 @@ export const UnifiedWorkspace = () => {
         {/* Blockly visual workspace */}
         <Box
           sx={{
+            // No `width` here. It carried a calc() meant to make room for the
+            // robot panel and it never had any effect: `flex: 1` sets
+            // flex-basis 0 and grow 1, and flex sizing wins over `width` on the
+            // main axis. The room is reserved by the row's paddingRight above,
+            // where flex cannot ignore it.
             flex: 1,
+            minWidth: 0,
             height: '100%',
             position: 'relative',
-            transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            width: simOpen ? 'calc(100% - 35vw)' : '100%',
             order: chatPosition === 'left' ? 2 : 1,
           }}
         >

@@ -9,7 +9,11 @@
 
 import { UI_TEXT } from 'constants/uiVocabulary'
 
-import { blockDescriptionsByType, blocksColours } from '../blocks'
+import {
+  blockDescriptionsByType,
+  blockLabelsByType,
+  blocksColours,
+} from '../blocks'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,7 +67,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'repeat_block',
-        label: 'Repeat times', // Repeat N Times
+        label: blockLabelsByType.repeat_block, // Repeat N Times
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.repeat_block,
         inputs: 'Number of repetitions | Steps to repeat',
@@ -71,10 +75,11 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'repeat_until_block',
-        // 'Repeat', not 'Repeat until': the block itself reads
-        // "Repeat / Do / Stop when", so a pill saying "Repeat until"
-        // promised words the block does not contain.
-        label: 'Repeat',
+        // Never "Repeat until" — the block reads "Repeat / Do / Stop when",
+        // and a pill promising "until" breaks the scent between palette and
+        // canvas. See blockTextDictionary for why it names the third row
+        // instead, and for what the pill loses that the canvas has.
+        label: blockLabelsByType.repeat_until_block,
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.repeat_until_block,
         inputs: 'Condition to wait for | Steps to repeat',
@@ -82,7 +87,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'when_block',
-        label: 'When → Do', // When … Do
+        label: blockLabelsByType.when_block, // When … Do
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.when_block,
         inputs: 'Condition to check | Steps to run',
@@ -90,7 +95,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'when_otherwise_block',
-        label: 'When → Do / Otherwise', // When … Do … Otherwise
+        label: blockLabelsByType.when_otherwise_block, // When … Do … Otherwise
         colour: blocksColours.logicControl,
         description: blockDescriptionsByType.when_otherwise_block,
         inputs: 'Event to check | First set of steps | Second set of steps',
@@ -105,7 +110,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'pick_block',
-        label: 'Pick up', // Pick
+        label: blockLabelsByType.pick_block, // Pick
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.pick_block,
         inputs: 'Target object',
@@ -115,7 +120,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
         type: 'processing_block',
         // MAPPING REFERENCE:
         // - Block type: 'processing_block' ➔ User-facing pill label: 'Execute skill'
-        label: 'Execute skill',
+        label: blockLabelsByType.processing_block,
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.processing_block,
         inputs: 'Skill to run',
@@ -123,7 +128,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'place_block',
-        label: 'Place at', // Place
+        label: blockLabelsByType.place_block, // Place
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.place_block,
         inputs: 'Target destination',
@@ -131,7 +136,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'move_to_block',
-        label: 'Move to', // Move To
+        label: blockLabelsByType.move_to_block, // Move To
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.move_to_block,
         inputs: 'Motion type | Destination',
@@ -139,21 +144,21 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'open_gripper_block',
-        label: 'Open gripper',
+        label: blockLabelsByType.open_gripper_block,
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.open_gripper_block,
         outputs: 'None',
       },
       {
         type: 'close_gripper_block',
-        label: 'Close gripper',
+        label: blockLabelsByType.close_gripper_block,
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.close_gripper_block,
         outputs: 'None',
       },
       {
         type: 'wait_block',
-        label: 'Wait',
+        label: blockLabelsByType.wait_block,
         colour: blocksColours.robotActions,
         description: blockDescriptionsByType.wait_block,
         inputs: 'Duration (seconds)',
@@ -168,7 +173,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'human_action_block',
-        label: 'Pause and show message', // Human Action -> Wait for Operator
+        label: blockLabelsByType.human_action_block, // Human Action -> Wait for Operator
         colour: blocksColours.humanActions,
         description: blockDescriptionsByType.human_action_block,
         inputs: 'Message to display | Condition to resume',
@@ -176,7 +181,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'notify_action_block',
-        label: 'Show message',
+        label: blockLabelsByType.notify_action_block,
         colour: blocksColours.humanActions,
         description: blockDescriptionsByType.notify_action_block,
         inputs: 'Message to display',
@@ -195,7 +200,11 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       // Each entry here acts as a "template"; the actual pills are rendered per data item.
       {
         type: 'object_block',
-        label: 'Objects', // Object
+        // Category labels, deliberately NOT in blockLabelsByType: these three
+        // pills are plural headings for a picker ("Objects" opens a list of
+        // objects), while every entry in that dictionary names one step block
+        // in the singular. The picker builds its own rows from entity names.
+        label: 'Objects',
         colour: blocksColours.objectsPositions,
         dynamic: true,
       },
@@ -224,7 +233,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
     blocks: [
       {
         type: 'find_object_block',
-        label: 'Object detected', // Find Object
+        label: blockLabelsByType.find_object_block, // Find Object
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.find_object_block,
         outputs: 'Yes or No',
@@ -232,7 +241,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'gesture_block',
-        label: 'Gesture detected', // Gesture Detect
+        label: blockLabelsByType.gesture_block, // Gesture Detect
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.gesture_block,
         outputs: 'Yes or No',
@@ -240,7 +249,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'voice_command_block',
-        label: 'Voice command',
+        label: blockLabelsByType.voice_command_block,
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.voice_command_block,
         outputs: 'Yes or No',
@@ -248,7 +257,7 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       },
       {
         type: 'human_feedback_block',
-        label: 'Confirm button pressed',
+        label: blockLabelsByType.human_feedback_block,
         colour: blocksColours.eventsConditions,
         description: blockDescriptionsByType.human_feedback_block,
         outputs: 'Yes or No',

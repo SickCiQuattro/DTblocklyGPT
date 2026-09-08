@@ -110,6 +110,28 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
 
   const [width, setWidth] = useState(360)
   const [isResizing, setIsResizing] = useState(false)
+
+  // Publish the footprint so the robot panel can leave the workspace a floor.
+  //
+  // That panel is `position: fixed`, so it cannot learn from flex how much room
+  // is left; and this width lives in local state, not Redux, so it cannot read
+  // it either. A custom property is the channel the app already uses for the
+  // same kind of cross-layout fact (--layout-appbar-height, consumed by the
+  // panel's own `top`).
+  //
+  // Zero when closed, and set during a drag too: the panel clamps on every
+  // frame of the resize, so the workspace cannot be squeezed below its minimum
+  // even momentarily.
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty(
+      '--copilot-width',
+      chatOpen ? `${width + 12}px` : '0px',
+    )
+    return () => {
+      root.style.removeProperty('--copilot-width')
+    }
+  }, [chatOpen, width])
   const [showProposalOverlay, setShowProposalOverlay] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   // Applying a proposal replaces the whole workspace (chatSync.ts disposes
@@ -161,6 +183,15 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const { data: dataLocations = [] } = useSWR<LocationListType[], Error>({
     url: endpoints.graphic.locationsGraphic,
   })
+  // The assistant's Saved Task catalogue. Same SWR key the toolbox and the
+  // robot panel already hold, so this costs no request. Without it the prompt
+  // told the model that a "Saved Tasks" category exists and never said what is
+  // in it — and a user asking to reuse one got an invented saved task back,
+  // reported as added.
+  const { data: dataMacros = [] } = useSWR<
+    { id: number; name: string; description?: string }[],
+    Error
+  >({ url: endpoints.graphic.macroList })
 
   // Auto-open overlay when a new proposal is received
   const prevProposedTaskRef = useRef<any>(null)
@@ -309,6 +340,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           dataObjects,
           dataLocations,
           dataActions,
+          dataMacros,
           dataBlocks: buildBlockCatalog(),
           taskStructure: taskStructure,
         },
@@ -350,6 +382,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           dataObjects,
           dataLocations,
           dataActions,
+          dataMacros,
           dataBlocks: buildBlockCatalog(),
           taskStructure: taskStructure,
         },
@@ -494,13 +527,40 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         position: 'relative',
         width: chatOpen ? width : 0,
         minWidth: chatOpen ? width : 0,
+        // A zero-width flex child still gets the row's `gap`, so cancel it —
+        // on the ONE side the gap is actually on.
+        //
+        // The first attempt split it symmetrically, half on each side. A gap
+        // sits between two children, not around one: with Copilot on the right
+        // the whole 12px is to its left, so halving it left 6px unaccounted for
+        // on that side and pulled the row's content edge 6px the wrong way. The
+        // visible result was double spacing between the workspace and the robot
+        // panel, exactly where it was supposed to be single.
+        //
+        // Which side depends on `order`, so the margin follows it.
+        ...(chatOpen
+          ? { marginInlineStart: 0, marginInlineEnd: 0 }
+          : chatPosition === 'left'
+            ? { marginInlineEnd: 'calc(var(--layout-gutter) * -1)' }
+            : { marginInlineStart: 'calc(var(--layout-gutter) * -1)' }),
         order: chatPosition === 'left' ? 1 : 2,
         transition: isResizing
           ? 'none'
           : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
         background: theme.palette.background.paper,
-        border: `1px solid ${theme.palette.divider}`,
+        // Conditional HERE, not in a spread above the base properties.
+        //
+        // `width: 0` alone does not hide this panel: with box-sizing
+        // border-box the 1px border on each side still draws, so the collapsed
+        // Copilot rendered as a 2px vertical rule between the workspace and the
+        // robot panel — read as a third surface, or as a seam.
+        //
+        // The first attempt put `border: 'none'` in a conditional spread placed
+        // ABOVE this line. In an object literal the later key wins, so this one
+        // overwrote it and the rule stayed on screen. Same reason it has to be
+        // the base declaration that branches, not an override sitting earlier.
+        border: chatOpen ? `1px solid ${theme.palette.divider}` : 'none',
         borderRadius: '16px',
         boxShadow: chatOpen ? theme.customShadows.card : 'none',
         display: 'flex',

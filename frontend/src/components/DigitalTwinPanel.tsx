@@ -28,12 +28,11 @@ import {
   CheckCircle2,
   VideoOff,
   Bell,
-  Maximize2,
-  Minimize2,
   Info,
   ScanEye,
   Clock,
   User,
+  Bot,
 } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import * as Blockly from 'blockly/core'
@@ -42,10 +41,16 @@ import useSWR from 'swr'
 
 import { TaskStatus } from 'pages/tasks/types'
 import { useAppSelector } from 'store/reducers'
-import { toggleSim, toggleRobotPanelWidth } from 'store/reducers/task'
+import {
+  toggleSim,
+  setRobotPanelWidth,
+  ROBOT_PANEL_MIN_PX,
+  ROBOT_PANEL_DEFAULT_PX,
+} from 'store/reducers/task'
 import {
   RECOGNIZED_GESTURES,
   RECOGNIZED_VOICE_COMMANDS,
+  voiceLabelWithSpokenForm,
   NOTHING_RECOGNIZED,
   gestureLabel,
   spokenExample,
@@ -63,6 +68,7 @@ import {
 } from 'store/reducers/simulation'
 import { useRosEvents } from 'hooks/useRosEvents'
 import { useWebcamVision } from 'hooks/useWebcamVision'
+import { useRecognitionSound } from 'hooks/useRecognitionSound'
 import { useVoiceCommand } from 'hooks/useVoiceCommand'
 import { MacroWorkspaces, recognitionNeedsOf } from 'utils/runRecognitionNeeds'
 import {
@@ -106,6 +112,34 @@ const humanizeBlockType = (blockType?: string): string => {
 // (outer radius − border width) — not the outer radius. `borderRadius:
 // 'inherit'` handed the overlays the OUTER 10px inside a 9px curve, so each
 // corner was over-rounded and let a sliver of the frame through.
+/**
+ * The workspace never goes below this, whatever the other two panels ask for.
+ *
+ * It is the app's primary surface — the place the task is actually built — and
+ * it was the only one of the three with no minimum: Copilot has flexShrink 0
+ * and this panel is fixed, so the workspace absorbed every request until it was
+ * a 31px stripe of half-drawn blocks. 480px is a human-action block with its
+ * resume condition still readable, which is the widest thing a task normally
+ * holds.
+ */
+const WORKSPACE_MIN_PX = 480
+/** Nav rail + the row's own padding and gutters. */
+const LAYOUT_CHROME_PX = 104
+
+/**
+ * The video's own ceiling, and therefore the panel's.
+ *
+ * The live view is capped at 64vh of width (see the box below for why that
+ * number). Past the width where the video stops growing, a wider panel buys
+ * nothing: the stream — the reason the panel is open — stays exactly the same
+ * size while the workspace shrinks to pay for it. So the panel may not grow
+ * beyond its own content's ceiling plus the 16px padding on each side.
+ *
+ * Expressed in vh for the same reason the video's cap is: what bounds this is
+ * the vertical budget, and a 4:3 box spends 0.75px of height per px of width.
+ */
+const PANEL_MAX_CSS = 'calc(64vh + 32px)'
+
 const VIDEO_RADIUS_PX = 10
 const VIDEO_BORDER_PX = 1
 const VIDEO_INNER_RADIUS = `${VIDEO_RADIUS_PX - VIDEO_BORDER_PX}px`
@@ -208,7 +242,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // the spinner below spins forever if web_video_server/the Vite camera
   // proxy is down, indistinguishable from a slow-starting simulation.
   const [feedError, setFeedError] = useState(false)
-  const [stepCompleted, setStepCompleted] = useState(false)
+  // The completion TEXT, not a boolean: a step can complete with something
+  // worth naming (a simulated detection says what it found and that it was
+  // simulated) or with nothing to add, where the generic line is right
+  // because the operator has just done the thing themselves.
+  const [stepCompleted, setStepCompleted] = useState<string | null>(null)
   // Milliseconds left, not whole seconds: the bar reads this directly, so it
   // moves ten times a second instead of stepping 3.3% once a second. The
   // number on screen still shows whole seconds.
@@ -242,7 +280,82 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     initialExecutionTarget ?? 'sim',
   )
   const [confirmRealRun, setConfirmRealRun] = useState(false)
-  const isWide = robotPanelWidth === 'wide'
+  // Announced to assistive tech only. The width that actually applies is the
+  // CSS `min()` on the panel below, which re-evaluates on every window resize
+  // without anything having to re-render; this mirrors it for aria-valuemax so
+  // a keyboard user is told the same ceiling they will hit.
+  const maxPanelPx =
+    typeof window !== 'undefined'
+      ? Math.max(
+          ROBOT_PANEL_MIN_PX,
+          Math.min(
+            // PANEL_MAX_CSS, in the units this side of the stylesheet has.
+            window.innerHeight * 0.64 + 32,
+            window.innerWidth -
+              LAYOUT_CHROME_PX -
+              WORKSPACE_MIN_PX -
+              (parseFloat(
+                getComputedStyle(document.documentElement).getPropertyValue(
+                  '--copilot-width',
+                ),
+              ) || 0),
+          ),
+        )
+      : ROBOT_PANEL_DEFAULT_PX
+  // The width travels as a CSS custom property, and React is told once, at the
+  // end.
+  //
+  // Three attempts got here. Dispatching on every pointermove meant a store
+  // update, a re-render of everything subscribed to it and a
+  // localStorage.setItem sixty times a second. Moving to local React state
+  // fixed the weight but broke the layout: the row reserves its room from the
+  // Redux value, so the workspace only caught up when the mouse was released.
+  //
+  // A custom property fixes both, because it is the one channel BOTH sides
+  // already read — this panel's own `width` and the row's `paddingRight`. A
+  // drag frame writes one string to documentElement.style: no reconciliation,
+  // no store, and every dependent box moves in the same frame. Redux is told on
+  // release, where it is a preference to persist rather than a live value.
+  const [isResizing, setIsResizing] = useState(false)
+
+  useEffect(() => {
+    if (isResizing) return
+    document.documentElement.style.setProperty(
+      '--robot-panel-width',
+      `${robotPanelWidth}px`,
+    )
+  }, [robotPanelWidth, isResizing])
+
+  const startPanelResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = robotPanelWidth
+    let latest = startWidth
+    setIsResizing(true)
+    // Flags the drag on the document element so CSS elsewhere can suspend its
+    // own transitions — the row's padding-right in task-workspace is the one
+    // that matters, because it is what synthesises the gap beside this panel.
+    // A DOM attribute rather than Redux: it is read by a stylesheet, not by a
+    // component, and it must land in the same frame as the width.
+    document.documentElement.dataset.panelResizing = ''
+    const onMove = (ev: PointerEvent) => {
+      // Dragging LEFT widens: the panel is anchored to the right edge.
+      latest = Math.max(ROBOT_PANEL_MIN_PX, startWidth + (startX - ev.clientX))
+      document.documentElement.style.setProperty(
+        '--robot-panel-width',
+        `${latest}px`,
+      )
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      setIsResizing(false)
+      delete document.documentElement.dataset.panelResizing
+      dispatch(setRobotPanelWidth(latest))
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
   // Hardware-armed status (server DRIVE_HARDWARE + cobotta_node reachable),
   // fetched when "Real robot" is selected — the b-CAP host is server config
   // now, not a per-request robot picker.
@@ -483,6 +596,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // The hook owns voice's own start/stop/cleanup lifecycle entirely — it
   // just needs to know whether it should be listening right now.
   const voice = useVoiceCommand(voiceActive)
+  const sound = useRecognitionSound()
 
   // Prefer webcam gesture in live mode (lower latency than SocketIO roundtrip)
   const activeGesture =
@@ -536,8 +650,8 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // the shared transient lifetime rather than a hand-picked 2s.
   useEffect(() => {
     if (humanStep?.status !== 'completed') return
-    setStepCompleted(true)
-    const t = setTimeout(() => setStepCompleted(false), MESSAGE_TTL_MS)
+    setStepCompleted(humanStep.description || 'Step completed')
+    const t = setTimeout(() => setStepCompleted(null), MESSAGE_TTL_MS)
     return () => clearTimeout(t)
   }, [humanStep])
 
@@ -546,11 +660,75 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // at the top of the scroll body: a plain flex child with no sticky and no
   // scroll-into-view, so it could appear off-screen and delete itself four
   // seconds later, and mounting it shoved the whole video down ~44px mid-run.
+  // It lasts until something makes it stale, and it used to last four seconds.
+  //
+  // MESSAGE_TTL_MS is the lifetime the panel's duration rule gives to "an
+  // event with nothing left to handle" — a step completing, a run finishing.
+  // This is the other case in that same rule, and it always was: the entire
+  // reason the block exists is that a PERSON has to read something, and
+  // "and continue" means the program will not wait while they do. So the thing
+  // left to handle is the reading, and nothing on screen could know it had
+  // happened. Four seconds is about what it takes to notice a pill has
+  // appeared, look up from a moving arm, and find it already gone.
+  //
+  // Three things end it now, and each one is a real reason the text stopped
+  // being what the operator needs to see:
+  //
+  //   1. they dismiss it — the only positive evidence it was read;
+  //   2. a newer authored message takes the slot. Another Show message
+  //      overwrites this state; a waiting human step clears it (below), and
+  //      that one also outranks it in `videoPill` so the two can never fight
+  //      over the same 40 pixels of video;
+  //   3. the run ends (below). A message about a run that is over is not a
+  //      message, and leaving it there would carry it into the next run.
+  //
+  // Deliberately NOT a longer timeout. Any number picked here is a guess about
+  // how long someone needs to walk to a bench and back, and the failure it
+  // produces is silent: the instruction disappears while they are away from
+  // the screen, which is the case the block exists for.
   useEffect(() => {
     if (humanStep?.status !== 'notify') return
     setNotifyPill(humanStep.description || 'Notification')
-    const t = setTimeout(() => setNotifyPill(null), MESSAGE_TTL_MS)
-    return () => clearTimeout(t)
+  }, [humanStep])
+
+  // A waiting step supersedes a Show message: the operator's attention has a
+  // new destination, and the older text is no longer the one to act on. Not
+  // queued behind it either — `videoPill`'s priority would otherwise bring the
+  // stale pill back the moment the wait resolved.
+  useEffect(() => {
+    if (humanStep?.status === 'started') setNotifyPill(null)
+  }, [humanStep])
+
+  // And it does not outlive its run. Without this the pill would still be over
+  // the video when the panel is opened for the next task, describing a step of
+  // one that finished — the same leak the per-visit Redux flags in
+  // store/reducers/task.ts have to be re-synced for.
+  useEffect(() => {
+    if (!simulation.isRunning) setNotifyPill(null)
+  }, [simulation.isRunning])
+
+  // The audible half of the same three moments the pills announce visually.
+  //
+  // Keyed on `humanStep`, the one object that already carries every transition
+  // of an operator step, so the sound cannot drift out of step with what the
+  // panel is showing — they are driven from the same event.
+  //
+  // The microphone is open across the WHOLE run, not just during a voice step
+  // (`voiceActive` is `simulation.isRunning && taskNeedsVoice`), so these tones
+  // are always heard by the recogniser. They cannot be misread as a command:
+  // matchVoiceKeyword accepts only the four exact words, and a sine burst is
+  // not one of them.
+  useEffect(() => {
+    if (!humanStep) return
+    if (humanStep.status === 'started') sound.play('waiting')
+    else if (humanStep.status === 'completed') sound.play('accepted')
+    else if (humanStep.status === 'timeout' || humanStep.status === 'error') {
+      sound.play('failed')
+    }
+    // `sound` is deliberately not a dependency: `play` changes identity with
+    // the mute setting, and re-running this effect on a toggle would replay
+    // the cue of whatever step happens to be current.
+    // eslint-disable-next-line @eslint-react/exhaustive-deps
   }, [humanStep])
 
   // Task aborted — an event with an open consequence, so it stays until the
@@ -681,6 +859,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
 
   // Real-robot runs go through a confirm dialog (irreversible physical motion).
   const handleRun = () => {
+    // Web Audio has to be started from a user gesture or it stays suspended
+    // and every later cue is dropped silently. This click is that gesture.
+    sound.unlock()
     if (executionTarget === 'real') {
       setConfirmRealRun(true)
       return
@@ -896,18 +1077,29 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // now reads as "make this hand shape". The wrong instruction, in the one
   // place the operator is under a deadline.
   //
-  // Gesture and object steps never reach this overlay (they are excluded so
-  // the camera stays visible), so the channels here are exactly these three
-  // plus a bare wait. Mic and Clock are the marks this panel and the chat
-  // preview already use for voice and time; `User` is the "Pause and show
-  // message" block's own icon in the toolbox, which ties the runtime moment
+  // All FOUR channels reach it now. It used to serve only the overlay, which
+  // gesture and object steps are excluded from so the camera stays visible —
+  // and that exclusion silently took the operator's own instruction with it
+  // (see videoPill). The instruction moved onto the video, so this mark rides
+  // along and has to answer for every channel.
+  //
+  // Mic and Clock are the marks this panel and the chat preview already use
+  // for voice and time. A gesture step draws THE GESTURE it is asking for, the
+  // same rule the REQUIRED readout follows — `Hand` only as the fallback,
+  // where there is no named gesture to misread. `ScanEye` is the Conditions
+  // category's own mark for "an object is detected". `User` is the "Pause and
+  // show message" block's icon in the toolbox, which ties the runtime moment
   // back to the block on the canvas.
   const WaitIcon =
     humanStep?.condition === 'voice'
       ? Mic
       : humanStep?.condition === 'timer'
         ? Clock
-        : User
+        : humanStep?.condition === 'gesture'
+          ? gestureIcon(humanStep?.value) || Hand
+          : humanStep?.condition === 'object'
+            ? ScanEye
+            : User
   // Both of these name a gesture, so both must draw THAT gesture. `Hand` is
   // the fallback only while nothing is detected, where there is no value to
   // misread. Hoisted out of the JSX: a component identity built inside the
@@ -917,6 +1109,66 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   const SandboxGestureIcon = gestureIcon(webcam.gesture) || Hand
   const RequiredGestureIcon = gestureIcon(expectedGesture)
   const DetectedGestureIcon = gestureIcon(gestureActive ? activeGesture : null)
+
+  // What the step wants, next to what the system currently perceives — for
+  // EVERY channel that perceives something, not only for gesture.
+  //
+  // It existed for gesture alone, and the gap it left is the one an operator
+  // cannot reason their way out of: without it, "the microphone is not hearing
+  // me" and "the microphone hears me and the word is wrong" look identical,
+  // and so do "the camera cannot see the tube" and "the camera sees it as
+  // something else". That is the difference between trying again and changing
+  // what you are doing, and the operator has about thirty seconds to pick.
+  //
+  // It matters twice over for Part B, which times the four channels against
+  // each other: a channel that shows whether it is perceiving you is not
+  // competing on equal terms with three that do not.
+  //
+  // human_feedback and timer return null on purpose. A button press is not a
+  // perception — the button is its own readout — and a timer perceives nothing.
+  const waitReadout: {
+    required: string
+    detected: string
+    match: boolean
+  } | null = useMemo(() => {
+    if (!isHumanStepActive || !humanStep) return null
+    switch (humanStep.condition) {
+      case 'gesture':
+        return {
+          required: gestureLabel(humanStep.value),
+          detected: gestureLabel(activeGesture),
+          match: gestureMatch,
+        }
+      case 'voice': {
+        const heard = voice.word
+        return {
+          required: voiceLabel(humanStep.value),
+          detected: heard ? voiceLabel(heard) : '—',
+          match: !!heard && heard === humanStep.value,
+        }
+      }
+      case 'object': {
+        const seen = activeDetections.map((d) => d.class)
+        const want = String(humanStep.value ?? '')
+        return {
+          required: want,
+          // Two names at most: the readout is scanned under a countdown, and a
+          // full list of everything the model fired on is not scannable.
+          detected: seen.length ? seen.slice(0, 2).join(', ') : '—',
+          match: seen.some((c) => c.toLowerCase() === want.toLowerCase()),
+        }
+      }
+      default:
+        return null
+    }
+  }, [
+    isHumanStepActive,
+    humanStep,
+    activeGesture,
+    gestureMatch,
+    voice.word,
+    activeDetections,
+  ])
 
   // Put focus on the Confirm button the moment a button-confirmed human step
   // starts. The STATUS line already announces the wait, but announcing it is
@@ -955,6 +1207,28 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         text: errorBanner,
         onDismiss: () => setErrorBanner(null),
       },
+      // A bypass is not a timeout, and the two arrive with the same status.
+      //
+      // simulate.py auto-satisfies a condition nothing can observe — no
+      // detector running, an unreachable bridge — and reports it down this
+      // same channel. The step PASSES and the run carries on, while this
+      // banner said "object "tube" not detected", which is both the opposite
+      // of what happened and an accusation aimed at the operator. Saying who
+      // completed the step is the whole point: the log records these
+      // separately for exactly the same reason (see _mark_condition_bypass).
+      isTimeout &&
+        humanStep?.bypass_reason && {
+          key: 'bypass',
+          tone: 'info' as const,
+          text:
+            humanStep.bypass_reason === 'vision_node_absent'
+              ? 'Step completed by the system — no object camera is running, so nothing could look for it.'
+              : humanStep.bypass_reason === 'bridge_unreachable'
+                ? 'Step completed by the system — the camera could not be reached, so nothing could check.'
+                : humanStep.bypass_reason === 'object_already_in_frame'
+                  ? `Step completed by the system — "${humanStep.value}" was already in view before the step began.`
+                  : 'Step completed by the system, not by you.',
+        },
       isTimeout && {
         key: 'timeout',
         tone: 'info' as const,
@@ -979,10 +1253,53 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // ── Slot 1: NOW ────────────────────────────────────────────────────────
   // Same pattern as the outcome banner: priority is the order of the array,
   // and the slot holds one thing. Authored text outranks the panel's own ack.
-  const videoPill: { tone: 'info' | 'success'; text: string } | null =
+  // `wait: true` marks the one entry that must not expire and that carries the
+  // channel's own mark instead of the notify bell.
+  const videoPill: {
+    tone: 'info' | 'success'
+    text: string
+    wait?: boolean
+    /** Present only on a message that persists until acknowledged. */
+    onDismiss?: () => void
+  } | null =
     [
-      notifyPill && { tone: 'info' as const, text: notifyPill },
-      stepCompleted && { tone: 'success' as const, text: 'Step completed' },
+      // The operator's own instruction, and it outranks everything because it
+      // is the only text here they wrote themselves.
+      //
+      // It used to render in one place only — the dark overlay that replaces
+      // the video — and gesture and object steps are deliberately excluded
+      // from that overlay so the camera stays visible. Correct reason, unclosed
+      // consequence: for those two channels the instruction was rendered
+      // NOWHERE. "Show the camera a blue tube" ran with the screen saying only
+      // "Waiting to find tube".
+      //
+      // That is a measurement problem, not only a usability one.
+      // seed_partb_tasks.py gives all four Part-B tasks a single shared
+      // _TASK_DESC precisely so the on-screen instruction is identical across
+      // the four conditions — "anything else that differed between them would
+      // be a second explanation for any difference in the measurements". The
+      // constant made the DATA identical while two of the four screens showed
+      // no instruction at all.
+      //
+      // So the instruction lives over the video, where Show message already
+      // puts its own text. The camera stays visible for every channel, and the
+      // difference between the two blocks stops being WHERE the message
+      // appears and becomes how long it stays and what accompanies it.
+      isHumanStepActive &&
+        humanStep?.description && {
+          tone: 'info' as const,
+          text: humanStep.description,
+          wait: true,
+        },
+      // The ✕ is what lets this one stay. A message that never expires and
+      // cannot be closed is not persistent, it is stuck — and it sits on the
+      // live view, the one thing the operator is watching.
+      notifyPill && {
+        tone: 'info' as const,
+        text: notifyPill,
+        onDismiss: () => setNotifyPill(null),
+      },
+      stepCompleted && { tone: 'success' as const, text: stepCompleted },
     ].find(Boolean) || null
 
   // Fallback matches the backend's own default (CONDITION_TIMEOUT_S). It only
@@ -1004,7 +1321,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // camera tab" behaviour entirely — no more forced tab switch or camera
   // toggle mid-run. Events panel shows whenever a live stream is actually
   // running (sandbox test or a live-mode run) or a run is in progress.
-  const eventsVisible = cameraActive || voiceActive || simulation.isRunning
+  // Hidden while a step is actually waiting, and that is the point rather than
+  // a space saving. This section lists the recognisers generically — a
+  // "Gesture" row is drawn whether or not the step is asking for a gesture —
+  // so during an OBJECT wait the panel showed "Gesture … None" next to a step
+  // that has nothing to do with gestures, and next to a STATUS line naming a
+  // third thing. Three answers to "what is the robot waiting for", one of them
+  // wrong.
+  //
+  // While a step waits, `waitReadout` above answers that question exactly, for
+  // the channel actually in play. This comes back the moment the step resolves,
+  // where it does its real job: showing that the recognisers are alive between
+  // steps.
+  const eventsVisible =
+    (cameraActive || voiceActive || simulation.isRunning) && !isHumanStepActive
 
   // Preflight checklist: the system already knows what a task needs (its own
   // block types, its publish status, the selected target) — say so up front
@@ -1017,6 +1347,34 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     action?: { label: string; onClick: () => void }
   }
   const preflightIssues: PreflightIssue[] = []
+
+  // The event channel, checked FIRST, because without it this panel is blind
+  // for the whole run.
+  //
+  // `connected` is the SocketIO stream on :5001 — block_step, human_step,
+  // gestures, detections. It is not the arm and not the HTTP bridge: a run can
+  // start over :5000 while this is down, and then the operator watches a still
+  // picture with no highlighted block, no "waiting for a gesture", and no
+  // countdown, which looks exactly like a run frozen at step zero.
+  //
+  // It was missing from this list, and that produced the contradiction an
+  // operator reported: an amber "Offline" pill in the header above a green
+  // "Ready to run" at the foot of the same column. Both were true — the pill is
+  // about the channel, the checkmark about the task — but nothing said so, and
+  // the reassuring one was the one next to the button. Listing it here makes
+  // them agree by construction: "Ready to run" is the empty state of this list,
+  // so it can no longer appear while the panel cannot see the run.
+  if (!connected) {
+    preflightIssues.push({
+      // Not "from the simulator". The stream is the same on both targets, but
+      // an operator who has just chosen "Real robot" reads that phrase as
+      // naming the other mode and skips a notice that applies to them. Naming
+      // what the panel cannot do is true either way, and it is the part they
+      // can act on.
+      text: 'No live updates — the run would start, but this panel could not show which block is running or when it needs you.',
+    })
+  }
+
   if (!canRun) {
     preflightIssues.push({
       text:
@@ -1077,19 +1435,63 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       tabIndex={-1}
       sx={{
         position: 'fixed',
-        right: '12px',
-        top: 'calc(var(--layout-appbar-height, 56px) + 12px)',
-        bottom: 'calc(var(--layout-statusbar-height, 40px) + 12px)',
-        width: isWide ? '50vw' : '35vw',
+        right: 'var(--layout-gutter)',
+        top: 'calc(var(--layout-appbar-height, 56px) + var(--layout-gutter))',
+        // The task-code panel is a flex sibling of the status bar; this one is
+        // fixed, so nothing links it to either. Without the third term it sat
+        // on top of the code panel whenever both were open — the operator
+        // dragged the code view taller and watched the robot panel cover it.
+        // --layout-codepanel-height is published by BottomPanel (and already
+        // carries its own clamp), the same channel Copilot uses for its width.
+        bottom: `calc(var(--layout-statusbar-height, 40px) + var(--layout-gutter) + var(--layout-codepanel-height, 0px))`,
+        // Clamped so the workspace keeps a floor.
+        //
+        // Copilot is a flex sibling with flexShrink 0, this panel is fixed, and
+        // the workspace between them is `flex: 1, minWidth: 0` — the only one
+        // that yields, and it yields all the way to nothing. With Copilot
+        // dragged to 600px and this panel at 50vw, a 1470px viewport left the
+        // workspace 31px: a vertical stripe of half-drawn blocks, which reads
+        // as broken rather than as narrow.
+        //
+        // So the chosen width is a request, not a promise. The panel takes what
+        // it asked for or what is left over WORKSPACE_MIN_PX, whichever is
+        // smaller. Pressing "wide" with Copilot open still widens the panel,
+        // just not to 50vw — a control that does less is honest; one that
+        // silently destroys the main surface is not.
+        //
+        // --copilot-width is published by ChatThread, the same trick the app
+        // already uses for --layout-appbar-height above.
+        width: `min(var(--robot-panel-width, 520px), ${PANEL_MAX_CSS}, calc(100vw - ${
+          LAYOUT_CHROME_PX + WORKSPACE_MIN_PX
+        }px - var(--copilot-width, 0px)))`,
         zIndex: 100,
         background: panel.surface,
-        backdropFilter: 'blur(24px)',
         borderRadius: '16px',
         border: `1px solid ${panel.hairlineStrong}`,
-        boxShadow: theme.customShadows.cardDark,
-        transform: simOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition:
-          'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        // No drop shadow and no backdrop blur. Both said "floating above the
+        // page", and that stopped being true once the workspace started
+        // reserving room for this panel: it is a column beside its peers now,
+        // and it was the only one of the three wearing an elevation. Nothing
+        // shows through it either, so the blur was cost without effect.
+        // +12px so the panel clears the viewport entirely when closed.
+        //
+        // It is inset from the right edge by that much, so sliding it out by
+        // 100% of its OWN width still left 12px of dark surface parked against
+        // the edge. It looked like a collapsed drawer and behaved like nothing:
+        // clicking it did not open the panel, because it is the panel — off
+        // screen except for its inset — and the only thing that opens it is
+        // Run. A strip that suggests an affordance it does not have is worse
+        // than no strip.
+        transform: simOpen
+          ? 'translateX(0)'
+          : 'translateX(calc(100% + var(--layout-gutter)))',
+        // No width animation while the pointer is down. Copilot's handle has
+        // always done this; without it every pointermove started a fresh 250ms
+        // tween, so the panel chased the cursor a quarter second behind and the
+        // drag felt broken rather than slow.
+        transition: isResizing
+          ? 'none'
+          : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
@@ -1098,20 +1500,73 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         outline: 'none',
       }}
     >
+      {/* Resize handle, on the left edge because the panel is anchored right.
+          Same WAI-ARIA "Window Splitter" pattern Copilot uses — role
+          separator, focusable, arrow keys — because these two are peers and
+          were being resized in two different ways: one dragged freely, the
+          other snapped between two fixed widths by an icon. */}
+      {simOpen && (
+        /* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
+        <div
+          onPointerDown={startPanelResize}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize robot panel"
+          aria-valuenow={robotPanelWidth}
+          aria-valuemin={ROBOT_PANEL_MIN_PX}
+          aria-valuemax={Math.round(maxPanelPx)}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            const STEP = 16
+            // Left widens: the panel grows towards the workspace.
+            const delta =
+              e.key === 'ArrowLeft'
+                ? STEP
+                : e.key === 'ArrowRight'
+                  ? -STEP
+                  : null
+            if (delta === null) return
+            e.preventDefault()
+            dispatch(setRobotPanelWidth(robotPanelWidth + delta))
+          }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '6px',
+            height: '100%',
+            cursor: 'col-resize',
+            zIndex: 101,
+            background: 'transparent',
+          }}
+          className="resize-handle"
+        />
+        /* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
+      )}
+
       {/* ── Header ── */}
       <Box
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '14px 18px',
+          // 16px, matching the footer and the scroll body below it. It was
+          // 18px, so the title sat two pixels further in than every heading
+          // under it and the panel had no single left edge.
+          padding: '14px 16px',
           background: panel.chrome,
           borderBottom: `1px solid ${panel.hairline}`,
           flexShrink: 0,
         }}
       >
         <Stack direction="row" sx={{ alignItems: 'center' }} spacing={1.5}>
-          <Camera size={16} color={panel.primary} />
+          {/* The panel is the robot, not the camera. This was a Camera icon —
+              the same glyph used a few hundred pixels below as the video's own
+              empty-state mark, so one symbol stood for two different things on
+              one screen, and the more specific meaning (a video feed) was the
+              one sitting on the title. `Bot` is also what the navigation rail
+              already puts beside "My Robot": same object, same mark. */}
+          <Bot size={16} color={panel.primary} />
           <Typography
             id="digital-twin-title"
             sx={{
@@ -1122,18 +1577,48 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           >
             Robot
           </Typography>
+          {/* One indicator, one shape, one hue per state.
+              ── shape ──
+              The pill used to appear only in the bad state while the good one
+              was bare text, so the two halves of a single two-state control
+              were built out of different components: a border and a fill
+              arrived from nowhere, and the title beside it shifted sideways
+              every time the stream dropped or came back.
+
+              ── hue ──
+              Then the two states still did not agree, because one was
+              monochrome and the other was not: neutral pill, grey text, green
+              dot — three families in the "on" state against amber-everything
+              in the "off" one. Here each state takes exactly one tone and
+              applies it to fill, border, dot and text alike, at the same 0.12 /
+              0.4 intensities as the hardware chip below. Three chips, one
+              component, hue is the only variable.
+
+              ── why not amber, which is what "off" used to be ──
+              Amber is reserved across this panel for one meaning — the
+              physical arm is involved — and PanelMessage enforces it in the
+              type system. `connected` is the SocketIO event stream: not the
+              arm, not the HTTP bridge. The preflight list twenty lines up
+              already reports this exact fact, and reports it as `info`,
+              because that is what it is. The header said the same thing in
+              amber, so one fact wore two colours in one column, and the amber
+              one competed with the "Real robot" chip beside it — which is the
+              only thing in this header that IS about the arm. Guarded by
+              test_panel_chrome.py. */}
           <Stack
             direction="row"
             spacing={0.6}
             sx={{
               alignItems: 'center',
-              ...(!connected && {
-                px: 1,
-                py: 0.25,
-                borderRadius: '999px',
-                bgcolor: panel.warningTint(0.12),
-                border: `1px solid ${panel.warningTint(0.4)}`,
-              }),
+              px: 1,
+              py: 0.25,
+              borderRadius: '999px',
+              bgcolor: connected
+                ? panel.successTint(0.12)
+                : panel.primaryTint(0.12),
+              border: `1px solid ${
+                connected ? panel.successTint(0.4) : panel.primaryTint(0.4)
+              }`,
             }}
           >
             <Box
@@ -1141,16 +1626,24 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                bgcolor: connected ? panel.success : panel.warning,
+                bgcolor: connected ? panel.success : panel.primaryLight,
               }}
             />
             <Typography
               sx={{
                 fontSize: panelType.micro,
-                color: connected ? panel.textDim : panel.warningLight,
+                fontWeight: 600,
+                color: connected ? panel.successLight : panel.primaryFaint,
               }}
             >
-              {connected ? 'Connected' : 'Offline'}
+              {/* Names the CHANNEL, not the robot.
+                  "Connected"/"Offline" sat under the word "Robot" beside a
+                  camera icon, so it read as a verdict on the arm. It is neither
+                  the arm nor the HTTP bridge: it is the event stream that
+                  carries which block is running and when a step needs the
+                  operator. Saying "live updates" says what stops if it drops,
+                  which is the only thing an operator can act on. */}
+              {connected ? 'Live updates on' : 'No live updates'}
             </Typography>
           </Stack>
           {/* The panel reserves amber for one meaning — the physical arm is
@@ -1189,21 +1682,12 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           )}
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <Tooltip title={isWide ? 'Standard width' : 'Wide'}>
-            <IconButton
-              onClick={() => dispatch(toggleRobotPanelWidth())}
-              size="small"
-              aria-label={
-                isWide ? 'Switch to standard width' : 'Switch to wide'
-              }
-              sx={{
-                color: panel.iconMuted,
-                '&:hover': { color: panel.white, background: panel.hover },
-              }}
-            >
-              {isWide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-            </IconButton>
-          </Tooltip>
+          {/* No expand/restore button. The panel had two ways to be
+              resized — this icon and the edge handle — which is one more than
+              Copilot beside it has and one more than anything needs. The
+              handle is the shared model; a second control that jumps to fixed
+              sizes competes with it and re-opens the inconsistency the handle
+              was added to close. */}
           <IconButton
             onClick={handleClose}
             size="small"
@@ -1227,8 +1711,46 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
-          padding: '14px 16px',
+          // The bottom step is breathing room above the footer's border, and
+          // nothing more. An earlier comment here claimed it was clearance for
+          // a pinned button overlapping the scroll — that was wrong: the
+          // run/stop footer is a flex SIBLING with flexShrink 0, so this box
+          // ends above it and nothing ever comes to rest underneath.
+          //
+          // What was actually reported as "cut off" was content below the
+          // scroll fold, which is a scroll region working. The fix for that is
+          // upstream — cap the video, and clip the Run section while a step is
+          // waiting, both done — not padding down here.
+          // Top / right / bottom / LEFT — and the right is 10, not 16, on
+          // purpose. This is the panel's only scroll region and it had no
+          // scrollbar styling at all, so it took the platform's, which is
+          // about 15px wide and takes that width out of the CONTENT box. The
+          // header and the footer are not scroll containers and lose nothing,
+          // so every heading, card and the video sat 16px from the left edge
+          // and ~31px from the right, under a Run button that spanned the full
+          // 16/16. Reported as the panel not being centred, which is exactly
+          // what it was.
+          //
+          // 10 + a 6px scrollbar is 16, so the content's right inset matches
+          // its left one and both match the footer. `scrollbar-gutter: stable`
+          // reserves that 6px whether or not the content currently overflows,
+          // so nothing shifts sideways as the panel fills up.
+          //
+          // 6px, styled, is also what every other scroll surface in the app
+          // already uses (Copilot, the toolbox, the task-code panel). This was
+          // the only one left on the platform default.
+          padding: '14px 10px 20px 16px',
           overflowY: 'auto',
+          scrollbarGutter: 'stable',
+          '&::-webkit-scrollbar': { width: '6px' },
+          '&::-webkit-scrollbar-track': { background: 'transparent' },
+          '&::-webkit-scrollbar-thumb': {
+            background: panel.trackBg,
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: panel.selectBorder,
+          },
         }}
       >
         {/* ── Slot 3: OUTCOME — one region, one message ──
@@ -1310,6 +1832,55 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   position: 'relative',
                   width: '100%',
                   aspectRatio: '4/3',
+                  // Capped on WIDTH, and it has to be the width.
+                  //
+                  // Why a cap at all: expanding switches the panel from 35vw to
+                  // 50vw, and an aspect-locked box answers more width with more
+                  // HEIGHT. The control labelled "make this bigger" grew the
+                  // video by about a third and pushed the wait state, the
+                  // countdown and STATUS into the scroll region — "if I enlarge
+                  // it there is only video and I cannot read anything". The one
+                  // element that grew is the one an operator waiting on a step
+                  // looks at least: during a wait they are watching their hands.
+                  //
+                  // Why not max-height, which is what this was first: with
+                  // `width: 100%` and `aspect-ratio`, a max-height clamps the
+                  // height and leaves the width alone, so the USED box stops
+                  // being 4:3 and becomes wider. The Gazebo camera is 640×480 —
+                  // exactly 4:3 — and the feed is fitted with `contain`, so a
+                  // wider box pillarboxes it: black bars down both sides, and a
+                  // picture smaller than before. Reported within the hour.
+                  //
+                  // Capping the width keeps the box at 4:3, so the feed fills
+                  // it edge to edge as it always did.
+                  //
+                  // The cap is in vh, not vw, because what actually limits this
+                  // box is the VERTICAL budget: the readouts, the countdown,
+                  // Confirm and Stop need about 180px under the video, and a
+                  // 4:3 box spends 0.75px of height for every px of width. A vw
+                  // cap ignored that and left the wide panel with 15vw of empty
+                  // surface either side of a video that had not grown — an
+                  // "enlarge" button that enlarged nothing, which is the state
+                  // this replaces.
+                  //
+                  // 64vh, and that is the ceiling rather than a preference.
+                  // Measured on the reported layout: the body is ~625px, and
+                  // what has to sit under the video during a wait — the
+                  // Required/Detected readout, the countdown, Confirm, Stop —
+                  // is ~165px once the Run section is clipped away while a step
+                  // is waiting (it repeated the pill and the readout). That
+                  // leaves ~460px of height, which at 4:3 is ~613px of width.
+                  // 64vh lands just inside it.
+                  //
+                  // Past this the readouts start to scroll, and the whole point
+                  // of capping was that they must not. The remaining lever is
+                  // not a bigger number: the wide panel is 719x625, ratio 1.15,
+                  // while the video is 1.33 — it is WIDER than the box holding
+                  // it, so filling the width costs 539px of height and leaves
+                  // 86px for everything else. Two columns are worse, not
+                  // better: at 65/35 the video gets 467px, less than it has now.
+                  maxWidth: 'min(100%, 64vh)',
+                  marginInline: 'auto',
                   background: panel.videoBg,
                   borderRadius: `${VIDEO_RADIUS_PX}px`,
                   overflow: 'hidden',
@@ -1487,165 +2058,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Box>
                 )}
 
-                {/* Human step overlay — skipped for gesture steps: the whole
-                    point of the self-view above is for the operator to see
-                    themselves, and this scrim's blur/full-cover background
-                    would hide it completely. The Required/Detected card
-                    below the video already carries the instruction for that
-                    case, so nothing is lost by not duplicating it here.
+                {/* The dark overlay that used to sit here is gone.
+                    It replaced the video with the step's message and, for a
+                    button-confirmed step, the Confirm button. Two problems, one
+                    cause: it could not be shown for gesture or object steps
+                    (the operator has to SEE the camera to aim), so for those
+                    two channels the instruction rendered nowhere at all — and
+                    where it did show, it cost ~140px of vertical stack that
+                    pushed STATUS and CONDITIONS below the fold, worse the wider
+                    the panel got.
 
-                    Skipped for an OBJECT wait too, for exactly the same
-                    reason and it took longer to notice: the step says "show
-                    the camera a blue tube", and the panel answered by blurring
-                    the camera's picture. Aiming an object at a lens is a
-                    closed loop — you move it and watch what happens — and
-                    covering the feed turns it into guessing until the 30s
-                    timeout fires. The Objects readout that would close the
-                    loop instead lives in EVENTS, below the fold on a laptop.
-                    These steps get the bar below rather than a scrim. */}
-                {isHumanStepActive && !isGestureStep && !isObjectStep && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: panel.overlayScrim,
-                      // No backdrop-filter. It was the visible half of the
-                      // corner defect: Chromium paints a blurred backdrop
-                      // clipped to the element's SQUARE border box, not to its
-                      // border-radius, so each corner showed a bright blurred
-                      // crescent of the frame underneath — exactly the white
-                      // slivers. And it was buying nothing: at 0.92 opacity
-                      // only 8% of the backdrop comes through, so the blur was
-                      // decoration paying for a compositor layer and a bug.
-                      borderRadius: VIDEO_INNER_RADIUS,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 1.5,
-                      padding: '20px',
-                      '@media (prefers-reduced-motion: no-preference)': {
-                        animation: 'dt-fade-in 0.25s ease',
-                      },
-                      '@keyframes dt-fade-in': {
-                        from: { opacity: 0 },
-                        to: { opacity: 1 },
-                      },
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: panel.primaryTint(0.15),
-                        border: `2px solid ${panel.primaryTint(0.5)}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <WaitIcon size={17} color={panel.primaryFaint} />
-                    </Box>
-                    <Typography
-                      sx={{
-                        fontSize: panelType.lead,
-                        fontWeight: 600,
-                        textAlign: 'center',
-                        color: panel.text,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {humanStep?.description || 'Human action required'}
-                    </Typography>
-                    {/* Names the channel instead of a bare "waiting", so what
-                        is shown matches what the STATUS line announces. Not a
-                        live region itself: that one lives on the STATUS line,
-                        and a second one here would say the same sentence
-                        twice. */}
-                    <Stack
-                      direction="row"
-                      sx={{ alignItems: 'center' }}
-                      spacing={0.8}
-                    >
-                      <CircularProgress
-                        size={10}
-                        sx={{ color: panel.primary }}
-                      />
-                      <Typography
-                        sx={{ fontSize: panelType.body, color: panel.text }}
-                      >
-                        {humanStepLabel ?? 'Waiting for operator confirmation…'}
-                      </Typography>
-                      {/* The seconds belong next to the thing they constrain.
-                          The countdown card lives below the video, ~250px from
-                          the Confirm button at this panel width — two fixations
-                          for a person who has thirty seconds and is also
-                          watching an arm. The bar down there stays: it is the
-                          shape of time passing. This is the number. */}
-                      {countdown !== null && (
-                        <Typography
-                          sx={{
-                            fontSize: panelType.body,
-                            fontFamily: "'Geist Mono', monospace",
-                            fontWeight: 600,
-                            color: countdownIsCritical
-                              ? panel.errorLight
-                              : panel.textDim,
-                          }}
-                        >
-                          {countdown}s
-                        </Typography>
-                      )}
-                    </Stack>
-                    {humanStep?.condition === 'human_feedback' && (
-                      <Button
-                        ref={confirmButtonRef}
-                        variant="contained"
-                        onClick={handleConfirmHumanStep}
-                        disabled={confirmSending}
-                        startIcon={
-                          confirmSending ? (
-                            <CircularProgress size={16} color="inherit" />
-                          ) : (
-                            <CheckCircle2 size={18} />
-                          )
-                        }
-                        sx={{
-                          mt: 1,
-                          minWidth: 200,
-                          minHeight: 48,
-                          fontSize: panelType.body,
-                          fontWeight: 600,
-                          textTransform: 'none',
-                          // NO bgcolor override. The theme's containedPrimary
-                          // is primary.dark precisely because primary.main
-                          // renders white text at 4.47:1 and fails AA
-                          // (themes/overrides/Button.ts) — the override that
-                          // used to be here reintroduced that exact failure on
-                          // the one control an operator must find under a
-                          // 30-second deadline. primary.dark is 6.29:1.
-                          //
-                          // Not green either, though green would also pass:
-                          // this panel already spends green on "Twin only",
-                          // "Ready to run" and the simulate button, all
-                          // meaning "safe". This is the app's primary action,
-                          // so it wears the app's primary colour.
-                          '&.Mui-disabled': {
-                            // The theme's disabled fill is grey[200] on a
-                            // white page. On this dark scrim that rendered a
-                            // near-white slab with #d9d9d9 text — 1.24:1, and
-                            // brighter than anything around it.
-                            bgcolor: panel.primaryTint(0.25),
-                            color: panel.text,
-                          },
-                        }}
-                      >
-                        {confirmSending ? 'Sending…' : 'Confirm'}
-                      </Button>
-                    )}
-                  </Box>
-                )}
+                    The instruction now rides in the pill over the video, the
+                    same place Show message uses, for all four channels. Confirm
+                    moved down next to the countdown, which is where the
+                    operator is already looking to see how long they have. */}
 
                 {/* ── Slot 1: NOW — one pill, over the live view ──
                     Both messages that report on this instant share this one
@@ -1736,8 +2162,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       maxWidth: 'calc(100% - 24px)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 0.8,
-                      padding: '6px 14px',
+                      // The wait instruction gets more room, because it is the
+                      // sentence the operator has to act on before the run can
+                      // go any further. Both kinds persist now — a Show
+                      // message until it is dismissed or superseded — so the
+                      // separation is weight and the countdown beneath, not
+                      // lifetime: a step that BLOCKS reads louder than one
+                      // that informs.
+                      gap: videoPill.wait ? 1.1 : 0.8,
+                      padding: videoPill.wait ? '10px 18px' : '6px 14px',
                       // Its own ground, not the video's. As a tint this
                       // measured 1.22:1 (success) and 1.59:1 (notify) over the
                       // Gazebo frame — the operator's own authored message,
@@ -1768,6 +2201,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         color={panel.success}
                         style={{ flexShrink: 0 }}
                       />
+                    ) : videoPill.wait ? (
+                      // The channel's mark, not the notify bell: a bell says
+                      // "here is a message", and this pill says "the robot is
+                      // waiting for you, this way".
+                      <WaitIcon
+                        size={18}
+                        color={panel.primaryLight}
+                        style={{ flexShrink: 0 }}
+                      />
                     ) : (
                       <Bell
                         size={13}
@@ -1777,30 +2219,65 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     )}
                     <Typography
                       sx={{
-                        fontSize: panelType.small,
+                        // `lead` for the wait, and this is the whole point of
+                        // moving the instruction here rather than a demotion.
+                        // The overlay it replaced set it at `lead`; rendering
+                        // it at pill size would have shrunk the one sentence
+                        // the operator must act on while claiming to give it
+                        // more prominence.
+                        fontSize: videoPill.wait
+                          ? panelType.lead
+                          : panelType.small,
                         color:
                           videoPill.tone === 'success'
                             ? panel.successLight
                             : panel.primaryFaint,
-                        fontWeight: 500,
+                        fontWeight: videoPill.wait ? 600 : 500,
+                        lineHeight: 1.35,
                       }}
                     >
                       {videoPill.text}
                     </Typography>
+                    {videoPill.onDismiss && (
+                      <IconButton
+                        size="small"
+                        onClick={videoPill.onDismiss}
+                        aria-label="Dismiss message"
+                        sx={{
+                          flexShrink: 0,
+                          padding: '2px',
+                          // -6px of the pill's own 14px right padding, so the
+                          // glyph sits where the text would have ended rather
+                          // than pushing the chip wider than the sentence.
+                          marginRight: '-6px',
+                          color: panel.iconMuted,
+                          '&:hover': {
+                            color: panel.white,
+                            background: panel.hover,
+                          },
+                        }}
+                      >
+                        <X size={13} />
+                      </IconButton>
+                    )}
                   </Box>
                 )}
               </Box>
 
               {/* Gesture match — only while a human step is waiting on one */}
-              {isHumanStepActive && expectedGesture && (
+              {/* REQUIRED / DETECTED — every perceiving channel, one card.
+                  Gesture keeps its drawings; voice and object get the same
+                  two columns in words. See `waitReadout` for why a channel
+                  that shows what it perceives is not a nicety. */}
+              {waitReadout && (
                 <Box
                   sx={{
                     mt: 1.5,
                     padding: '14px 16px',
-                    background: gestureMatch
+                    background: waitReadout.match
                       ? panel.successTint(0.1)
                       : panel.primaryTint(0.07),
-                    border: gestureMatch
+                    border: waitReadout.match
                       ? `1px solid ${panel.successTint(0.35)}`
                       : `1px solid ${panel.primaryTint(0.2)}`,
                     borderRadius: '10px',
@@ -1812,10 +2289,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     sx={{
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
-                      mb: 1,
+                      gap: 2,
                     }}
                   >
-                    <Box>
+                    <Box sx={{ minWidth: 0 }}>
                       <Typography
                         sx={{
                           fontSize: panelType.micro,
@@ -1832,23 +2309,27 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           fontSize: panelType.display,
                           fontWeight: 700,
                           fontFamily: "'Geist Mono', monospace",
-                          color: gestureMatch
+                          color: waitReadout.match
                             ? panel.successLight
                             : panel.primaryFaint,
                           letterSpacing: '0.02em',
+                          overflowWrap: 'anywhere',
                         }}
                       >
-                        {gestureLabel(expectedGesture)}
+                        {waitReadout.required}
                       </Typography>
                       {/* The word names the gesture; the drawing is what
                           actually tells the operator what to do with their
                           hand. Under a countdown, in a second language, the
-                          drawing is the faster of the two to read. */}
+                          drawing is the faster of the two to read. Only
+                          gesture has one — a spoken word and a tube have no
+                          equivalent picture, and inventing one for symmetry
+                          would say less than the word already does. */}
                       {RequiredGestureIcon && (
                         <RequiredGestureIcon
                           size={30}
                           color={
-                            gestureMatch
+                            waitReadout.match
                               ? panel.successLight
                               : panel.primaryFaint
                           }
@@ -1856,7 +2337,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         />
                       )}
                     </Box>
-                    <Box sx={{ textAlign: 'right' }}>
+                    <Box sx={{ textAlign: 'right', minWidth: 0 }}>
                       <Typography
                         sx={{
                           fontSize: panelType.micro,
@@ -1873,20 +2354,21 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           fontSize: panelType.display,
                           fontWeight: 700,
                           fontFamily: "'Geist Mono', monospace",
-                          color: gestureMatch
+                          color: waitReadout.match
                             ? panel.successLight
-                            : gestureActive
-                              ? panel.primaryLight
-                              : panel.textDim,
+                            : waitReadout.detected === '—'
+                              ? panel.textDim
+                              : panel.primaryLight,
+                          overflowWrap: 'anywhere',
                         }}
                       >
-                        {gestureLabel(activeGesture)}
+                        {waitReadout.detected}
                       </Typography>
                       {DetectedGestureIcon && (
                         <DetectedGestureIcon
                           size={30}
                           color={
-                            gestureMatch
+                            waitReadout.match
                               ? panel.successLight
                               : gestureActive
                                 ? panel.primaryLight
@@ -1973,6 +2455,62 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   >
                     {countdownIsCritical ? 'Time is almost up' : ''}
                   </Box>
+
+                  {/* Confirm, directly under the clock it is racing.
+                      It used to live inside the dark overlay, which meant it
+                      only existed for channels that got an overlay — and it sat
+                      mid-panel at 200px wide while Stop ran full width against
+                      the bottom edge. By Fitts that made the destructive,
+                      rare action the easiest target on the screen and the
+                      frequent one harder, for an operator whose hands are full
+                      of test tubes. Full width here, immediately below the
+                      countdown, where they are already looking. */}
+                  {humanStep?.condition === 'human_feedback' && (
+                    <Button
+                      ref={confirmButtonRef}
+                      fullWidth
+                      variant="contained"
+                      onClick={handleConfirmHumanStep}
+                      disabled={confirmSending}
+                      startIcon={
+                        confirmSending ? (
+                          <CircularProgress size={16} color="inherit" />
+                        ) : (
+                          <CheckCircle2 size={18} />
+                        )
+                      }
+                      sx={{
+                        mt: 1,
+                        minHeight: 48,
+                        fontSize: panelType.body,
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        // NO bgcolor override. The theme's containedPrimary is
+                        // primary.dark precisely because primary.main renders
+                        // white text at 4.47:1 and fails AA
+                        // (themes/overrides/Button.ts) — the override that used
+                        // to be here reintroduced that exact failure on the one
+                        // control an operator must find under a 30-second
+                        // deadline. primary.dark is 6.29:1.
+                        //
+                        // Not green either, though green would also pass: this
+                        // panel already spends green on "Twin only", "Ready to
+                        // run" and the simulate button, all meaning "safe".
+                        // This is the app's primary action, so it wears the
+                        // app's primary colour.
+                        '&.Mui-disabled': {
+                          // The theme's disabled fill is grey[200] on a white
+                          // page, which on this dark panel rendered a
+                          // near-white slab with #d9d9d9 text — 1.24:1, and
+                          // brighter than anything around it.
+                          bgcolor: panel.primaryTint(0.25),
+                          color: panel.text,
+                        },
+                      }}
+                    >
+                      {confirmSending ? 'Sending…' : 'Confirm'}
+                    </Button>
+                  )}
                 </Box>
               )}
             </>
@@ -2035,7 +2573,15 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       : 'Gesture conditions auto-completed'
                   }
                 >
+                  {/* edge="end" on all four switches in this panel. A MUI
+                      Switch carries 7px of transparent padding around its
+                      track, so a row that ends with one leaves its label flush
+                      left and its control seven pixels short of the right
+                      edge — every toggle row hanging inside the column the
+                      cards beside it fill. This is the prop that exists for
+                      exactly that. */}
                   <Switch
+                    edge="end"
                     size="small"
                     checked={testCameraOn}
                     onChange={(e) => setTestCameraOn(e.target.checked)}
@@ -2088,6 +2634,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <span>
                     <Switch
+                      edge="end"
                       size="small"
                       checked={webcam.detectObjects}
                       onChange={(e) =>
@@ -2142,6 +2689,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 >
                   <span>
                     <Switch
+                      edge="end"
                       size="small"
                       checked={testVoiceOn}
                       onChange={(e) => setTestVoiceOn(e.target.checked)}
@@ -2545,16 +3093,50 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       <Typography
                         sx={{ fontSize: panelType.small, color: panel.textDim }}
                       >
-                        {v.label}
+                        {/* The word to SAY, not only the name of the command.
+                            This legend is what an operator reads while
+                            testing the microphone, and it listed "Yes / No /
+                            Done / Proceed" at a recognizer set to Italian —
+                            so three of the four could be read aloud exactly
+                            as printed and still match nothing. */}
+                        {voiceLabelWithSpokenForm(v)}
                       </Typography>
                     </Box>
                   ))}
                 </Stack>
 
+                {/* Third row of the legend, and it has to be a row.
+
+                    It read "The robot's camera looks for objects here." — in
+                    the webcam sandbox, one screen below a caption that says
+                    object detection here "looks for objects in this webcam
+                    feed" and that real runs "use the robot camera only". Two
+                    sentences on one tab naming opposite cameras.
+
+                    It also broke the pattern it sat in. The two rows above are
+                    a heading, a count and the closed list of everything the
+                    system answers to. This was a loose sentence whose "here"
+                    pointed at nothing, so it read as a third row whose chips
+                    had failed to load. The count is the part that cannot be
+                    given — objects are not a fixed vocabulary — so say that,
+                    in the place a count would go. */}
+                <Typography
+                  sx={{
+                    fontSize: panelType.micro,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: panel.muted,
+                    mb: 0.8,
+                  }}
+                >
+                  Objects (no fixed list)
+                </Typography>
                 <Typography
                   sx={{ fontSize: panelType.micro, color: panel.muted }}
                 >
-                  The robot's camera looks for objects here.
+                  Whatever the camera above recognises in the picture. Turn on
+                  Object detection to see it name them.
                 </Typography>
               </Box>
             </Box>
@@ -2564,7 +3146,40 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
         {/* ── RUN — only on the Robot tab; the Test recognition
               sandbox is a diagnostic space with no run affordance at all ── */}
         {liveView === 'simulation' && (
-          <Box>
+          // Collapsed to nothing but its live region while a step is waiting.
+          //
+          // During a wait this section says what the pill over the video and
+          // the Required/Detected readout have already said, one above the
+          // other, and it costs about 60px of the vertical budget — the budget
+          // that decides how large the video may be, because a 4:3 box spends
+          // 0.75px of height for every px of width. Sixty pixels of duplicate
+          // text was buying nothing and pushing the readouts towards the fold.
+          //
+          // Clipped, NOT unmounted and NOT `visibility: hidden`. The Typography
+          // inside is this panel's live region and the ONLY announcement that a
+          // human step has begun — the pill over the video is purely visual. A
+          // live region removed and re-inserted is announced unreliably, and
+          // `visibility: hidden` (the first thing written here) takes it out of
+          // the accessibility tree altogether, which would have silenced the
+          // very announcement this comment claims to protect.
+          //
+          // The clip pattern is the one that keeps an element announced while
+          // taking no layout space, and it is already used a few lines below
+          // for the countdown's "time is almost up".
+          <Box
+            sx={
+              isHumanStepActive
+                ? {
+                    position: 'absolute',
+                    width: 1,
+                    height: 1,
+                    overflow: 'hidden',
+                    clip: 'rect(0 0 0 0)',
+                    whiteSpace: 'nowrap',
+                  }
+                : undefined
+            }
+          >
             <SectionLabel>Run</SectionLabel>
 
             <Box
@@ -2671,6 +3286,50 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   />
                 </Stack>
 
+                {/* Sound, on both targets and in study mode.
+                    Unlike the switch below it, this is not about how a step is
+                    answered — it is about whether the operator can tell that it
+                    was, from wherever they happen to be standing. */}
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 1,
+                  }}
+                >
+                  <Box>
+                    <Typography
+                      sx={{ fontSize: panelType.body, color: panel.textDim }}
+                    >
+                      Sound when a step needs you
+                    </Typography>
+                    <Typography
+                      sx={{ fontSize: panelType.micro, color: panel.muted }}
+                    >
+                      A short tone when the robot starts waiting, and another
+                      when it accepts your answer. The same tone for every
+                      channel.
+                    </Typography>
+                  </Box>
+                  <Switch
+                    edge="end"
+                    size="small"
+                    checked={sound.enabled}
+                    onChange={(e) => sound.setEnabled(e.target.checked)}
+                    sx={{
+                      ...panelSwitchOffSx,
+                      '& .MuiSwitch-switchBase.Mui-checked': {
+                        color: panel.primary,
+                      },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track':
+                        {
+                          backgroundColor: panel.primary,
+                        },
+                    }}
+                  />
+                </Stack>
+
                 {/* Event handling folds into the target choice instead of being a
                 separate, unrelated-sounding "Events" control: on Simulation
                 it's an optional convenience switch; on Real robot it's not a
@@ -2701,6 +3360,7 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       </Typography>
                     </Box>
                     <Switch
+                      edge="end"
                       size="small"
                       checked={runMode === 'auto'}
                       disabled={simulation.isRunning}
@@ -2729,9 +3389,24 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Box>
                 ) : (
                   <Box sx={{ mb: 1 }}>
+                    {/* One sentence, and it used to be two. The second —
+                        "Gestures and voice commands must be performed live" —
+                        is what the camera/microphone notice directly below
+                        says, and that one says it only on a task that has
+                        gestures or voice, names which permission Run will ask
+                        for, and cannot go stale: on this target `runMode` is
+                        forced to 'live', so it appears whenever the fact
+                        applies. Here it was unconditional, so a task with no
+                        human step at all carried a warning about gestures it
+                        does not use.
+
+                        It also cost the sentence that matters. Real robot
+                        stacks more into the same body than Simulation does —
+                        a longer notice, the e-stop line, an extra pre-flight
+                        issue — and this banner is what the scroll fold cut in
+                        half, mid-word, directly above the run button. */}
                     <PanelMessage tone="hardware" dense>
-                      Live hardware — the real robot will move. Gestures and
-                      voice commands must be performed live.
+                      Live hardware — the real robot will move.
                     </PanelMessage>
                   </Box>
                 )}
@@ -3031,29 +3706,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   ? UI_TEXT.runOnRobot
                   : UI_TEXT.startSimulation}
           </Button>
-          {executionTarget === 'real' && (
-            <Stack
-              direction="row"
-              spacing={0.6}
-              sx={{ alignItems: 'center', justifyContent: 'center', mt: 1 }}
-            >
-              <AlertTriangle
-                size={13}
-                color={panel.warning}
-                style={{ flexShrink: 0 }}
-              />
-              <Typography
-                sx={{
-                  fontSize: panelType.small,
-                  fontWeight: 500,
-                  color: panel.warningLight,
-                  textAlign: 'center',
-                }}
-              >
-                Use the teach-pendant e-stop to stop the arm immediately.
-              </Typography>
-            </Stack>
-          )}
+          {/* Blockers first, standing advice last, and that order is the point.
+              These two groups answer different questions in different tenses:
+              the pre-flight list says what stops the run NOW and is what
+              explains a disabled button directly above it; the e-stop line is
+              what to do once the arm is moving. They used to be interleaved,
+              so the footer read amber, blue, amber and the operator sorted
+              three messages by hand to find the one holding them up. */}
           {!simulation.isRunning &&
             (preflightIssues.length > 0 ? (
               <Stack spacing={0.6} sx={{ mt: 0.8 }}>
@@ -3062,10 +3721,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     key={i}
                     direction="row"
                     sx={{
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      // flex-start and NO wrap. It was `center` + `wrap`, and
+                      // every one of these sentences is long enough to wrap in
+                      // a 360px panel — so the icon, being the first flex item,
+                      // was pushed onto a line of its own above the text. All
+                      // three notices rendered as a floating symbol over a
+                      // centred paragraph, which reads as a layout fault
+                      // exactly where the panel explains why Run is disabled.
+                      alignItems: 'flex-start',
                       gap: '6px',
-                      flexWrap: 'wrap',
+                      flexWrap: 'nowrap',
                     }}
                   >
                     {/* Amber only when the arm is the problem. The other
@@ -3080,13 +3745,16 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       <AlertTriangle
                         size={12}
                         color={panel.warning}
-                        style={{ flexShrink: 0 }}
+                        // Optical alignment with the first line of text, which
+                        // is 13px at 1.5 line-height — the glyph's own box is
+                        // shorter than the line box it sits beside.
+                        style={{ flexShrink: 0, marginTop: 4 }}
                       />
                     ) : (
                       <Info
                         size={12}
                         color={panel.primaryLight}
-                        style={{ flexShrink: 0 }}
+                        style={{ flexShrink: 0, marginTop: 4 }}
                       />
                     )}
                     <Typography
@@ -3096,7 +3764,11 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                           issue.tone === 'hardware'
                             ? panel.warningLight
                             : panel.textDim,
-                        textAlign: 'center',
+                        // Left, now that the icon stays on the first line: a
+                        // paragraph centred beside a left-pinned icon is ragged
+                        // on both edges and starts at a different x on every
+                        // line.
+                        textAlign: 'left',
                       }}
                     >
                       {issue.text}
@@ -3140,6 +3812,33 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 </Typography>
               </Stack>
             ))}
+          {/* Last, and outside the `!isRunning` gate above on purpose: this is
+              the only line here that matters MORE once the arm is moving, and
+              a previous version of this panel put every amber cue behind that
+              gate — so all of them unmounted at the moment the arm started. */}
+          {executionTarget === 'real' && (
+            <Stack
+              direction="row"
+              spacing={0.6}
+              sx={{ alignItems: 'flex-start', mt: 1 }}
+            >
+              <AlertTriangle
+                size={13}
+                color={panel.warning}
+                style={{ flexShrink: 0, marginTop: 3 }}
+              />
+              <Typography
+                sx={{
+                  fontSize: panelType.small,
+                  fontWeight: 500,
+                  color: panel.warningLight,
+                  textAlign: 'left',
+                }}
+              >
+                Use the teach-pendant e-stop to stop the arm immediately.
+              </Typography>
+            </Stack>
+          )}
         </Box>
       )}
 

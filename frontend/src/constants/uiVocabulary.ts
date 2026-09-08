@@ -46,7 +46,13 @@ export const UI_TEXT = {
   startSimulation: 'Start simulation',
   simulationRunning: 'Simulation running',
   robotRunning: 'Robot running',
-  idle: 'Idle',
+  // The resting half of a three-state indicator whose other two states are
+  // "Simulation running" and "Robot running". It read "Idle": a systems word,
+  // in an app whose users are told never to need one, and the only one of the
+  // three that did not name its subject — so the indicator changed grammar,
+  // not just value, every time a run started. "Not running" is the same
+  // sentence with the same subject, negated.
+  idle: 'Not running',
   simulationCompleted: 'Simulation completed',
   taskCompletedOnRobot: 'Task completed on robot',
 
@@ -58,6 +64,11 @@ export const UI_TEXT = {
   unpublishedChanges: 'Unpublished changes',
   discardUnpublishedChanges: 'Discard unpublished changes',
   unsavedChanges: 'Unsaved changes',
+  // Distinct from unsavedChanges, which claims edits exist that are not on the
+  // server. A task opened and not touched has none — "Unsaved changes" there
+  // named a change the operator had not made, on the one screen whose whole
+  // job is to tell them whether their work is safe.
+  notSavedYet: 'Not saved yet',
 
   // Reusable-task concept — toolbox category, block label, and the action
   // that expands it all say "Saved Task" explicitly (never bare "macro",

@@ -110,7 +110,37 @@ export const SegmentedControl = ({
           sx={
             opt.activeColor
               ? {
-                  '&.Mui-selected': {
+                  // `&&&`, not `&`, and it is the same specificity trap this
+                  // file already documents ten lines up for Mui-disabled.
+                  //
+                  // The group writes its selected style as a DESCENDANT
+                  // selector — `.css-group .MuiToggleButtonGroup-grouped
+                  // .Mui-selected`, (0,3,0). A plain `&.Mui-selected` here
+                  // compiles to `.css-button.Mui-selected`, (0,2,0), and loses
+                  // every time. Not sometimes, and not depending on insertion
+                  // order: the specificities differ, so the group always won
+                  // and `activeColor` had no effect at all.
+                  //
+                  // What that cost: the robot panel passes success to
+                  // Simulation and warning to Real robot, so its Mode selector
+                  // was supposed to carry the same green/amber rule as the Run
+                  // button and the notice under it. Both pills rendered
+                  // indigo. The panel's own comment cites "the Mode selector's
+                  // Run on robot pill" as the reason its Run button is amber,
+                  // and that pill had never been amber.
+                  //
+                  // `&&&` repeats the component's own class three times,
+                  // (0,4,0), which clears the descendant rule.
+                  //
+                  // `:not(.Mui-disabled)` is not decoration either. The group's
+                  // `&.Mui-selected.Mui-disabled` rule is ALSO (0,4,0), so
+                  // against a bare `&&&.Mui-selected` the winner would be
+                  // whichever Emotion happened to insert last — and losing
+                  // that coin flip puts back the exact bug the block above
+                  // exists to prevent: a locked pill still wearing its accent
+                  // fill. Excluding the state outright means order cannot
+                  // decide it. Guarded by test_panel_chrome.py.
+                  '&&&.Mui-selected:not(.Mui-disabled)': {
                     bgcolor: dark
                       ? alpha(opt.activeColor, 0.25)
                       : alpha(opt.activeColor, 0.12),

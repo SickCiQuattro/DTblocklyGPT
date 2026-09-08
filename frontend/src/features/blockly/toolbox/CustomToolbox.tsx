@@ -339,7 +339,16 @@ const CategoryPanel: React.FC<{
       onChange={() => onChange(category.key)}
       disableGutters
       elevation={0}
-      className="toolbox-category"
+      // `--bounded` caps the panel's height and lets it scroll inside itself.
+      // Only for a category whose rows come from the database: its length is
+      // the operator's library, so one of them could otherwise push every
+      // other category off the palette. A static category is as long as
+      // toolboxRegistry.ts says and needs no cap — see CustomToolbox.css.
+      className={
+        category.blocks.some((b) => b.dynamic)
+          ? 'toolbox-category toolbox-category--bounded'
+          : 'toolbox-category'
+      }
       sx={{
         '&::before': { display: 'none' },
       }}
@@ -512,10 +521,23 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   // Robot Actions (pick/place/gripper), not Task Flow (loops/conditionals) —
   // a brand-new task is more likely to start with a physical action than a
   // control-flow construct.
-  const [expandedKey, setExpandedKey] = useState<string | null>('robot-actions')
+  //
+  // A SET, not one key. Opening a category used to close whatever was open,
+  // which is right for an accordion whose panels are alternatives and wrong
+  // here: a program is built by taking a robot action, then a condition, then
+  // a human step, and the palette made every one of those a round trip that
+  // put away what the operator had just been reading. Reported from a pilot
+  // run. Nothing about these categories is exclusive, so nothing has to close.
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+    () => new Set(['robot-actions']),
+  )
 
   const handleAccordionChange = (key: string) => {
-    setExpandedKey((prev) => (prev === key ? null : key))
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
   }
 
   // H / Shift+H walk the categories, mirroring the heading-jump convention
@@ -541,15 +563,22 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
     e.preventDefault()
     const step = e.shiftKey ? -1 : 1
     const count = TOOLBOX_CATEGORIES.length
-    const current = TOOLBOX_CATEGORIES.findIndex((c) => c.key === expandedKey)
-    // Nothing expanded: enter the list from the end the direction points at.
+    // Where H is now, read from FOCUS rather than from what is expanded.
+    //
+    // It used to be read from the single expanded key, which no longer names
+    // one category — several can be open at once. Focus is the better source
+    // anyway: it is what the operator moved last, and it stays correct
+    // whether they arrived by H, by Tab or by clicking a heading.
+    const activeId = active instanceof HTMLElement ? active.id : ''
+    const current = TOOLBOX_CATEGORIES.findIndex(
+      (c) => `toolbox-category-${c.key}` === activeId,
+    )
+    // Not on a heading yet: enter the list from the end the direction points at.
     const from = current === -1 ? (step === 1 ? -1 : 0) : current
     const next = TOOLBOX_CATEGORIES[(from + step + count) % count]
-    // Expand what we land on. Selection follows focus here for the same reason
-    // it does in the Objects/Locations/Skills tab strip below: if `expandedKey`
-    // did not track where H just went, the next press would compute its index
-    // from the stale category and appear to skip one.
-    setExpandedKey(next.key)
+    // Expand what we land on, and leave the rest as they were: H walks the
+    // headings, it does not tidy up behind itself.
+    setExpandedKeys((prev) => new Set(prev).add(next.key))
     document.getElementById(`toolbox-category-${next.key}`)?.focus()
   }
 
@@ -678,7 +707,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
                 category={category}
                 pills={pills}
                 blockViewMode={blockViewMode}
-                expanded={expandedKey === category.key}
+                expanded={expandedKeys.has(category.key)}
                 onChange={handleAccordionChange}
                 onBlockPointerDown={onBlockPointerDown}
                 onBlockActivate={onBlockActivate}

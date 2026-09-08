@@ -3,103 +3,178 @@ import React from 'react'
 import { MainCard } from 'components/MainCard'
 import { useDocumentTitle } from 'hooks/useDocumentTitle'
 
+/**
+ * The page a first-time operator should not need.
+ *
+ * Written for someone who does not program and has not worked with a robot
+ * arm, so it explains what things DO and never how they are built: no block
+ * type names, no endpoints, no talk of Blockly or ROS. Every control it names
+ * is named with the words printed on that control, because a reference whose
+ * vocabulary differs from the screen sends the reader hunting.
+ *
+ * Two things are deliberately absent.
+ *
+ * It does not say what happens if the operator does nothing while the robot
+ * waits. That is the third of the three prediction questions in the user study
+ * (studio-utenti/04-compiti.md), and this page is reachable during a session:
+ * answering it here would answer the question for the participant and the
+ * measurement would be of this paragraph rather than of the system.
+ *
+ * And it does not list the toolbox categories one by one. The toolbox is on
+ * screen, labelled, and one click from every block's own description — a
+ * duplicate list here would be one more place to drift out of date, and this
+ * project has spent real time on exactly that kind of drift.
+ */
 const Faq = () => {
   useDocumentTitle('Instructions & FAQ')
   return (
     <MainCard
       title="Instructions & FAQ"
-      subtitle="A quick reference — most of the time the app itself will guide you, but this is here if you need it."
+      subtitle="Most of what you need is on screen and labelled. This is here for the rest."
     >
-      <h2>Building a task</h2>
+      <h2>What you are building</h2>
       <p>
-        Open a task to see the <b>Blockly workspace</b>: a canvas where you
-        build a program by dragging coloured blocks from the toolbox on the
-        left. The toolbox is grouped into categories — <b>Task Flow</b> (repeat,
-        wait for a condition), <b>Robot Actions</b> (pick up, place, open/close
-        gripper), <b>Human Actions</b> (pause and show a message, notify
-        someone), <b>Conditions</b> (wait for a gesture, a voice command, or an
-        object to appear), <b>Saved Tasks</b> (reuse a task you already built),
-        and <b>Library</b> (your objects, locations, and skills — drag one of
-        these into a dashed slot like &ldquo;Select object…&rdquo; to fill it).
+        A <b>task</b> is a list of steps the robot carries out in order. You
+        build it by dragging blocks into the workspace, or by describing it to{' '}
+        <b>Copilot</b> in plain language — whichever you prefer, and you can mix
+        the two.
       </p>
       <p>
-        Some blocks show a dashed slot with a{' '}
-        <b>
-          <i>+</i>
-        </b>{' '}
-        inside, like <i>&ldquo;Select object…&rdquo;</i>. Drag a matching block
-        into that slot to fill it. You can save a draft at any time, even with
-        empty slots — but a task can&rsquo;t be published or run until every
-        slot is filled. Hover a block in the toolbox to preview what it does
-        before you use it.
+        Blocks are grouped on the left by what they do, and hovering one shows a
+        preview of it with a sentence explaining it. Some blocks have a dashed
+        slot — <i>&ldquo;Select object…&rdquo;</i>,{' '}
+        <i>&ldquo;Select condition…&rdquo;</i> — waiting for something to be
+        dropped in. Click the slot to pick from a list, or drag a block into it.
       </p>
 
-      <h2>Getting help from Copilot</h2>
+      <h2>Steps the robot does, and steps you do</h2>
       <p>
-        The <b>Copilot</b> panel on the right lets you describe what the robot
-        should do in plain language — e.g. &ldquo;pick up the flask and place it
-        in the rack&rdquo; — and it builds the matching blocks for you. When it
-        proposes blocks, review them and press <b>Apply</b> to build them in
-        your workspace — if you already have blocks there, this replaces them,
-        and you&rsquo;ll be asked to confirm first. Press <b>Cancel</b> to
-        discard the suggestion instead. You can also just ask it questions about
-        the task you&rsquo;re building. Turn on <b>Proactive analysis</b> (the
-        toggle inside Copilot) if you want it to automatically review your
-        workspace and point out problems without you having to ask.
-      </p>
-
-      <h2>Testing before you run</h2>
-      <p>
-        Open the <b>Robot</b> panel (top right) to test your task. It has two
-        views: <b>Robot</b> shows the robot moving once a run starts, and{' '}
-        <b>Test recognition</b> turns on your camera so you can check that
-        gesture, voice, and object detection actually work — you can try this
-        any time, even before running anything.
-      </p>
-      <p>
-        If your task needs the camera or microphone to work, the panel tells you
-        right there and lets you turn it on with one click — you don&rsquo;t
-        need to remember to do it yourself.
-      </p>
-      <p>
-        Before you can run a task, save it with the <b>Save &amp; Publish</b>{' '}
-        button in the top bar. A task can be:
+        Most steps are the robot&rsquo;s: pick something up, put it somewhere,
+        run a skill it has been taught. Two of them are yours.
       </p>
       <ul>
         <li>
-          <b>Draft</b>: not published yet — you can keep editing, but it
-          can&rsquo;t run.
+          <b>Pause and show message</b> stops the robot and puts your message on
+          screen. It stays stopped until the thing you chose under{' '}
+          <i>&ldquo;Resume when&rdquo;</i> happens — you press the Confirm
+          button, say a word, make a hand gesture, or put an object where the
+          camera can see it.
         </li>
         <li>
-          <b>Published</b>: saved and ready to run.
-        </li>
-        <li>
-          <b>Published, with unpublished changes</b>: still shows as{' '}
-          <b>Published</b>, but can&rsquo;t run until you publish or discard
-          those changes — the version on screen and the version that would run
-          are no longer the same task.
+          <b>Show message and continue</b> also puts a message on screen, but
+          the robot keeps working. Use it to tell the person what to get ready
+          for while the arm is still moving.
         </li>
       </ul>
-
-      <h2>Running on the real robot</h2>
       <p>
-        In the Robot panel, choose <b>Simulate</b> to try the task safely — the
-        physical arm never moves. Choose <b>Run on robot</b> to run it on the
-        physical arm; you&rsquo;ll be asked to confirm first, since this is a
-        real, irreversible motion.
-      </p>
-      <p>
-        The teach-pendant <b>e-stop</b> is always the fastest way to stop the
-        robot immediately, no matter what the app shows. The in-app Stop button
-        also halts the robot, but it isn&rsquo;t a substitute for the e-stop in
-        an emergency.
+        The difference between the two is the only thing you need to remember
+        here: one waits for you, the other does not.
       </p>
 
-      <h2>Sharing tasks</h2>
+      <h2>Saving, and what actually runs</h2>
       <p>
-        A task can be <b>Private</b> (only you can open it) or <b>Shared</b>{' '}
-        (visible to other users). You can only edit or delete a task you own — a
-        shared task from someone else shows as read-only.
+        There is one save button, at the top right, and it does the right thing
+        on its own:
+      </p>
+      <ul>
+        <li>
+          <b>Save &amp; Publish</b> — the task is complete, so saving also makes
+          it the version that runs.
+        </li>
+        <li>
+          <b>Save draft</b> — something is still missing, usually an empty slot.
+          Your work is kept, but the task cannot run yet. The warning next to
+          the task name says what is missing.
+        </li>
+      </ul>
+      <p>
+        <b>Run always uses the published version</b>, not whatever is on screen.
+        If you edit a published task and do not publish the change, the header
+        says <i>Unpublished changes</i> — that is the app telling you the two
+        have drifted apart, and it will not run until you publish or discard
+        them. The same rule applies to a task used inside another one: it runs
+        the version its author published.
+      </p>
+
+      <h2>Trying it</h2>
+      <p>
+        <b>Run</b> opens the robot panel on the right. It has two views:{' '}
+        <b>Robot</b> shows the arm while a task runs, and{' '}
+        <b>Test recognition</b> turns on your camera so you can check that
+        gestures, voice and object detection are working — you can use that at
+        any time, before running anything.
+      </p>
+      <p>
+        Before it starts, the panel lists anything that would get in the way and
+        offers to fix it: a task that is not published, a camera that is off,
+        recognition set to answer for you. If the list is empty it says{' '}
+        <b>Ready to run</b>.
+      </p>
+      <p>
+        While the task runs, the block being carried out is highlighted in the
+        workspace, so you can always see where the robot is in your program.
+        When it reaches one of your steps, the panel shows your message over the
+        live view, tells you which way it is waiting for you to answer, and —
+        for a gesture, a word or an object — shows what it is looking for beside
+        what it can currently see. If those two do not match, that is what to
+        act on.
+      </p>
+      <p>
+        You can widen the panel by dragging its left edge, the same way you can
+        drag Copilot&rsquo;s. Copilot folds away on its own while a task runs
+        and comes back when it stops.
+      </p>
+
+      <h2>Simulation and the real arm</h2>
+      <p>
+        <b>Start simulation</b> runs the task on the on-screen robot. Nothing
+        physical moves, so it is the safe way to see whether your task does what
+        you meant.
+      </p>
+      <p>
+        <b>Run on robot</b> runs it on the arm in the room. You are asked to
+        confirm first, because it is a real movement that cannot be undone.
+      </p>
+      <p>
+        The <b>Stop</b> button in the panel stops the task. It is not an
+        emergency stop: the red <b>e-stop</b> on the teach pendant is always the
+        fastest and the only certain way to stop the arm, whatever the screen is
+        showing.
+      </p>
+
+      <h2>Copilot</h2>
+      <p>
+        Describe what you want in ordinary words —{' '}
+        <i>
+          &ldquo;pick up the blue tube and place it on the sample tray&rdquo;
+        </i>{' '}
+        — and Copilot proposes the blocks. You see the proposal before anything
+        changes: press <b>Apply</b> to put it in the workspace, or <b>Cancel</b>{' '}
+        to leave your work as it is. If you already have blocks there, applying
+        replaces them and you are asked to confirm.
+      </p>
+      <p>
+        You can also just ask it questions about the task you are building. It
+        only knows the objects, places and skills that are in your library, so
+        it works best when you call things by the names you see there.
+      </p>
+      <p>
+        The sparkle button turns on <b>proactive analysis</b>: Copilot then
+        reviews your workspace and points out problems without being asked.
+      </p>
+
+      <h2>Your library, and sharing</h2>
+      <p>
+        <b>Objects</b>, <b>Locations</b> and <b>Skills</b> in the left menu are
+        the things your tasks refer to — a tube, the sample tray, a movement the
+        robot has already been taught. They are the same items that appear in
+        the blocks&rsquo; slots.
+      </p>
+      <p>
+        A task you own is either <b>private</b> or <b>shared</b> with other
+        users; the small icon on its card says which. A task someone else has
+        shared with you shows their name on the card instead. You can open and
+        run a shared task, but only its owner can change it.
       </p>
     </MainCard>
   )

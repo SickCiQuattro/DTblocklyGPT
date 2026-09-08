@@ -518,3 +518,26 @@
     transition: none;
   }
 }
+
+/* ── The warning triangle must not steal a click from the block under it ──
+   A shadow slot that has not been filled in carries a native Blockly warning
+   icon (useConformance sets it via setWarningText). That icon sits ON the
+   shadow block, and the shadow block's own click is what opens the picker
+   that fills the slot and removes the warning — so the marker occupied part
+   of the target you have to hit to make it go away. Reported after a pilot
+   run: once an operator has understood the dashed slots and moves quickly,
+   they keep landing on the triangle instead of the slot.
+
+   Click-through rather than removal: the triangle still marks the block, it
+   just stops being a control. No text is lost either, because the bubble it
+   opened repeats what the header's issue list already says word for word
+   (both render formatIssue on the same ConformanceIssue).
+
+   Scoped to .blocklyWarningIcon, not the shared .blocklyIconGroup: the
+   comment and mutator icons carry that group class too, and this app does
+   not draw either today only because its mutators are serialization-only
+   (no compose/decompose, so no gear). Naming the warning keeps that from
+   becoming a trap for whoever adds the first real mutator. */
+.blocklyWarningIcon {
+  pointer-events: none;
+}

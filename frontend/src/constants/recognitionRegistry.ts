@@ -119,8 +119,29 @@ export const spokenExample = (code: string | null | undefined): string => {
 export const GESTURE_DROPDOWN_OPTIONS: [string, string][] =
   RECOGNIZED_GESTURES.map((g) => [g.label, g.code])
 
+/**
+ * The command's name plus the word to actually say, when the two differ.
+ *
+ * "Done" is the name of the step; "fatto" is what an it-IT recognizer will
+ * accept. Only the first was ever on screen — in the block's own dropdown, in
+ * the Test recognition legend, on the card that previews a task — so a
+ * participant read "Done", said "done", and the recognizer heard nothing it
+ * knew. "Yes" was the one that happened to work anyway, because "sì" is the
+ * obvious guess and nothing else was.
+ *
+ * The suffix appears only when the spoken form is not the label itself, so
+ * flipping VITE_SPEECH_LANG to en-US collapses these back to plain "Yes" and
+ * "Done" rather than printing 'Yes ("yes")'.
+ */
+export const voiceLabelWithSpokenForm = (v: RecognitionOption): string => {
+  const say = spokenExample(v.code)
+  return !say || say.toLowerCase() === v.label.toLowerCase()
+    ? v.label
+    : `${v.label} (“${say}”)`
+}
+
 export const VOICE_DROPDOWN_OPTIONS: [string, string][] =
-  RECOGNIZED_VOICE_COMMANDS.map((v) => [v.label, v.code])
+  RECOGNIZED_VOICE_COMMANDS.map((v) => [voiceLabelWithSpokenForm(v), v.code])
 
 /**
  * The value both pipelines report for "nothing recognized right now": the ROS

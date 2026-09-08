@@ -2,6 +2,38 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
 import { INITIAL_TASK_STRUCTURE, TaskChatStructure } from 'utils/chat'
 
+/**
+ * Robot panel resize bounds, in px.
+ *
+ * The floor is what the panel needs to stay useful: the 4:3 live view plus the
+ * Required/Detected readout side by side. Below it the readout wraps and the
+ * video is a thumbnail, which is not a narrower panel but a broken one.
+ *
+ * There is no ceiling here on purpose — it depends on the viewport and on
+ * Copilot's current width, so it lives in the panel's own CSS clamp.
+ */
+export const ROBOT_PANEL_MIN_PX = 360
+export const ROBOT_PANEL_DEFAULT_PX = 520
+
+/**
+ * Task-code panel resize bounds, in px, and the height of its collapsed rail.
+ *
+ * The floor is the height at which the JSON is still worth reading — roughly
+ * six lines plus the header. Below that the panel costs its own chrome and
+ * shows less than the tooltip it replaced.
+ *
+ * `CODE_PANEL_RAIL_PX` is the closed state, and it is deliberately not zero.
+ * The panel used to collapse to `height: 0` and the dark hairline still visible
+ * along the bottom edge was an accident: a semi-transparent `border-top` on a
+ * zero-height box, showing the panel's own background through it. It read as a
+ * closed drawer, which is exactly right — so it is a real rail now, thick
+ * enough to click and to grab, instead of a 1px side effect that could vanish
+ * with any change to the border.
+ */
+export const CODE_PANEL_MIN_PX = 120
+export const CODE_PANEL_DEFAULT_PX = 220
+export const CODE_PANEL_RAIL_PX = 5
+
 export type TaskStatus = 'draft' | 'published' | 'published_with_draft'
 
 export type TaskState = {
@@ -9,6 +41,9 @@ export type TaskState = {
   editMode: boolean
   activeTaskId: string | null
   activeTaskName: string
+  /** Authored in the workspace header, beside the name. Metadata: it is PUT on
+   *  its own, never through the publish path. */
+  activeTaskDescription: string
   activeTaskStatus: TaskStatus
   lastSaved: string | null
   chatOpen: boolean
@@ -57,7 +92,19 @@ export type TaskState = {
   isReadOnly: boolean
   ownerUsername: string | null
   chatPosition: 'left' | 'right'
-  robotPanelWidth: 'standard' | 'wide'
+  /**
+   * Robot panel width in px, drag-resizable like Copilot.
+   *
+   * Was `'standard' | 'wide'` — a two-step snap, while Copilot next to it was
+   * dragged freely. Two peers, two ways of doing the same thing, which is the
+   * inconsistency this replaces. The panel clamps this against the workspace's
+   * own minimum at render time, so a value stored on a wide screen does not
+   * squeeze the workspace on a narrow one.
+   */
+  robotPanelWidth: number
+  /** Task-code panel height, in px. Dragged from its top edge, same as the
+   *  two side panels are dragged from theirs. */
+  codePanelHeight: number
 }
 
 export const initialState: TaskState = {
@@ -65,6 +112,7 @@ export const initialState: TaskState = {
   editMode: false,
   activeTaskId: null,
   activeTaskName: 'New Task',
+  activeTaskDescription: '',
   activeTaskStatus: 'draft',
   lastSaved: null,
   // Defaults open on a fresh browser (helps a first-time operator discover
@@ -94,8 +142,12 @@ export const initialState: TaskState = {
       : null) || 'right',
   robotPanelWidth:
     (typeof window !== 'undefined'
-      ? (localStorage.getItem('robotPanelWidth') as 'standard' | 'wide')
-      : null) || 'standard',
+      ? Number(localStorage.getItem('robotPanelWidth'))
+      : 0) || ROBOT_PANEL_DEFAULT_PX,
+  codePanelHeight:
+    (typeof window !== 'undefined'
+      ? Number(localStorage.getItem('codePanelHeight'))
+      : 0) || CODE_PANEL_DEFAULT_PX,
 }
 
 const taskSlice = createSlice({
@@ -119,6 +171,7 @@ const taskSlice = createSlice({
         status: TaskStatus
         isReadOnly?: boolean
         ownerUsername?: string | null
+        description?: string
       }>,
     ) {
       state.activeTaskId = action.payload.id
@@ -126,9 +179,24 @@ const taskSlice = createSlice({
       state.activeTaskStatus = action.payload.status
       state.isReadOnly = action.payload.isReadOnly ?? false
       state.ownerUsername = action.payload.ownerUsername ?? null
+      // Assigned only when the key is present, NOT `?? ''`.
+      //
+      // This action is dispatched from seven places and only the two that load
+      // a task pass the full record; the five that follow a save re-state just
+      // id/name/status. A defaulting `??` would therefore blank the header's
+      // description on every autosave — which is every two seconds while the
+      // operator types. (`isReadOnly` and `ownerUsername` above have the same
+      // shape and are safe only because a read-only task cannot reach any of
+      // those five paths.)
+      if (action.payload.description !== undefined) {
+        state.activeTaskDescription = action.payload.description
+      }
     },
     setTaskName(state, action: PayloadAction<string>) {
       state.activeTaskName = action.payload
+    },
+    setTaskDescription(state, action: PayloadAction<string>) {
+      state.activeTaskDescription = action.payload
     },
     setTaskStatus(state, action: PayloadAction<TaskStatus>) {
       state.activeTaskStatus = action.payload
@@ -184,11 +252,25 @@ const taskSlice = createSlice({
         localStorage.setItem('chatPosition', state.chatPosition)
       }
     },
-    toggleRobotPanelWidth(state) {
-      state.robotPanelWidth =
-        state.robotPanelWidth === 'standard' ? 'wide' : 'standard'
+    /**
+     * Set the robot panel's width, in px.
+     *
+     * Only the lower bound is enforced here. The upper one depends on the
+     * viewport and on Copilot's current footprint, neither of which a reducer
+     * can see — the panel clamps it in CSS at render time, which also keeps it
+     * correct when the window is resized without anything being dispatched.
+     */
+    setRobotPanelWidth(state, action: PayloadAction<number>) {
+      state.robotPanelWidth = Math.max(ROBOT_PANEL_MIN_PX, action.payload)
       if (typeof window !== 'undefined') {
-        localStorage.setItem('robotPanelWidth', state.robotPanelWidth)
+        localStorage.setItem('robotPanelWidth', String(state.robotPanelWidth))
+      }
+    },
+    /** Same contract as setRobotPanelWidth: floor here, ceiling in CSS. */
+    setCodePanelHeight(state, action: PayloadAction<number>) {
+      state.codePanelHeight = Math.max(CODE_PANEL_MIN_PX, action.payload)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('codePanelHeight', String(state.codePanelHeight))
       }
     },
   },
@@ -200,6 +282,7 @@ export const {
   updateTask,
   setActiveTask,
   setTaskName,
+  setTaskDescription,
   setTaskStatus,
   toggleChat,
   toggleSim,
@@ -216,7 +299,8 @@ export const {
   setHasUnsavedEdits,
   setLastSaved,
   toggleChatPosition,
-  toggleRobotPanelWidth,
+  setRobotPanelWidth,
+  setCodePanelHeight,
 } = taskSlice.actions
 
 export const taskReducers = taskSlice.reducer

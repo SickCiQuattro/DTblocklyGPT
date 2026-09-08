@@ -98,7 +98,20 @@ export const MainDrawer = ({ open, handleDrawerToggle }: MainDrawerProps) => {
                 alignItems: 'center',
                 justifyContent: open ? 'flex-start' : 'center',
                 width: '100%',
-                padding: '12px 8px',
+                // Less on top than underneath, and the difference is the
+                // separator.
+                //
+                // The rule above this block sits at the vertical CENTRE of its
+                // own 17px row, so half that row — about 8px — already counts
+                // as space between the line and this box. Equal padding on both
+                // sides therefore renders unequal: 20px above the avatar
+                // against 12 below, which is what read as badly framed.
+                //
+                // 8/12 puts the visible gaps at roughly 16 and 12; the rail's
+                // own rounded bottom edge accounts for the rest, and these are
+                // tuned to what renders rather than to what the box model
+                // predicts.
+                padding: '8px 8px 12px',
               }}
             >
               <Profile drawerOpen={open} />

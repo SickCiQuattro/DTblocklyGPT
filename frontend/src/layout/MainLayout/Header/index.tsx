@@ -30,6 +30,7 @@ import {
 import { useAppSelector } from 'store/reducers'
 import {
   setTaskName,
+  setTaskDescription,
   toggleSim,
   triggerSave,
   triggerRename,
@@ -74,6 +75,9 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   const hasUnsavedEdits = useAppSelector((state) => state.task.hasUnsavedEdits)
   const isReadOnly = useAppSelector((state) => state.task.isReadOnly)
   const ownerUsername = useAppSelector((state) => state.task.ownerUsername)
+  const activeTaskDescription = useAppSelector(
+    (state) => state.task.activeTaskDescription,
+  )
   const [issuesAnchorEl, setIssuesAnchorEl] =
     React.useState<HTMLElement | null>(null)
 
@@ -92,6 +96,9 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
 
   const [isEditing, setIsEditing] = React.useState(false)
   const [localName, setLocalName] = React.useState(activeTaskName)
+  const [isEditingDesc, setIsEditingDesc] = React.useState(false)
+  const [localDesc, setLocalDesc] = React.useState(activeTaskDescription)
+  const skipBlurSaveDescRef = React.useRef(false)
   const [discardConfirmOpen, setDiscardConfirmOpen] = React.useState(false)
   // Escape sets isEditing false directly (see handleCancelEditName), which
   // unmounts the InputBase — some browsers fire a blur on unmount, which
@@ -101,6 +108,10 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
   React.useEffect(() => {
     setLocalName(activeTaskName)
   }, [activeTaskName])
+
+  React.useEffect(() => {
+    setLocalDesc(activeTaskDescription)
+  }, [activeTaskDescription])
 
   // The actual discard happens in task-workspace/index.tsx's
   // discardTriggered listener — auto-close the confirm dialog once THAT
@@ -138,6 +149,30 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
     setIsEditing(false)
   }
 
+  // Same shape as handleSaveName, and the same trigger: a description is task
+  // metadata, so it takes the metadata PUT (triggerRename) and never
+  // triggerSave, which would republish the workspace as a side effect of
+  // retitling. Empty is a legitimate value — clearing a description is an edit,
+  // not a cancel, which is why this trims rather than guarding on truthiness
+  // the way the name does (a task must have a name).
+  const handleSaveDesc = () => {
+    if (skipBlurSaveDescRef.current) {
+      skipBlurSaveDescRef.current = false
+      return
+    }
+    setIsEditingDesc(false)
+    const trimmed = localDesc.trim()
+    if (trimmed !== activeTaskDescription) {
+      dispatch(setTaskDescription(trimmed))
+      dispatch(triggerRename(true))
+    }
+  }
+
+  const handleCancelEditDesc = () => {
+    setLocalDesc(activeTaskDescription)
+    setIsEditingDesc(false)
+  }
+
   const iconBackColor = 'grey.100'
   const iconBackColorOpen = 'grey.200'
 
@@ -165,100 +200,204 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
           </Typography>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {isEditing ? (
-            <InputBase
-              value={localName}
-              onChange={(e) => setLocalName(e.target.value)}
-              onBlur={handleSaveName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.currentTarget.blur()
-                } else if (e.key === 'Escape') {
-                  e.preventDefault()
-                  skipBlurSaveRef.current = true
-                  handleCancelEditName()
-                } else if (
-                  (e.metaKey || e.ctrlKey) &&
-                  (e.key === 's' || e.key === 'S')
-                ) {
-                  // Commit the in-progress name, then save — rather than
-                  // blocking the save while the rename editor is open.
-                  // The global Ctrl/Cmd+S (task-workspace/index.tsx) reads
-                  // activeTaskName from Redux, which this editor only writes
-                  // on blur/Enter, so pressing it mid-rename saved the task
-                  // under its previous name and dropped the new one with no
-                  // sign it had been ignored. The global handler skips its own
-                  // dispatch whenever focus is in a text field, so this is the
-                  // only one that fires here — no double save.
-                  e.preventDefault()
-                  // Both dispatches land in the same React batch, so the save
-                  // effect over in task-workspace re-runs already seeing the
-                  // new name. No triggerRename: saveTaskToBackend PUTs the
-                  // name itself when it differs from the loaded task, and the
-                  // rename listener would fire a second, racing PUT for it.
-                  const trimmed = localName.trim()
-                  if (trimmed && trimmed !== activeTaskName) {
-                    dispatch(setTaskName(trimmed))
+          {/* Name over description, as one column. Everything after it — the
+              status chip, the read-only notice, the issues badge — stays a
+              sibling in the row and centres against the pair.
+
+              The two lines have to fit inside the 56px Toolbar: the app
+              publishes that number as --layout-appbar-height and the fixed
+              panels position themselves against it, so a header that outgrows
+              it would misalign the robot panel rather than just look tall.
+              Budget: ~30px for the name row (its rename button is the tallest
+              thing in it) plus ~15px here. */}
+          <div
+            style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}
+          >
+            {isEditing ? (
+              <InputBase
+                value={localName}
+                onChange={(e) => setLocalName(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    skipBlurSaveRef.current = true
+                    handleCancelEditName()
+                  } else if (
+                    (e.metaKey || e.ctrlKey) &&
+                    (e.key === 's' || e.key === 'S')
+                  ) {
+                    // Commit the in-progress name, then save — rather than
+                    // blocking the save while the rename editor is open.
+                    // The global Ctrl/Cmd+S (task-workspace/index.tsx) reads
+                    // activeTaskName from Redux, which this editor only writes
+                    // on blur/Enter, so pressing it mid-rename saved the task
+                    // under its previous name and dropped the new one with no
+                    // sign it had been ignored. The global handler skips its own
+                    // dispatch whenever focus is in a text field, so this is the
+                    // only one that fires here — no double save.
+                    e.preventDefault()
+                    // Both dispatches land in the same React batch, so the save
+                    // effect over in task-workspace re-runs already seeing the
+                    // new name. No triggerRename: saveTaskToBackend PUTs the
+                    // name itself when it differs from the loaded task, and the
+                    // rename listener would fire a second, racing PUT for it.
+                    const trimmed = localName.trim()
+                    if (trimmed && trimmed !== activeTaskName) {
+                      dispatch(setTaskName(trimmed))
+                    }
+                    // Leaving edit mode unmounts the InputBase, and some
+                    // browsers fire a blur on unmount — same reason
+                    // handleCancelEditName arms this ref (see handleSaveName).
+                    skipBlurSaveRef.current = true
+                    setIsEditing(false)
+                    dispatch(triggerSave(true))
                   }
-                  // Leaving edit mode unmounts the InputBase, and some
-                  // browsers fire a blur on unmount — same reason
-                  // handleCancelEditName arms this ref (see handleSaveName).
-                  skipBlurSaveRef.current = true
-                  setIsEditing(false)
-                  dispatch(triggerSave(true))
-                }
-              }}
-              autoFocus
-              sx={{
-                fontSize: '1rem',
-                fontWeight: 600,
-                color: 'text.primary',
-                borderBottom: `2px solid ${theme.palette.primary.main}`,
-                paddingBottom: '2px',
-                width: '180px',
-              }}
-            />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Typography
-                variant="h5"
-                component="h1"
-                sx={{
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  // The left group grew a badge + Discard button — an
-                  // unbounded long name could now push into the fixed-width
-                  // action group instead of just crowding empty space.
-                  maxWidth: '320px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}
-                onClick={() => setIsEditing(true)}
-                title={activeTaskName}
+                autoFocus
+                sx={{
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  color: 'text.primary',
+                  borderBottom: `2px solid ${theme.palette.primary.main}`,
+                  paddingBottom: '2px',
+                  width: '180px',
+                }}
+              />
+            ) : (
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
-                {activeTaskName}
-              </Typography>
-              <Tooltip
-                title={
-                  isReadOnly
-                    ? "Shared by another user — you can't edit this task"
-                    : 'Rename task'
-                }
-              >
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={() => setIsEditing(true)}
-                    aria-label="Rename task"
-                    disabled={isReadOnly}
-                  >
-                    <Pencil size={14} />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </div>
-          )}
+                <Typography
+                  variant="h5"
+                  component="h1"
+                  sx={{
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    // The left group grew a badge + Discard button — an
+                    // unbounded long name could now push into the fixed-width
+                    // action group instead of just crowding empty space.
+                    maxWidth: '320px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onClick={() => setIsEditing(true)}
+                  title={activeTaskName}
+                >
+                  {activeTaskName}
+                </Typography>
+                <Tooltip
+                  title={
+                    isReadOnly
+                      ? "Shared by another user — you can't edit this task"
+                      : 'Rename task'
+                  }
+                >
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => setIsEditing(true)}
+                      aria-label="Rename task"
+                      disabled={isReadOnly}
+                    >
+                      <Pencil size={14} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </div>
+            )}
+
+            {/* The description, and the reason it is here is authoring, not
+                reading.
+
+                It could only be written on the Edit details page, reached from
+                the overflow menu of the task list. So a task built from
+                /task/new — which is how a task gets built — could not be given
+                a description at all without leaving the workspace, going to
+                another screen and coming back. The place where you decide what
+                a task does and the place where you say what it does were two
+                navigations apart, in opposite directions.
+
+                Inline, exactly like the name above: same commit-on-blur, same
+                Enter/Escape, same metadata PUT. Nothing new to learn. */}
+            {isEditingDesc ? (
+              <InputBase
+                value={localDesc}
+                onChange={(e) => setLocalDesc(e.target.value)}
+                onBlur={handleSaveDesc}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    // Escape unmounts this InputBase, and some browsers fire a
+                    // blur on unmount — which would re-run the save straight
+                    // after the cancel. Same guard as the name editor.
+                    skipBlurSaveDescRef.current = true
+                    handleCancelEditDesc()
+                  }
+                }}
+                autoFocus
+                placeholder="What does this task do?"
+                sx={{
+                  fontSize: '0.75rem',
+                  lineHeight: 1.2,
+                  color: 'text.secondary',
+                  width: '320px',
+                  '& input': { padding: 0 },
+                }}
+              />
+            ) : (
+              (activeTaskDescription || !isReadOnly) && (
+                <Typography
+                  variant="caption"
+                  onClick={() => !isReadOnly && setIsEditingDesc(true)}
+                  // The name has a Pencil button beside it, so clicking its
+                  // text is only a shortcut and the keyboard still has a way
+                  // in. This line has no button — a second one in the header
+                  // would be noise — so the text itself has to be the control,
+                  // and a control has to be reachable by Tab.
+                  {...(!isReadOnly && {
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-label': activeTaskDescription
+                      ? `Edit description: ${activeTaskDescription}`
+                      : 'Add a description',
+                    onKeyDown: (e: React.KeyboardEvent) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setIsEditingDesc(true)
+                      }
+                    },
+                  })}
+                  title={activeTaskDescription || undefined}
+                  sx={{
+                    // 1.2 and 0.75rem keep the pair inside the Toolbar; see the
+                    // budget on the column above.
+                    fontSize: '0.75rem',
+                    lineHeight: 1.2,
+                    maxWidth: '320px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    // An empty description is not nothing to say: without the
+                    // prompt the line is blank, and a blank line is not a
+                    // control anyone tries to click.
+                    color: activeTaskDescription
+                      ? 'text.secondary'
+                      : 'text.disabled',
+                    fontStyle: activeTaskDescription ? 'normal' : 'italic',
+                  }}
+                >
+                  {activeTaskDescription || 'Add a description'}
+                </Typography>
+              )
+            )}
+          </div>
           {statusChip}
           {isReadOnly && (
             <Alert
@@ -409,12 +548,32 @@ export const Header = ({ open, handleDrawerToggle }: HeaderProps) => {
               textTransform: 'none',
               fontWeight: 500,
               fontSize: '0.85rem',
-              color: chatOpen ? 'primary.main' : 'text.secondary',
-              bgcolor: chatOpen
-                ? alpha(theme.palette.primary.main, 0.08)
-                : 'transparent',
+              // Tonal in BOTH states, and indigo in both.
+              //
+              // It was grey text on nothing until opened, so the one control
+              // that offers help was the quietest thing in the bar — a
+              // first-time operator has no reason to read it as a button at
+              // all. A tinted ground is what makes it one; the open state
+              // keeps its stronger tint, so the toggle still reads.
+              //
+              // Not green, though green was the request. Green is spoken for
+              // in this app: the robot panel reserves it for "twin only, the
+              // arm cannot move" and spends it on the Start simulation button
+              // a few centimetres to the right. A green Copilot button beside
+              // a green Run button would put the same colour on the one
+              // control that never touches the robot and on the one that
+              // starts it.
+              //
+              // Indigo is already the app's own accent and already what this
+              // button turns when open, so this promotes what was there
+              // rather than introducing a colour.
+              color: chatOpen ? 'primary.main' : 'primary.dark',
+              bgcolor: alpha(
+                theme.palette.primary.main,
+                chatOpen ? 0.12 : 0.06,
+              ),
               '&:hover': {
-                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                bgcolor: alpha(theme.palette.primary.main, 0.16),
               },
             }}
           >

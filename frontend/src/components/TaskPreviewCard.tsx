@@ -19,6 +19,7 @@ import {
   ScanEye,
   Mic,
   Clock,
+  Layers,
 } from 'lucide-react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
@@ -29,6 +30,7 @@ import { abstractToBlockly } from 'utils/blocklyParser'
 import {
   RECOGNIZED_GESTURES,
   RECOGNIZED_VOICE_COMMANDS,
+  voiceLabelWithSpokenForm,
 } from 'constants/recognitionRegistry'
 import { blockMetaByType } from 'features/blockly/toolbox/toolboxRegistry'
 
@@ -52,6 +54,12 @@ const codeLabel = (
   code: string,
 ): string => options.find((o) => o.code === code)?.label ?? code
 
+/** Voice needs the spoken form, which the generic codeLabel above cannot give. */
+const voiceCodeLabel = (code: string): string => {
+  const option = RECOGNIZED_VOICE_COMMANDS.find((v) => v.code === code)
+  return option ? voiceLabelWithSpokenForm(option) : code
+}
+
 // Same icon-per-block-type language already on the canvas (blocks/icons.ts,
 // blocks/definitions.ts iconConfig calls) — pure reuse, not a new choice, so
 // the preview reinforces the same visual vocabulary the operator already
@@ -74,6 +82,7 @@ const STEP_ICON_BY_BLOCK_TYPE: Record<
   repeat_until_block: Repeat2,
   when_block: Split,
   when_otherwise_block: Split,
+  macro_task_block: Layers,
 }
 
 interface TreeColors {
@@ -172,6 +181,27 @@ const buildTreeNodes = (
       case 'notify_action':
         title = `${blockMetaByType.notify_action_block.label}: ${(step as any).description || 'No description'}`
         icon = stepIcon('notify_action_block')
+        break
+      // The assistant emits all three of these — `validate_step` accepts them
+      // and the prompt documents them — and this switch handled none, so the
+      // preview rendered "Unknown step: macro_task" with an error icon next to
+      // a proposal that was in fact correct. The operator was being told the
+      // assistant had produced something broken.
+      //
+      // Nothing is nested under a Saved Task here on purpose: its steps live
+      // in another task's workspace, which this card was never given. Naming
+      // it is honest; inventing its contents would not be.
+      case 'macro_task':
+        title = `${blockMetaByType.macro_task_block.label}: ${(step as any).macroName || 'Unnamed saved task'}`
+        icon = stepIcon('macro_task_block')
+        break
+      case 'open_gripper':
+        title = blockMetaByType.open_gripper_block.label
+        icon = stepIcon('open_gripper_block')
+        break
+      case 'close_gripper':
+        title = blockMetaByType.close_gripper_block.label
+        icon = stepIcon('close_gripper_block')
         break
       case 'repeat':
         title = `Repeat ${(step as any).times} times`
@@ -328,7 +358,11 @@ const renderConditionNode = (
       }
     case 'voice':
       return {
-        title: `${blockMetaByType.voice_command_block.label}: ${codeLabel(RECOGNIZED_VOICE_COMMANDS, condition.voiceWord)}`,
+        // Carries the spoken form, like the block's own dropdown and the
+        // recognition legend. This card is where an operator decides whether
+        // to accept Copilot's proposal, so it has to show the same thing the
+        // block will show once accepted.
+        title: `${blockMetaByType.voice_command_block.label}: ${voiceCodeLabel(condition.voiceWord)}`,
         icon: <Mic size={16} style={{ color: colors.cond }} />,
         key: `${path}-voice`,
       }

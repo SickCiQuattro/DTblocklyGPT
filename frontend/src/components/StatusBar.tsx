@@ -51,9 +51,15 @@ export const StatusBar: React.FC = () => {
         height: '40px',
         minHeight: '40px',
         bgcolor: 'background.default',
-        display: 'flex',
+        // A grid, not space-between. With three flex children the middle one
+        // is centred only while the outer two happen to be the same width, and
+        // these two never are: the left label swings between "Not running" and
+        // "Simulation running", so the save state slid sideways every time a
+        // run started or ended. `1fr auto 1fr` pins it to the true centre
+        // whatever the neighbours do.
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        justifyContent: 'space-between',
         padding: '0 20px',
         fontFamily: "'Geist Mono', monospace",
         color: theme.palette.text.secondary,
@@ -61,17 +67,35 @@ export const StatusBar: React.FC = () => {
         boxSizing: 'border-box',
       }}
     >
-      {/* Left side: Simulation status */}
+      {/* Left: is a program running, and where. The app's only persistent
+          answer to that question — the robot panel says it too, but only while
+          it is open, and it is closed by default. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span
-          style={{
+        <Box
+          component="span"
+          sx={{
             width: '8px',
             height: '8px',
             borderRadius: '50%',
             backgroundColor: isSimulationRunning
-              ? theme.palette.success.main
-              : theme.palette.text.disabled,
+              ? 'success.main'
+              : 'text.disabled',
             display: 'inline-block',
+            flexShrink: 0,
+            // A run is the one state on this bar that is ongoing rather than
+            // finished, and a dot that only changes colour reads as another
+            // static badge in the periphery. Motion is what separates "running
+            // now" from "ran"; it stops when the run does.
+            ...(isSimulationRunning && {
+              animation: 'statusPulse 1.6s ease-in-out infinite',
+              '@keyframes statusPulse': {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0.35 },
+              },
+              '@media (prefers-reduced-motion: reduce)': {
+                animation: 'none',
+              },
+            }),
           }}
         />
         <Typography
@@ -79,7 +103,9 @@ export const StatusBar: React.FC = () => {
           sx={{
             fontFamily: 'inherit',
             fontSize: '0.74rem',
-            fontWeight: 500,
+            fontWeight: isSimulationRunning ? 700 : 500,
+            color: isSimulationRunning ? 'success.dark' : 'inherit',
+            whiteSpace: 'nowrap',
           }}
         >
           {isSimulationRunning
@@ -91,7 +117,7 @@ export const StatusBar: React.FC = () => {
       </Box>
 
       {/* Center: Last saved timestamp, brief success flash on save */}
-      <Box>
+      <Box sx={{ justifySelf: 'center' }}>
         <Typography
           role={saveError ? 'alert' : undefined}
           aria-live={saveError ? undefined : 'polite'}
@@ -123,15 +149,16 @@ export const StatusBar: React.FC = () => {
                 ? UI_TEXT.unsavedChanges
                 : lastSaved
                   ? `Saved at ${lastSaved}`
-                  : UI_TEXT.unsavedChanges}
+                  : UI_TEXT.notSavedYet}
         </Typography>
       </Box>
 
       {/* Right side: View Code toggle */}
-      <Box>
+      <Box sx={{ justifySelf: 'end' }}>
         <Button
           onClick={() => dispatch(toggleCode())}
           size="small"
+          aria-expanded={codeOpen}
           startIcon={<Code size={14} />}
           sx={{
             fontFamily: "'Geist Mono', monospace",

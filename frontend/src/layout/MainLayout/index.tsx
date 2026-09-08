@@ -6,6 +6,7 @@ import { Box, Toolbar, useMediaQuery } from '@mui/material'
 
 import { useAppSelector } from 'store/reducers'
 import { openDrawer } from 'store/reducers/menu'
+import { LAYOUT } from 'utils/constants'
 
 import { MainDrawer } from './Drawer'
 import { Header } from './Header'
@@ -50,6 +51,17 @@ export const MainLayout = () => {
         width: '100%',
         height: '100vh',
         overflow: 'hidden',
+        // Publish the layout constants as CSS custom properties.
+        //
+        // utils/constants.ts has claimed since it was written that these
+        // "propagate automatically" — they did not: nothing ever set them, so
+        // every `var(--layout-appbar-height, 56px)` in a fixed panel was
+        // silently using its literal fallback. Correct today, and a trap the
+        // moment either height changes: the TS constant would move and the
+        // panels would not.
+        '--layout-appbar-height': `${LAYOUT.appBarHeight}px`,
+        '--layout-statusbar-height': `${LAYOUT.statusBarHeight}px`,
+        '--layout-gutter': `${LAYOUT.gutter}px`,
       }}
     >
       <Box

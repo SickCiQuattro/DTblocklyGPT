@@ -12,4 +12,7 @@
 
 export { blocksColours } from './palette'
 export { SHADOW_ICON_URIS } from './icons'
-export { blockDescriptionsByType } from './blockTextDictionary'
+export {
+  blockDescriptionsByType,
+  blockLabelsByType,
+} from './blockTextDictionary'

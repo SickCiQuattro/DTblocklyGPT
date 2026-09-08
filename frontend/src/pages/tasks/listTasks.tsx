@@ -31,9 +31,11 @@ import {
   Trash2,
   Share2,
   Lock,
+  Users,
   ListChecks,
   MoreVertical,
   Undo2,
+  AlertTriangle,
 } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
@@ -46,7 +48,7 @@ import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
 import { defaultCurrentPage } from 'utils/constants'
-import { formatDateTimeShortFrontend } from 'utils/date'
+import { formatDateTimeShortFrontend, formatRelativeFrontend } from 'utils/date'
 import { isModalOpen } from 'utils/keyboardGuards'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { MyRobotType } from 'pages/myrobots/types'
@@ -174,13 +176,26 @@ const TaskRowActions = ({
         {/* span wrapper: a disabled IconButton alone won't fire the
             Tooltip's hover events */}
         <span>
-          <IconButton
-            // Always green, always opens the panel pre-set to Simulate
-            // (never Real robot) — a one-click shortcut from the list
-            // should never default to moving the physical arm. Matches the
-            // robot panel's "green = twin-only" convention
-            // (DigitalTwinPanel.tsx Mode selector / Run button).
-            sx={{ width: 40, height: 40, color: 'success.dark' }}
+          <Button
+            // Labelled, and heavier than the overflow menu beside it.
+            //
+            // This was a 17px ghost icon sitting at the same visual weight as
+            // the "…" next to it, on the page whose whole job is running
+            // tasks: the action performed ten times a day was quieter than the
+            // one performed once, and quieter than "New task" at the top. It
+            // has always carried a tooltip and an aria-label, so this is a
+            // hierarchy problem rather than an accessibility one — the fix is
+            // weight and a word, not a label that only some users get.
+            //
+            // Always green, always opens the panel pre-set to Simulate (never
+            // Real robot): a one-click shortcut from a list must not default to
+            // moving the physical arm. Matches the robot panel's "green =
+            // twin-only" convention (DigitalTwinPanel.tsx).
+            variant="outlined"
+            size="small"
+            color="success"
+            startIcon={<Play size={15} />}
+            sx={{ textTransform: 'none', fontWeight: 600, minHeight: 34 }}
             disabled={!canRun}
             onClick={() =>
               navigate(`/task/${row.id}`, {
@@ -188,10 +203,9 @@ const TaskRowActions = ({
               })
             }
             id={`btn-run-task-${row.id}`}
-            aria-label={`${UI_TEXT.simulate} this task`}
           >
-            <Play size={17} />
-          </IconButton>
+            {UI_TEXT.simulate}
+          </Button>
         </span>
       </Tooltip>
 
@@ -361,6 +375,59 @@ const TaskRowActions = ({
 
 // ─── Task card ────────────────────────────────────────────────────────────────
 
+/**
+ * The card's description, clamped to two lines with the rest on hover.
+ *
+ * It was one line with an ellipsis and no tooltip, so a description longer
+ * than the card was simply unreadable without opening Edit details on another
+ * page. The seeded catalogue runs 38–132 characters against roughly 250px of
+ * card, so most of it was cut and a second line carries most of it whole.
+ *
+ * The tooltip appears only when the text is ACTUALLY clamped, measured rather
+ * than assumed — this is the grid an operator sweeps the pointer across to
+ * click a card, and a tooltip that repeats a sentence already fully on screen
+ * is worse than the truncation it was added to explain.
+ */
+const TaskDescription = ({ text }: { text: string }) => {
+  const ref = useRef<HTMLElement | null>(null)
+  const [clamped, setClamped] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // +1 absorbs sub-pixel line heights, which otherwise report a one-pixel
+    // overflow on text that fits and make every card show a tooltip.
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    // Card width follows the grid, which follows the viewport: a sentence that
+    // fits on two lines at 1440px is cut at 1024px, and nothing re-renders in
+    // between.
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text])
+
+  return (
+    <Tooltip title={clamped ? text : ''}>
+      <Typography
+        ref={ref}
+        variant="caption"
+        color="text.secondary"
+        sx={{
+          // -webkit-box + line-clamp, not `nowrap` + text-overflow: the second
+          // can only ever cut at one line. The clamp draws its own ellipsis.
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {text}
+      </Typography>
+    </Tooltip>
+  )
+}
+
 const TaskCard = ({
   row,
   canView,
@@ -437,35 +504,30 @@ const TaskCard = ({
           >
             {row.name}
           </Typography>
-          {row.description && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {row.description}
-            </Typography>
-          )}
+          {row.description && <TaskDescription text={row.description} />}
         </Box>
         {/* Was a bordered, tinted pill with icon AND label — the loudest thing
             on the card after the name, for a binary that is nearly always the
             same value and that an operator almost never acts on. Demoted to a
             bare icon: still present, still explained on hover, no longer
-            competing with what the program actually does. */}
-        <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
-          <Box sx={{ flexShrink: 0, display: 'flex', pt: 0.25 }}>
-            {row.shared ? (
-              <Share2 size={14} color={tokenPalette.slate[400]} />
-            ) : (
-              <Lock size={14} color={tokenPalette.slate[300]} />
-            )}
-          </Box>
-        </Tooltip>
+            competing with what the program actually does.
+
+            Only on a task you own. `shared` is the owner's choice about who
+            may see it, and on someone else's task that is not a fact about
+            you: the only reason it is in your list at all is that it IS
+            shared, so the icon would be a constant. What matters there is who
+            owns it, and that goes in the meta row below as words. */}
+        {canManage && (
+          <Tooltip title={row.shared ? 'Shared with other users' : 'Private'}>
+            <Box sx={{ flexShrink: 0, display: 'flex', pt: 0.25 }}>
+              {row.shared ? (
+                <Share2 size={14} color={tokenPalette.slate[400]} />
+              ) : (
+                <Lock size={14} color={tokenPalette.slate[300]} />
+              )}
+            </Box>
+          </Tooltip>
+        )}
       </Stack>
 
       <UsesStrip uses={(row as any).uses} />
@@ -473,8 +535,55 @@ const TaskCard = ({
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
         <TaskStatusChip status={(row as any).status} />
         <Typography variant="caption" color="text.secondary">
-          {formatDateTimeShortFrontend(row.last_modified)}
+          {/* Relative, with the exact value on hover — the grid is sorted by
+              this field, and the ordering has to be visible without parsing
+              DD/MM twice. */}
+          <Tooltip title={formatDateTimeShortFrontend(row.last_modified) ?? ''}>
+            <span>{formatRelativeFrontend(row.last_modified)}</span>
+          </Tooltip>
         </Typography>
+        {/* Whose task this is, in words, on the card.
+
+            The app already knew — `owner__username` is in the list payload and
+            has been all along, and the workspace header says "Shared by X —
+            read-only" the moment you open one. The card said nothing, so the
+            only way to find out that a task is not yours was to open it, and
+            what you found there was that you could not edit it. Same sentence
+            as the header, deliberately: two screens describing one fact should
+            not need to be reconciled.
+
+            Visible rather than a hover, unlike the private/shared icon above.
+            That icon is a binary that is nearly always the same and that the
+            operator rarely acts on; this is rarely true and it changes what
+            the card can do — Edit, Discard and Delete are already absent from
+            its menu, and an absence explains nothing. */}
+        {!canManage && (
+          <Tooltip
+            title={`Shared by ${row.owner__username || 'another user'} — you can open and run this task, but not edit it`}
+          >
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{
+                alignItems: 'center',
+                color: 'text.secondary',
+                minWidth: 0,
+              }}
+            >
+              <Users size={12} style={{ flexShrink: 0 }} />
+              <Typography
+                variant="caption"
+                sx={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Shared by {row.owner__username || 'another user'}
+              </Typography>
+            </Stack>
+          </Tooltip>
+        )}
       </Stack>
 
       <Stack
@@ -523,8 +632,19 @@ const UsesStrip = ({ uses }: { uses?: TaskUses }) => {
       label: `${uses.steps} ${uses.steps === 1 ? 'step' : 'steps'}`,
     },
   ]
-  if (uses.movesRobot)
-    items.push({ key: 'arm', label: 'moves arm', amber: true })
+  // The INFORMATIVE case is the absence.
+  //
+  // "moves arm" was pushed for every task that moves the arm, which is very
+  // nearly all of them — nine of nine on the first screen. A tag carried by
+  // everything separates nothing and costs a line on every card, while
+  // "camera" and "voice" earn theirs by being rare.
+  //
+  // What is worth marking is the task that does NOT move the arm: messages and
+  // waits only, the human-in-the-loop case this system exists for. That one had
+  // no tag at all, so the one card worth a second look was the one with the
+  // least ink on it.
+  if (!uses.movesRobot)
+    items.push({ key: 'arm', label: 'no arm movement', amber: true })
   if (uses.needsCamera) items.push({ key: 'cam', label: 'camera' })
   if (uses.needsVoice) items.push({ key: 'mic', label: 'voice' })
   if (uses.usesSavedTask) items.push({ key: 'macro', label: 'saved task' })
@@ -746,6 +866,13 @@ const ListTasks = () => {
   // Tasks is the app's de-facto landing page (no separate marketing/dashboard
   // route) — the greeting + live status line replace a plain "Tasks" title
   // with something that actually orients a returning operator.
+  //
+  // Including whether the simulator answers at all. This page counts how many
+  // tasks are ready and said nothing about whether ANY of them could run: the
+  // operator found that out one navigation later, in the robot panel. The
+  // endpoint proxies the bridge's own health and returns an `error` key only
+  // when the bridge did not answer — hardware being unarmed is not an error and
+  // does not set it, so this cannot cry wolf about a simulator that is fine.
   const userName =
     typeof storedUser === 'object' &&
     storedUser !== null &&
@@ -753,6 +880,15 @@ const ListTasks = () => {
     typeof (storedUser as Partial<UserLoginInterface>).username === 'string'
       ? (storedUser as Partial<UserLoginInterface>).username
       : ''
+  const { data: bridgeHealth } = useSWR<{ error?: string }, Error>(
+    { url: endpoints.task.hardwareStatus, method: MethodHTTP.GET },
+    fetchApi,
+    // Checked on arrival and when the tab is returned to, not polled: this is
+    // orientation, not a monitor, and the panel checks properly before a run.
+    { revalidateOnFocus: true, refreshInterval: 0, shouldRetryOnError: false },
+  )
+  const simulatorDown = !!bridgeHealth?.error
+
   const liveStatusLine = (() => {
     if (rows.length === 0) return 'No tasks yet — create your first one below.'
     if (statusFilter === 'published') {
@@ -833,6 +969,30 @@ const ListTasks = () => {
           <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
             {liveStatusLine}
           </Typography>
+          {/* Amber, and only when the bridge did not answer. This page's own
+              vocabulary keeps amber for "something about the robot" — the same
+              reservation the panel enforces — and this is the only thing on it
+              that qualifies. It says what stops working rather than naming a
+              service: the operator can act on "nothing will run", not on
+              "the bridge is down". */}
+          {simulatorDown && (
+            <Stack
+              direction="row"
+              spacing={0.75}
+              sx={{ alignItems: 'center', mt: 0.75 }}
+            >
+              <AlertTriangle size={14} color={tokenPalette.warning.darker} />
+              {/* warning.darker, not .dark: on white the latter measures
+                  3.19:1 and fails AA for body text, while darker clears it at
+                  5.02:1. The icon beside it may sit at either — it is not
+                  text — but it uses the same token so the two read as one
+                  mark. */}
+              <Typography variant="body2" color="warning.darker">
+                The simulator is not responding — tasks cannot run until it is
+                back.
+              </Typography>
+            </Stack>
+          )}
         </Box>
         <Button
           variant="contained"
@@ -987,19 +1147,34 @@ const ListTasks = () => {
               ))}
             </Box>
           </Box>
-          <TablePagination
-            rowsPerPageOptions={CARD_PAGE_SIZE_OPTIONS}
-            component="div"
-            count={filteredRows.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(_, newPage) => setPage(newPage)}
-            onRowsPerPageChange={(e) => {
-              setRowsPerPage(parseInt(e.target.value, 10))
-              setPage(0)
-            }}
-            sx={{ mt: 1 }}
-          />
+          {/* Hidden when there is only one page.
+              With ten tasks and a page size of twelve, this row rendered
+              "1–10 of 10" with both arrows disabled and a size selector
+              offering 12/24/48 for a set of ten: a full band across the bottom
+              of the primary screen whose only effect was to be scrolled past.
+              Worse, the grid above it scrolls — so the page offered two
+              competing ways to reach ten cards, one of which could not move. */}
+          {filteredRows.length > rowsPerPage && (
+            <TablePagination
+              // "Tasks per page", not MUI's default "Rows per page": there are
+              // no rows on this screen. It is a grid of cards, and the component
+              // is being borrowed for its paging controls, not its table
+              // semantics — `component="div"` below says the same thing. Naming
+              // the thing the operator can actually see is the whole of the fix.
+              labelRowsPerPage="Tasks per page"
+              rowsPerPageOptions={CARD_PAGE_SIZE_OPTIONS}
+              component="div"
+              count={filteredRows.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={(_, newPage) => setPage(newPage)}
+              onRowsPerPageChange={(e) => {
+                setRowsPerPage(parseInt(e.target.value, 10))
+                setPage(0)
+              }}
+              sx={{ mt: 1 }}
+            />
+          )}
         </>
       )}
 

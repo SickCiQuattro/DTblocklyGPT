@@ -43,7 +43,13 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
       </Box>
 
       {/* Pinned help link — same rail row metric as the nav items above. */}
-      <Box sx={{ pb: 1, bgcolor: 'background.paper' }}>
+      {/* The row sits between two rules: this section's separator above and the
+          one over the profile below. Both are 17px tall with the line centred,
+          so on paper 8px of padding on each side would centre the item — and it
+          did not: the gap underneath rendered visibly larger. The padding below
+          is trimmed to match what the eye sees rather than what the box model
+          predicts, which is the only measurement that counts here. */}
+      <Box sx={{ pt: 1, pb: 0.25, bgcolor: 'background.paper' }}>
         {/* Separator keeps NAV_SEPARATOR_HEIGHT in both states so toggling
             the rail never moves the FAQ row (same rule as NavGroupHeader).
             Collapsed: short centered hairline matching the group dividers

@@ -13,6 +13,17 @@ export interface HumanStepStatus {
   value?: string
   timeout?: number
   timestamp?: number
+  /**
+   * Set when a `timeout` was not a timeout: the condition was auto-satisfied
+   * because nothing could observe it. `bridge_unreachable`,
+   * `vision_node_absent`, `object_already_in_frame` (see _mark_condition_bypass
+   * in simulate.py).
+   *
+   * The two outcomes share one status on the wire and mean opposite things —
+   * a real timeout ends the step in failure, a bypass lets the run continue —
+   * so anything rendering `timeout` has to check this first.
+   */
+  bypass_reason?: string
 }
 
 export interface BlockStepStatus {

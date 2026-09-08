@@ -164,7 +164,47 @@ export const BlocklyWorkspace = ({
     onTaskLoadedRef.current = onTaskLoaded
   })
 
+  /**
+   * Names the cause when the workspace is torn down and rebuilt.
+   *
+   * The effect below disposes the whole Blockly instance and injects a new one
+   * whenever `editMode` or `dataTask` changes identity. On screen that is
+   * indistinguishable from a page refresh: the blocks vanish and come back
+   * from data, and anything not yet saved goes with them.
+   *
+   * Both are supposed to be stable — `dataTask` is `editorDataTask` in
+   * task-workspace, which is assigned once and cleared only by Discard — but
+   * that invariant lives in another file and nothing enforces it. A `useMemo`
+   * losing its identity there, or a new caller passing a fresh object, would
+   * silently turn every render into a rebuild, and the report reaching a
+   * developer would be "the workspace refreshes at random".
+   *
+   * Dev only, and it prints WHICH dependency moved, because the two have very
+   * different causes: `editMode` follows read-only state, `dataTask` follows
+   * the fetched task.
+   */
+  const injectionCountRef = useRef(0)
+  const lastDepsRef = useRef<{ editMode: boolean; dataTask: unknown } | null>(
+    null,
+  )
+
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      injectionCountRef.current += 1
+      const previous = lastDepsRef.current
+      if (previous) {
+        const changed = [
+          previous.editMode !== editMode && 'editMode',
+          previous.dataTask !== dataTask && 'dataTask',
+        ].filter(Boolean)
+        console.warn(
+          `[BlocklyWorkspace] rebuilt (#${injectionCountRef.current}) — ` +
+            `changed: ${changed.join(', ') || 'neither: the component remounted'}`,
+        )
+      }
+      lastDepsRef.current = { editMode, dataTask }
+    }
+
     if (blocklyDivRef.current) {
       blocklyDivRef.current.innerHTML = ''
     }

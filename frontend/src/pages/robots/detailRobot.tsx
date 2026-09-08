@@ -38,7 +38,7 @@ const DetailRobot = () => {
       title={insertMode ? 'Add Robot to Fleet' : 'Robot Fleet Detail'}
       subtitle={subtitle}
       backFunction={backFunction}
-      backTitle="Return to Robots Fleet"
+      backTitle="Return to Robot Fleet"
     >
       {isLoading && !insertMode && <CircularProgress />}
       {loadError && (

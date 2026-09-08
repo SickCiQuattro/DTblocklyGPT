@@ -221,12 +221,33 @@
   font-size: 1.1rem !important;
 }
 
+/* No height cap by default: an open category renders at its natural size and
+   the palette around it is the one thing that scrolls.
+
+   It used to cap every category at 260px and scroll inside. That was already
+   wrong for one of them before anything changed — Robot Actions holds seven
+   pills, which is 16px of padding + 7x32 + 6x6 = 276px, so the category that
+   is open when the editor loads has always been clipping its last pill and
+   scrolling a sixteen-pixel window to reach it.
+
+   Capping every panel became worse once several can be open at once: each one
+   is then a scroll region nested inside the palette's own, and the wheel does
+   something different depending on which of them the pointer happens to be
+   over. */
 .toolbox-category__body {
   background-color: #ffffff;
   padding: 8px !important;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* The exception, and the only one: a category whose rows come from the
+   database. Objects, Locations, Skills and Saved Tasks are as long as the
+   operator's library, so without a bound one of them could push every other
+   category off the palette. The static categories cannot grow — their length
+   is decided in toolboxRegistry.ts, not at runtime. */
+.toolbox-category--bounded .toolbox-category__body {
   max-height: 260px;
   overflow-y: auto;
   scrollbar-width: thin;

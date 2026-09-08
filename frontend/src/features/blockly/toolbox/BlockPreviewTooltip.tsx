@@ -647,7 +647,16 @@ export const BlockPreviewTooltip = ({
             <div className="toolbox-preview-card__body">
               <p
                 className="toolbox-preview-card__description"
-                style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4' }}
+                // `pretty` so the browser stops leaving a single short word,
+                // or a stranded article, alone on the last line. The card is a
+                // fixed 292px and these sentences are written once for every
+                // block, so which words fall at a line end is not something
+                // the text can be tuned for one at a time.
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  textWrap: 'pretty',
+                  lineHeight: '1.4',
+                }}
               >
                 {descriptionText}
               </p>

@@ -69,7 +69,7 @@ const ColHead = ({ children }: { children: React.ReactNode }) => (
 )
 
 const ListRobots = () => {
-  useDocumentTitle('Robots Fleet')
+  useDocumentTitle('Robot Fleet')
   const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
   const [rowsPerPage, setRowsPerPage] = useState(defaultPageSizeSelection)
   const [deleteId, setDeleteId] = useState<number | null>(null)
@@ -143,7 +143,7 @@ const ListRobots = () => {
 
   return (
     <MainCard
-      title="Robots Fleet"
+      title="Robot Fleet"
       subtitle="Here you can view and manage the Robots defined in the fleet."
     >
       <Stack
