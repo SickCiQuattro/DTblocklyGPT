@@ -69,7 +69,14 @@ from backend.functions.chat import (  # noqa: E402
     validate_step,
 )
 
-CASES_PATH = os.path.join(os.path.dirname(__file__), "eval_llm_cases.jsonl")
+DEFAULT_CASES_PATH = os.path.join(os.path.dirname(__file__), "eval_llm_cases.jsonl")
+
+# Overridable so a separate case file can be run without touching the frozen
+# golden set. Adding a case to the frozen file changes `cases_sha256`, which
+# makes every already-measured result file diverge in the provenance audit —
+# the campaign would have to be re-run in full to stay comparable. A second
+# file is measured and reported on its own instead.
+CASES_PATH = DEFAULT_CASES_PATH
 RPD_STATE_PATH = os.path.join(os.path.dirname(__file__), ".eval_rpd_state.json")
 
 DATA_OBJECTS = [
@@ -142,6 +149,7 @@ COST_PER_MTOK = {
     "gpt-5-mini": {"input": 0.25, "output": 2.00},
     "gpt-5.4-nano": {"input": 0.20, "output": 1.25},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
+    "gpt-5.6-luna": {"input": 0.20, "output": 1.20},
     # legacy reference, kept for comparison if someone benchmarks the old default
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
 }
@@ -327,6 +335,41 @@ def top_level_types(task):
     return [step.get("type") for step in task] if isinstance(task, list) else []
 
 
+# Every key under which a step can carry nested steps or a nested condition.
+# `do`/`otherwise` are the branch bodies, `steps` a loop body, `condition` and
+# `confirmEvent` the boolean slots — the last one is what a human action hangs
+# its resume condition on.
+_NEST_KEYS = ("steps", "do", "otherwise", "condition", "confirmEvent",
+              "left", "right")
+
+
+def _walk(node):
+    """Yield every step dict in the tree, in no particular order."""
+    if isinstance(node, list):
+        for item in node:
+            yield from _walk(item)
+    elif isinstance(node, dict):
+        if node.get("type"):
+            yield node
+        for key in _NEST_KEYS:
+            if key in node:
+                yield from _walk(node[key])
+
+
+def flatten_types(task):
+    return [step["type"] for step in _walk(task)]
+
+
+def tree_depth(node, _d=0):
+    """Deepest nesting level reached, counting a top-level step as depth 1."""
+    if isinstance(node, list):
+        return max((tree_depth(i, _d) for i in node), default=_d)
+    if isinstance(node, dict):
+        here = _d + 1 if node.get("type") else _d
+        return max([here] + [tree_depth(node[k], here) for k in _NEST_KEYS if k in node])
+    return _d
+
+
 def _load_rpd_state():
     try:
         with open(RPD_STATE_PATH) as f:
@@ -505,7 +548,21 @@ def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_cal
     if "lang_prefix" in expect:
         lang_ok = str(raw.get("lang", "")).lower().startswith(expect["lang_prefix"])
 
-    overall = intent_ok and task_modified_ok and types_ok and no_errors and lang_ok
+    # Optional, and only for cases that ask for them: `top_level_types` reads
+    # the root of the tree and nothing else, so a case built to exercise
+    # nesting would score full marks on an empty `repeat`. `all_types` compares
+    # the multiset of every type anywhere in the tree, `min_depth` the depth it
+    # reaches. Absent from a case, both default to satisfied, so the frozen
+    # golden set is scored exactly as before.
+    nested_ok = True
+    depth_ok = True
+    if "all_types" in expect:
+        nested_ok = sorted(flatten_types(validated)) == sorted(expect["all_types"])
+    if "min_depth" in expect:
+        depth_ok = tree_depth(validated) >= expect["min_depth"]
+
+    overall = (intent_ok and task_modified_ok and types_ok and no_errors
+               and lang_ok and nested_ok and depth_ok)
 
     usage = getattr(response.raw_response, "usage", None)
     prompt_tokens = getattr(usage, "prompt_tokens", None)
@@ -514,6 +571,8 @@ def run_case(provider: Provider, case: dict, model_spec: str, rpm: int, last_cal
     return {
         "name": case["name"],
         "category": case.get("category"),
+        "nested_ok": nested_ok,
+        "depth_ok": depth_ok,
         "lang": case.get("lang"),
         "pass": overall,
         "intent_ok": intent_ok,
@@ -678,7 +737,12 @@ def main():
     parser.add_argument("--rpm", type=int, default=0, help="throttle requests to N per minute per model (0 = no throttling; use ~15 for Gemini free tier)")
     parser.add_argument("--json", dest="json_path", help="write raw per-case, per-run results to this file")
     parser.add_argument("--start-at", type=int, default=0, help="skip the first N cases, for resuming coverage on a low-RPD model across multiple days instead of re-covering the same leading cases every reset")
+    parser.add_argument("--cases", default=None, help="path to a cases file; defaults to the frozen golden set. Use this to run a separate set (e.g. a stress case) without changing cases_sha256 for the frozen one")
     args = parser.parse_args()
+
+    if args.cases:
+        global CASES_PATH
+        CASES_PATH = args.cases
 
     model_specs = args.models or default_model_specs()
     if not model_specs:
