@@ -106,6 +106,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         }}
       >
         <TextField
+          // The placeholder is not an accessible name: it disappears on the
+          // first keystroke and screen readers do not announce it as the
+          // field's label. The visible design has no label by choice, so the
+          // name is supplied here instead.
+          aria-label="Message to the assistant"
           placeholder={isRecording ? 'Listening…' : 'Type a message...'}
           value={isRecording ? transcript : message}
           onChange={(e) => setMessage(e.target.value)}
