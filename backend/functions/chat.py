@@ -129,6 +129,13 @@ class LLMProvider:
         # omit the param entirely rather than pass a value that always 400s.
         if not self.model.startswith("gpt-5"):
             request_kwargs["temperature"] = temperature
+        # gpt-5.6-luna additionally rejects function tools outright unless
+        # reasoning_effort is explicitly "none" (400 "Function tools with
+        # reasoning_effort are not supported for gpt-5.6-luna in
+        # /v1/chat/completions... or set reasoning_effort to 'none'").
+        # Scoped to this one model; other gpt-5.x models are unaffected.
+        if self.model == "gpt-5.6-luna":
+            request_kwargs["reasoning_effort"] = "none"
         response = self.client.chat.completions.create(**request_kwargs)
         latency_ms = (time.monotonic() - started_at) * 1000
         usage = getattr(response, "usage", None)
@@ -405,8 +412,10 @@ Where AbstractStep is one of:
     {{"type": "open_gripper"}}
     {{"type": "close_gripper"}}
 
-  - Saved Task Step (runs a previously saved task, "Saved Tasks" category — only ever preserve
-    one exactly as found in the snapshot, never author a new one from scratch):
+  - Saved Task Step (runs a previously saved task, "Saved Tasks" category). Both the id and the
+    name MUST come from the Saved Tasks list in # DATABASE #, or be preserved exactly as found in
+    the snapshot. Never invent an id, and never guess a name from what the user said — if the
+    saved task they asked for is not in that list, change nothing and say which one is missing:
     {{
       "type": "macro_task",
       "macroId": number,
@@ -507,7 +516,7 @@ Decide what the user wants and set "intent" to exactly one of "explain", "analyz
 
 - "modify": the user asks to build, add, remove, or change steps.
   → Return the full updated task in "task" and set taskModified = true. Briefly describe the change in "answer" as something you are OFFERING, not something you have done: the workspace is NOT touched by your reply. What you return is shown to the user as a proposal they must accept or reject, and it is applied only if they accept. Write "Here's the task with the pick step set to 'tube'" or "I can set the pick step to 'tube'", never "I updated the pick step" — if they reject it, a past-tense sentence is left in the conversation claiming a change that never happened.
-  → When the request IS a modification but you CANNOT carry it out — the object, location or skill the user named is not in the # DATABASE # lists, or the request is too vague to tie to specific entities ("pick up the thing and put it somewhere") — the intent STAYS "modify". Set taskModified = false, return "task" = the snapshot unchanged, and in "answer" name exactly what is missing and ask for the specific object, location or skill. Do NOT switch to "explain": the user asked to change the task, and "explain" means they asked how something works. Do NOT invent a near-match from the lists to have something to return: proposing the wrong entity is worse than asking.
+  → When the request IS a modification but you CANNOT carry it out — the object, location, skill or saved task the user named is not in the # DATABASE # lists, or the request is too vague to tie to specific entities ("pick up the thing and put it somewhere") — the intent STAYS "modify". Set taskModified = false, return "task" = the snapshot unchanged, and in "answer" name exactly what is missing and ask for the specific object, location, skill or saved task. Do NOT switch to "explain": the user asked to change the task, and "explain" means they asked how something works. Do NOT invent a near-match from the lists to have something to return: proposing the wrong entity is worse than asking.
 
 - "evaluate": the user asks you to check, review, judge, or improve their task ("is this good?", "valuta il mio task", "what can I improve?").
   → Give an honest, encouraging assessment in "answer": what works, what is risky or missing (e.g. picking without placing, a "When" with no condition, an object that may be too heavy), and how to fix it. Do NOT change the task unless they explicitly ask. taskModified = false. The app also runs its own automatic checks and shows them next to your assessment.
@@ -545,6 +554,7 @@ You have access to the following lists (always use exact IDs and names):
 - Objects: {{objects}}
 - Locations: {{locations}}
 - Actions: {{actions}}
+- Saved Tasks (previously saved programs this user can run as one step; use ONLY these ids/names for a "macro_task" step): {{macros}}
 - Live camera scene (what the robot camera sees RIGHT NOW, aggregated by type and cap colour; "cap" entries are coloured test-tube caps; [] = nothing visible; "unavailable" = camera offline — never invent scene contents): {{scene}}
 
 # EXAMPLES #
@@ -964,7 +974,8 @@ def validate_condition(condition, cond_index, warnings, data_objects):
         warnings.append({"severity": "error", "message": f"Condition {cond_index}: unknown condition type '{cond_type}'."})
 
 
-def validate_step(step, step_index, warnings, data_objects, data_locations, data_actions):
+def validate_step(step, step_index, warnings, data_objects, data_locations, data_actions,
+                  data_macros=None):
     if not isinstance(step, dict):
         # A malformed/misplaced token from a bad tool-call parse (e.g. a
         # flattened-container repair mistaking a literal key like "do" for a
@@ -1112,15 +1123,55 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
         pass
 
     elif step_type == "macro_task":
-        # Echoed back from the snapshot, not authored fresh by the LLM (the
-        # AbstractStep schema above doesn't document this shape) — light
-        # presence check only, no existence check against the macro library
-        # (validate_step isn't handed the macro list to check against).
-        if not step.get("macroId"):
+        # Checked against the real catalogue, like every other entity.
+        #
+        # This used to be a presence check on `macroId` and nothing more, with
+        # a comment explaining that the macro list was not available here. It
+        # was not available because nobody passed it, and the same gap ran the
+        # other way: the prompt never listed the user's saved tasks either. So
+        # a user asking to reuse one left the model with a request it could not
+        # satisfy from data it did not have, and it obliged — observed
+        # 2026-09-02, the assistant appended `macroName: "dispose"` for a saved
+        # task that does not exist and replied "Ho aggiunto l'esecuzione del
+        # task salvato 'dispose'".
+        #
+        # `error`, not `warning`, and deliberately: severity here decides
+        # whether the WHOLE proposal is discarded (see `is_valid` in
+        # new_message_multimodal). A hallucinated entity is the case CLAUDE.md
+        # already reserves that for — an invented object is an error, and an
+        # invented saved task is worse, because a macro is a whole sub-program.
+        # Left as a warning it would be dropped silently and the rest of the
+        # proposal applied, so the operator would accept a task that quietly
+        # lost the step they asked for.
+        macro_id = step.get("macroId")
+        macro_name = step.get("macroName")
+        macro = None
+        for macro_item in (data_macros or []):
+            if (macro_id is not None and str(macro_item.get("id")) == str(macro_id)) or \
+               (macro_name and macro_item.get("name")
+                    and macro_item["name"].lower() == str(macro_name).lower()):
+                macro = macro_item
+                break
+        if macro is None and is_unfilled_slot(macro_id, macro_name):
+            # A Saved Task block dropped on the canvas and not yet pointed at
+            # anything — the user's own work in progress, echoed back from the
+            # snapshot. Same rule as every other unfilled slot.
+            pass
+        elif macro is None:
             warnings.append({
-                "severity": "warning",
-                "message": f"Saved Task step {step_index}: missing macroId."
+                "severity": "error",
+                "message": (
+                    f"Saved Task step {step_index}: "
+                    f"'{macro_name or macro_id}' is not one of this user's saved tasks."
+                )
             })
+        else:
+            # Pin BOTH, from the catalogue. A right name with a stale id is
+            # what makes a Saved Task block fail at run time in front of the
+            # robot (`_h_macro` resolves by id), and the model is echoing ids
+            # out of a snapshot that may predate a delete-and-recreate.
+            step_copy["macroId"] = macro["id"]
+            step_copy["macroName"] = macro["name"]
 
     elif step_type == "repeat":
         times = step.get("times")
@@ -1134,7 +1185,7 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             })
         validated_children = []
         for i, sub_step in enumerate(steps):
-            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings, data_objects, data_locations, data_actions)
+            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat[{i}]", warnings, data_objects, data_locations, data_actions, data_macros)
             if validated_sub_step is not None:
                 validated_children.append(validated_sub_step)
         step_copy["steps"] = validated_children
@@ -1150,7 +1201,7 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             validate_condition(condition, f"{step_index}.repeat_until.condition", warnings, data_objects)
         validated_children = []
         for i, sub_step in enumerate(steps):
-            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings, data_objects, data_locations, data_actions)
+            validated_sub_step = validate_step(sub_step, f"{step_index}.repeat_until[{i}]", warnings, data_objects, data_locations, data_actions, data_macros)
             if validated_sub_step is not None:
                 validated_children.append(validated_sub_step)
         step_copy["do"] = validated_children
@@ -1165,14 +1216,14 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             validate_condition(condition, f"{step_index}.when.condition", warnings, data_objects)
         validated_do = []
         for i, sub_step in enumerate(do_steps):
-            validated_sub_step = validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings, data_objects, data_locations, data_actions)
+            validated_sub_step = validate_step(sub_step, f"{step_index}.when.do[{i}]", warnings, data_objects, data_locations, data_actions, data_macros)
             if validated_sub_step is not None:
                 validated_do.append(validated_sub_step)
         step_copy["do"] = validated_do
         if otherwise_steps is not None:
             validated_otherwise = []
             for i, sub_step in enumerate(otherwise_steps):
-                validated_sub_step = validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings, data_objects, data_locations, data_actions)
+                validated_sub_step = validate_step(sub_step, f"{step_index}.when.otherwise[{i}]", warnings, data_objects, data_locations, data_actions, data_macros)
                 if validated_sub_step is not None:
                     validated_otherwise.append(validated_sub_step)
             step_copy["otherwise"] = validated_otherwise
@@ -1220,6 +1271,14 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data_locations = data.get("dataLocations")
                 data_objects = data.get("dataObjects")
                 data_actions = data.get("dataActions")
+                # Saved Tasks. Absent until 2026-09-02, which is how the
+                # assistant came to invent one: the prompt said the "Saved
+                # Tasks" category exists and never listed its contents, so a
+                # user asking to reuse a saved task left the model with a
+                # request it could not satisfy from data it did not have. It
+                # authored `{"type": "macro_task", "macroName": "dispose"}`
+                # with a made-up id and reported success.
+                data_macros = data.get("dataMacros") or []
                 data_blocks = data.get("dataBlocks")
 
                 if message is None:
@@ -1231,6 +1290,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     "{{objects}}": json.dumps(data_objects, ensure_ascii=False),
                     "{{locations}}": json.dumps(data_locations, ensure_ascii=False),
                     "{{actions}}": json.dumps(data_actions, ensure_ascii=False),
+                    "{{macros}}": json.dumps(data_macros, ensure_ascii=False),
                     "{{blocks}}": format_blocks_catalog(data_blocks),
                     "{{scene}}": json.dumps(_scene_summary(), ensure_ascii=False),
                 }
@@ -1304,7 +1364,7 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                     validated_task = []
 
                     for step_index, step in enumerate(llm_task):
-                        validated_step = validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions)
+                        validated_step = validate_step(step, step_index, validation_warnings, data_objects, data_locations, data_actions, data_macros)
                         if validated_step is not None:
                             validated_task.append(validated_step)
 
