@@ -426,7 +426,8 @@ Android app (`com.denso_wave.cobottaworld`), separate from our pipeline.
 
 On Windows the ROS2 stack runs **inside WSL2** (same as Linux); only host→robot
 reachability and where Django runs differ. This is the original architecture (old
-`bat/_main.bat`: Django + npm on Windows, ROS nodes in WSL). It is **easier** than the
+`bat/_main.bat`, no longer in the tree: Django + npm on Windows, ROS nodes in WSL). It is
+**easier** than the
 Mac path: the token is set with the desktop Virtual TP, and the **Canon camera works**.
 
 **Network (WSL2 → robot).** See [cobotta-connection.md](cobotta-connection.md):

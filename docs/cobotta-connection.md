@@ -208,7 +208,8 @@ by `if sys.platform == 'win32'`. It is inert on Linux/Mac VM and inside WSL (the
 `Dispatch is None`, so `get_photo` returns a clear "requires Windows" error).
 
 It is **not** dead code on Windows: when **Django runs on the Windows host** (as in the
-original `bat/_main.bat` layout — Django + npm on Windows, ROS nodes in WSL), this is the
+original `bat/_main.bat` layout — Django + npm on Windows, ROS nodes in WSL; those scripts
+are no longer in the tree), this is the
 **supported way to use the Canon camera** (`get_photo`/`acquire_photo` via the ORiN Canon
 COM provider at `192.168.0.90`). Robot *motion* always goes through the pure-Python b-CAP
 path (`cobotta_node` in WSL), not this COM path. The wrist-cam YOLO pipeline

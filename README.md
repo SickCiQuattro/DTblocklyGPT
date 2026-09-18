@@ -1,13 +1,639 @@
-# :robot: DTblocklyGPT
+<div align="center">
 
-This repository contains the prototype implementation of the project described in the [paper](https://dl.acm.org/doi/abs/10.1145/3610978.3640653).
+<img src="docs/images/logo.svg" alt="DTblocklyGPT" width="110">
 
-> Gargioni, Luigi and Fogli, Daniela.
-> "Integrating ChatGPT with Blockly for End-User Development of Robot Tasks"
-> *Companion of the 2024 ACM/IEEE International Conference on Human-Robot Interaction*, pages 478–482, 2024.
-> Publisher: ACM New York, NY.
+# DTblocklyGPT
+
+**Build a robot task out of blocks, watch it run in a digital twin, then run it on a real arm.**
+
+An End-User Development environment where a person with no programming background can compose a
+task for a Denso COBOTTA, including the steps the robot cannot do alone and has to wait for a
+human to do.
+
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Blockly](https://img.shields.io/badge/Blockly-13-4285F4?logo=google&logoColor=white)
+![Django](https://img.shields.io/badge/Django-6-092E20?logo=django&logoColor=white)
+![ROS 2](https://img.shields.io/badge/ROS_2-Jazzy-22314E?logo=ros&logoColor=white)
+![Gazebo](https://img.shields.io/badge/Gazebo-Harmonic-FF6C00)
+![Tests](https://img.shields.io/badge/tests-675_offline-3fb950)
+
+</div>
+
+
+## What it does
+
+You describe a task in chat or drag it together out of blocks. The system turns it into a program
+the robot can run, shows you the arm executing it in a live 3D twin, and stops when the task
+reaches a step only a person can do.
+
+A block that says *"pause and show a message"* suspends the interpreter. The arm holds the position
+it reached without dropping what it is carrying, and the program resumes when one of four channels
+says so.
+
+| Channel | How you answer | Kind |
+|---|---|---|
+| Button | Click Confirm in the robot panel | direct |
+| Voice | Say one of four commands (`sì` / `no` / `fatto` / `procedi`, Italian or English) | direct |
+| Gesture | Show one of six hand signs to your webcam | direct |
+| Object | Put the expected object in front of the cell camera | indirect: nobody signals, the world changes |
+
+> [!NOTE]
+> The same program runs in simulation and on the physical arm. Which one moves is decided by two
+> independent keys, a server flag and a per-request flag. Neither alone moves anything.
+
+<!--
+  SCREENSHOTS. Drop images into docs/images/ and uncomment.
+  Suggested set, in this order:
+    1. workspace.png  the three-pane editor: chat, blocks, robot panel
+    2. waiting.png    a run paused on "Pause and show", countdown visible
+    3. twin.png       the Gazebo twin mid-pick with the running block highlighted
+
+## Screenshots
+
+| Composing a task | Waiting for the operator |
+|---|---|
+| ![The workspace](docs/images/workspace.png) | ![A step waiting for a human](docs/images/waiting.png) |
+-->
+
+
+## Architecture
+
+Five processes on the local network. All of them have to be up for the full system.
+
+```
+  ┌──────────────────────────────┐
+  │  FRONTEND        :3000       │  chat · Blockly editor · robot panel
+  └──────┬────────────────▲──────┘
+    task │                │ video + "I am on this block"
+         ▼                │
+  ┌──────────────────────────────┐
+  │  BACKEND         :8000       │  REST · SQLite · LLM · inverse kinematics
+  └──────┬────────────────▲──────┘
+  joints │                │ "object seen" / "gesture seen"
+         ▼                │
+  ┌──────────────────────────────┐        ┌──────────────────┐
+  │  BRIDGE          :5000       │───────▶│  VISION NODE     │
+  │  HTTP → ROS 2    :5001 (ws)  │◀───────│  YOLOE·MediaPipe │
+  └──────┬───────────────────────┘        └──────────────────┘
+         ▼
+  ┌──────────────────────────────┐  ····▶ ┌──────────────────┐
+  │  ROS 2 JAZZY + GAZEBO        │ two    │  DENSO COBOTTA   │
+  │  gz_ros2_control · MJPEG:8080│ keys   │  RC8 · b-CAP     │
+  └──────────────────────────────┘        └──────────────────┘
+```
+
+> [!IMPORTANT]
+> Two Python environments coexist, and mixing them breaks things.
+>
+> | Environment | Holds | Used by |
+> |---|---|---|
+> | Poetry (`pyproject.toml`) | Django, `ikpy`, `ultralytics`, `mediapipe` | backend, and `vision_node` |
+> | `ros2_ws/.venv` (`--system-site-packages`) | Flask, ROS 2 bindings | Flask bridge, all other ROS nodes |
+>
+> This is also why `bcapclient.py` exists twice. Neither environment can see the other's packages,
+> so do not "deduplicate" it.
+
+The Flask bridge exists for the same reason: without that boundary the Django backend would have
+to live inside the ROS environment and inherit its dependencies.
+
+> [!TIP]
+> Code names and UI labels differ on purpose (`action_block` in code is "Skills" on screen).
+> Conversion table: [docs/ui-naming-map.md](docs/ui-naming-map.md).
+
+
+## Quick start
+
+Already set up? Three terminals, in this order.
+
+```bash
+# 1 — simulation stack (Gazebo, bridge, controllers, video)
+cd ros2_ws/Cobotta && bash launch_sim.sh      # add SKIP_BUILD=1 after the first run
+
+# 2 — backend
+poetry run python manage.py runserver
+
+# 3 — frontend
+npm start
+```
+
+Open http://localhost:3000 and log in as `operator1` / `Operator_1!`.
+
+```bash
+# Did the stack actually come up? launch_sim.sh does not verify anything.
+poetry run python testing/preflight.py
+```
+
+
+## Setup
+
+<details>
+<summary><strong>1 · Prerequisites</strong></summary>
+
+- Ubuntu 24.04 (Noble), native or in WSL2 or a VM
+- ROS 2 Jazzy ([install guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html))
+- Gazebo Harmonic ([install guide](https://gazebosim.org/docs/harmonic/install_ubuntu/))
+- Python 3.12 or 3.13, pinned `>=3.12,<3.14`. Ubuntu 24.04 ships 3.12
+- Poetry ([install guide](https://python-poetry.org/docs/#installation))
+- Node.js 20.19+ or 22 LTS. Vite 8 requires `≥20.19`/`≥22.12`; older 20.x fails
+
+```bash
+sudo apt update && sudo apt install -y \
+    ros-jazzy-ros-gz python3-colcon-common-extensions python3-rosdep \
+    python3-virtualenv curl psmisc build-essential cmake \
+    libboost-dev libboost-filesystem-dev libboost-thread-dev \
+    libopencv-dev libasio-dev
+
+sudo rosdep init   # "already initialized" is safe to ignore
+rosdep update
+```
+
+`ros-jazzy-ros-gz` provides the `ros_gz_bridge` that `launch_sim.sh` needs. The
+`build-essential`/`cmake`/boost/asio packages compile the C++ streaming packages in `ros2_ws/src/`.
+
+</details>
+
+<details>
+<summary><strong>2 · Clone this repository and the streaming packages</strong></summary>
+
+```bash
+git clone https://github.com/SickCiQuattro/DTblocklyGPT.git
+cd DTblocklyGPT
+```
+
+> [!NOTE]
+> This fork is where the collaborative-step, digital-twin and vision work lives. It is intended to
+> be merged back into
+> [luigigargioni/DTblocklyGPT](https://github.com/luigigargioni/DTblocklyGPT); until that happens,
+> clone from here. Upstream does not contain any of it yet.
+
+Two ROS packages are not bundled here and must be cloned into the workspace:
+
+```bash
+cd ros2_ws/src
+git clone https://github.com/fkie/async_web_server_cpp.git
+git clone https://github.com/RobotWebTools/web_video_server.git
+cd ../..
+```
+
+> [!WARNING]
+> Both are moving development branches, so a fresh clone may not match what this project was built
+> against. The versions used were `async_web_server_cpp` at `be0ca7b` (2026-05-06) and
+> `web_video_server` at `20c30ab` (2026-07-02). If `colcon build` fails on a fresh clone, check
+> those out before assuming the fault is here.
+
+</details>
+
+<details>
+<summary><strong>3 · Environment files</strong></summary>
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+`backend/.env`. The chat assistant does not work without a key:
+
+```env
+FLASK_BRIDGE_URL = "http://localhost:5000"
+LLM_PROVIDER     = "gemini"                  # gemini · openai · ollama
+LLM_MODEL        = "gemini-3.5-flash-lite"
+GEMINI_API_KEY   = "your_key_here"
+OPENAI_API_KEY   = ""
+```
+
+> [!CAUTION]
+> Set `LLM_MODEL` explicitly. Left unset, the code falls back to `gemini-2.5-flash`, which is a
+> different model from the one this project is configured and evaluated on, and nothing says so.
+
+`frontend/.env`. All six values are required:
+
+```env
+VITE_BACKEND_PROTOCOL  = http://
+VITE_BACKEND_HOST      = localhost
+VITE_BACKEND_PORT      = :8000
+VITE_FRONTEND_PROTOCOL = http://
+VITE_FRONTEND_HOST     = localhost
+VITE_FRONTEND_PORT     = :3000
+```
+
+> [!NOTE]
+> The three `VITE_FRONTEND_*` values are read by Django (`CSRF_TRUSTED_ORIGINS`), not by any
+> frontend code, despite the prefix. Leave them empty and `manage.py runserver` fails its system
+> check.
+
+</details>
+
+<details>
+<summary><strong>4 · Dependencies</strong></summary>
+
+```bash
+poetry install                    # backend: Django, ikpy, ultralytics, mediapipe
+npm ci --legacy-peer-deps         # frontend
+```
+
+> [!TIP]
+> Use `npm ci`, not `npm install`. `package-lock.json` is committed and `ci` installs exactly what
+> it pins. `blockly` is declared `^13.0.0`, and the editor's keyboard layer depends on shortcut
+> names a Blockly release can rename, which is why `features/blockly/editor/appShortcuts.ts`
+> carries a drift check. Run `npm install` only when you mean to take updates, then re-run
+> `npm run lint` and try the shortcuts.
+
+The gesture model is not bundled with its wheel. Download it once:
+
+```bash
+mkdir -p backend/assets
+curl -L "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task" \
+     -o backend/assets/hand_landmarker.task
+```
+
+`yolov8n.pt` downloads itself on first inference; the first run needs network access.
+
+</details>
+
+<details>
+<summary><strong>5 · Build the ROS 2 workspace</strong></summary>
+
+```bash
+cd ros2_ws
+source /opt/ros/jazzy/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+
+virtualenv .venv --system-site-packages
+source .venv/bin/activate
+pip install Flask flask-socketio flask-cors
+
+colcon build                      # the WHOLE workspace — no --packages-select
+source install/setup.bash
+cd ..
+```
+
+> [!WARNING]
+> Do not skip the full build. `launch_sim.sh` rebuilds only `cobotta_rest_api`, so if this never
+> ran, `web_video_server` is missing and the camera panel stays empty at runtime.
+
+</details>
+
+<details>
+<summary><strong>6 · Database</strong></summary>
+
+`db.sqlite3` is committed and already contains users, robots, locations and example tasks, so a
+fresh clone needs nothing.
+
+To rebuild the catalogue from scratch, the order is mandatory:
+
+```bash
+poetry run python manage.py seed_library          # objects, locations, skills
+poetry run python manage.py seed_partb_tasks      # the four study tasks
+poetry run python manage.py seed_study_users --count 12
+```
+
+> [!CAUTION]
+> `seed_library --reset` deletes every task and object owned by the target user before
+> reseeding, and it has no `--dry-run`. It is not a safe way to apply a rename to a database that
+> holds work you want to keep.
+
+</details>
+
+
+## Platform paths
+
+Everything above and below is identical on all three. These are the differences.
+
+<details>
+<summary><strong>Windows + WSL2</strong></summary>
+
+```powershell
+# PowerShell as Administrator
+wsl --update
+wsl --install -d Ubuntu-24.04
+wsl --set-default Ubuntu-24.04
+```
+
+Restart when prompted, then open Ubuntu from the Start menu and finish the user setup.
+
+All processes run inside WSL, and your Windows browser reaches them on `localhost`, because WSL2
+forwards ports to the host automatically. Open `http://localhost:3000`.
+
+For VS Code, install the WSL extension and run `code .` from inside the WSL terminal. Every
+integrated terminal then runs in Linux.
+
+Gazebo is heavy and WSL2's default memory allocation is a fraction of your RAM. Create
+`C:\Users\<you>\.wslconfig`:
+
+```ini
+[wsl2]
+memory=8GB
+processors=4
+```
+
+Then `wsl --shutdown` and reopen.
+
+> [!IMPORTANT]
+> Gesture recognition works. Object detection needs one extra step.
+>
+> Gestures are read by the browser (`getUserMedia`), which runs on Windows, so your laptop webcam
+> works with no configuration.
+>
+> `vision_node` is different: it opens `camera_source` *inside Linux*, and WSL2 exposes no USB
+> video device, so the default `0` finds nothing. Either attach the device with
+> [usbipd-win](https://learn.microsoft.com/windows/wsl/connect-usb), or point the node at a network
+> camera instead:
+>
+> ```bash
+> ros2 run cobotta_rest_api vision_node --ros-args -p camera_source:="http://192.168.0.90/stream"
+> ```
+
+> [!WARNING]
+> Driving the physical arm from WSL2 needs mirrored networking. WSL2 is NAT'd by default and
+> cannot reach a robot on a physical LAN such as `192.168.0.1`. On Windows 11 22H2+, add
+> `networkingMode=mirrored` under `[wsl2]` in `.wslconfig`. Otherwise use a native Linux machine
+> for hardware runs.
+
+Gazebo's 3D window needs WSLg (Windows 11). On Windows 10 keep it headless, which is the default
+anyway.
+
+</details>
+
+<details>
+<summary><strong>Virtual machine (including macOS hosts)</strong></summary>
+
+There is no ROS 2 Jazzy / Gazebo Harmonic build for macOS. Run Ubuntu 24.04 in a VM
+(UTM / Parallels / VMware). On Apple Silicon use an ARM64 image, and keep Gazebo headless because
+the 3D GUI is CPU-rendered and slow.
+
+Working over SSH, forward every port:
+
+```bash
+ssh -L 3000:localhost:3000 -L 8000:localhost:8000 \
+    -L 5000:localhost:5000 -L 5001:localhost:5001 \
+    -L 8080:localhost:8080 you@your-vm
+```
+
+VS Code's Remote-SSH extension forwards these for you. Check its Ports tab.
+
+> [!NOTE]
+> A stock QEMU/UTM VM has no `/dev/video*` at all, so `vision_node` cannot open a local camera.
+> Pass a USB device through from the hypervisor, or give `camera_source` a network camera URL.
+> Browser-side gesture recognition is unaffected, since it uses the host's webcam.
+
+</details>
+
+<details>
+<summary><strong>Native Linux</strong></summary>
+
+Nothing extra. This is the path the project is developed and evaluated on, and the only one where
+the physical arm, the cell camera and the 3D GUI all work without configuration.
+
+</details>
+
+
+## Running
+
+### Simulation
+
+```bash
+# Terminal 1
+cd ros2_ws/Cobotta && bash launch_sim.sh          # SKIP_BUILD=1 to skip the rebuild
+
+# Terminal 2
+poetry run python manage.py runserver
+
+# Terminal 3
+npm start
+```
+
+`launch_sim.sh` starts Gazebo (headless), `ros_gz_bridge`, the `ros2_control` spawners and the
+`flask_node` / `polling_socket_node` / `web_video_server` nodes. It launches them and returns
+without verifying anything, so check the result with `testing/preflight.py`.
+
+To see the 3D window, remove `-s` from the `gz sim` line inside the script.
+
+<details>
+<summary><strong>Launching nodes individually</strong></summary>
+
+Each node needs its own terminal with the environment sourced:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd ros2_ws && source .venv/bin/activate && source install/setup.bash
+```
+
+```bash
+ros2 run cobotta_rest_api flask_node
+ros2 run cobotta_rest_api polling_socket_node
+ros2 run cobotta_rest_api cobotta_node --ros-args -p enable_hardware:=true   # real arm only
+```
+
+`vision_node` is the exception. It needs the Poetry environment, so launch the file rather than
+the entry point:
+
+```bash
+poetry run python ros2_ws/src/cobotta_rest_api/cobotta_rest_api/vision_node.py \
+    --ros-args -p camera_source:=0
+```
+
+`poetry run ros2 run …` fails with `ModuleNotFoundError: ultralytics`, because the entry-point
+shebang points at the system python.
+
+The only real console scripts are `flask_node`, `cobotta_node`, `polling_socket_node`,
+`vision_node`. There is no `gazebo_command_node` or `gazebo_state_node`. The wiring between Gazebo
+and ROS is the standard `gz_ros2_control` plugin.
+
+</details>
+
+### Physical COBOTTA
+
+<details>
+<summary><strong>Prerequisites and startup</strong></summary>
+
+One-time setup:
+- Client PC on the robot LAN `192.168.0.0/24` (robot `.1`, camera `.90`, PC `.100`) through a PoE
+  switch. See [docs/cobotta-connection.md](docs/cobotta-connection.md)
+- Executable Token set on the controller (`Any`, or `Ethernet` + PC IP) from a Teach Pendant, or
+  the motors will not turn on. See [docs/cobotta-physical-testing.md](docs/cobotta-physical-testing.md) §6b
+
+```bash
+# T1 — twin + real arm + cell camera
+cd ros2_ws/Cobotta
+ENABLE_VISION=1 BCAP_HOST=192.168.0.1 EXT_SPEED=20 \
+YOLO_MODEL=yoloe-11s-seg.pt YOLO_CLASSES="test tube,medicine bottle,beaker,bowl" \
+bash launch_physical.sh
+#   wait for "B-CAP connected (ExtSpeed=20)"
+
+# T2 — backend, hardware armed
+VISION_MODEL=yoloe DRIVE_HARDWARE=1 poetry run python manage.py runserver
+
+# T3 — frontend
+npm start
+```
+
+> [!NOTE]
+> `VISION_MODEL` (backend) must match `YOLO_MODEL`/`YOLO_CLASSES` (ROS). The two configs cannot
+> discover each other, and a mismatch means the node publishes class names the backend never
+> looks for.
+
+```bash
+curl -s http://localhost:5000/api/actual-joints-real | python3 -m json.tool   # {"available":true,…}
+curl -s http://localhost:5000/api/vision/state       | python3 -m json.tool   # detections
+```
+
+> [!CAUTION]
+> **Keep the teach-pendant e-stop in hand.** `/api/stop` halts the simulation and sends a soft halt
+> to the arm over a dedicated b-CAP channel, but it is best-effort and **not safety-rated**. The
+> e-stop is the only certified stop. Start at `EXT_SPEED=20`.
+
+Field guide: [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md).
+Camera and detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md).
+
+</details>
+
+### User-study mode
+
+<details>
+<summary><strong>Running a measured session</strong></summary>
+
+Study mode removes every shortcut that could resolve a step without the participant, and records
+one JSON line per event.
+
+```bash
+# frontend/.env
+VITE_STUDY_MODE=1
+```
+
+```bash
+# backend — one participant per run, both IDs updated together
+VISION_MODEL=yoloe \
+DRIVE_HARDWARE=1 \
+HUMAN_STEP_TIMEOUT_S=60 \
+STRICT_CONDITIONS=1 \
+STUDY_LOG_PATH=studio-utenti/dati/P03.jsonl \
+STUDY_PARTICIPANT_ID=P03 \
+poetry run python manage.py runserver
+```
+
+| Variable | Effect |
+|---|---|
+| `VITE_STUDY_MODE=1` | Forces live execution, hides the "simulate event" escape hatch, locks the wait-time field, and disables HMR module updates |
+| `STRICT_CONDITIONS=1` | A condition can only be satisfied by a real signal, so no confirmation can be fabricated |
+| `HUMAN_STEP_TIMEOUT_S` | Seconds a human step waits. In study mode this is the only way to set it |
+| `STUDY_LOG_PATH` | Enables logging. Unset, nothing is written at all |
+
+> [!WARNING]
+> Verify the log file is growing before the first real participant. `log_event` never raises,
+> because a logging failure must not abort a run, so a misconfigured path fails silently.
+
+> [!CAUTION]
+> For a measured session, serve a **build** rather than the dev server. Vite's client reloads the
+> page whenever its WebSocket drops, and a machine running Gazebo under thermal throttling drops
+> one routinely. `VITE_STUDY_MODE=1` sets `server.hmr: false`, which stops module updates but
+> **does not** stop that reload: measured on 2026-09-10, the `vite-hmr` socket still connects with
+> the flag on. A build has no Vite client in it at all, so it cannot reload itself.
+>
+> ```bash
+> VITE_STUDY_MODE=1 npx vite build     # once, before the session
+> npx vite preview --port 3000         # serves at http://localhost:3000/static/
+> ```
+>
+> The `/camera` proxy works in preview exactly as in dev. Rebuild after any code change; preview
+> serves what was built, not what is on disk.
+
+Outside study mode the wait time is set from the robot panel (5 to 300 seconds) and remembered per
+browser.
+
+</details>
+
+
+## Tests
+
+```bash
+# Full offline suite — no Gazebo, no ROS, no robot, no network
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 poetry run python -m pytest testing/ -q
+
+# Live end-to-end (needs the simulation running)
+poetry run python testing/test_ik_regression.py
+
+# Stack health
+poetry run python testing/preflight.py
+```
+
+675 tests guard the properties where a defect moves a mechanical arm in space shared with a
+person: the two-key hardware consent, inverse-kinematics discipline, twin-versus-encoder
+agreement, grasp verification, and the human-step wait semantics.
+
+> [!NOTE]
+> `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` is required. Without it, pytest picks up ROS Jazzy's
+> `launch_testing_ros` plugin from the system site-packages, which mis-resolves the package and
+> then fails importing a dependency this environment does not have.
+
+ROS-side tests need the sourced ROS environment:
+
+```bash
+cd ros2_ws && colcon build --packages-select cobotta_rest_api
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest src/cobotta_rest_api/test/ -v
+```
+
+
+## Credentials and ports
+
+| Role | Username | Password |
+|---|---|---|
+| Operator | `operator1` | `Operator_1!` |
+| Manager | `manager1` | `passwordmanager1` |
+| Django admin | `admin` | `adminpassword` |
+
+> [!NOTE]
+> In the shipped database `operator1` is actually in the `Manager` group despite its name, so it
+> can reach the admin pages too. Use `manager1` to test the Operator-only restriction.
+
+| Service | Port |
+|---|---|
+| Frontend | `3000` |
+| Backend | `8000` |
+| Flask bridge | `5000` |
+| Event stream (SocketIO) | `5001` |
+| Camera stream | `8080` |
+
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `package 'web_video_server' not found` | Streaming repos not cloned | Setup step 2, then a full `colcon build` |
+| `package 'ros_gz_bridge' not found` | Missing apt package | `sudo apt install ros-jazzy-ros-gz` |
+| `colcon build` fails with C++ errors | Missing system libs | Install the `build-essential`/cmake/boost/asio set from step 1 |
+| `ModuleNotFoundError: ikpy` | Wrong environment | `ikpy` is a Poetry dependency. Run `poetry install`, and never `pip install` into `.venv` |
+| `ModuleNotFoundError: rclpy` in the Poetry shell | ROS bindings are not in Poetry | Use `ros2_ws/.venv` for ROS nodes |
+| `ModuleNotFoundError: ultralytics` from `vision_node` | Launched via `ros2 run` | Launch the file with `poetry run python …` |
+| Gesture always `NONE`, no error | `hand_landmarker.task` missing | Setup step 4, download the model |
+| `POST /api/vision/frame/` returns 500 | Same as above | Same as above |
+| Object detection finds nothing on WSL/VM | No `/dev/video*` in the guest | usbipd-win, or a network `camera_source` |
+| The app loads but Run does nothing | Flask bridge down | Check terminal 1; `:5000` must answer |
+| `runserver` fails on `CSRF_TRUSTED_ORIGINS` (4_0.E001) | `VITE_FRONTEND_*` empty | Fill all three in `frontend/.env`; Django reads them |
+| CORS/CSRF errors in the browser | Ports not forwarded | Forward 3000, 8000, 5000, 5001, 8080 |
+| The page reloads by itself mid-task | Vite's client reacting to a dropped WebSocket | Serve a build (`vite build` then `vite preview`), not the dev server. `hmr: false` alone does not stop it |
+| `'X' didn't come up with the gripper` | Weld lost a `gz` message | Fixed by the retry budget; if it persists, restart the Gazebo stack |
+
+
+## Documentation
+
+| Document | Covers |
+|---|---|
+| [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md) | Field guide for a physical session |
+| [docs/cobotta-connection.md](docs/cobotta-connection.md) | Network, PoE switch, controller setup |
+| [docs/cobotta-physical-testing.md](docs/cobotta-physical-testing.md) | Hardware test procedure and safety |
+| [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md) | Cell camera and detection tuning |
+| [docs/ui-naming-map.md](docs/ui-naming-map.md) | Code identifiers and their on-screen labels |
+
 
 ## Citation
+
+This repository extends the prototype described in:
+
+> Gargioni, Luigi and Fogli, Daniela.
+> *"Integrating ChatGPT with Blockly for End-User Development of Robot Tasks"*.
+> Companion of the 2024 ACM/IEEE International Conference on Human-Robot Interaction, pages
+> 478-482, 2024. ACM, New York.
+> [doi.org/10.1145/3610978.3640653](https://dl.acm.org/doi/abs/10.1145/3610978.3640653)
 
 ```bibtex
 @inproceedings{gargioni2024integrating,
@@ -18,501 +644,3 @@ This repository contains the prototype implementation of the project described i
   year={2024}
 }
 ```
-
----
-
-## Table of Contents
-
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Platform Setup](#platform-setup)
-- [Common Setup (run once)](#common-setup-run-once)
-- [Run Procedure](#run-procedure)
-- [Credentials & Ports](#credentials--ports)
-- [Troubleshooting](#troubleshooting)
-
----
-
-## Architecture
-
-The system is composed of four independent processes that must all be running for full functionality:
-
-| Process | Port | Role |
-|---|---|---|
-| Django backend | `:8000` | REST API, SQLite DB, AI/CV processing, IK solver |
-| Vite frontend | `:3000` | React + Blockly UI |
-| Flask ROS bridge | `:5000` | HTTP → ROS2 adapter (runs inside the ROS2 environment) |
-| Gazebo + ROS2 | — | 3D simulation and robot state management |
-
-> **Two Python environments coexist — never mix them.**
-> `pyproject.toml` / Poetry env → Django, IK (`ikpy`), vision (`ultralytics`, `hand-gesture-engine`, `mediapipe`).
-> `ros2_ws/.venv` → Flask bridge and ROS2 nodes only (system site-packages + `flask`, `flask-socketio`).
-> Running `ros2` commands inside the Poetry shell, or running `poetry run` inside the `.venv`, will break things.
-
-> Code and UI don't always use the same name for the same thing (e.g. `action_block` in the code is
-> "Skills" in the UI). Full conversion table: [docs/ui-naming-map.md](docs/ui-naming-map.md).
-
----
-
-## Prerequisites
-
-### Required software
-
-- **Ubuntu 24.04** (Noble) — native install or WSL2 / Virtual Machine
-- **ROS2 Jazzy** — [official install guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
-- **Gazebo Harmonic** — [official install guide](https://gazebosim.org/docs/harmonic/install_ubuntu/)
-- **Python 3.12 or 3.13** — `pyproject.toml` pins `>=3.12,<3.14`. Ubuntu 24.04 ships 3.12, so a
-  default install already satisfies this; a newer distro shipping 3.14 does not.
-- **Poetry** — [official install guide](https://python-poetry.org/docs/#installation)
-- **Node.js 20.19+** (or 22 LTS) with npm — Vite 8 requires Node `≥20.19` / `≥22.12`; older 20.x fails
-
-### System apt packages
-
-Install all required system packages in one shot:
-
-```bash
-sudo apt update && sudo apt install -y \
-    ros-jazzy-ros-gz \
-    python3-colcon-common-extensions \
-    python3-rosdep \
-    python3-virtualenv \
-    curl \
-    psmisc \
-    build-essential \
-    cmake \
-    libboost-dev \
-    libboost-filesystem-dev \
-    libboost-thread-dev \
-    libopencv-dev \
-    libasio-dev
-```
-
-> `ros-jazzy-ros-gz` provides the `ros_gz_bridge` used by `launch_sim.sh`.
-> The `build-essential`/`cmake`/`boost`/`libasio` packages are required to compile the C++ streaming packages in `ros2_ws/src/`.
-
-Initialize rosdep (once per machine):
-
-```bash
-sudo rosdep init   # skip if already done; error "already initialized" is safe to ignore
-rosdep update
-```
-
----
-
-## Platform Setup
-
-Choose your environment. Everything after this section is identical for both paths.
-
-> **macOS / Windows-without-WSL2:** there is no native ROS2 Jazzy / Gazebo Harmonic build for macOS. Run **Ubuntu 24.04 in a VM** (UTM / Parallels / VMware) and follow **Path B**. On Apple Silicon use an **ARM64** Ubuntu image; Gazebo runs headless fine, but the 3D GUI is CPU-rendered and slow — keep it headless. Windows users who can't use WSL2 can likewise use a Linux VM + Path B.
-
-<details>
-<summary><strong> Path A — Windows + WSL2</strong></summary>
-
-### Install WSL2 and Ubuntu 24.04
-
-Open **PowerShell as Administrator** and run:
-
-```powershell
-wsl --install -d Ubuntu-24.04
-wsl --set-default Ubuntu-24.04
-```
-
-Restart when prompted. After restart, open the Ubuntu terminal from the Start menu and complete the user setup.
-
-### Access the app from Windows
-
-All four processes run **inside WSL**. Your Windows browser connects via `localhost` automatically because WSL2 maps ports to the Windows host.
-
-Open `http://localhost:3000` in any Windows browser after starting the frontend.
-
-### VS Code (recommended)
-
-Install the **WSL** extension, then open VS Code from inside the WSL terminal:
-
-```bash
-code .
-```
-
-All terminals in VS Code will run inside WSL automatically.
-
-Now follow the [Common Setup](#common-setup-run-once) steps inside the WSL terminal.
-
-</details>
-
-<details>
-<summary><strong> Path B — Virtual Machine / Native Linux</strong></summary>
-
-### SSH port forwarding (if accessing from a host machine)
-
-If you work from Windows/macOS and connect to the VM via SSH, forward all required ports so your local browser can reach the app:
-
-```bash
-ssh -L 3000:localhost:3000 \
-    -L 8000:localhost:8000 \
-    -L 5000:localhost:5000 \
-    -L 5001:localhost:5001 \
-    your_user@your-vm-ip
-```
-
-Keep this SSH session open while working.
-
-### VS Code Remote-SSH (alternative to manual forwarding)
-
-If you use the **Remote – SSH** VS Code extension, it forwards ports automatically. Check the **Ports** tab in the bottom panel and verify these are forwarded:
-
-| Port | Service |
-|---|---|
-| `3000` | React frontend |
-| `8000` | Django backend |
-| `5000` | Flask ROS bridge |
-| `5001` | SocketIO stream |
-
-Once forwarded, open `http://localhost:3000` in your local browser.
-
-Now follow the [Common Setup](#common-setup-run-once) steps inside the VM terminal (via SSH or directly).
-
-</details>
-
----
-
-## Common Setup (run once)
-
-All commands run from the project root (`DTblocklyGPT/`) unless noted.
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/luigigargioni/DTblocklyGPT.git
-cd DTblocklyGPT
-```
-
-### 2. Clone the ROS2 streaming packages
-
-These two packages are required by `launch_sim.sh` for camera streaming. They are **not** bundled in this repository and must be cloned separately:
-
-```bash
-cd ros2_ws/src
-git clone https://github.com/fkie/async_web_server_cpp.git
-git clone https://github.com/RobotWebTools/web_video_server.git
-cd ../..
-```
-
-> No branch is given because each repository's default branch is already the ROS2 one
-> (`ros2-develop` and `ros2` respectively) — the ROS1 branches are not the default.
->
-> Both are **moving development branches**, so a clone made later will not necessarily match what
-> this project was built and evaluated against. The versions used were
-> `async_web_server_cpp` at `be0ca7b` (2026-05-06) and `web_video_server` at `20c30ab` (2026-07-02).
-> If `colcon build` fails on a fresh clone, check out those commits before assuming the failure is
-> in this repository.
-
-### 3. Configure environment files
-
-**Backend** — copy the template and add your LLM API key:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Open `backend/.env` and fill in your key:
-
-```env
-FLASK_BRIDGE_URL = "http://localhost:5000"
-
-LLM_PROVIDER = "gemini"
-LLM_MODEL = "gemini-3.5-flash-lite"
-
-OPENAI_API_KEY = ""
-GEMINI_API_KEY = "your_key_here"
-```
-
-> `LLM_MODEL` must be a model your `GEMINI_API_KEY` can actually access — an invalid name makes every chat call fail. Switch provider with `LLM_PROVIDER` (`gemini` / `openai` / `ollama`); the matching endpoint is selected automatically (no `LLM_BASE_URL` needed for Gemini/OpenAI). If `LLM_MODEL` is left unset, the code falls back to `gemini-2.5-flash`. `LLM_API_KEY`/`LLM_BASE_URL` are optional and only needed to override the key/endpoint for whichever provider is active (e.g. point at a local proxy).
-
-**Frontend** — copy the template and fill in the localhost defaults:
-
-```bash
-cp frontend/.env.example frontend/.env
-```
-
-Open `frontend/.env` and set the six required values:
-
-```env
-VITE_BACKEND_PROTOCOL = http://
-VITE_BACKEND_HOST = localhost
-VITE_BACKEND_PORT = :8000
-VITE_FRONTEND_PROTOCOL = http://
-VITE_FRONTEND_HOST = localhost
-VITE_FRONTEND_PORT = :3000
-```
-
-> The template ships with empty strings (`''`). The app will not start correctly without these six values — the `VITE_FRONTEND_*` ones are read by the Django backend (`CSRF_TRUSTED_ORIGINS`), not by the frontend, despite the prefix; leaving them empty makes `manage.py runserver` fail its system check on Django 4.0+. `VITE_SOCKET_PROTOCOL`/`VITE_SOCKET_PORT`/`VITE_CAMERA_STREAM_URL` are optional — each already has a working default (see comments in `frontend/.env.example`) and only need setting to override it, e.g. for a production build.
-
-### 4. Install backend dependencies (Poetry)
-
-From the project root:
-
-```bash
-poetry install
-```
-
-This installs Django, `ikpy`, `ultralytics`, `mediapipe`, `hand-gesture-engine`, and all other backend dependencies into the Poetry virtual environment. This is the only environment where `ikpy` and the vision packages are available.
-
-### 5. Install frontend dependencies (npm)
-
-```bash
-npm ci --legacy-peer-deps
-```
-
-> The `--legacy-peer-deps` flag is required due to ESLint/React peer dependency conflicts.
->
-> **Use `npm ci`, not `npm install`, to reproduce the environment this project was developed and
-> evaluated on.** `package-lock.json` is committed; `npm ci` installs exactly what it pins, while
-> `npm install` is free to move any dependency up within its caret range and rewrite the lockfile.
-> That is not hypothetical here: `blockly` is declared as `^13.0.0`, and the editor's keyboard
-> layer depends on shortcut names that a Blockly release can rename — the drift check in
-> `features/blockly/editor/appShortcuts.ts` exists because of it. Run `npm install` only when you
-> intend to take updates, and re-run `npm run lint` plus the keyboard shortcuts afterwards.
-
-### 6. Download the gesture recognition model
-
-The `hand-gesture-engine` package requires a MediaPipe model file that is not bundled with the wheel. Download it once:
-
-```bash
-mkdir -p backend/assets
-curl -L "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task" \
-     -o backend/assets/hand_landmarker.task
-```
-
-The backend will automatically copy this file into the package on first use. Without it, every call to `/api/vision/frame/` will flood the logs with 500 errors.
-
-> `yolov8n.pt` (object detection model) is downloaded automatically by `ultralytics` on first inference. Network access is required on the first run.
-
-### 7. Build the ROS2 workspace
-
-Navigate to `ros2_ws/`:
-
-```bash
-cd ros2_ws
-```
-
-Install ROS2 package dependencies (C++ packages need system libs):
-
-```bash
-source /opt/ros/jazzy/setup.bash
-rosdep install --from-paths src --ignore-src -r -y
-```
-
-Create the Python virtual environment for ROS2 nodes:
-
-```bash
-virtualenv .venv --system-site-packages
-source .venv/bin/activate
-```
-
-Install Flask inside this environment (used by `flask_node`):
-
-```bash
-pip install Flask flask-socketio flask-cors
-```
-
-> `rosdep install` above already pulls `python3-flask` / `flask-cors` / `flask-socketio` system-wide (declared in `cobotta_rest_api/package.xml`), and the `.venv` was created with `--system-site-packages`, so it sees them. This `pip install` simply pins current versions inside the venv — keep it if `flask_node` complains about a missing module.
-
-Build the **entire** workspace (no `--packages-select`):
-
-```bash
-colcon build
-source install/setup.bash
-```
-
-> This compiles **all** packages — `cobotta_rest_api`, `my_robot_interfaces` (custom messages), `async_web_server_cpp`, and `web_video_server`. **Do not skip this step:** `launch_sim.sh` only rebuilds `cobotta_rest_api`, so if this full build never ran, `web_video_server` / camera streaming will be missing at runtime.
-> Build errors in `async_web_server_cpp` or `web_video_server` usually mean the C++ system dependencies (step in [Prerequisites](#prerequisites)) were not installed.
-
-Return to project root:
-
-```bash
-cd ..
-```
-
-### 8. Database
-
-The `db.sqlite3` file is included in the repository. It contains pre-configured users, robots, simulation locations, and example tasks. **No migrations or seeding commands are needed.**
-
----
-
-## Run Procedure
-
-Open **3 separate terminals** in the project root. Run each in order.
-
-### Terminal 1 — Backend (Django)
-
-```bash
-poetry run python manage.py runserver
-```
-
-Starts the REST API on `http://localhost:8000`.
-
-### Terminal 2 — Frontend (React/Vite)
-
-```bash
-npm start
-```
-
-Starts the UI on `http://localhost:3000`.
-
-> **Prerequisite:** the full `colcon build` from [Common Setup step 7](#7-build-the-ros2-workspace) must have run at least once. `launch_sim.sh` rebuilds **only** `cobotta_rest_api` — it does not build `web_video_server`.
-
-### Terminal 3 (first run, or after editing `cobotta_rest_api`)
-
-```bash
-cd ros2_ws/Cobotta
-bash launch_sim.sh
-```
-
-### Terminal 3 (subsequent runs — skip the cobotta rebuild)
-```bash
-cd ros2_ws/Cobotta
-SKIP_BUILD=1 bash launch_sim.sh
-```
-
-This single script starts Gazebo (headless), `ros_gz_bridge`, the `ros2_control` spawners, and the `flask_node` / `polling_socket_node` / `web_video_server` nodes. It does not wait for or verify anything — it launches the processes and returns. To check the stack actually came up healthy, run `poetry run python testing/preflight.py`. There is no `gazebo_command_node`/`gazebo_state_node` — Gazebo↔ROS2 wiring is the standard `gz_ros2_control` plugin, not a bespoke node.
-
-> **3D GUI:** By default, Gazebo runs headless (`-s` flag). To enable the full 3D interface, edit `launch_sim.sh` and remove `-s` from the `gz sim` line.
-
----
-
-### Manual node launch (alternative to `launch_sim.sh`)
-
-If you need to start nodes individually (e.g., for debugging), each node requires its own terminal with the ROS2 environment set up:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-cd ros2_ws
-source .venv/bin/activate
-source install/setup.bash
-```
-
-Launch nodes in this order:
-
-```bash
-# Terminal A
-ros2 run cobotta_rest_api flask_node
-
-# Terminal B
-ros2 run cobotta_rest_api polling_socket_node
-
-# Terminal C — real hardware only (enable_hardware:=true drives the b-CAP arm)
-ros2 run cobotta_rest_api cobotta_node --ros-args -p enable_hardware:=true
-
-# Terminal D — vision node uses the Poetry env, NOT .venv.
-# Launch the FILE with the Poetry python — `poetry run ros2 run …` fails with
-# ModuleNotFoundError: ultralytics (the ros2 entry-point shebang uses the system python).
-poetry run python ros2_ws/src/cobotta_rest_api/cobotta_rest_api/vision_node.py \
-    --ros-args -p camera_source:=0        # USB webcam index; or an http/rtsp URL
-```
-
-The only real console-script entry points (`ros2_ws/src/cobotta_rest_api/setup.py`) are `flask_node`, `cobotta_node`, `polling_socket_node`, `vision_node` — `gazebo_command_node`/`gazebo_state_node` don't exist.
-
-> The `vision_node` must run under the Poetry python because `ultralytics`, `mediapipe`, and `hand-gesture-engine` are only installed in the Poetry environment. All other nodes use the `.venv`.
-
----
-
-## Physical robot + webcam (real COBOTTA)
-
-Everything above runs in **simulation**. To drive the **real Denso COBOTTA** and use its
-**Canon camera** for object detection, use `launch_physical.sh` instead of
-`launch_sim.sh`. It runs the full Gazebo twin **and** `cobotta_node` (real arm) **and**
-`vision_node` on the Canon, in parallel.
-
-**Prerequisites (one-time):**
-- Network: client PC on the robot LAN `192.168.0.0/24` (robot `192.168.0.1`, camera
-  `192.168.0.90`, PC `192.168.0.100`) via a **PoE switch** (powers the camera). See
-  [docs/cobotta-connection.md](docs/cobotta-connection.md).
-- **Executable Token** set on the controller (`Any`, or `Ethernet` + PC IP) via a Teach
-  Pendant — required for motor-on. See
-  [docs/cobotta-physical-testing.md](docs/cobotta-physical-testing.md) §6b.
-
-**Startup (3 terminals):**
-```bash
-# T1 — full twin + real arm (vision NOT started by default — ENABLE_VISION
-# defaults to false; set ENABLE_VISION=1 for object detection on the Canon)
-cd ros2_ws/Cobotta
-ENABLE_VISION=1 BCAP_HOST=192.168.0.1 EXT_SPEED=20 bash launch_physical.sh
-#   → wait for "B-CAP connected (ExtSpeed=20)"
-#   overrides: CAMERA_SOURCE=0 (USB cam) · BCAP_PROVIDER=… · YOLO_MODEL=yoloe-11s-seg.pt
-#   YOLO_CLASSES="test tube,medicine bottle,beaker,bowl" (open-vocab; unset = stock yolov8n.pt)
-```
-
-```bash
-# T2 — Django with hardware profile (arms the server; DRIVE_HARDWARE alone
-# does not move the arm — the frontend's "Real robot" target also has to
-# send driveHardware:true per request. "Simulation" never moves the arm.)
-# VISION_MODEL must match T1's YOLO_MODEL/YOLO_CLASSES choice (yoloe or unset
-# for stock) — the two configs don't auto-discover each other.
-VISION_MODEL=yoloe DRIVE_HARDWARE=1 poetry run python manage.py runserver
-```
-
-```bash
-# T3 — frontend
-npm start
-```
-
-**Quick checks:**
-```bash
-curl -s http://localhost:5000/api/actual-joints-real | python3 -m json.tool   # {"available":true,...}
-curl -s http://localhost:5000/api/vision/state | python3 -m json.tool         # YOLO detections
-```
-
-> **Safety:** keep the teach-pendant **e-stop** in hand. `/api/stop` stops the Gazebo
-> stream and sends a soft halt to the real arm over a dedicated b-CAP channel — but
-> this is best-effort, not safety-rated. The e-stop is the only certified stop. Start
-> at `EXT_SPEED=20`.
-
-Full field guide: [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md) ·
-camera/detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md).
-
----
-
-## Credentials & Ports
-
-### App login
-
-| Role | Username | Password |
-|---|---|---|
-| Operator | `operator1` | `Operator_1!` |
-| Manager | `manager1` | `passwordmanager1` |
-
-> `operator1` is actually in the Django `Manager` group in the shipped `db.sqlite3`, not `Operator`, despite the label above — it can reach the admin pages too. Use `manager1` if you specifically need to test the Operator-only role restriction.
-
-### Django admin panel (`http://localhost:8000/admin/`)
-
-| Username | Password |
-|---|---|
-| `admin` | `adminpassword` |
-
-### Ports
-
-| Service | Port |
-|---|---|
-| React frontend | `3000` |
-| Django backend | `8000` |
-| Flask ROS bridge | `5000` |
-| SocketIO stream | `5001` |
-| Camera stream (web_video_server) | `8080` |
-
----
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `ros2 run web_video_server: package not found` | Streaming repos not cloned | Run Step 2: clone `async_web_server_cpp` and `web_video_server` into `ros2_ws/src/`, then `colcon build` |
-| `POST /api/vision/frame/` returns 500, log shows `hand_landmarker.task` error | Model file not downloaded | Run Step 6: `curl` download into `backend/assets/` |
-| `ModuleNotFoundError: No module named 'ikpy'` | Running IK in wrong environment | `ikpy` is a Poetry dep. Run `poetry install`. Do not use `pip install` in `.venv` |
-| `package 'ros_gz_bridge' not found` | Missing apt package | `sudo apt install ros-jazzy-ros-gz` |
-| `colcon build` fails with C++ errors | Missing system libs | Install `build-essential cmake libboost-dev libboost-filesystem-dev libboost-thread-dev libasio-dev` |
-| `No module named 'rclpy'` inside Poetry shell | ROS2 Python binding missing | Use the `.venv` for ROS2 nodes, not `poetry shell`. Poetry env does not have `--system-site-packages` |
-| App loads but Simulate does nothing | Flask bridge not running | Check Terminal 3 / `launch_sim.sh` output; Flask API must respond on `:5000` |
-| CORS or CSRF errors in browser | Port forwarding not set up | Follow Path B SSH forwarding — all four ports must be forwarded |
-| `frontend/.env` values show as `undefined` | Template values left empty | Open `frontend/.env` and fill the six `VITE_BACKEND_*`/`VITE_FRONTEND_*` variables (template ships with `''`) |
-| `manage.py runserver` fails: `SystemCheckError` on `CSRF_TRUSTED_ORIGINS` (4_0.E001) | `VITE_FRONTEND_PROTOCOL`/`HOST`/`PORT` empty or missing in `frontend/.env` | Django builds `CSRF_TRUSTED_ORIGINS` from these three — fill them in even though they look frontend-only |
-| Gesture always returns `NONE` but no error | `hand_landmarker.task` missing (silent fallback) | Same as row 2 above — download the model |
