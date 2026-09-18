@@ -236,6 +236,183 @@ def test_the_authored_message_is_shown_over_the_live_view():
     )
 
 
+def test_a_waiting_step_shows_its_instruction_on_every_channel():
+    """The message of "Pause and show message" must reach the screen for all
+    four resume channels, and this is the assertion that was missing when it
+    did not.
+
+    It rendered in exactly one place: the dark overlay that replaces the video.
+    Gesture and object steps are deliberately excluded from that overlay — the
+    operator has to SEE the camera to aim at it — so for those two channels the
+    instruction was rendered NOWHERE. A step reading "show the camera a blue
+    tube" ran with the panel saying only "Waiting to find tube".
+
+    That is a measurement problem before it is a usability one.
+    seed_partb_tasks.py gives all four Part-B tasks one shared `_TASK_DESC`
+    exactly so the on-screen instruction is identical across the conditions —
+    "anything else that differed between them would be a second explanation for
+    any difference in the measurements". The shared constant made the DATA
+    identical while two of the four screens showed no instruction at all.
+
+    So: the description belongs to the pill, gated on the step being active and
+    on nothing else. Any channel condition in that gate re-opens the hole.
+    """
+    src = _strip_comments(_read(PANEL))
+
+    pill = src[src.index("const videoPill"):]
+    pill = pill[: pill.index("].find(Boolean)")]
+
+    assert "humanStep?.description" in pill, (
+        "l'istruzione del passo umano non raggiunge piu' la pillola sul video: "
+        "sui canali gesto e oggetto non verrebbe mostrata da nessuna parte, e "
+        "le quattro condizioni della Parte B smetterebbero di mostrare la "
+        "stessa frase."
+    )
+
+    entry = pill[: pill.index("humanStep?.description")]
+    entry = entry[entry.rindex("[") + 1 :] if "[" in entry else entry
+    for channel_gate in ("isGestureStep", "isObjectStep", "condition ==="):
+        assert channel_gate not in entry, (
+            f"l'istruzione e' condizionata al canale ({channel_gate}): deve "
+            "comparire su tutti e quattro, altrimenti la differenza fra le "
+            "condizioni della Parte B non e' piu' il solo canale."
+        )
+
+    assert pill.index("humanStep?.description") < pill.index("notifyPill"), (
+        "un 'Show message' da 4 secondi puo' coprire l'istruzione di un passo "
+        "che dura tutta l'attesa."
+    )
+
+
+def test_every_perceiving_channel_says_what_it_perceives():
+    """REQUIRED next to DETECTED, for gesture AND voice AND object.
+
+    It existed for gesture alone. Without it an operator cannot separate the
+    two failures they must act on differently: "the microphone is not hearing
+    me" and "the microphone hears me and the word is wrong" look identical, and
+    so do "the camera cannot see the tube" and "the camera sees it as something
+    else". One means try again, the other means change what you are doing, and
+    the step is on a thirty-second clock.
+
+    Part B makes it a measurement problem too. It times the four channels
+    against each other; a channel that shows whether it is perceiving you is
+    not competing on equal terms with three that do not.
+
+    Button and timer are excluded on purpose: a press is not a perception (the
+    button is its own readout) and a timer perceives nothing.
+    """
+    src = _strip_comments(_read(PANEL))
+
+    readout = src[src.index("const waitReadout"):]
+    readout = readout[: readout.index("}, [")]
+    for channel in ("'gesture'", "'voice'", "'object'"):
+        assert f"case {channel}:" in readout or f"case {channel}: {{" in readout, (
+            f"il canale {channel} non produce piu' un readout REQUIRED/DETECTED: "
+            "l'operatore non puo' distinguere 'non mi percepisce' da 'mi "
+            "percepisce e non va bene'."
+        )
+    assert "'human_feedback'" not in readout and "'timer'" not in readout, (
+        "pulsante o timer hanno un readout percettivo: non percepiscono nulla, "
+        "e una riga DETECTED vuota accanto a un pulsante e' rumore."
+    )
+
+    # The card must read the shared object, not the gesture-only state it grew
+    # out of — that is what made it a gesture card in the first place.
+    # Anchored on code, not on a JSX comment: _strip_comments has already
+    # removed those, and an anchor that cannot be found raises instead of
+    # failing with the message this test wants to give.
+    card = src[src.index("{waitReadout && ("):]
+    card = card[: card.index("{isHumanStepActive && countdown !== null")]
+    assert "{waitReadout.required}" in card and "{waitReadout.detected}" in card, (
+        "la scheda non legge piu' waitReadout: e' tornata a essere la scheda "
+        "del solo gesto."
+    )
+
+
+def test_the_channel_pill_and_the_ready_check_cannot_contradict():
+    """An amber "Offline" in the header above a green "Ready to run" at the
+    foot of the same column. Both true, nothing saying so.
+
+    `connected` is the SocketIO event stream on :5001 — block_step, human_step,
+    gestures, detections. Not the arm, not the HTTP bridge: a run can start over
+    :5000 while this is down, and then the operator watches a still picture with
+    no highlighted block, no "waiting for a gesture" and no countdown, which
+    looks exactly like a run frozen at step zero.
+
+    Two fixes, and they work together. The pill names the CHANNEL, so it stops
+    reading as a verdict on the robot. And the disconnected case joins the
+    preflight list, whose empty state IS "Ready to run" — so the reassuring
+    line can no longer appear while the panel cannot see the run.
+    """
+    src = _strip_comments(_read(PANEL))
+
+    assert "'Offline'" not in src, (
+        "la pillola torna a dire 'Offline' sotto il titolo 'Robot': si legge "
+        "come un verdetto sul braccio, mentre riguarda il canale eventi."
+    )
+    assert "live updates" in src.lower(), (
+        "la pillola non nomina piu' cio' che smette di funzionare quando cade"
+    )
+
+    preflight = src[src.index("const preflightIssues"):]
+    preflight = preflight[: preflight.index("return (")]
+    assert "if (!connected)" in preflight, (
+        "la caduta del canale eventi non e' piu' fra le condizioni di "
+        "preflight: 'Ready to run' tornerebbe a comparire mentre il pannello "
+        "non puo' vedere niente della corsa."
+    )
+
+
+def test_the_run_folds_copilot_away_like_the_other_two():
+    """Focus mode collapsed the nav rail and the toolbox and left Copilot open.
+
+    That was right while the robot panel floated over everything — starting a
+    run covered whatever was open. Once the panel became a column with room
+    reserved for it, an open Copilot stopped being covered and started
+    competing: three surfaces dividing the viewport, with the workspace — the
+    one showing which block is running — squeezed between them.
+
+    Nothing an operator does with Copilot happens DURING a run: it writes
+    blocks into a workspace that is executing. So it folds, and it comes back,
+    because the operator did not close it — the run did.
+    """
+    workspace = _read(
+        os.path.join(FRONTEND, "pages", "task-workspace", "index.tsx")
+    )
+    focus = workspace[workspace.index("const preRunLayoutRef"):]
+    focus = focus[: focus.index("}, [isSimulationRunning])")]
+
+    assert "chatOpen," in focus, (
+        "lo stato di Copilot non viene piu' salvato prima della corsa: non "
+        "puo' essere ripristinato dopo."
+    )
+    assert focus.count("toggleChat()") >= 2, (
+        "Copilot non viene piu' chiuso all'avvio o non viene riaperto alla "
+        "fine. Un pannello che non torna insegna a non aprirlo piu'."
+    )
+
+
+def test_the_conditions_list_is_hidden_while_a_step_is_waiting():
+    """Three answers to "what is the robot waiting for", one of them wrong.
+
+    The Conditions section lists the recognisers generically — it draws a
+    "Gesture" row whether or not the step wants a gesture. During an object
+    wait the panel therefore showed "Gesture … None" beside a step that has
+    nothing to do with gestures, while STATUS named a third thing.
+
+    While a step waits, waitReadout answers the question exactly, for the
+    channel actually in play. The list returns when the step resolves, where it
+    does its real job: showing the recognisers are alive between steps.
+    """
+    src = _strip_comments(_read(PANEL))
+    gate = src[src.index("const eventsVisible"):]
+    gate = gate[: gate.index("\n\n")]
+    assert "!isHumanStepActive" in gate, (
+        "l'elenco delle condizioni ricompare durante un'attesa: nominerebbe di "
+        "nuovo un canale che quel passo non usa."
+    )
+
+
 def test_the_outcome_region_cannot_be_scrolled_out_of_view():
     """A banner that deletes itself is only useful if it was on screen.
 
@@ -273,3 +450,57 @@ def test_banner_priority_is_declared_once():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_an_authored_message_outlives_the_step_that_showed_it():
+    """"Show message and continue" is the third case of the duration rule, and
+    it was filed under the second.
+
+    MESSAGE_TTL_MS is for an event with nothing left to handle. Here the thing
+    left to handle is a PERSON READING the text — that is the entire purpose of
+    the block, and "and continue" says the program will not wait while they do.
+    Four seconds is roughly what it takes to notice a pill appeared, look up
+    from a moving arm, and find it gone.
+
+    So it persists, and three things end it: a dismiss, a newer authored
+    message, and the run finishing. Not a longer timeout — any number here is a
+    guess about how long someone needs to walk to a bench, and guessing wrong
+    fails silently, while they are away from the screen.
+    """
+    src = _strip_comments(_read(PANEL))
+    notify = src[src.index("if (humanStep?.status !== 'notify') return"):]
+    notify = notify[:notify.index("}, [humanStep])")]
+    assert "setTimeout" not in notify, (
+        "il messaggio di 'Show message and continue' torna a scadere da solo: "
+        "e' testo che una persona deve leggere, e il programma non l'aspetta."
+    )
+
+    assert "if (humanStep?.status === 'started') setNotifyPill(null)" in src, (
+        "un passo in attesa non scaccia piu' il messaggio precedente: la "
+        "priorita' di videoPill lo farebbe riapparire appena l'attesa si "
+        "risolve, ormai vecchio."
+    )
+    assert "if (!simulation.isRunning) setNotifyPill(null)" in src, (
+        "il messaggio sopravvive alla propria esecuzione: verrebbe trovato "
+        "sopra il video all'apertura del pannello per il compito successivo."
+    )
+
+
+def test_a_message_that_never_expires_can_be_closed():
+    """Persistent and undismissable is not persistent, it is stuck — and this
+    one sits on the live view, the one thing the operator is watching."""
+    src = _strip_comments(_read(PANEL))
+    pill = src[src.index("notifyPill && {"):]
+    pill = pill[:pill.index("stepCompleted &&")]
+    assert "onDismiss" in pill, (
+        "il messaggio persistente non ha piu' modo di essere chiuso"
+    )
+    render = src[src.index("{videoPill && ("):]
+    render = render[:render.index("</Box>\n                )}")]
+    assert "videoPill.onDismiss &&" in render, (
+        "la pillola non disegna piu' la ✕: l'onDismiss esiste nei dati e non "
+        "raggiunge lo schermo."
+    )
+    assert 'aria-label="Dismiss message"' in render, (
+        "la ✕ e' senza nome accessibile"
+    )

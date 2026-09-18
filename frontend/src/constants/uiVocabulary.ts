@@ -38,6 +38,10 @@ export const UI_TEXT = {
   // protocol's own reference.
   targetSimulation: 'Simulation',
   targetRobot: 'Real robot',
+  /** Same target, mid-run. The header control keeps the amber escalation the
+   *  old read-only chip carried: "Real robot" is a choice, "Arm live" is a
+   *  fact, and the operator needs the second one while the arm is moving. */
+  targetRobotLive: 'Arm live',
   liveViewRobot: 'Robot',
   liveViewSandbox: 'Test recognition',
   /** Verb form, for a card action ("Simulate this task"). Not the mode label. */
@@ -79,4 +83,28 @@ export const UI_TEXT = {
 
   // The left blocks panel is always "Toolbox" — never "blocks sidebar".
   toolbox: 'Toolbox',
+  // Copilot panel. "Copilot" is the product name and never varies; the rest
+  // is what the operator reads around it.
+  //
+  // The panel used to carry a subtitle, "Ask for help with your task", one
+  // line under a title that said COPILOT. It restated the title and cost the
+  // header a row in a 360px column whose scarcest axis is vertical.
+  copilot: 'Copilot',
+
+  // Opening state. An operator who does not program reads "tell me what the
+  // robot should do" as a blank page: the panel's only affordance was a text
+  // field, and roughly half of it was empty. These label starters built from
+  // the operator's own catalogue, so there is something to click rather than
+  // something to compose.
+  copilotStarters: 'Or start from one of these',
+
+  // The automatic-review toggle. Its tooltip used to end "(uses tokens)" —
+  // a billing concern belonging to whoever runs the server, written into the
+  // one surface that belongs to the operator.
+  copilotAutoCheckOn:
+    'Automatic review is on — Copilot checks your task and points out what is missing',
+  copilotAutoCheckOff:
+    'Automatic review is off — Copilot answers only when you ask',
+  copilotAutoCheckTurnOn: 'Turn on automatic review',
+  copilotAutoCheckTurnOff: 'Turn off automatic review',
 } as const

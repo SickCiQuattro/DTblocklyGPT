@@ -228,6 +228,17 @@ def test_the_instruction_and_the_deadline_are_the_largest_things_on_screen():
     What the operator must do, and how long they have. Both used to be below
     the panel's own body text — the countdown was 10.88px, the smallest type in
     the file apart from the camera label.
+
+    2026-09-04: the instruction moved out of the full-cover overlay and into
+    the pill over the video, so that it is visible for all four channels
+    instead of only the two that got an overlay. The size claim had to move
+    with it, and that is the part easy to lose — rendering the sentence at pill
+    size would have SHRUNK the one thing the change set out to make more
+    prominent. The pill therefore branches on `wait`.
+
+    The countdown/action adjacency survives too, by the opposite arrangement:
+    instead of pulling the clock up to the button, Confirm moved down beside
+    the clock.
     """
     tokens = _read(TOKENS)
     scale = {
@@ -239,16 +250,23 @@ def test_the_instruction_and_the_deadline_are_the_largest_things_on_screen():
     )
 
     src = _read(PANEL)
-    overlay = src[src.index("{isHumanStepActive && !isGestureStep"):]
-    overlay = overlay[:overlay.index("{videoPill && (")]
-    assert "panelType.lead" in overlay, (
-        "l'istruzione del passo umano non e' piu' al gradino `lead`: e' la "
-        "frase su cui l'operatore deve agire."
+    pill = src[src.index("{videoPill && ("):]
+    pill = pill[: pill.index("{videoPill.text}")]
+    assert "videoPill.wait\n" in pill or "videoPill.wait" in pill, (
+        "la pillola non distingue piu' l'attesa da una notifica: l'istruzione "
+        "verrebbe resa alla stessa dimensione di un avviso che dura 4s."
     )
-    assert "{countdown}s" in overlay, (
-        "i secondi rimasti non compaiono piu' accanto all'azione: la scheda "
-        "del countdown sta sotto il video, a circa 250px dal pulsante "
-        "Confirm, e chi ha trenta secondi non puo' spendere due fissazioni."
+    assert "panelType.lead" in pill, (
+        "l'istruzione del passo umano non e' piu' al gradino `lead`: e' la "
+        "frase su cui l'operatore deve agire, e spostarla senza portarsi "
+        "dietro la dimensione la degrada invece di darle rilievo."
+    )
+
+    countdown = src[src.index("{isHumanStepActive && countdown !== null"):]
+    countdown = countdown[: countdown.index("</>")]
+    assert "{countdown}s" in countdown and "handleConfirmHumanStep" in countdown, (
+        "Confirm non sta piu' accanto ai secondi rimasti: chi ha trenta "
+        "secondi non puo' spendere due fissazioni per trovare il pulsante."
     )
 
 
@@ -321,11 +339,20 @@ def test_the_arm_is_announced_while_it_is_moving():
     when that thing became true: every amber cue sat inside the
     `!simulation.isRunning` gate."""
     src = _read(PANEL)
-    header = src[:src.index("Scrollable body")]
-    assert "'Arm live'" in header, (
+    header = src[: src.index("Scrollable body")]
+    # The literal moved into UI_TEXT when the read-only chip became the target
+    # CONTROL; the property did not move. Follow the indirection rather than
+    # the string, and check both halves: the escalation must be reachable from
+    # the header, and the word must still exist to escalate to.
+    assert "UI_TEXT.targetRobotLive" in header, (
         "il segnale 'il braccio fisico si sta muovendo' non e' piu' "
         "nell'intestazione, fuori da ogni gate: tornerebbe a sparire "
         "nell'istante in cui il braccio parte."
+    )
+    vocab = _read(os.path.join(FRONTEND, "constants", "uiVocabulary.ts"))
+    assert "targetRobotLive: 'Arm live'" in vocab, (
+        "targetRobotLive non dice piu' 'Arm live': l'intestazione escalerebbe "
+        "verso una parola che non distingue la scelta dal fatto."
     )
 
 
@@ -375,11 +402,19 @@ def test_an_object_wait_does_not_cover_the_camera_it_asks_you_to_use():
     blue tube" was answered by blurring the camera's picture. The Objects
     readout that would close the loop lives in EVENTS, below the fold on a
     laptop, which is why this went unnoticed.
+
+    2026-09-04: the exclusion is gone because the scrim is gone. Keeping the
+    camera visible for two channels had cost those two channels their
+    instruction entirely — it rendered only inside the scrim. With the
+    instruction moved into the pill over the video, no full-cover overlay is
+    gated on a human step at all, which is the stronger property and the one
+    asserted here now.
     """
     src = _strip_comments(_read(PANEL))
-    assert "!isGestureStep && !isObjectStep" in src, (
-        "lo scrim copre di nuovo l'attesa oggetto: l'operatore deve mostrare "
-        "qualcosa a una camera di cui non vede piu' l'immagine."
+    assert "!isGestureStep && !isObjectStep" not in src, (
+        "l'esclusione e' tornata, quindi e' tornato anche uno scrim a "
+        "copertura totale durante un passo umano. Il messaggio deve stare "
+        "nella pillola sul video, non in un pannello che lo sostituisce."
     )
     bar = src[src.index("{isObjectStep && ("):]
     bar = bar[:bar.index("{videoPill && (")]
@@ -407,7 +442,10 @@ def test_one_word_per_axis_in_the_execution_vocabulary():
         assert f"{key}:" in vocab, f"manca {key} da UI_TEXT"
 
     src = _strip_comments(_read(PANEL))
-    mode = src[src.index('aria-label="Mode"'):]
+    # Renamed from "Mode" when the control moved into the header: "Mode" named
+    # a section that no longer exists, and the header needs a label that says
+    # what is being chosen.
+    mode = src[src.index('aria-label="Execution target"'):]
     mode = mode[:mode.index("]}")]
     assert "UI_TEXT.runOnRobot" not in mode and "UI_TEXT.simulate," not in mode, (
         "il controllo del modo usa di nuovo le etichette dei pulsanti: "
@@ -435,11 +473,40 @@ def test_nothing_over_the_video_uses_a_backdrop_filter():
     like.
     """
     src = _strip_comments(_read(PANEL))
-    video = src[src.index("aspectRatio: '4/3'"):src.index("<SectionLabel>Run</SectionLabel>")]
+    video = src[src.index("aspectRatio: videoCollapsed ? undefined : '4/3'"):src.index("<SectionLabel>Run</SectionLabel>")]
     assert "backdropFilter" not in video, (
         "un elemento sopra il video usa di nuovo backdrop-filter: Chromium "
         "non ritaglia lo sfondo sfocato al border-radius, e negli angoli "
         "ricompare il fotogramma."
+    )
+
+
+def test_the_video_box_keeps_its_aspect_ratio_when_capped():
+    """The Gazebo camera is 640x480 — exactly 4:3 — and the feed is fitted with
+    `contain`. So the box must stay 4:3 or the picture gets bars.
+
+    Capping this box is necessary: expanding the panel from 35vw to 50vw makes
+    an aspect-locked box taller, and the video is the one thing an operator
+    waiting on a step is looking at least. But the cap has to be on the WIDTH.
+
+    With `width: 100%` and `aspect-ratio`, a `max-height` clamps the height and
+    leaves the width alone: the used box stops being 4:3 and becomes wider, and
+    a 4:3 feed inside it pillarboxes — black bars down both sides, and a picture
+    smaller than before the cap existed. That is what the first attempt did, and
+    it was reported within the hour.
+    """
+    src = _strip_comments(_read(PANEL))
+    box = src[src.index("aspectRatio: videoCollapsed ? undefined : '4/3'"):]
+    box = box[: box.index("}}")]
+
+    assert "maxHeight" not in box, (
+        "il riquadro video torna a essere limitato in altezza: con width 100% "
+        "e aspect-ratio, il box smette di essere 4:3 e diventa piu' largo, "
+        "quindi il flusso 640x480 in 'contain' mostra bande nere laterali."
+    )
+    assert "maxWidth" in box, (
+        "il riquadro video non ha piu' un limite: espandere il pannello lo fa "
+        "crescere in altezza e spinge readout e STATUS sotto la piega."
     )
 
 
@@ -458,12 +525,19 @@ def test_a_full_cover_overlay_uses_the_inner_radius_not_the_outer_one():
         "il raggio interno non e' piu' derivato dal raggio esterno meno il "
         "bordo: due numeri che devono restare d'accordo tornano indipendenti."
     )
-    video = src[src.index("aspectRatio: '4/3'"):src.index("<SectionLabel>Run</SectionLabel>")]
+    video = src[src.index("aspectRatio: videoCollapsed ? undefined : '4/3'"):src.index("<SectionLabel>Run</SectionLabel>")]
     assert "borderRadius: 'inherit'" not in video, (
         "un overlay usa di nuovo 'inherit': eredita il raggio ESTERNO mentre "
         "occupa il riquadro interno, quindi si arrotonda piu' del contenitore."
     )
-    assert video.count("borderRadius: VIDEO_INNER_RADIUS") >= 3, (
+    # A count, because "at least one uses it" would pass with the others
+    # broken. Was 3; it is 2 since 2026-09-04, when the human-step scrim was
+    # removed — a deletion, so every overlay that remains still carries it.
+    #
+    # Deliberately not derived from a count of `inset: 0`: that string also
+    # appears on things that are not overlays over the video, so the derived
+    # bound failed on a correct file the first time it was written.
+    assert video.count("borderRadius: VIDEO_INNER_RADIUS") >= 2, (
         "non tutti gli overlay a copertura totale usano il raggio interno."
     )
 
@@ -491,10 +565,22 @@ def test_a_hand_only_ever_means_a_hand_shape():
     # mention `Hand` as the no-gesture-detected fallback.
     overlay = src[src.index("const WaitIcon ="):]
     overlay = overlay[: overlay.index("\n  const ", 1)]
-    assert "Hand" not in overlay, (
-        "l'attesa di un passo umano torna a mostrare una mano: nel vocabolario "
-        "di questo pannello significa 'fai il gesto Open hand', mentre il "
-        "passo chiede un pulsante, una voce o un'attesa."
+
+    # 2026-09-04: WaitIcon now serves all four channels, because the
+    # instruction it marks moved onto the video and gesture/object steps reach
+    # it too. A GESTURE step may therefore draw a hand — it is drawing the
+    # gesture being asked for, which is the rule this test states, not a
+    # violation of it. What must never happen is the old failure: a button,
+    # voice or timer step wearing a hand.
+    gesture_branch = "gestureIcon(humanStep?.value) || Hand"
+    assert gesture_branch in overlay, (
+        "l'attesa di un gesto non disegna piu' il gesto richiesto: e' la "
+        "stessa regola che segue la riga REQUIRED."
+    )
+    assert "Hand" not in overlay.replace(gesture_branch, "«gesto»"), (
+        "un passo che chiede un pulsante, una voce o un'attesa mostra una "
+        "mano: nel vocabolario di questo pannello significa 'fai il gesto "
+        "Open hand', cioe' l'istruzione sbagliata sotto scadenza."
     )
     for channel, icon in (("voice", "Mic"), ("timer", "Clock")):
         assert icon in overlay, (
@@ -513,22 +599,47 @@ def test_a_hand_only_ever_means_a_hand_shape():
         )
 
 
-def test_following_the_running_step_is_opt_in_and_only_when_off_screen():
-    """Reintroduced as a setting, not as behaviour.
+def test_following_the_running_step_acts_only_when_the_block_is_off_screen():
+    """On by default since 2026-09-11, and the guard below is what allows that.
 
-    An always-on version existed and was removed because it recentred the
-    canvas on every step — including the ones already in front of the operator
-    — and fought anyone trying to pan. Two things make it acceptable now: it is
-    off by default, and it only acts when the block has actually left the
-    viewport.
+    History, because this setting has been through three states. An always-on
+    version existed first and was removed: it recentred the canvas on every
+    step, including steps already in front of the operator, and fought anyone
+    trying to pan. It came back as a setting, off by default, with a
+    `fullyVisible` check so it acts only when the block has actually left the
+    viewport — and being off by default was argued at the time as half of what
+    made it acceptable.
+
+    That half was reversed once the layout was measured. With Copilot and the
+    robot panel open on a 1440px laptop the canvas floor is 480px, and a
+    program with two conditions is about twice that wide, so during a run half
+    the program is off-screen. Unlike a document, the operator cannot know
+    where to scroll: the thing advancing is the robot, not the page. Off by
+    default meant the one case the feature exists for was the one it sat out.
+
+    The original complaint does not return, because `fullyVisible` is what
+    removed it: nothing moves while the running step is in view. One case
+    survives on purpose — an operator who pans away mid-run gets pulled back.
+    That is the trade, taken deliberately: not seeing the running step is the
+    common case, panning away from it is not.
+
+    So the load-bearing assertion here is the `fullyVisible` guard, not the
+    default. Without it, default-on is the behaviour that was removed.
     """
     settings = _read(
         os.path.join(FRONTEND, "features", "blockly", "utils", "useViewSettings.ts")
     )
-    assert "followRunningBlock: false," in settings, (
-        "'segui lo step in esecuzione' non e' piu' disattivato di default: "
-        "torna a essere un comportamento imposto invece di una scelta."
+    assert "followRunningBlock: true," in settings, (
+        "'segui lo step in esecuzione' torna spento di default, e con esso "
+        "torna il caso per cui esiste: meta' programma fuori schermo durante "
+        "una corsa, senza niente che ci porti sopra."
     )
+    # Still a setting, not a behaviour. That is the part of the original
+    # argument that holds: an operator who does not want it can turn it off,
+    # which is what made reintroducing it acceptable in the first place.
+    assert "followRunningBlock: boolean" in _read(
+        os.path.join(FRONTEND, "features", "blockly", "utils", "useViewSettings.ts")
+    ), "non e' piu' una preferenza: torna a essere un comportamento imposto."
 
     helper = _strip_comments(
         _read(os.path.join(FRONTEND, "features", "blockly", "utils",

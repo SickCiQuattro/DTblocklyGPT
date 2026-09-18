@@ -170,3 +170,23 @@ export const voiceLabel = (code: string | null | undefined): string =>
     : (RECOGNIZED_VOICE_COMMANDS.find((v) => v.code === code)?.label ??
       code ??
       '')
+
+/**
+ * `voiceLabelWithSpokenForm` addressed by CODE rather than by option.
+ *
+ * The panel's REQUIRED readout knows a code, not an option, and it was
+ * therefore printing the bare label — the command's English NAME — under a
+ * 30-second clock while the recogniser listens in Italian. The utterance that
+ * actually matches lived only in the legend, on a tab the panel disables for
+ * the whole duration of a run, so mid-wait it was unreachable.
+ *
+ * Delegates rather than re-composing the string: one format, one place, so the
+ * legend and the readout cannot drift into showing the same thing two ways.
+ */
+export const voiceLabelWithSpokenFormByCode = (
+  code: string | null | undefined,
+): string => {
+  if (isNothing(code)) return NOTHING_RECOGNIZED
+  const option = RECOGNIZED_VOICE_COMMANDS.find((v) => v.code === code)
+  return option ? voiceLabelWithSpokenForm(option) : (code ?? '')
+}
