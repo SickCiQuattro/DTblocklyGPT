@@ -22,7 +22,10 @@ export const LogoSection = ({ open = true }: LogoSectionProps) => {
     >
       <img
         src="/logo.svg"
-        alt="logo"
+        // Decorative: the wordmark below renders "DTblocklyGPT" right beside
+        // it, so a description here makes a screen reader announce the brand
+        // twice — it used to say "logo, DTblocklyGPT".
+        alt=""
         width="28"
         height="28"
         style={{

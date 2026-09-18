@@ -13,7 +13,6 @@ import {
   Paper,
   Skeleton,
   Stack,
-  TablePagination,
   Tooltip,
   Typography,
   Menu,
@@ -36,6 +35,7 @@ import {
   MoreVertical,
   Undo2,
   AlertTriangle,
+  Bot,
 } from 'lucide-react'
 
 import { MainCard } from 'components/MainCard'
@@ -47,7 +47,6 @@ import { fetchApi, MethodHTTP } from 'services/api'
 import { endpoints } from 'services/endpoints'
 import { activeItem } from 'store/reducers/menu'
 import { MessageText } from 'utils/messages'
-import { defaultCurrentPage } from 'utils/constants'
 import { formatDateTimeShortFrontend, formatRelativeFrontend } from 'utils/date'
 import { isModalOpen } from 'utils/keyboardGuards'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
@@ -96,9 +95,6 @@ const SCROLL_AREA_SX = {
 
 const tokenPalette = ThemeOption()
 
-const CARD_PAGE_SIZE_OPTIONS = [12, 24, 48]
-const DEFAULT_CARD_PAGE_SIZE = 12
-
 type StatusFilter = 'all' | 'draft' | 'published'
 
 // A task is "published" for filtering purposes whenever it has a live
@@ -125,6 +121,7 @@ const TaskRowActions = ({
   handleDelete,
   handleDiscard,
   referenceDataError,
+  simulatorDown,
 }: {
   row: TaskType
   canManage: boolean
@@ -134,6 +131,7 @@ const TaskRowActions = ({
   handleDelete: (id: number) => Promise<unknown>
   handleDiscard: (id: number) => Promise<unknown>
   referenceDataError: boolean
+  simulatorDown: boolean
 }) => {
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
@@ -167,7 +165,16 @@ const TaskRowActions = ({
       <Tooltip
         title={
           canRun
-            ? `${UI_TEXT.simulate} this task`
+            ? simulatorDown
+              ? // Said here as well as in the banner, because this is where
+                // the operator's hand is. The button stays enabled on purpose:
+                // that health check is fetched on arrival and on tab focus,
+                // never polled — it is orientation, not a monitor — and
+                // disabling a control on state nobody is watching is how you
+                // block work that would have succeeded. The panel checks
+                // properly before it runs anything.
+                `${UI_TEXT.simulate} this task — the simulator was not responding when this page loaded`
+              : `${UI_TEXT.simulate} this task`
             : isPublishedWithDraft
               ? `${UI_TEXT.unpublishedChanges} — publish or discard them to run this task`
               : 'This task is a draft — publish it first to run it'
@@ -302,6 +309,51 @@ const TaskRowActions = ({
         )}
 
         <Divider />
+
+        {/* The one path from this list to the physical arm.
+            There was none: this menu held Edit details, Discard unpublished
+            changes, Check for problems and Delete, so running a task on the
+            robot meant opening it, pressing Run, and switching the panel's
+            target by hand — four steps for what Simulate does in one.
+
+            A menu row rather than a modifier on the Simulate button. Cmd+click
+            already means "open in a new tab" in every browser, and this button
+            sits inside a card that itself navigates, so that gesture would arm
+            the arm for someone reaching for a new tab. A modifier is also the
+            least discoverable affordance there is, which is the wrong property
+            for the action that moves metal. Same hierarchy argument that gave
+            Simulate its label: the frequent action gets one click, the rare
+            one gets two — and this one gets a name.
+
+            Opening the panel on "Real robot" does not move anything by itself:
+            the panel confirms a real run, and motion still needs both
+            DRIVE_HARDWARE server-side and driveHardware per request. */}
+        <MenuItem
+          disabled={!canRun}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleClose()
+            navigate(`/task/${row.id}`, {
+              state: { autoOpenRobot: true, executionTarget: 'real' },
+            })
+          }}
+          title={
+            canRun
+              ? undefined
+              : 'Only a published task can run — publish it first'
+          }
+        >
+          <ListItemIcon>
+            <Bot size={15} color={tokenPalette.warning.darker} />
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography sx={{ fontSize: '0.85rem', color: 'warning.darker' }}>
+                {UI_TEXT.runOnRobot}
+              </Typography>
+            }
+          />
+        </MenuItem>
 
         <MenuItem
           onClick={(e) => {
@@ -692,8 +744,6 @@ const UsesStrip = ({ uses }: { uses?: TaskUses }) => {
 
 const ListTasks = () => {
   useDocumentTitle('Tasks')
-  const [page, setPage] = useState(defaultCurrentPage - 1) // MUI is 0-indexed
-  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_CARD_PAGE_SIZE)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const navigate = useNavigate()
@@ -813,8 +863,6 @@ const ListTasks = () => {
     }).then(() => {
       toast.success(MessageText.success)
       mutate()
-      const remaining = (dataTasks?.length ?? 1) - 1
-      if (remaining <= page * rowsPerPage && page > 0) setPage(page - 1)
     })
   }
 
@@ -845,10 +893,6 @@ const ListTasks = () => {
       matchesSearch && matchesStatusFilter((row as any).status, statusFilter)
     )
   })
-  const paginated = filteredRows.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage,
-  )
   const isFiltering = search.trim() !== '' || statusFilter !== 'all'
   const draftCount = rows.filter((r) =>
     matchesStatusFilter((r as any).status, 'draft'),
@@ -856,11 +900,19 @@ const ListTasks = () => {
   const publishedCount = rows.filter((r) =>
     matchesStatusFilter((r as any).status, 'published'),
   ).length
+  // Not publishedCount. That one deliberately includes published_with_draft —
+  // correct for the filter chip, whose question is "has a live version" — and
+  // it was also being printed as "ready to run", whose question is `canRun`,
+  // strictly 'published'. So a task with unpublished changes was counted as
+  // ready while its own Simulate button sat disabled next to the tooltip
+  // "publish or discard them to run this task".
+  const runnableCount = rows.filter(
+    (r) => (r as any).status?.toLowerCase() === 'published',
+  ).length
 
   const clearFilters = () => {
     setSearch('')
     setStatusFilter('all')
-    setPage(0)
   }
 
   // Tasks is the app's de-facto landing page (no separate marketing/dashboard
@@ -889,28 +941,38 @@ const ListTasks = () => {
   )
   const simulatorDown = !!bridgeHealth?.error
 
+  const plural = (n: number) => (n !== 1 ? 's' : '')
+
   const liveStatusLine = (() => {
     if (rows.length === 0) return 'No tasks yet — create your first one below.'
+    // Filtered views describe what is on screen and make no claim about
+    // running: "Showing 13 published tasks" is complete and true, and mixing a
+    // second, smaller number into the same sentence would not be.
     if (statusFilter === 'published') {
-      return `Showing ${publishedCount} published task${publishedCount !== 1 ? 's' : ''} ready to run`
+      return `Showing ${publishedCount} published task${plural(publishedCount)}`
     }
     if (statusFilter === 'draft') {
-      return `Showing ${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`
+      return `Showing ${draftCount} draft${plural(draftCount)} waiting`
     }
     const statusParts: string[] = []
-    if (publishedCount > 0) {
+    // With the simulator down, report the total and let the banner below say
+    // why nothing runs. The claim used to stand anyway, directly above a line
+    // denying it. The neutral figure is rows.length so it matches the "All"
+    // chip exactly — printing a second number also called "published" next to
+    // the chip's would trade one contradiction for another.
+    if (simulatorDown) {
+      statusParts.push(`${rows.length} task${plural(rows.length)}`)
+    } else if (runnableCount > 0) {
       statusParts.push(
-        `${publishedCount} task${publishedCount !== 1 ? 's' : ''} ready to run`,
+        `${runnableCount} task${plural(runnableCount)} ready to run`,
       )
     }
     if (draftCount > 0) {
-      statusParts.push(
-        `${draftCount} draft${draftCount !== 1 ? 's' : ''} waiting`,
-      )
+      statusParts.push(`${draftCount} draft${plural(draftCount)} waiting`)
     }
-    return statusParts.length > 0
-      ? statusParts.join(' · ')
-      : 'No tasks yet — create your first one below.'
+    // rows.length > 0 is established above, so an empty join here means every
+    // clause was suppressed, not that there is nothing to show.
+    return statusParts.join(' · ')
   })()
 
   const actionProps = {
@@ -920,6 +982,7 @@ const ListTasks = () => {
     handleDelete,
     handleDiscard,
     referenceDataError,
+    simulatorDown,
   }
 
   return (
@@ -1035,7 +1098,6 @@ const ListTasks = () => {
           onChange={(_e, v) => {
             if (v) {
               setStatusFilter(v)
-              setPage(0)
             }
           }}
           options={[
@@ -1055,7 +1117,6 @@ const ListTasks = () => {
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
-            setPage(0)
           }}
           startAdornment={
             <InputAdornment position="start">
@@ -1135,7 +1196,7 @@ const ListTasks = () => {
         <>
           <Box sx={SCROLL_AREA_SX}>
             <Box sx={GRID_SX}>
-              {paginated.map((row) => (
+              {filteredRows.map((row) => (
                 <TaskCard
                   key={row.id}
                   row={row}
@@ -1147,34 +1208,18 @@ const ListTasks = () => {
               ))}
             </Box>
           </Box>
-          {/* Hidden when there is only one page.
-              With ten tasks and a page size of twelve, this row rendered
-              "1–10 of 10" with both arrows disabled and a size selector
-              offering 12/24/48 for a set of ten: a full band across the bottom
-              of the primary screen whose only effect was to be scrolled past.
-              Worse, the grid above it scrolls — so the page offered two
-              competing ways to reach ten cards, one of which could not move. */}
-          {filteredRows.length > rowsPerPage && (
-            <TablePagination
-              // "Tasks per page", not MUI's default "Rows per page": there are
-              // no rows on this screen. It is a grid of cards, and the component
-              // is being borrowed for its paging controls, not its table
-              // semantics — `component="div"` below says the same thing. Naming
-              // the thing the operator can actually see is the whole of the fix.
-              labelRowsPerPage="Tasks per page"
-              rowsPerPageOptions={CARD_PAGE_SIZE_OPTIONS}
-              component="div"
-              count={filteredRows.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={(_, newPage) => setPage(newPage)}
-              onRowsPerPageChange={(e) => {
-                setRowsPerPage(parseInt(e.target.value, 10))
-                setPage(0)
-              }}
-              sx={{ mt: 1 }}
-            />
-          )}
+          {/* No pagination. The grid scrolls, and a list that scrolls does
+              not also need pages — the comment this replaces had already named
+              the problem ("the page offered two competing ways to reach ten
+              cards") and then solved it only for the single-page case. At
+              fifteen tasks against a page size of twelve both mechanisms came
+              back, and three tasks sat behind an arrow at the bottom of a
+              scrolling area, which is the best hiding place on the screen.
+
+              Measured rather than assumed: 20 tasks in the whole database, 15
+              for the busiest owner. If a library ever did reach hundreds, the
+              answer is still not paging through them — it is the search field
+              above, which exists and already answers to Cmd+K. */}
         </>
       )}
 

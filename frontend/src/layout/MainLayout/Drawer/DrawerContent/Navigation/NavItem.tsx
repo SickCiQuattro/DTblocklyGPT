@@ -70,20 +70,32 @@ export const NavItem = ({ item, level }: NavItemProps) => {
   const Icon = item.icon
   const itemIcon = Icon ? <Icon size={18} /> : false
 
+  // A nav item's id is its LIST route and is plural (`objects`); the matching
+  // detail route is singular (`object/:id`). Match either, for every item.
+  //
+  // This was a special case for `tasks` alone — `/task/:id` never matched the
+  // "tasks" id by segment — and the identical gap was open for objects,
+  // locations, actions, myrobots, users and robots: six of the seven items
+  // that have a detail route, where opening a row left the rail with nothing
+  // highlighted at all. That is the screen where the marker matters most,
+  // because the page title there is a record's name, not the section's, so
+  // the rail was the only thing left saying where you were.
+  //
+  // Vestigial as of this change, and deliberately not removed here: the seven
+  // list pages each call `dispatch(activeItem(''))` before navigating into a
+  // detail page (`listObjects.tsx` and its six siblings) — someone read the
+  // blank rail as intended and built the other half of it, with the detail
+  // page's `backFunction` restoring the id on the way out. They are harmless
+  // now: this matches on the path, so `openItem` being '' changes nothing and
+  // the effect below writes the right id back on the next render. They are
+  // also the only thing in the tree still asserting the old behaviour, so if
+  // this ever regresses, start there.
+  const singularId = item.id.endsWith('s') ? item.id.slice(0, -1) : null
   const currentIndex = document.location.pathname
-    .toString()
     .split('/')
-    .findIndex((id) => id === item.id)
+    .findIndex((segment) => segment === item.id || segment === singularId)
 
-  // The task workspace lives at /task/:id (singular), which never matches the
-  // "tasks" nav item by path segment — without this, opening a task leaves
-  // the rail showing nothing active, even though the task workspace is
-  // conceptually still "under" Tasks.
-  const isTasksItemInWorkspace =
-    item.id === 'tasks' && document.location.pathname.startsWith('/task/')
-
-  const isSelected =
-    currentIndex > -1 || openItem === item.id || isTasksItemInWorkspace
+  const isSelected = currentIndex > -1 || openItem === item.id
 
   // active menu item on page load
   useEffect(() => {

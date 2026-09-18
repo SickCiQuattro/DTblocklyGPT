@@ -36,6 +36,9 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
           display: 'flex',
           flexDirection: 'column',
           overflowY: 'auto',
+          // The rail rarely has enough items to scroll, so without this every
+          // wheel gesture over it went straight to the document.
+          overscrollBehavior: 'contain',
           overflowX: 'hidden',
         }}
       >

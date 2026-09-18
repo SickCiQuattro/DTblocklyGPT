@@ -964,9 +964,9 @@ export const UnifiedWorkspace = () => {
             >
               <Blocks size={32} color={theme.palette.slate[400]} />
               <Typography variant="body2" color="text.secondary">
-                Drag a block from the toolbox to start,
+                Click a block in the toolbox to add it,
                 <br />
-                or ask Copilot to build it for you.
+                or ask Copilot to build the task for you.
               </Typography>
             </Box>
           )}
