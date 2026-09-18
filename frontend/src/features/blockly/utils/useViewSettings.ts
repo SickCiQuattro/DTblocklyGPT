@@ -25,6 +25,18 @@ export interface ViewSettings {
    * even then it is opt-in.
    */
   followRunningBlock: boolean
+  /**
+   * Show the AND / OR / NOT condition operators in the toolbox and the shadow
+   * picker.
+   *
+   * Off by default: they were pulled from the palette on advisor feedback,
+   * because they ask a non-programmer to hold a boolean expression in mind.
+   * The block types, the parser and the backend enums never went away — the
+   * chat assistant can still produce them, and a task that contains them still
+   * loads. Turning this on only puts them back where they can be reached by
+   * hand.
+   */
+  showLogicOperators: boolean
 }
 
 export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
@@ -35,7 +47,23 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   gridVisible: true,
   snapToGrid: true,
   toolboxCollapsed: false,
-  followRunningBlock: false,
+  // On. The setting only scrolls when the running step has already gone
+  // off-screen, so it does nothing whenever the program fits — free when
+  // unneeded, and the only thing that helps when it is.
+  //
+  // Off was backwards for this layout. With Copilot and the robot panel open
+  // on a 1440px laptop the canvas floor is 480px (WORKSPACE_MIN_PX 480, minus
+  // the 240px toolbox, which does auto-collapse during a run); a program with
+  // two conditions is already about twice that wide. So during a run half the
+  // program sat off-screen and nothing brought the executing step into view —
+  // and unlike a document, the operator cannot know where to scroll, because
+  // the thing advancing is the robot, not the page.
+  //
+  // Note for anyone comparing behaviour: loadSettings merges stored values
+  // over these defaults, so a browser that already has
+  // `dtblockly.viewSettings` keeps whatever it had. This changes first runs.
+  followRunningBlock: true,
+  showLogicOperators: false,
 }
 
 const STORAGE_KEY = 'dtblockly.viewSettings'

@@ -117,6 +117,8 @@ interface UseShadowPickerParams {
   dataActions: ActionListType[]
   /** Available macro tasks for the "sequence" picker context (current task excluded). */
   availableMacros: TaskType[]
+  /** Show the AND / OR / NOT operators among the trigger items. */
+  showLogicOperators?: boolean
 }
 
 /**
@@ -165,6 +167,7 @@ export const useShadowPicker = ({
   dataLocations,
   dataActions,
   availableMacros,
+  showLogicOperators = false,
 }: UseShadowPickerParams): ShadowPickerAPI => {
   const [position, setPosition] = useState<ShadowPickerPosition | null>(null)
   const [popoverType, setPopoverType] = useState<ShadowPopoverType | null>(null)
@@ -194,13 +197,22 @@ export const useShadowPicker = ({
       case 'action':
         return buildShadowPickerItems(dataActions, 'Skill', 'Skills')
       case 'trigger':
-        return TRIGGER_PICKER_ITEMS
+        return TRIGGER_PICKER_ITEMS.filter(
+          (item) => !item.advanced || showLogicOperators,
+        )
       case 'sequence':
         return buildSequencePickerItems(availableMacros)
       default:
         return []
     }
-  }, [dataActions, dataLocations, dataObjects, popoverType, availableMacros])
+  }, [
+    dataActions,
+    dataLocations,
+    dataObjects,
+    popoverType,
+    availableMacros,
+    showLogicOperators,
+  ])
 
   /** Items filtered by the current search query. */
   const filteredItems = useMemo(

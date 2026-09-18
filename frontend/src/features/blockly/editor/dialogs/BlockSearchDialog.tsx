@@ -124,6 +124,9 @@ export const BlockSearchDialog = ({
     >
       <DialogContent sx={{ p: 1.5 }}>
         <TextField
+          // Same reason as the chat composer: the placeholder is the only
+          // visible cue, and it is not a name.
+          aria-label="Search for a step"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a step to add…"

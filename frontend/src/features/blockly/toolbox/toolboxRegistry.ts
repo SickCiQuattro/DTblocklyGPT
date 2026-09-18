@@ -43,6 +43,8 @@ export interface ToolboxBlockItem {
   data?: string
   /** Optional serialized macro source code used for expanded macro preview. */
   macroCode?: string
+  /** Hidden from the palette unless the "Condition operators" setting is on. */
+  advanced?: boolean
 }
 
 /** Represents a collapsible category in the toolbox accordion. */
@@ -273,30 +275,33 @@ export const TOOLBOX_CATEGORIES: ToolboxCategory[] = [
       //   inputs: 'Seconds',
       //   outputs: 'Yes or No',
       // },
-      // {
-      //   type: 'logic_and_block',
-      //   label: 'AND',
-      //   colour: blocksColours.eventsConditions,
-      //   description: blockDescriptionsByType.logic_and_block,
-      //   inputs: 'First condition | Second condition',
-      //   outputs: 'Yes or No',
-      // },
-      // {
-      //   type: 'logic_or_block',
-      //   label: 'OR',
-      //   colour: blocksColours.eventsConditions,
-      //   description: blockDescriptionsByType.logic_or_block,
-      //   inputs: 'First condition | Second condition',
-      //   outputs: 'Yes or No',
-      // },
-      // {
-      //   type: 'logic_not_block',
-      //   label: 'NOT',
-      //   colour: blocksColours.eventsConditions,
-      //   description: blockDescriptionsByType.logic_not_block,
-      //   inputs: 'Condition to reverse',
-      //   outputs: 'Yes or No',
-      // },
+      {
+        type: 'logic_and_block',
+        label: 'AND',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_and_block,
+        inputs: 'First condition | Second condition',
+        outputs: 'Yes or No',
+        advanced: true,
+      },
+      {
+        type: 'logic_or_block',
+        label: 'OR',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_or_block,
+        inputs: 'First condition | Second condition',
+        outputs: 'Yes or No',
+        advanced: true,
+      },
+      {
+        type: 'logic_not_block',
+        label: 'NOT',
+        colour: blocksColours.eventsConditions,
+        description: blockDescriptionsByType.logic_not_block,
+        inputs: 'Condition to reverse',
+        outputs: 'Yes or No',
+        advanced: true,
+      },
     ],
   },
   {

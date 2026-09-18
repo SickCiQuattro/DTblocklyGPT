@@ -87,6 +87,8 @@ export interface ShadowPickerItem {
   paramHint?: string
   /** Keywords used for fuzzy search within the picker search field. */
   keywords: string[]
+  /** Hidden from the picker unless the "Condition operators" setting is on. */
+  advanced?: boolean
   /**
    * The Blockly block type to create when this item is selected.
    * When absent, the picker falls back to `resolveRealBlockTypeFromShadow`.

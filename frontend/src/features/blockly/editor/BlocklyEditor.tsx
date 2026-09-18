@@ -760,6 +760,7 @@ export const BlocklyEditor = ({
     dataLocations,
     dataActions,
     availableMacros,
+    showLogicOperators: !!viewSettings?.showLogicOperators,
   })
 
   // ── History sync ───────────────────────────────────────────────────────────
@@ -1751,6 +1752,23 @@ export const BlocklyEditor = ({
       const startY = e.clientY
       const pointerId = e.pointerId
       const sourceElement = e.currentTarget
+      // A press that never becomes a drag is a click, and a click has to add
+      // the block.
+      //
+      // It did not. The pill carries role="button" and the label "Add <block>
+      // to the task", and Enter/Space on it call handleInsertToolboxItem — so
+      // the keyboard had a one-press path to add a block and the mouse had
+      // none. Pressing a pill and releasing without moving did nothing at all,
+      // as did dragging and releasing before the pointer reached the canvas.
+      // Meanwhile every instruction in the app ("Drag blocks into workspace",
+      // "Drag a block from the toolbox to start") taught the one interaction
+      // that novices fail at most in a block editor, because it was the only
+      // one a mouse had.
+      //
+      // Tracked rather than recomputed on pointerup: the release can land back
+      // within the threshold after a wide excursion, and that gesture is an
+      // abandoned drag, not a click.
+      let movedPastThreshold = false
 
       const cleanup = () => {
         window.removeEventListener('pointermove', onPointerMove)
@@ -1767,6 +1785,7 @@ export const BlocklyEditor = ({
           moveEvent.clientY - startY,
         )
         if (distance < DRAG_THRESHOLD_PX) return
+        movedPastThreshold = true
 
         // Wait until the pointer is actually over the canvas before creating
         // the block.
@@ -1801,6 +1820,9 @@ export const BlocklyEditor = ({
       const onPointerEnd = (endEvent: PointerEvent) => {
         if (endEvent.pointerId !== pointerId) return
         cleanup()
+        if (endEvent.type === 'pointerup' && !movedPastThreshold) {
+          handleInsertToolboxItem(item)
+        }
       }
 
       window.addEventListener('pointermove', onPointerMove)
@@ -1808,7 +1830,7 @@ export const BlocklyEditor = ({
       window.addEventListener('pointercancel', onPointerEnd)
       pendingDragCleanupRef.current = cleanup
     },
-    [],
+    [handleInsertToolboxItem],
   )
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1835,6 +1857,7 @@ export const BlocklyEditor = ({
         isDeleting={isDeleting}
         deleteZoneState={toolboxDeleteZoneState}
         blockViewMode={blockViewMode}
+        showLogicOperators={!!viewSettings?.showLogicOperators}
         onRootRefChange={handleToolboxRootRefChange}
         onCollapse={
           onViewSettingsChange
@@ -1945,6 +1968,41 @@ export const BlocklyEditor = ({
               </span>
             </Tooltip>
             <span className="workspace-controls-divider" aria-hidden="true" />
+            {/* Out of the ⋯ menu and onto the bar.
+                It is the one click-to-add path the palette does not offer, and
+                it sat inside an overflow menu at the same level as "Export
+                task" — so the alternative to dragging was behind three dots.
+                Kept in the ⋯ menu as well: the menu row carries the ⌘K hint,
+                which is how anyone learns the shortcut exists. */}
+            <Tooltip
+              title={
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <span>Add a step</span>
+                  <KeycapHint
+                    sx={{
+                      bgcolor: 'transparent',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      color: 'common.white',
+                    }}
+                  >
+                    {ADD_BLOCK_SHORTCUT}
+                  </KeycapHint>
+                </Stack>
+              }
+            >
+              <IconButton
+                className="workspace-control-button"
+                size="small"
+                onClick={() => setBlockSearchOpen(true)}
+                aria-label="Add a step"
+              >
+                <Search size={18} />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="More actions">
               <IconButton
                 className="workspace-control-button"
@@ -2326,6 +2384,15 @@ export const BlocklyEditor = ({
                 checked={viewSettings.followRunningBlock}
                 onChange={(value) =>
                   onViewSettingsChange({ followRunningBlock: value })
+                }
+              />
+
+              <SettingSwitch
+                label="Condition operators"
+                caption="Adds AND, OR and NOT to Conditions, for combining two events in one step."
+                checked={viewSettings.showLogicOperators}
+                onChange={(value) =>
+                  onViewSettingsChange({ showLogicOperators: value })
                 }
               />
 

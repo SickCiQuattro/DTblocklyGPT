@@ -492,8 +492,17 @@ export const BlockPreviewTooltip = ({
   const descriptionText =
     item.description ??
     'Block available in the toolbox to compose the program visually.'
-  const inputText = item.inputs ?? 'None'
-  const outputText = item.outputs ?? 'None'
+  // Only the lines that carry information.
+  //
+  // These rendered unconditionally, defaulting to 'None', so "Output: None"
+  // appeared on 13 of the 21 blocks that declare the field and on every block
+  // that does not — a constant, in function-signature vocabulary, on a card
+  // read by operators who do not program. The four condition blocks really do
+  // answer Yes or No, and every input that exists is worth naming; those are
+  // the cases left.
+  const inputText = item.inputs && item.inputs !== 'None' ? item.inputs : null
+  const outputText =
+    item.outputs && item.outputs !== 'None' ? item.outputs : null
 
   /**
    * Derive category-tinted accent colours for the pill and "View" button.
@@ -660,16 +669,22 @@ export const BlockPreviewTooltip = ({
               >
                 {descriptionText}
               </p>
-              <div className="toolbox-preview-card__io">
-                <span className="toolbox-preview-card__io-line">
-                  <SquareArrowRightEnter size={16} />
-                  Input: {inputText}
-                </span>
-                <span className="toolbox-preview-card__io-line">
-                  <SquareArrowRightExit size={16} />
-                  Output: {outputText}
-                </span>
-              </div>
+              {(inputText || outputText) && (
+                <div className="toolbox-preview-card__io">
+                  {inputText && (
+                    <span className="toolbox-preview-card__io-line">
+                      <SquareArrowRightEnter size={16} />
+                      Needs: {inputText}
+                    </span>
+                  )}
+                  {outputText && (
+                    <span className="toolbox-preview-card__io-line">
+                      <SquareArrowRightExit size={16} />
+                      Answers: {outputText}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {isMacroPreviewAvailable && (
                 <button
@@ -730,7 +745,7 @@ export const BlockPreviewTooltip = ({
             >
               <Pointer size={16} />
               <span className="toolbox-preview-card__footer-text">
-                Drag to add to program
+                Click or drag to add
               </span>
             </div>
           </div>
@@ -741,7 +756,18 @@ export const BlockPreviewTooltip = ({
         leaveDelay={80}
         onOpen={handleOpen}
         onClose={handleClose}
-        disableFocusListener
+        // Focus opens it too. The pills are a roving-tabindex list walked with
+        // the arrow keys, and Enter on one adds the block — so the keyboard is
+        // a first-class way to build a program here, and everything explaining
+        // what a block IS (the description, the rendered preview, what it
+        // needs) was reachable only by hovering a mouse over it. MUI opens on
+        // focus-visible, so this costs a mouse user nothing.
+        //
+        // Still mouse-only, and known: the "View Task Blocks" button inside
+        // this card. MUI renders the tooltip in a portal at the end of the
+        // body, so Tab from a pill never walks into it, and MacroPreviewModal
+        // has no other entry point anywhere in the app. Giving it one is a
+        // separate change, not a prop.
         disableTouchListener
         slotProps={{
           popper: { className: 'toolbox-preview-popper' },

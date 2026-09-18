@@ -50,6 +50,8 @@ interface CustomToolboxProps {
   isDeleting: boolean
   deleteZoneState?: 'idle' | 'drag-intent' | 'hover-confirm'
   blockViewMode?: BlockViewMode
+  /** Show the AND / OR / NOT operators (off by default). */
+  showLogicOperators?: boolean
   macroDetailsById: Record<number, TaskDetailType>
   onRootRefChange?: (element: HTMLElement | null) => void
   /** Hide the toolbox (the "show" button then lives on the workspace overlay). */
@@ -508,6 +510,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   dataLocations,
   dataActions,
   dataMacros,
+  showLogicOperators = false,
   isDeleting,
   deleteZoneState = 'idle',
   blockViewMode = 'complete',
@@ -605,19 +608,10 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
       <div className="custom-toolbox__inner">
         <header
           className="custom-toolbox__header"
-          style={
-            /*isDeleting
-            ? {
-                backgroundColor: '#FEF2F2',
-                borderBottom: '2px dashed #C84D28',
-                transition: 'all 0.2s ease-in-out',
-                paddingBottom: '4px',
-              }
-            : */ {
-              transition: 'all 0.2s ease-in-out',
-              borderBottom: `1px solid ${theme.palette.slate[200]}`,
-            }
-          }
+          style={{
+            transition: 'all 0.2s ease-in-out',
+            borderBottom: `1px solid ${theme.palette.slate[200]}`,
+          }}
         >
           <div className="custom-toolbox__header-content">
             <div className="custom-toolbox__header-title-row">
@@ -662,7 +656,7 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
             >
               {isDeleting
                 ? 'Drop block to remove'
-                : 'Drag blocks into workspace'}
+                : 'Click or drag a block to add it'}
             </span>
           </div>
 
@@ -693,7 +687,9 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
         <div className="custom-toolbox__scroll">
           {TOOLBOX_CATEGORIES.map((category) => {
             const pills = resolveDynamicBlocks(
-              category.blocks,
+              category.blocks.filter(
+                (item) => !item.advanced || showLogicOperators,
+              ),
               dataObjects,
               dataLocations,
               dataActions,
