@@ -28,6 +28,11 @@ export interface MessageType {
   parts?: MessagePart[]
   /** What the assistant did this turn — drives the evaluation card. */
   intent?: ChatIntent
+  /** BCP-47 language the assistant answered in. The interface is English, but
+   * the assistant replies in whatever language the operator wrote in, so the
+   * bubble is the one place on the page whose language is not the document's.
+   * Without it a screen reader reads an Italian answer with English phonetics. */
+  lang?: string
 }
 
 // The example names things that are ACTUALLY in the library.

@@ -40,6 +40,7 @@ import { AbstractStep } from 'pages/tasks/types'
 import { getFromLocalStorage, LocalStorageKey } from 'utils/localStorageUtils'
 import { UserLoginInterface } from 'pages/login/LoginForm'
 import { ConfirmDialog } from 'components/ConfirmDialog'
+import { UI_TEXT } from 'constants/uiVocabulary'
 
 import { UserBubble } from './UserBubble'
 import { AssistantBubble } from './AssistantBubble'
@@ -193,6 +194,32 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     Error
   >({ url: endpoints.graphic.macroList })
 
+  // Starters for the opening state, built from the operator's own catalogue
+  // rather than written down here.
+  //
+  // The panel opened with one welcome bubble, a composer, and roughly half its
+  // height empty. Its only affordance was a text field, and the welcome's
+  // answer to "what do I type" was a worked example to retype by hand. An
+  // operator who does not program reads that as a blank page — and the
+  // observed behaviour in testing is that they look for something to press,
+  // then look elsewhere when they do not find it.
+  //
+  // Reading the live catalogue rather than hardcoding nouns also means these
+  // cannot go stale: the welcome text in utils/chat.ts carries names that have
+  // to be kept in step with seed_library by hand, and these name whatever this
+  // operator actually has.
+  const starterPrompts = React.useMemo(() => {
+    const object = dataObjects[0]?.name
+    const location = dataLocations[0]?.name
+    return [
+      object && location
+        ? `Pick up the ${object} and place it on the ${location}`
+        : null,
+      'Repeat the whole task 4 times',
+      'Wait for a thumbs up before continuing',
+    ].filter((prompt): prompt is string => Boolean(prompt))
+  }, [dataObjects, dataLocations])
+
   // Auto-open overlay when a new proposal is received
   const prevProposedTaskRef = useRef<any>(null)
   const proposalOverlayRef = useRef<HTMLDivElement | null>(null)
@@ -227,14 +254,19 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         }
       }
 
-      const handlePointerUp = () => {
+      // pointercancel, not just pointerup: under touch the system can take the
+      // pointer away mid-gesture and pointerup never fires, leaving the move
+      // listener attached and the divider stuck in its resizing state.
+      const handlePointerEnd = () => {
         setIsResizing(false)
         window.removeEventListener('pointermove', handlePointerMove)
-        window.removeEventListener('pointerup', handlePointerUp)
+        window.removeEventListener('pointerup', handlePointerEnd)
+        window.removeEventListener('pointercancel', handlePointerEnd)
       }
 
       window.addEventListener('pointermove', handlePointerMove)
-      window.addEventListener('pointerup', handlePointerUp)
+      window.addEventListener('pointerup', handlePointerEnd)
+      window.addEventListener('pointercancel', handlePointerEnd)
     },
     [width, chatPosition],
   )
@@ -263,6 +295,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       type: MessageTypeEnum.TEXT,
       parts,
       intent,
+      lang: res.response.lang,
     }
 
     setListMessages([...priorMessages, newRobotMessage])
@@ -314,11 +347,17 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     ])
   }, [dispatch])
 
-  const onMessageSend = async () => {
-    if (!message.trim() || isProcessing) return
+  // One send path for three entry points: the composer, a starter chip in the
+  // opening state, and a suggestion chip inside an assistant reply. The text
+  // is a parameter rather than read from `message` state — the chip paths
+  // never put their text in the field, and a chip wired straight to a click
+  // handler would otherwise hand the click event in as the message.
+  const sendText = async (rawText: string) => {
+    const text = rawText.trim()
+    if (!text || isProcessing) return
 
     const newUserMessage: MessageType = {
-      text: message,
+      text,
       id: listMessages[listMessages.length - 1].id + 1,
       user: UserChatEnum.USER,
       timestamp: dayjs().toISOString(),
@@ -335,7 +374,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         method: MethodHTTP.POST,
         body: {
           id: Number(taskId),
-          message,
+          message: text,
           chatLog,
           dataObjects,
           dataLocations,
@@ -351,11 +390,16 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       // fetchApi already toasts every failure path (services/api.ts) — a
       // second toast here just stacks a redundant message behind it.
       console.error('Error sending message:', error)
-      setMessage(message)
+      // Restore into the composer whatever failed to send, including a chip's
+      // text — the operator can retry or edit it rather than hunt for the chip
+      // again, which may no longer be on screen.
+      setMessage(text)
     } finally {
       setIsProcessing(false)
     }
   }
+
+  const onMessageSend = () => void sendText(message)
 
   // Contextual help, part 2 — the one LLM call this feature actually spends
   // tokens on. Fires at most once per task open, only when the workspace has
@@ -369,6 +413,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const requestProactiveHelp = async (
     issueTexts: string[],
     priorMessages: MessageType[],
+    localSummary: string,
   ) => {
     setIsProcessing(true)
     try {
@@ -396,7 +441,10 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       setListMessages([
         ...priorMessages,
         {
-          text: "I couldn't check the workspace for issues automatically. You can ask me directly if something isn't working.",
+          // Fall back to what conformance already worked out locally. This
+          // used to be a bare apology, which threw away the one thing that
+          // had cost nothing and was known to be true.
+          text: `${localSummary} I couldn't look at it in more detail just now — tell me what the robot should do and I'll help.`,
           id: (priorMessages[priorMessages.length - 1]?.id ?? 0) + 1,
           user: UserChatEnum.ROBOT,
           timestamp: dayjs().toISOString(),
@@ -410,12 +458,19 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   }
 
   // Contextual welcome — seeded once per task, when the workspace is
-  // available. Naming the current issues is free (computed locally from the
-  // workspace, no LLM call); if there are any, it also kicks off the one
-  // proactive LLM call above. A short delay covers the gap between the
-  // workspace becoming available (injection) and the task's saved blocks
-  // finishing their load into it, since conformance read too early would
-  // misreport an existing task as empty.
+  // available. Conformance runs locally and costs nothing; if it finds
+  // anything, it kicks off the one proactive LLM call above. A short delay
+  // covers the gap between the workspace becoming available (injection) and
+  // the task's saved blocks finishing their load into it, since conformance
+  // read too early would misreport an existing task as empty.
+  //
+  // The local summary is NOT posted as its own bubble any more. It used to be,
+  // and the proactive call then appended a second bubble about the same block
+  // one second later — two Copilot messages on the same timestamp, both saying
+  // something was unfinished. The LLM's is strictly the better of the two: it
+  // names which step and offers the fix as a chip. So the local text is held
+  // back and spent only where it is the best available answer, which is when
+  // that call fails.
   const hasSeededWelcomeRef = useRef(false)
   useEffect(() => {
     if (hasSeededWelcomeRef.current) return
@@ -432,17 +487,11 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       const issueTexts = result.errors.map(formatIssue)
       if (issueTexts.length === 0) return // clean workspace: default opener stays
 
-      const dynamicWelcome: MessageType[] = [
-        {
-          ...INITIAL_MESSAGE_1,
-          text:
-            issueTexts.length === 1
-              ? `I can see one thing to finish here: ${issueTexts[0]} Want help, or tell me what the robot should do.`
-              : `I can see ${issueTexts.length} things to finish here: ${issueTexts.join(' ')} Want help, or tell me what the robot should do.`,
-        },
-      ]
-      setListMessages(dynamicWelcome)
-      void requestProactiveHelp(issueTexts, dynamicWelcome)
+      const localSummary =
+        issueTexts.length === 1
+          ? `I can see one thing to finish here: ${issueTexts[0]}`
+          : `I can see ${issueTexts.length} things to finish here: ${issueTexts.join(' ')}`
+      void requestProactiveHelp(issueTexts, [INITIAL_MESSAGE_1], localSummary)
     }, 500)
     return () => clearTimeout(t)
     // eslint-disable-next-line @eslint-react/exhaustive-deps
@@ -464,9 +513,12 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         <React.Fragment key={msg.id}>
           <AssistantBubble
             text={msg.text}
+            lang={msg.lang}
             timestamp={msg.timestamp}
             avatarUrl="/pages/robot.png"
             parts={msg.parts}
+            onSuggestionClick={(text) => void sendText(text)}
+            suggestionsDisabled={isProcessing}
           />
           {msg.intent === 'evaluate' && (
             <EvaluationCard
@@ -593,6 +645,25 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
         .chat-messages-container::-webkit-scrollbar-thumb:hover {
           background: ${theme.palette.slate[400]} !important;
         }
+        .starter-chip {
+          text-align: left;
+          font: inherit;
+          font-size: 13px;
+          color: ${theme.palette.slate[700]};
+          background: ${theme.palette.background.paper};
+          border: 1px solid ${theme.palette.divider};
+          border-radius: 10px;
+          padding: 9px 12px;
+          cursor: pointer;
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .starter-chip:hover {
+          background: ${alpha(theme.palette.primary.main, 0.06)};
+          border-color: ${alpha(theme.palette.primary.main, 0.3)};
+        }
+        .starter-chip:active {
+          transform: scale(0.99);
+        }
         .close-btn-premium:hover {
           background: ${alpha(theme.palette.primary.main, 0.08)} !important;
         }
@@ -661,6 +732,9 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             height: '100%',
             cursor: 'col-resize',
             zIndex: 100,
+            // Without this the browser claims the gesture for page scrolling
+            // and the drag never reaches the handler on a touch screen.
+            touchAction: 'none',
             background: 'transparent',
           }}
           className="resize-handle"
@@ -697,34 +771,23 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             background: theme.palette.grey[50],
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div
-              style={{
-                color: theme.palette.slate[600],
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                letterSpacing: '0.12em',
-              }}
-            >
-              COPILOT
-            </div>
-            <div
-              style={{
-                color: theme.palette.slate[400],
-                fontSize: '0.63rem',
-                fontWeight: 500,
-                letterSpacing: '0.02em',
-              }}
-            >
-              Ask for help with your task
-            </div>
+          <div
+            style={{
+              color: theme.palette.slate[600],
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {UI_TEXT.copilot}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Tooltip
               title={
                 contextualHelpEnabled
-                  ? 'Proactive analysis: on — Copilot automatically reviews workspace issues (uses tokens)'
-                  : 'Proactive analysis: off — no automatic review'
+                  ? UI_TEXT.copilotAutoCheckOn
+                  : UI_TEXT.copilotAutoCheckOff
               }
               placement="bottom"
             >
@@ -733,8 +796,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                 size="small"
                 aria-label={
                   contextualHelpEnabled
-                    ? 'Turn off proactive analysis'
-                    : 'Turn on proactive analysis'
+                    ? UI_TEXT.copilotAutoCheckTurnOff
+                    : UI_TEXT.copilotAutoCheckTurnOn
                 }
                 sx={{
                   color: contextualHelpEnabled
@@ -814,6 +877,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             style={{
               flex: 1,
               overflowY: 'auto',
+              overscrollBehavior: 'contain',
               padding: '16px 20px',
               display: 'flex',
               flexDirection: 'column',
@@ -821,6 +885,42 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             }}
           >
             {listMessages.map(renderMessage)}
+            {/* Opening state only. These are an empty state, not a toolbar:
+                once the conversation has started, the transcript is the thing
+                worth the room. */}
+            {listMessages.length <= 1 &&
+              !isProcessing &&
+              !proposal.proposedTask && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    marginTop: '4px',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: theme.palette.slate[500],
+                      marginBottom: '2px',
+                    }}
+                  >
+                    {UI_TEXT.copilotStarters}
+                  </div>
+                  {starterPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className="starter-chip"
+                      onClick={() => void sendText(prompt)}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
             {isProcessing && renderTypingIndicator()}
             <div ref={chatEndRef} />
           </div>

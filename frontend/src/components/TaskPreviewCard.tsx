@@ -609,12 +609,18 @@ export const TaskPreviewCard: React.FC<TaskPreviewCardProps> = ({
 
         {/* Answer from the assistant */}
         {answer && (
+          // No height cap and no scrollbar of its own.
+          //
+          // This was maxHeight:90px with overflowY:auto, and 90px is about
+          // four lines at this width — so the text that says what Apply is
+          // about to do was the one thing in the overlay that got cut, mid
+          // sentence, behind a second scrollbar nested inside the panel's
+          // own. It flows now; the tree below keeps flex:1 and gives up the
+          // room, and Apply/Cancel sit outside both, so they cannot be
+          // pushed off. The full text is in the transcript either way.
           <div
             style={{
-              maxHeight: '90px',
-              overflowY: 'auto',
               marginBottom: '12px',
-              paddingRight: '4px',
               flexShrink: 0,
             }}
           >

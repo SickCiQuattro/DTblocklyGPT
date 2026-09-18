@@ -9,15 +9,33 @@ import { MessagePart } from 'utils/chat'
 
 interface AssistantBubbleProps {
   text: string
+  /** BCP-47 language of `text`, declared on the element that carries it. The
+   * document is `lang="en"` and the interface is English; only this bubble can
+   * be in another language, and only it needs to say so. */
+  lang?: string
   timestamp: string | null
   avatarUrl?: string
   parts?: MessagePart[]
+  /** Required, not optional. A suggestion chip is drawn in the same indigo,
+   * the same border and the same radius as the Review and Apply buttons, and
+   * its content is phrased as an action ("Set confirmation to thumbs up
+   * gesture"). It was a plain div with no handler and no pointer cursor, so
+   * the one element in the panel that looked pressable was the one element
+   * that did nothing. Making the prop required means the affordance can only
+   * be drawn where it is real. */
+  onSuggestionClick: (text: string) => void
+  /** A send is already in flight — the chip would be swallowed by the guard
+   * in sendText, which is the same silence this whole change removes. */
+  suggestionsDisabled?: boolean
 }
 
 export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
   text,
+  lang,
   timestamp,
   parts,
+  onSuggestionClick,
+  suggestionsDisabled,
 }) => {
   const theme = useTheme()
   const accent = theme.palette.success.main
@@ -48,6 +66,16 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
           box-shadow: 0 6px 16px ${alpha(accent, 0.08)} !important;
           background: ${alpha(accent, 0.1)} !important;
           border-color: ${alpha(accent, 0.22)} !important;
+        }
+        .suggestion-chip {
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .suggestion-chip:not(:disabled):hover {
+          background: ${alpha(theme.palette.primary.main, 0.14)} !important;
+          border-color: ${alpha(theme.palette.primary.main, 0.34)} !important;
+        }
+        .suggestion-chip:not(:disabled):active {
+          transform: scale(0.99);
         }
       `}</style>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -96,6 +124,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
           </span>
         </div>
         <div
+          lang={lang}
           style={{
             fontSize: '14px',
             color: theme.palette.success.darker,
@@ -111,23 +140,31 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {parts.map((part, idx) =>
               part.type === 'suggestion' ? (
-                <div
+                <button
                   key={`s-${idx}`}
+                  type="button"
+                  onClick={() => onSuggestionClick(part.content)}
+                  disabled={suggestionsDisabled}
+                  className="suggestion-chip"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
                     fontSize: '13px',
+                    textAlign: 'left',
+                    font: 'inherit',
                     color: theme.palette.primary.darker,
                     background: alpha(theme.palette.primary.main, 0.08),
                     border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
                     borderRadius: '10px',
                     padding: '6px 10px',
+                    cursor: suggestionsDisabled ? 'default' : 'pointer',
+                    opacity: suggestionsDisabled ? 0.55 : 1,
                   }}
                 >
                   <Lightbulb size={14} style={{ flexShrink: 0 }} />
                   <span>{part.content}</span>
-                </div>
+                </button>
               ) : part.type === 'warning' ? (
                 <div
                   key={`w-${idx}`}
