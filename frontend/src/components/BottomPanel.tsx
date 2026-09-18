@@ -125,15 +125,20 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
         clampedHeightCss(latest),
       )
     }
-    const onUp = () => {
+    // pointercancel, not just pointerup: under touch the system can take the
+    // pointer away mid-gesture and pointerup never fires, which would leave
+    // both listeners attached and data-panel-resizing stuck on the document.
+    const onEnd = () => {
       window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointerup', onEnd)
+      window.removeEventListener('pointercancel', onEnd)
       setIsResizing(false)
       delete document.documentElement.dataset.panelResizing
       dispatch(setCodePanelHeight(latest))
     }
     window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointerup', onEnd)
+    window.addEventListener('pointercancel', onEnd)
   }
 
   return (
@@ -195,6 +200,9 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             width: '100%',
             height: '6px',
             cursor: 'row-resize',
+            // Without this the browser claims the gesture for page scrolling
+            // and the drag never reaches the handler on a touch screen.
+            touchAction: 'none',
             zIndex: 1,
             background: 'transparent',
           }}
@@ -262,6 +270,7 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
             flex: 1,
             padding: '16px 20px',
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
             margin: 0,
             '&::-webkit-scrollbar': {
               width: '6px',

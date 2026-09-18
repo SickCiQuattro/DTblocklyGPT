@@ -9,6 +9,26 @@
   --font-mono: 'Geist Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 }
 
+/* ─── Overscroll: the app shell does not rubber-band ─────────────────────
+   Reported: scrolling over the robot panel or the nav rail, where there is
+   nothing to scroll, bounced the WORKSPACE instead — the whole canvas plus the
+   status bar with "running" and "View code" shifted together.
+
+   That is scroll chaining. When a container cannot scroll, or has reached its
+   end, the browser hands the gesture to the nearest scrollable ancestor. On the
+   /task/ route the shell is `height: 100vh; overflow: hidden` (MainLayout), so
+   the nearest one left is the DOCUMENT, and what the operator saw was the page
+   itself rubber-banding under a UI that is supposed to be fixed.
+
+   `none` here rather than `contain`: this shell is not a scrollable surface at
+   any viewport, so there is no local overscroll worth keeping — only the chain
+   to remove. Inner panels use `contain`, which stops the chain while leaving
+   each panel its own end-of-list feedback. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 * {
   font-family: var(--font-ui);
 }
