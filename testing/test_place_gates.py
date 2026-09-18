@@ -330,39 +330,43 @@ def _reset_placed_registry():
     simulate._placed_seq = 0
 
 
-def test_persist_placed_object_removes_then_creates(monkeypatch):
-    """Removal first, spawn second, and the removal is the WAITING one.
+def test_persist_placed_object_parks_then_creates(monkeypatch):
+    """Move "object" out of the way first, spawn the placed copy second.
 
-    The seam moved: the bare `gz service .../remove` this used to inspect now
-    lives inside remove_entity_and_wait, which also polls the world until the
-    entity is really gone. Patching it here keeps the test about ordering and
-    naming — spawning placed_N on top of a live "object" interpenetrates two
-    colliders — instead of about how the wait is implemented.
+    The ordering is what this test is about, and it survived a change of
+    mechanism: the placed_N copy is spawned at the pose "object" is standing
+    on, so the original has to leave that pose first or the two colliders
+    interpenetrate and Gazebo explodes them apart.
+
+    What changed is HOW it leaves. It used to be deleted; it is now parked,
+    because deleting it here forced the next pick to create a same-named model
+    and that is the cycle that binds the DetachableJoint to a corpse. See
+    testing/test_object_entity_reuse.py.
     """
-    removed, created = [], []
-    monkeypatch.setattr(simulate, "remove_entity_and_wait",
-                        lambda name, **kw: removed.append(name) or True)
+    parked, created = [], []
+    monkeypatch.setattr(simulate, "set_object_world_pose",
+                        lambda x, y, z, **kw: parked.append((x, y)) or True)
     monkeypatch.setattr(simulate, "launch_wsl_ros_command",
                         lambda cmd, **kw: created.append(cmd) or True)
 
     ok = _real_persist_placed_object("tube", 1.0, 2.0, 3.0, yaw=0.0)
 
     assert ok is True
-    assert removed == ["object"]
+    assert parked == [(simulate.OBJECT_PARK_X, simulate.OBJECT_PARK_Y)]
     assert len(created) == 1
     assert "create" in created[0] and 'name: "placed_1"' in created[0]
     assert simulate._placed_in_world == [("placed_1", None)]
 
 
-def test_persist_placed_object_gives_up_when_the_entity_will_not_go_away(monkeypatch):
-    """No spawn on top of a corpse.
+def test_persist_placed_object_gives_up_when_the_entity_will_not_move(monkeypatch):
+    """No spawn on top of something still standing there.
 
-    An "object" still in the world after the wait means the physics engine is
-    about to rename the newcomer and hold a dangling reference — the
-    Physics.cc:2967 storm. Skipping persistence loses a placed tube; spawning
-    anyway corrupts the rest of the session.
+    If the park fails, "object" is still at the place pose. Spawning placed_N
+    there interpenetrates two colliders and the physics engine flings them
+    apart, in full view of the operator. Skipping persistence loses a placed
+    tube from the destination; spawning anyway wrecks the scene.
     """
-    monkeypatch.setattr(simulate, "remove_entity_and_wait", lambda name, **kw: False)
+    monkeypatch.setattr(simulate, "set_object_world_pose", lambda x, y, z, **kw: False)
     spawns = []
     monkeypatch.setattr(
         simulate, "launch_wsl_ros_command", lambda cmd, **kw: spawns.append(cmd) or True
@@ -374,7 +378,7 @@ def test_persist_placed_object_gives_up_when_the_entity_will_not_go_away(monkeyp
 
 
 def test_persist_placed_object_increments_across_calls(monkeypatch):
-    monkeypatch.setattr(simulate, "remove_entity_and_wait", lambda name, **kw: True)
+    monkeypatch.setattr(simulate, "set_object_world_pose", lambda x, y, z, **kw: True)
     monkeypatch.setattr(simulate, "launch_wsl_ros_command", lambda *a, **kw: True)
 
     _real_persist_placed_object("tube", 0, 0, 0)
@@ -383,31 +387,27 @@ def test_persist_placed_object_increments_across_calls(monkeypatch):
     assert simulate._placed_in_world == [("placed_1", None), ("placed_2", None)]
 
 
-def test_persist_placed_object_skips_spawn_on_delete_failure(monkeypatch):
-    """A failed delete must not be followed by a spawn.
+def test_persist_placed_object_does_not_delete_the_reusable_entity(monkeypatch):
+    """The regression this whole change exists to prevent.
 
-    The removal is stubbed at `remove_entity_and_wait` rather than by making
-    the raw `gz` command fail. Making the command fail is not enough: the
-    helper ignores that return and decides by POLLING the world, so this test
-    reached a real `gz model --list` and therefore passed only on a machine
-    with no simulator running — and started failing the moment one was up,
-    for reasons that had nothing to do with what it is checking. The helper's
-    own polling is covered by test_entity_removal_wait.py.
+    A removal here runs on EVERY place, so it puts a remove-then-create cycle
+    on the common path — and gz-sim8 loses roughly one of those in five,
+    leaving the DetachableJoint welded to a corpse and every later grasp in the
+    session failing with "didn't come up with the gripper".
     """
-    calls = []
-    monkeypatch.setattr(simulate, "launch_wsl_ros_command",
-                        lambda cmd, **kw: calls.append(cmd) or True)
+    removals = []
     monkeypatch.setattr(simulate, "remove_entity_and_wait",
-                        lambda name, **kw: False)
+                        lambda name, **kw: removals.append(name) or True)
+    monkeypatch.setattr(simulate, "set_object_world_pose", lambda x, y, z, **kw: True)
+    monkeypatch.setattr(simulate, "launch_wsl_ros_command", lambda *a, **kw: True)
 
-    ok = _real_persist_placed_object("tube", 0, 0, 0)
+    _real_persist_placed_object("tube", 0, 0, 0)
 
-    assert ok is False
-    assert not any("/create" in c for c in calls), (
-        "ha spawnato la copia persistente anche se la rimozione e' fallita: "
-        "i due modelli si compenetrano e Gazebo li fa esplodere"
+    assert removals == [], (
+        f"il place ha rimosso {removals}: torna a costringere il pick "
+        "successivo a ricreare un modello con lo stesso nome, che e' la causa "
+        "del fallimento silenzioso della saldatura."
     )
-    assert simulate._placed_in_world == []
 
 
 def test_delete_placed_objects_sweeps_registry(monkeypatch):

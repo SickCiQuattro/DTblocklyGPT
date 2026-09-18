@@ -249,3 +249,50 @@ def test_object_meta_sanity(name):
     assert 0 < width_m <= simulate.MAX_GRIP_WIDTH_MM / 1000.0, (
         f"{name}: max_grasp_width={width_m} exceeds the gripper's own MAX_GRIP_WIDTH_MM "
         "(the pick would be classified infeasible)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The fingers have to reach the object they are closing on.
+#
+# orange_tube declared max_grasp_width 26mm — the diameter of its cap. That cap
+# is visual only (model.sdf says so), so the fingers actually met the 15mm body
+# and stopped 7mm short of it on both sides. The weld still fired, because a
+# DetachableJoint does not care whether anything touched, so the pick "worked"
+# while the operator watched a tube hang in mid-air below an open gripper. It
+# was the one object in the catalogue that looked wrong, and the height was
+# blamed for it twice before the width was measured.
+#
+# The same 26mm also pushed it past RACK_SLOT_INNER_W, so rack_lift_for_width
+# perched it 35mm above the rack instead of seating it in a slot — a second
+# visible symptom from the same number.
+#
+# The bound is deliberately one-sided. Closing tighter than the object is how
+# every tuned object here already works (medicine_bottle crushes 7mm, and
+# GRIPPER_GRIP_CLEARANCE_MM exists to produce exactly that). Closing WIDER than
+# the object grips nothing, and no amount of tuning makes that right.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("name", _all_meta_object_names())
+def test_fingers_close_at_least_onto_the_object(name):
+    model = simulate.normalize_object_for_grasp(name)
+    if not model.feasible:
+        pytest.skip(f"{name} is not top-graspable")
+
+    parsed = simulate._parse_object_collisions(name)
+    assert parsed is not None, f"{name}: feasible model from an unparseable SDF"
+    grasp_z = model.min_z + model.grasp_center_offset
+    covering = [w for (z_lo, z_hi, w) in parsed["bands"] if z_lo - 1e-6 <= grasp_z <= z_hi + 1e-6]
+    assert covering, (
+        f"{name}: grasp height {model.grasp_center_offset * 1000:.1f}mm above the bottom "
+        "is outside every collision primitive — the fingers close on empty space"
+    )
+
+    real_width_mm = min(covering) * 1000.0
+    plan = simulate.plan_pick_for_object(model, 0.0, 0.0)
+    gap_mm = plan.hand_close - real_width_mm
+    assert gap_mm <= 1.0, (
+        f"{name}: fingers close to {plan.hand_close}mm around a {real_width_mm:.1f}mm "
+        f"body — {gap_mm:.1f}mm of clear air on the diameter. max_grasp_width "
+        f"({model.graspable_width * 1000:.1f}mm) is describing something the gripper "
+        "does not actually meet at this height (a visual-only cap?)."
+    )

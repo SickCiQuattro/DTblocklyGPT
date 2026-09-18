@@ -84,6 +84,18 @@ DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 #   - an object already in frame, or already spawned in the Gazebo world,
 #     satisfies find_object with no operator involvement at all.
 STRICT_CONDITIONS = get_bool_env("STRICT_CONDITIONS")
+# Age past which the object detector counts as absent rather than merely
+# quiet. vision_node publishes on every cycle at ~2 Hz whether or not it found
+# anything, so five seconds is ten missed cycles — well clear of a slow frame
+# or one YOLO inference running long, and far short of the condition timeout
+# it exists to avoid burning.
+VISION_STALE_AFTER_S = float(os.getenv("VISION_STALE_AFTER_S", "5"))
+# How long a simulated object detection is made to take. Not padding: the
+# panel announces the wait ("Waiting to find X") the moment the step starts,
+# and a step that resolved in the same breath showed that sentence for a frame
+# or two — the operator saw the arm move and the step end, with nothing
+# connecting the two. This is the beat in which the robot is looking.
+SIMULATED_DETECTION_DWELL_S = float(os.getenv("SIMULATED_DETECTION_DWELL_S", "2"))
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
 # How many of a ramp's IK waypoints reach the real arm, at most (Gazebo always
 # gets the full path). Each waypoint sent to hardware is a discrete b-CAP PTP
@@ -140,6 +152,39 @@ MAX_MACRO_DEPTH = int(os.getenv("MAX_MACRO_DEPTH", "10"))
 # replays this exists to reject are seconds old, from a previous run/step,
 # so there is a wide safety margin without weakening that check.
 GESTURE_FRESHNESS_SLOP_S = 0.02
+
+# How long a human step waits, for THIS run only. None = use the configured
+# default. Set by simulate_task() from the "humanStepTimeout" body key and
+# cleared in the same finally as _HW_DRIVE_REQUESTED, under the same run lock,
+# so two requests cannot read each other's value.
+#
+# Why per-run and not per-block: a field on the block would be more expressive
+# (a label check and filling a rack do not need the same budget) but it changes
+# the Blockly schema, and that means changing the prompt and the validator in
+# chat.py — which invalidates an evaluation campaign that is measured against a
+# frozen chat.py. One value per run buys most of the benefit at none of that
+# cost. The per-block field stays the right next step once the campaign closes.
+_RUN_HUMAN_TIMEOUT_S: int | None = None
+
+# Bounds for the value above. Validated SERVER-side, not only in the input that
+# produces it: this arrives in a request body and a request body is a trust
+# boundary, whatever the UI does. The floor is not cosmetic — a 1-second budget
+# would time out before the panel has finished drawing what it is asking for,
+# and every step would fail in a way that looks like the operator's fault.
+MIN_HUMAN_TIMEOUT_S = 5
+MAX_HUMAN_TIMEOUT_S = 300
+
+
+def _effective_condition_timeout() -> int:
+    """The wait budget in force, in seconds.
+
+    ONE resolver, called by every site that needs it. The countdown the
+    operator watches and the deadline the interpreter enforces come from here
+    and cannot drift apart — a mismatch between them is how a step once looked
+    like it still had half a minute left at the moment it gave up.
+    """
+    return _RUN_HUMAN_TIMEOUT_S or CONDITION_TIMEOUT_S
+
 
 # Per-request switch, set by simulate_task() from the "driveHardware" body key.
 # NOTE: single-process runserver only (same constraint as SIMULATION_STOP_EVENT
@@ -257,6 +302,17 @@ _spawned_location_name = None
 # Cleared on reset_simulation_world(), delete_spawned_object_and_place(), and STOP.
 _spawned_in_world: set = set()
 
+# Which model the live reusable "object" entity is currently holding, or None
+# when no such entity exists. NOT the same thing as _spawned_in_world, which
+# records what a pick put into Gazebo during this run and is a set of names for
+# find_object's bypass. This is a single value describing one live entity, and
+# it is what lets the next pick decide whether it can MOVE that entity instead
+# of destroying and recreating it — see _object_entity_is_reusable for why
+# that distinction is the difference between a weld that holds and one that
+# silently refuses. Set only where "object" is created or reused; cleared
+# everywhere it is actually removed.
+_live_object_sdf: str | None = None
+
 # Registry of persisted placed-object entity names (e.g. "placed_3"), spawned
 # by _persist_placed_object so a placed item survives the next pick's cleanup
 # of the reusable "object" entity. _placed_seq is monotonic and never reset
@@ -295,6 +351,27 @@ def _take_condition_bypass() -> str | None:
     global _LAST_CONDITION_BYPASS
     reason, _LAST_CONDITION_BYPASS = _LAST_CONDITION_BYPASS, None
     return reason
+
+
+# Text for the NEXT human-step-complete, when the step resolved with something
+# worth naming (a simulated object detection says what it found). Left here for
+# the handler to pick up rather than sent on the spot: every path that resolves
+# a condition already announces its own completion afterwards, so a second
+# notify from inside the condition is immediately overwritten by that one — the
+# operator saw "Found tube" for a frame and then the generic "Step completed".
+_PENDING_COMPLETION_TEXT: str | None = None
+
+
+def _set_completion_text(text: str) -> None:
+    global _PENDING_COMPLETION_TEXT
+    _PENDING_COMPLETION_TEXT = text
+
+
+def _take_completion_text() -> str:
+    """Read and clear the description for the completion about to be sent."""
+    global _PENDING_COMPLETION_TEXT
+    text, _PENDING_COMPLETION_TEXT = _PENDING_COMPLETION_TEXT, None
+    return text or ""
 
 
 def _abort_task(reason: str, detail: str | None = None):
@@ -1158,6 +1235,24 @@ def _safe_gz_entity_name(name: str) -> str | None:
     return safe if _SAFE_GZ_NAME_RE.match(safe) else None
 
 
+# A `gz service` RPC that answers nothing gets this many extra tries.
+#
+# Same lottery as the attach topic, and for the same reason: every `gz` call
+# here is a fresh short-lived process, and gz-transport's peer discovery either
+# completes inside the call or does not. When it does not, the CLI exits 0 and
+# prints NOTHING — which is indistinguishable from success by exit code and
+# looks like a refusal to a caller checking for "data: true".
+#
+# The attach path already knew this and carried a retry budget
+# (_ATTACH_MAX_ATTEMPTS' comment measures 2 attempts at ~53%, 10 at 20/20).
+# Nothing else did, so a place could abort with "Lost track of 'blue tube'
+# after releasing it" on a snap-to-slot whose stdout was simply empty —
+# observed 2026-09-10, one call after two picks in the same run had both
+# needed an attach re-roll.
+_GZ_EMPTY_REPLY_RETRIES = 4
+_GZ_RETRY_DELAY_S = 0.3
+
+
 def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> bool:
     """Run a shell command. Returns True on success (exit code 0), False otherwise.
 
@@ -1166,7 +1261,29 @@ def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> boo
     even when the service refused the request (bad SDF, name collision, entity
     not found) — exit code alone can't tell a real failure from a no-op success.
     Set this to also require "data: true" in stdout.
+
+    An EMPTY reply is retried; an explicit "data: false" is not. That split is
+    the whole point: a service that answered "no" has been reached and has
+    refused, and re-asking it just repeats a decision. A service that answered
+    nothing was never reached, and re-rolling the process is the only thing
+    that helps. Retrying a refusal would also turn a fast, correct abort into
+    a slow one.
     """
+    for attempt in range(_GZ_EMPTY_REPLY_RETRIES + 1):
+        result = _run_gz_once(command, expect_reply_true)
+        if result is not True:
+            if result == "empty" and attempt < _GZ_EMPTY_REPLY_RETRIES:
+                print(f"[SIMULATOR] gz RPC answered nothing "
+                      f"(attempt {attempt + 1}/{_GZ_EMPTY_REPLY_RETRIES + 1}) — re-rolling")
+                _interruptible_sleep(_GZ_RETRY_DELAY_S)
+                continue
+            return False
+        return True
+    return False
+
+
+def _run_gz_once(command: str, expect_reply_true: bool):
+    """One attempt. True, False, or the string "empty" for a silent RPC."""
     try:
         if platform.system() == "Windows":
             result = subprocess.run(
@@ -1196,6 +1313,10 @@ def launch_wsl_ros_command(command: str, expect_reply_true: bool = False) -> boo
             stdout_out = result.stdout.decode(errors="replace")
             if "data: true" not in stdout_out.lower():
                 tail = command.split("--req")[-1][:80] if "--req" in command else command[-80:]
+                if not stdout_out.strip():
+                    # Silence, not a refusal. The caller re-rolls; see
+                    # _GZ_EMPTY_REPLY_RETRIES.
+                    return "empty"
                 print(f"[SIMULATOR] Command exited 0 but reply was not 'data: true': ...{tail}")
                 print(f"[SIMULATOR] stdout: {stdout_out.strip()[:200]}")
                 return False
@@ -1786,37 +1907,67 @@ def attach_object_to_gripper() -> bool:
     leaving the object behind on lift — so this reads the state back instead of
     trusting the publish's own exit code.
 
-    But SILENCE IS NOT A NO. That topic publishes on CHANGE, so a read window
-    that catches no message means "the plugin said nothing", which is a
-    different thing from "the plugin said detached". On a loaded VM the 3s
-    echo window routinely closes with nothing in it, and treating that as
-    failure aborted the very first pick of a session after ten identical
-    retries — reported 2026-09-03, ten lines of "unverified (state output: no
-    message)" and a run that never reached the tube.
+    SILENCE IS NOT A NO — but it is not a YES either, and for a while this
+    function said it was.
 
-    So an explicit "detached" is still retried, and silence is passed through
-    as inconclusive. It is safe to pass through because the pick no longer
-    depends on this answer: `_verify_sim_grasp` watches the object actually
-    rise with the arm a moment later, and THAT is the verdict. The plugin's
-    self-report is a hint that can save a lift; it was never evidence, which
-    is precisely what the stale-child-entity case proved when it reported
-    "attached" with nothing welded.
+    The topic publishes on CHANGE, so a read window that catches no message
+    means "the plugin said nothing", which is different from "the plugin said
+    detached". Treating silence as failure aborted the very first pick of a
+    session after ten identical retries (reported 2026-09-03), so it stopped
+    being a failure. What it became instead was a SUCCESS that returned
+    immediately — and that quietly disabled the retry budget above, which is
+    the only thing that makes this reliable at all.
+
+    Read the measurement in that comment again: peer discovery for a fresh
+    short-lived `gz topic` process either completes in time or does not, and
+    the fix is re-rolling on a NEW publish+subscribe pair. 2 attempts measured
+    ~53%, 10 attempts measured 20/20. Silence is exactly what a failed
+    discovery looks like from here — neither the subscribe nor the publish
+    connected — so it is the case that most needs the re-roll, and it was the
+    one case that skipped it. Every observed "the grasp didn't hold" abort has
+    `Attach attempt 1: state topic said nothing` directly above it: attempt 1
+    of 10, and no attempt 2. Confirmed 2026-09-10 with the object verified to
+    be sitting exactly at its commanded pose, so nothing was wrong with the
+    world — only with how few times we asked.
+
+    So silence now RETRIES, and only the exhausted budget falls through as
+    inconclusive. Falling through rather than failing is deliberate and keeps
+    the 2026-09-03 fix intact: the pick does not depend on this answer.
+    `_verify_sim_grasp` watches the object actually rise with the arm a moment
+    later, and THAT is the verdict. The plugin's self-report is a hint that can
+    save a lift; it was never evidence.
+
+    Re-sending an attach that already landed is a no-op, so a spurious retry
+    costs 0.4s and nothing else.
+
+    The two ways of not succeeding stay distinct on the way out. A budget spent
+    entirely on SILENCE is inconclusive and returns True, deferring to the lift
+    check — that is the 2026-09-03 case, where the world was fine and only the
+    transport was not. A budget that ended on an explicit "detached" is the
+    plugin actively refusing, and returns False so the caller aborts before the
+    arm carries nothing to the destination.
     """
+    last_said_detached = False
     for attempt in range(1, _ATTACH_MAX_ATTEMPTS + 1):
         print(f"[GRASP] Attach attempt {attempt}/{_ATTACH_MAX_ATTEMPTS}: welding 'object' to link_j6")
         out = _shell_output(ATTACH_AND_VERIFY_CMD) or ""
         if '"attached"' in out or ("attached" in out and "detached" not in out):
             print(f"[GRASP] Attach verified: state topic reports 'attached' (attempt {attempt})")
             return True
-        if not out.strip():
-            print(f"[GRASP] Attach attempt {attempt}: state topic said nothing — "
-                  "proceeding, the lift check is the verdict")
-            return True
-        print(f"[GRASP] Attach attempt {attempt} reported detached "
-              f"(state output: {out.strip()[:120]})")
+        last_said_detached = bool(out.strip())
+        if last_said_detached:
+            print(f"[GRASP] Attach attempt {attempt} reported detached "
+                  f"(state output: {out.strip()[:120]})")
+        else:
+            print(f"[GRASP] Attach attempt {attempt}: state topic said nothing "
+                  "(likely a failed discovery on this publish) — re-rolling")
         if attempt < _ATTACH_MAX_ATTEMPTS:
             _interruptible_sleep(_ATTACH_RETRY_DELAY_S)
-    return False
+    if last_said_detached:
+        return False
+    print(f"[GRASP] Attach: {_ATTACH_MAX_ATTEMPTS} attempts, all silent — "
+          "proceeding, the lift check is the verdict")
+    return True
 
 
 def detach_object_from_gripper() -> bool:
@@ -1827,8 +1978,8 @@ def detach_object_from_gripper() -> bool:
     return ok
 
 
-def get_object_world_z():
-    """World Z of the 'object' model, or None if it cannot be read.
+def get_object_world_pose():
+    """World (x, y, z) of the 'object' model, or None if it cannot be read.
 
     Reads the model pose, which is the first `Pose [ XYZ (m) ]` block `gz model
     -m` prints; the link poses that follow are relative to it.
@@ -1839,7 +1990,66 @@ def get_object_world_z():
         r"\[\s*([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\s*\]",
         out,
     )
-    return float(match.group(3)) if match else None
+    if not match:
+        return None
+    return (float(match.group(1)), float(match.group(2)), float(match.group(3)))
+
+
+def get_object_world_z():
+    """World Z of the 'object' model, or None. Kept as its own name because
+    the lift check reads only Z and reads it twice per pick."""
+    pose = get_object_world_pose()
+    return pose[2] if pose else None
+
+
+# How far from the commanded pose the object may sit and still count as held.
+# Generous: this is not a precision check, it is asking "is the object roughly
+# where we put it, or is it somewhere else entirely".
+HOLD_POSE_TOL_M = 0.02
+
+
+def hold_object_at(x: float, y: float, z: float, yaw: float = 0.0) -> bool:
+    """Place 'object' at a pose and CONFIRM it is there. One retry.
+
+    `set_object_world_pose` returning True means the set_pose service accepted
+    the request, not that the model ended up at that pose — and for a long time
+    the pick treated the two as the same thing, printing "hold confirmed" on
+    the strength of the service reply alone. That is the one place in this file
+    that declared a state without checking it.
+
+    What it hid: a model can exist, be listed by `gz model --list`, accept a
+    set_pose, and still not be where you asked, because it is falling. The
+    world has no ground plane, so an object that leaves the table edge falls
+    forever, and set_pose moves it without clearing the velocity it picked up —
+    it lands at the commanded pose for an instant and keeps going. The gripper
+    then closes on nothing, the DetachableJoint has nothing to weld, and the
+    run aborts blaming the grasp. Observed 2026-09-10 on the second run of a
+    Gazebo session, with the world listing showing a perfectly healthy
+    "object".
+
+    Reads the pose back rather than trusting the reply, and retries once before
+    giving up — a single miss can be a sample taken mid-settle, but two says
+    the object is not under our control.
+    """
+    for attempt in (1, 2):
+        if not set_object_world_pose(x, y, z, yaw=yaw):
+            print(f"[GRASP] hold attempt {attempt}: set_pose refused")
+            continue
+        _interruptible_sleep(0.15)
+        pose = get_object_world_pose()
+        if pose is None:
+            # Unreadable is not "wrong place". Same rule as the lift check:
+            # a missed read is a reason to know less, not to abort a run that
+            # may be fine.
+            print("[GRASP] hold: pose unreadable — accepting the set_pose reply")
+            return True
+        drift = max(abs(pose[0] - x), abs(pose[1] - y), abs(pose[2] - z))
+        if drift <= HOLD_POSE_TOL_M:
+            return True
+        print(f"[GRASP] hold attempt {attempt}: object is at "
+              f"({pose[0]:.3f}, {pose[1]:.3f}, {pose[2]:.3f}), asked for "
+              f"({x:.3f}, {y:.3f}, {z:.3f}) — {drift * 1000:.0f}mm off")
+    return False
 
 
 def _verify_sim_grasp(z_before, z_after, commanded_rise: float) -> bool:
@@ -1877,6 +2087,20 @@ def _verify_sim_grasp(z_before, z_after, commanded_rise: float) -> bool:
         return True
     print(f"[GRASP] lift FAILED: object rose {risen * 1000:.0f}mm of "
           f"{commanded_rise * 1000:.0f}mm commanded — the weld did not take")
+    # Dump the world exactly at the moment of failure. One extra shell call, on
+    # the failure path only, and it answers the question that reading the code
+    # cannot: WHICH entities exist under which names when the weld refuses.
+    #
+    # The two things worth looking for are a NameManager rename ("object(1)",
+    # or an "object" that is not the one this pick created) and an unexpected
+    # pile of placed_* models. Both were invisible before, and both change the
+    # diagnosis completely: the first is the stale-entity case, the second
+    # is not.
+    pose = get_object_world_pose()
+    print(f"[GRASP] object pose at failure: {pose} "
+          f"(table top is z={TABLE_TOP_Z_ABS:.4f}; a z far below it means the "
+          f"model left the table and is falling — the world has no ground plane)")
+    print("[GRASP] world at failure:\n" + (_shell_output("gz model --list") or "<no answer>"))
     return False
 
 
@@ -1903,6 +2127,29 @@ OBJECT_SPAWN_X = -9.05          # X of object spawn point
 OBJECT_SPAWN_Y = -1.48
 LOCATION_SPAWN_X = -8.8         # X of location model spawn point
 LOCATION_SPAWN_Y = -1.41
+
+# Where the reusable "object" entity waits between a place and the next pick.
+# _persist_placed_object moves it here instead of deleting it, so the entity
+# survives the whole run and the next pick never has to recreate a same-named
+# model — see _object_entity_is_reusable for what that costs when it goes wrong.
+#
+# Four constraints, and the spot is the intersection of all four.
+#
+#  1. ON the table. SimpleTable is 1.5x1.5 centred at (-9.0, -1.2), so the
+#     supported area is x in [-9.75, -8.25] and y in [-1.95, -0.45].
+#     worldCobotta.sdf has NO ground plane: an object parked past the edge
+#     falls forever and comes back carrying velocity when it is teleported.
+#  2. Well inside that edge. A 100mm tube standing 5cm from the rim is one
+#     nudge from falling off, so this sits ~17cm in on x and ~15cm on y.
+#  3. Out of the arm's way: 0.83m from the base, more than twice the
+#     Cobotta's ~0.34m reach, and 0.62m from the pick rack.
+#  4. Out of the overhead camera's frustum. The camera is at (-9.0, -2.6)
+#     looking toward +Y with a 60 degree horizontal FOV, so at y=-1.80 it
+#     sees x in [-9.46, -8.54] — this sits outside that band on purpose. A
+#     parked tube inside the frame would be a real detection, and a
+#     find_object step waiting for a blue tube would resolve on the spare.
+OBJECT_PARK_X = -9.58
+OBJECT_PARK_Y = -1.80
 
 # Robot base world XY pose in Gazebo (worldCobotta.sdf, Cobotta include pose).
 # The Z counterpart (ROBOT_BASE_Z) lives in calibration.py as the SSOT for the
@@ -2096,9 +2343,11 @@ def simulate_ros_pick(obj, sdf_name: str = "", do_attach: bool = True,
         ):
             _abort_task(
                 f"'{sdf_name}' didn't come up with the gripper — the grasp didn't hold.",
-                detail="pick lift check: object did not rise with the arm; the "
-                       "DetachableJoint reported 'attached' but nothing is welded "
-                       "(stale child entity after delete+respawn)",
+                detail="pick lift check: object did not rise with the arm. The "
+                       "object was verified at its commanded pose, so this is the "
+                       "weld itself not landing — usually an attach publish whose "
+                       "gz-transport discovery never completed. See "
+                       "attach_object_to_gripper's retry budget.",
             )
             return
 
@@ -2445,8 +2694,12 @@ def simulate_ros_action(action_points: list = []):
 
 
 def reset_simulation_world():
-    global _LAST_HW_HAND_MM
+    global _LAST_HW_HAND_MM, _live_object_sdf
     try:
+        # The reusable entity does not survive a world reset, and a stale value
+        # here would let the first pick of the next run "reuse" a model that is
+        # no longer there — moving nothing and closing the gripper on air.
+        _live_object_sdf = None
         # Also per-run state — otherwise _verify_hw_grasp's first call
         # on a fresh run can read the previous run's gripper aperture instead
         # of "no data yet".
@@ -2470,18 +2723,33 @@ def reset_simulation_world():
         simulation_recursive_blockly_parser.last_pick_carry_joints = None
         simulation_recursive_blockly_parser.last_picked_object = None
 
+        # The two removals below are waited on, not slept at. A missing entity
+        # is fine (first run of the session); an entity that is STILL THERE
+        # afterwards is not, and used to be indistinguishable — both printed
+        # nothing and the next spawn landed on top.
+        #
+        # Reported, not aborted, and the asymmetry with the between-picks call
+        # site is deliberate. This runs before a run starts, where the world may
+        # still be settling from the previous one; the abort belongs where a
+        # spawn follows immediately. But an entity that outlived a 4s wait HERE
+        # is the same corrupted world, and it explains a Physics.cc:2967 storm
+        # that starts at second zero and never stops — so it has to reach the
+        # console rather than be swallowed.
+        #
+        # Written out rather than looped: test_weld_before_remove.py finds every
+        # removal site by matching the literal call, and a loop variable hides
+        # both of them from it.
+
         # Detach before delete: removing a welded child without detaching first
         # can leave the plugin in a stale attached state across the next spawn.
         print("[GRASP] Reset: detaching before world cleanup")
         detach_object_from_gripper()
         _interruptible_sleep(0.2)
 
-        # Wait for the removals instead of sleeping a fixed 0.3s at them. A
-        # missing entity is fine (first run of the session); an entity that is
-        # STILL THERE afterwards is not, and used to be indistinguishable —
-        # both printed nothing and the next spawn landed on top.
-        remove_entity_and_wait("object")
-        remove_entity_and_wait("location")
+        if not remove_entity_and_wait("object"):
+            print(_STALE_ENTITY_WARNING.format(name="object"))
+        if not remove_entity_and_wait("location"):
+            print(_STALE_ENTITY_WARNING.format(name="location"))
         global _spawned_location_name
         _spawned_location_name = None
 
@@ -2522,6 +2790,26 @@ def delete_spawned_object_and_place():
     replaced: in _h_place, right before the spawn, and only when the
     destination has changed.
     """
+    # The removal below READS its answer, which it did not until 2026-09-04.
+    # The contract on remove_entity_and_wait is explicit — False means the model
+    # is still there and the caller must not spawn over it — but this call site,
+    # the one its own comment calls the narrowest window, discarded it.
+    #
+    # What that cost, in the log of a three-pick run: picks 1 and 2 welded and
+    # lifted, pick 3's spawn landed on a corpse, the plugin bound to it, and the
+    # weld silently refused. The abort blamed the grasp. The grasp was fine; the
+    # world had been broken two picks earlier and nothing said so.
+    #
+    # Aborting does not make the weld succeed — nothing at this layer can, since
+    # <child_model>object</child_model> is fixed in Cobotta.sdf.template and
+    # gz-sim8 refuses the re-attach on a duplicate name. It makes the failure
+    # arrive where it happens and name the remedy.
+    global _live_object_sdf
+    # Cleared BEFORE the removal, not after. Every path out of this function
+    # below — the abort, an exception — leaves no live entity worth reusing,
+    # and a value that survived one of them would send the next pick down the
+    # reuse branch to move a model that is not there.
+    _live_object_sdf = None
     try:
         # Detach before delete: prevents stale weld state across repeated runs.
         print("[GRASP] Cleanup: detaching welded child before removing 'object'")
@@ -2530,7 +2818,19 @@ def delete_spawned_object_and_place():
         # Waited on, not slept at — this runs BETWEEN two picks in the same
         # run, so the next spawn follows immediately and the window this
         # closes is at its narrowest exactly here.
-        remove_entity_and_wait("object")
+        if not remove_entity_and_wait("object"):
+            _abort_task(
+                "The simulation needs restarting before this task can run.",
+                detail="stale 'object' entity survived its removal between two "
+                       "picks; spawning over it would bind the DetachableJoint "
+                       "to the corpse and every later weld would silently fail",
+            )
+            return
+        # Absence from `gz model --list` is the entity registry's answer, and
+        # the Physics system tears its own copy down on its next update. This
+        # settle is the width of that gap. It runs only between picks in the
+        # same run, never on the first one.
+        _interruptible_sleep(0.3)
         _spawned_in_world.clear()
     except Exception as e:
         print(str(e))
@@ -2539,24 +2839,32 @@ def delete_spawned_object_and_place():
 def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: float = 0.0,
                            location: str = None) -> bool:
     """Give a just-placed object a permanent identity so it survives the next
-    pick's cleanup of the reusable "object" entity.
+    pick's reuse of the "object" entity.
 
-    Delete "object" FIRST: spawning the placed_* copy at the same pose while
-    the original still exists interpenetrates the two colliders (Gazebo
-    reacts by exploding them apart). A failed delete skips the spawn — that
-    naturally covers the failed-pick case, where "object" was never welded
-    and there's nothing worth persisting anyway. Best-effort like the
-    existing snap-to-slot: never aborts the task.
+    Move "object" out of the way FIRST: spawning the placed_* copy at the same
+    pose while the original is still standing there interpenetrates the two
+    colliders (Gazebo reacts by exploding them apart). A failed move skips the
+    spawn — that naturally covers the failed-pick case, where "object" was
+    never welded and there's nothing worth persisting anyway. Best-effort like
+    the existing snap-to-slot: never aborts the task.
+
+    It is MOVED, not deleted, and that is the whole point. This runs on every
+    place, so deleting here forced the next pick to create a same-named model —
+    the one gz-sim8 operation that leaves the DetachableJoint bound to a corpse
+    and makes every later weld in the session silently refuse. See
+    _object_entity_is_reusable. Parking it costs one set_pose and removes the
+    delete+create cycle from the common path entirely.
     """
     global _placed_seq
     safe_sdf_name = _safe_gz_entity_name(sdf_name)
     if safe_sdf_name is None:
         print(f"[SIMULATOR] persist-placed: unsafe object name '{sdf_name}' — skipping persistence")
         return False
-    # Detach before removing, like the other two sites that remove "object"
-    # (reset_simulation_world and delete_spawned_object_and_place, both of
-    # which say so in their own comments). This was the only one of the three
-    # that did not, and it is the one that runs on EVERY place.
+    # Detach before touching the entity, like the two sites that still remove
+    # "object" (reset_simulation_world and delete_spawned_object_and_place,
+    # both of which say so in their own comments). This site no longer removes
+    # anything, but the detach stays: moving a model the joint still holds
+    # drags the arm's weld along with it.
     #
     # Removing a model while the DetachableJoint still holds it strands a
     # physics entity, and gz-sim then prints
@@ -2576,12 +2884,29 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     # it in the meantime" is an assumption this function was making about
     # code several steps away. A second detach on an already-released joint
     # is a no-op, which is why _h_pick can afford to send two.
-    print("[GRASP] persist-placed: detaching before removing 'object'")
+    print("[GRASP] persist-placed: detaching before parking 'object'")
     detach_object_from_gripper()
     _interruptible_sleep(0.2)
-    if not remove_entity_and_wait("object"):
-        print("[SIMULATOR] persist-placed: 'object' did not go away — skipping persistence")
+    # Rest it ON the parking spot, not at an arbitrary Z: the same
+    # TABLE_TOP_Z_ABS - min_z algebra the pick spawn uses, so the model sits on
+    # the table instead of sinking into it or dropping onto it.
+    global _live_object_sdf
+    _, _, park_min_z = get_sdf_dimensions(safe_sdf_name)
+    if not hold_object_at(OBJECT_PARK_X, OBJECT_PARK_Y, TABLE_TOP_Z_ABS - park_min_z):
+        # The park is VERIFIED, not assumed, for the same reason the pick's
+        # hold is. If the object did not settle at the parking spot it is not
+        # under our control any more — most likely falling — and the next pick
+        # must not reuse it.
+        #
+        # Degrading to remove+create rather than aborting: that path is merely
+        # the older, occasionally unlucky one, whereas reusing a runaway object
+        # closes the gripper on empty space and reports a grasp failure with
+        # the wrong diagnosis. Losing the persisted copy is the smaller loss.
+        print("[SIMULATOR] persist-placed: 'object' did not settle at the parking "
+              "spot — forcing a fresh spawn on the next pick, skipping persistence")
+        _live_object_sdf = None
         return False
+    _interruptible_sleep(0.2)
 
     _placed_seq += 1
     placed_name = f"placed_{_placed_seq}"
@@ -2603,6 +2928,64 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
     print(f"[SIMULATOR] Persisted placed object '{placed_name}' ({sdf_name}) at "
           f"x={x:.4f} y={y:.4f} z={z:.4f}")
     return True
+
+
+_STALE_ENTITY_WARNING = (
+    "[SIMULATOR] WARNING: '{name}' outlived its removal at world reset — "
+    "the simulation is in the state where welds silently refuse. "
+    "Restart the Gazebo stack before running."
+)
+
+
+def _model_in_world(name: str):
+    """True/False if `gz model --list` answered, None if it did not.
+
+    None is deliberately not False. A listing that failed or timed out says
+    nothing about whether the model is there, and every caller here has to
+    treat "I could not find out" differently from "it is absent".
+    """
+    listing = _shell_output("gz model --list") or ""
+    if "Available models" not in listing:
+        return None
+    return any(line.strip() == f"- {name}" for line in listing.splitlines())
+
+
+def _object_entity_is_reusable(sdf_name: str) -> bool:
+    """True when the live "object" entity already holds this model, so the next
+    pick can MOVE it into position instead of removing and recreating it.
+
+    This is the fix for "'X' didn't come up with the gripper — the grasp didn't
+    hold", and the reason that abort was never the first pick of a session.
+
+    `<child_model>object</child_model>` is fixed in Cobotta.sdf.template, so
+    every pick has to reuse that one entity name. Removing a model and creating
+    a same-named one is precisely the operation gz-sim8 loses — see
+    remove_entity_and_wait, which puts the reproduction rate at roughly one
+    cycle in five. When it is lost the DetachableJoint stays bound to the
+    corpse: the plugin answers "attached", nothing is welded, the object rides
+    up on finger friction and drops. And because the corpse survives, EVERY
+    later weld in that session fails the same way until Gazebo is restarted.
+
+    Moving the entity is not exposed to any of that. It is never destroyed, so
+    there is no window in which a creation can race a teardown.
+
+    Requires a POSITIVE reading that the entity is there: an unanswered listing
+    (None) means "do not reuse". Falling back to remove+create is merely slow
+    and occasionally unlucky, whereas moving an entity that is not there moves
+    nothing and hands the gripper empty air.
+    """
+    in_world = _model_in_world("object")
+    reusable = _live_object_sdf == sdf_name and in_world is True
+    # Logged unconditionally, both outcomes. The first version of this fix was
+    # inert for a whole session and the log could not say so: it printed a line
+    # when it reused and nothing when it did not, so "no reuse line" was
+    # indistinguishable from "the fixed code is not even loaded". Both inputs
+    # are printed because either one alone explains a False — a mismatched sdf
+    # name means the run picked a different model, while in_world=None means
+    # `gz model --list` did not answer and the decision failed safe.
+    print(f"[GRASP] reuse check: want={sdf_name!r} live={_live_object_sdf!r} "
+          f"object_in_world={in_world} -> {'REUSE' if reusable else 'CREATE'}")
+    return reusable
 
 
 def remove_entity_and_wait(name: str, timeout_s: float = 4.0) -> bool:
@@ -2640,10 +3023,7 @@ def remove_entity_and_wait(name: str, timeout_s: float = 4.0) -> bool:
     # Only skip on a POSITIVE reading. A listing that failed or timed out says
     # nothing about whether the model is there, and treating silence as absence
     # would skip a removal that was needed.
-    listing = _shell_output("gz model --list") or ""
-    if "Available models" in listing and not any(
-        line.strip() == f"- {name}" for line in listing.splitlines()
-    ):
+    if _model_in_world(name) is False:
         return True
 
     launch_wsl_ros_command(
@@ -2807,7 +3187,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
     the same as "object absent").
     """
     if timeout is None:
-        timeout = CONDITION_TIMEOUT_S
+        timeout = _effective_condition_timeout()
     block_type = condition_block.get("type", "")
 
     if block_type == EventsItems.GESTURE.value:
@@ -2931,6 +3311,80 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         seen_absent = False
         try:
             state = _bridge.get_vision_state()
+            # Is anything actually LOOKING? The bridge answers happily with
+            # detections: [] whether the detector is running and sees nothing
+            # or was never started at all — and `launch_sim.sh` forwards no
+            # arguments, so `vision:=false` is the default and a plain
+            # simulation has no detector at all.
+            #
+            # Told apart, this is the difference between "keep waiting, the
+            # object may still appear" and "nothing will ever appear". Without
+            # it the step burned its whole CONDITION_TIMEOUT_S and then
+            # reported that the OPERATOR had failed to confirm in time, which
+            # is how a missing node became a person's fault. Reported from a
+            # pilot run: the confirmation never arrives.
+            #
+            # Treated exactly like an unreachable bridge, because it is the
+            # same fact — the system cannot observe — and reusing that policy
+            # keeps one rule instead of two: abort honestly under
+            # STRICT_CONDITIONS (what a study session runs), otherwise bypass
+            # and record why, so the run continues and the log still says the
+            # confirmation was not the operator's.
+            #
+            # `.get()` with a permissive default, not a required key: an older
+            # bridge that predates object_age_s must keep behaving as before,
+            # not start reporting every detector as absent.
+            object_age = state.get("object_age_s")
+            if object_age is not None and object_age > VISION_STALE_AFTER_S:
+                if STRICT_CONDITIONS:
+                    logger.warning("condition_failed",
+                                   extra={"reason": "vision_node_absent", "block": "find_object_block"})
+                    _abort_task(
+                        "The task stopped because nothing is watching for objects — "
+                        "the object camera isn't running.",
+                        detail=(f"find_object '{obj_name}': no /vision/object_detected message for "
+                                f"{object_age}s (vision_node not running); STRICT_CONDITIONS"),
+                    )
+                    return False
+                # Simulated detection, and it reports SUCCESS.
+                #
+                # There is no camera to have this run: a plain simulation has
+                # no detector, and the object camera is a fact of the physical
+                # cell. But an operator who built a "find the tube" step and
+                # pressed Run has to see that step resolve, or the one block
+                # this system exists to teach reads as broken. So the arm goes
+                # to the scan pose, holds there long enough for the panel's
+                # "Waiting to find X" to be read, and the step completes.
+                #
+                # Announced as a completion rather than down the timeout
+                # channel, because that is what it is — the previous version
+                # reported it as "object not detected" while returning True,
+                # which is the opposite of what happened.
+                #
+                # The message says "simulated" on purpose. It keeps the
+                # feedback positive and true at once, and it stops a
+                # participant forming a belief about the camera that the study
+                # then measures: the trust probe in 04-compiti.md runs on C2
+                # precisely because it does NOT depend on the camera.
+                #
+                # The log is not fooled either. _mark_condition_bypass records
+                # this as a confirmation the system produced, so analisi.py can
+                # still tell it from one an operator caused — a fabricated
+                # confirmation that reads as genuine is the one thing
+                # STRICT_CONDITIONS exists to prevent, and that branch is
+                # right above, untouched, for the sessions that measure this.
+                logger.warning("condition_bypassed",
+                               extra={"reason": "vision_node_absent", "block": "find_object_block"})
+                _mark_condition_bypass("vision_node_absent")
+                print(f"[CONDITION] No object detector running (last message {object_age}s ago) — "
+                      f"simulating detection of '{obj_name}'")
+                _interruptible_sleep(SIMULATED_DETECTION_DWELL_S)
+                if SIMULATION_STOP_EVENT.is_set():
+                    return False
+                _set_completion_text(
+                    f'Found "{obj_name}" — simulated, no object camera in this run'
+                )
+                return True
             if _detections_match(state, coco_class, color):
                 if not STRICT_CONDITIONS:
                     print(f"[CONDITION] Object '{obj_name}' detected immediately!")
@@ -3106,7 +3560,21 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
 
 
 def _move_to_scan_pose():
-    """Move robot to SCAN_POSE if not already there, then settle for detection."""
+    """Move robot to SCAN_POSE if not already there, then settle for detection.
+
+    Unconditional, and on the physical cell that is because the pose IS what
+    the camera looks at: the Canon is wrist-mounted, and _REAL_PROFILE
+    overrides SCAN_POSE for exactly that reason.
+
+    In simulation the pose changes nothing about what is seen — the only
+    camera sensor in `worldCobotta.sdf` is a `<static>true</static>`
+    `overhead_camera` fixed 1.4 m to the side, and the camera on the arm
+    (`camera_link` in cobotta_ik.urdf, parented to link_j5) is a mesh and a
+    collision box with no sensor in it at all. The move happens there anyway,
+    and deliberately: it is the visible half of the simulated detection below.
+    An operator who asked the robot to find something has to see it go and
+    look, or the step reads as nothing happening.
+    """
     current_joints, current_hand = get_current_state()
     max_delta = max(abs(t - s) for t, s in zip(SCAN_POSE, current_joints))
     if max_delta > 2.0:  # degrees threshold — skip move if already in scan pose
@@ -3185,7 +3653,7 @@ def _notify_condition_wait_start(condition_block: dict, simulate_event: bool):
     try:
         _bridge.notify(
             "/api/human-step-start",
-            {**payload, "description": "", "timeout": CONDITION_TIMEOUT_S},
+            {**payload, "description": "", "timeout": _effective_condition_timeout()},
         )
     except Exception:
         pass
@@ -3198,7 +3666,8 @@ def _notify_condition_wait_complete(condition_block: dict, simulate_event: bool)
     if simulate_event or _condition_step_payload(condition_block) is None:
         return
     try:
-        _bridge.notify("/api/human-step-complete")
+        _bridge.notify("/api/human-step-complete",
+                       {"description": _take_completion_text()})
     except Exception:
         pass
 
@@ -3398,7 +3867,18 @@ def simulation_recursive_blockly_parser(
                     break
                 print(f"[LOGIC]   iteration {i + 1}/{times}")
                 _recurse("DO")
-                delete_spawned_object_and_place()
+                # No end-of-iteration cleanup. This used to remove "object"
+                # here, which put a remove-then-create cycle on EVERY loop
+                # iteration — the one gz-sim8 operation that binds the
+                # DetachableJoint to a corpse, so a Repeat x3 failed on its
+                # third pick with "didn't come up with the gripper". Observed
+                # 2026-09-10.
+                #
+                # Nothing replaces it because nothing has to: the pick decides
+                # for itself whether the live entity is reusable, and removes
+                # it only when it is not (see _object_entity_is_reusable). This
+                # call was duplicating that decision and always answering
+                # "remove".
             _interruptible_sleep(3)
             _next()
 
@@ -3429,7 +3909,9 @@ def simulation_recursive_blockly_parser(
                     _notify_condition_wait_complete(condition_block, simulate_event)
                     print("[LOGIC] Repeat-Until: condition met, exiting loop")
                     break
-                delete_spawned_object_and_place()
+                # Removed for the same reason as _h_repeat above: the pick
+                # owns the decision, and cleaning up here forced a
+                # remove-then-create cycle on every iteration.
             if not _fulfilled and not SIMULATION_STOP_EVENT.is_set():
                 print(f"[WARNING] Repeat-Until: cap ({MAX_LOOP_ITERATIONS}) reached, condition never met")
                 try:
@@ -3495,7 +3977,8 @@ def simulation_recursive_blockly_parser(
             # here meant the ring counted down from 60 while the deadline fired
             # at 30 — the step looked like it still had half a minute left at
             # the moment it gave up.
-            step_start_payload = {"description": task_desc, "timeout": CONDITION_TIMEOUT_S}
+            step_start_payload = {"description": task_desc,
+                                  "timeout": _effective_condition_timeout()}
             if confirm_event:
                 ev_type = confirm_event.get("type", "")
                 if ev_type == EventsItems.GESTURE.value:
@@ -3547,7 +4030,7 @@ def simulation_recursive_blockly_parser(
                 description=task_desc,
                 condition=step_start_payload.get("condition"),
                 value=step_start_payload.get("value"),
-                timeout_s=CONDITION_TIMEOUT_S,
+                timeout_s=_effective_condition_timeout(),
                 simulate_event=simulate_event,
             )
             if confirm_event:
@@ -3579,7 +4062,8 @@ def simulation_recursive_blockly_parser(
                     )
                     return
             try:
-                _bridge.notify("/api/human-step-complete")
+                _bridge.notify("/api/human-step-complete",
+                               {"description": _take_completion_text()})
             except Exception:
                 pass
             # A bypass resolved this step without the operator doing anything.
@@ -3609,17 +4093,11 @@ def simulation_recursive_blockly_parser(
         # ══════════════════════════════════════════════════════════════════════
 
         def _h_pick():
+            global _live_object_sdf
             object_data = _safe_block_data("OBJECT", "PICK")
             if object_data is None:
                 _next()
                 return
-            if _spawned_in_world:
-                # A prior pick/place in this run left an object spawned — spawning
-                # under the fixed entity name "object" would collide, and the
-                # following place would teleport the stale object instead of the
-                # new one. Clean up before spawning the next pick.
-                print("[SIMULATOR] Previous object still in world — cleaning up before new pick")
-                delete_spawned_object_and_place()
             obj = objectsOfUser.filter(id=object_data.get("id")).first()
             sdf_name = obj.name if obj else object_data.get("name", "unknown")
             safe_sdf_name = _safe_gz_entity_name(sdf_name)
@@ -3629,6 +4107,25 @@ def simulation_recursive_blockly_parser(
                     detail=f"PICK: object name '{sdf_name}' rejected by _safe_gz_entity_name",
                 )
                 return
+
+            # Reuse the live "object" entity whenever it already holds this
+            # model: the deterministic-hold set_pose further down moves it into
+            # the slot, and nothing is ever destroyed. This is the path that
+            # fixes "didn't come up with the gripper" — see
+            # _object_entity_is_reusable. The remove+create branch below stays
+            # for the case it cannot cover, a pick of a DIFFERENT model, which
+            # genuinely needs a different SDF loaded under that name.
+            reuse_live_object = _object_entity_is_reusable(safe_sdf_name)
+            if reuse_live_object:
+                print(f"[SIMULATOR] Reusing the live 'object' entity for {sdf_name} — "
+                      "no remove+create, so the DetachableJoint keeps a valid child")
+            elif _spawned_in_world:
+                # A prior pick/place in this run left an object spawned — spawning
+                # under the fixed entity name "object" would collide, and the
+                # following place would teleport the stale object instead of the
+                # new one. Clean up before spawning the next pick.
+                print("[SIMULATOR] Previous object still in world — cleaning up before new pick")
+                delete_spawned_object_and_place()
             print(f"[ROBOT] PICK: {sdf_name}")
             _, _, obj_min_z = get_sdf_dimensions(safe_sdf_name)
             # Objects too wide for a rack slot rest on top of the rack, not in
@@ -3679,28 +4176,35 @@ def simulation_recursive_blockly_parser(
                 simulation_recursive_blockly_parser.pick_slot_index = slot_idx + 1
                 print(f"[SIMULATOR] Pick slot {slot_idx % len(offsets)}: spawn_x={spawn_x:.3f} spawn_y={spawn_y:.3f} yaw={pick_grasp_yaw:.3f}")
 
-            cmd = (
-                'gz service -s /world/worldCobotta/create '
-                '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
-                '--timeout 5000 --req \'name: "object"; '
-                f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_sdf_name, "model.sdf")}"; '
-                f'pose: {{position: {{x: {spawn_x}, y: {spawn_y}, z: {z_rest}}}, '
-                'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
-            )
-            spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
-            if not spawn_ok:
-                # Used to be a warning that let the pick continue with the
-                # attach skipped — the arm then closed on empty space (or,
-                # on hardware, on a real object the twin never showed),
-                # and a later gate aborted with an unrelated diagnosis.
-                # Same "never fake a success" rule as every other gate here.
-                _abort_task(
-                    f"Couldn't pick up '{sdf_name}' — it didn't spawn in the simulator.",
-                    detail=f"object spawn failed for '{sdf_name}' (gz create returned false)",
+            if not reuse_live_object:
+                cmd = (
+                    'gz service -s /world/worldCobotta/create '
+                    '--reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean '
+                    '--timeout 5000 --req \'name: "object"; '
+                    f'sdf_filename: "{os.path.join(BASE_DIR, "ros2_ws", "Cobotta", "objects", safe_sdf_name, "model.sdf")}"; '
+                    f'pose: {{position: {{x: {spawn_x}, y: {spawn_y}, z: {z_rest}}}, '
+                    'orientation: {x: 0, y: 0, z: 0, w: 1}}\''
                 )
-                return
-            print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_rest:.4f} (min_z={obj_min_z:.4f})")
+                spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
+                if not spawn_ok:
+                    # Used to be a warning that let the pick continue with the
+                    # attach skipped — the arm then closed on empty space (or,
+                    # on hardware, on a real object the twin never showed),
+                    # and a later gate aborted with an unrelated diagnosis.
+                    # Same "never fake a success" rule as every other gate here.
+                    _abort_task(
+                        f"Couldn't pick up '{sdf_name}' — it didn't spawn in the simulator.",
+                        detail=f"object spawn failed for '{sdf_name}' (gz create returned false)",
+                    )
+                    return
+                print(f"[SIMULATOR] Spawn OK: 'object' ({sdf_name}) at z={z_rest:.4f} (min_z={obj_min_z:.4f})")
             _spawned_in_world.add(sdf_name)
+            # The live entity now holds this model, whether it was just created
+            # or carried over from the previous pick. Recorded here rather than
+            # only on the create path, so the reuse decision stays true after a
+            # reuse — otherwise every second pick would fall back to
+            # remove+create and the fix would work exactly once.
+            _live_object_sdf = safe_sdf_name
             # Detach-FIRST: clear the pending DetachableJoint auto-weld before any
             # hold/read, so the object never free-falls from the arm home pose.
             print("[GRASP] Post-spawn detach: neutralizing pending auto-attach")
@@ -3711,14 +4215,16 @@ def simulation_recursive_blockly_parser(
             # (kills the home-drop + tip of tall/thin objects). No polling settle.
             # GATE (mirror the pre-attach snap): a failed hold breaks determinism,
             # so abort this pick rather than grasping an unheld/unstable object.
-            if set_object_world_pose(spawn_x, spawn_y, z_rest, yaw=0.0):
+            if hold_object_at(spawn_x, spawn_y, z_rest, yaw=0.0):
                 print(f"[GRASP] hold confirmed: upright at rest "
                       f"({spawn_x},{spawn_y},z={z_rest:.4f})")
             else:
                 _abort_task(
-                    f"Couldn't pick up '{sdf_name}' — it wasn't resting stably where expected.",
-                    detail=f"post-spawn hold failed for '{sdf_name}' (set_pose) — "
-                           "refusing to pick an unstable/unheld object",
+                    f"Couldn't pick up '{sdf_name}' — it isn't where the simulator put it.",
+                    detail=f"post-spawn hold failed for '{sdf_name}': the model did not "
+                           "settle at the commanded pose after two attempts (most likely "
+                           "it left the table and is falling — the world has no ground "
+                           "plane). Refusing to close the gripper on empty space.",
                 )
                 return
             _interruptible_sleep(0.3)
@@ -4178,13 +4684,14 @@ def simulation_recursive_blockly_parser(
         safe_block_type = code.get("type", "unknown") if isinstance(code, dict) else "unknown"
         logger.exception("parser_handler_exception", extra={"block_type": safe_block_type})
         _abort_task(
-            "The task stopped unexpectedly — check the server log for details.",
+            "The task stopped because of an unexpected problem — try running it again, "
+            "or tell whoever manages this system if it keeps happening.",
             detail=f"simulation_recursive_blockly_parser: block_type={safe_block_type}: {e}",
         )
 
 
 def simulate_task(request: HttpRequest) -> HttpResponse:
-    global _TASK_ABORT_REASON, _HW_DRIVE_REQUESTED, _RUN_OWNER_ID
+    global _TASK_ABORT_REASON, _HW_DRIVE_REQUESTED, _RUN_OWNER_ID, _RUN_HUMAN_TIMEOUT_S
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
@@ -4192,6 +4699,21 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 task_id = data.get("id")
                 simulate_event = data.get("simulateEvent")
                 drive_hardware = bool(data.get("driveHardware", False))
+                # Clamped, not rejected. A value outside the range is a stale
+                # or malformed client, and refusing the whole run over it would
+                # trade a wrong wait budget for no run at all. Rejected loudly
+                # only if it is not a number, because that is a caller bug
+                # rather than a stale value.
+                human_timeout = data.get("humanStepTimeout")
+                if human_timeout is not None:
+                    try:
+                        human_timeout = int(human_timeout)
+                    except (TypeError, ValueError):
+                        return error_response(
+                            "humanStepTimeout must be a whole number of seconds."
+                        )
+                    human_timeout = max(MIN_HUMAN_TIMEOUT_S,
+                                        min(MAX_HUMAN_TIMEOUT_S, human_timeout))
                 if drive_hardware and not DRIVE_HARDWARE:
                     return error_response(
                         "Hardware not armed on this server (DRIVE_HARDWARE unset) — run refused."
@@ -4232,6 +4754,7 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                     SIMULATION_STOP_EVENT.clear()
                     _TASK_ABORT_REASON = None
                     _HW_DRIVE_REQUESTED = drive_hardware
+                    _RUN_HUMAN_TIMEOUT_S = human_timeout
                     _RUN_OWNER_ID = request.user.id
                     from backend.functions.vision_live import reset_voice, reset_confirm
                     reset_voice()  # drop any word heard before this run started
@@ -4270,7 +4793,25 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                             )
                         if _TASK_ABORT_REASON:
                             outcome = "aborted"
-                            return error_response(f"Task aborted: {_TASK_ABORT_REASON}")
+                            # 409, for the same reason the operator Stop below
+                            # is 409. An abort is a run that failed, but the
+                            # server handled it correctly and is reporting a
+                            # domain outcome — it is not an internal error, and
+                            # error_response's 500 default made Django log
+                            # every single one as "Internal Server Error:
+                            # /api/task/simulate/". That red line sits in the
+                            # same console where a real fault has to be
+                            # spotted, next to the abort reason that actually
+                            # explains what happened.
+                            #
+                            # Behaviour on the frontend is unchanged: runTask
+                            # passes rethrowOn: [400, 409], so this still
+                            # rejects into its catch and still raises the
+                            # error banner. Check that list before changing
+                            # this status again.
+                            return error_response(
+                                f"Task aborted: {_TASK_ABORT_REASON}", status=409
+                            )
                         if SIMULATION_STOP_EVENT.is_set():
                             # stop_simulation() sets the event but never
                             # _TASK_ABORT_REASON (that field is reserved for
@@ -4305,6 +4846,9 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                             _set_world_paused(True)
                 finally:
                     _HW_DRIVE_REQUESTED = False
+                    # Cleared with the rest of the per-run state, or the next
+                    # run inherits a budget nobody chose for it.
+                    _RUN_HUMAN_TIMEOUT_S = None
                     _RUN_OWNER_ID = None
                     _SIM_RUN_LOCK.release()
             else:
@@ -4348,6 +4892,8 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                 # whatever starts next.
                 stop_generation = _begin_run_generation()
                 _spawned_in_world.clear()
+                global _live_object_sdf
+                _live_object_sdf = None
                 _delete_placed_objects()
                 # Three things can go wrong here and only one of them used to
                 # be visible: the bridge being unreachable was printed, and the

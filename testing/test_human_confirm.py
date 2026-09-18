@@ -246,7 +246,13 @@ def test_human_action_proceeds_when_confirm_received(monkeypatch):
 
     assert not simulate.SIMULATION_STOP_EVENT.is_set()
     assert simulate._TASK_ABORT_REASON is None
-    mock_bridge.notify.assert_any_call("/api/human-step-complete")
+    # The endpoint, not the exact argument list: the completion now carries an
+    # optional description (a simulated object detection names what it found),
+    # so a call with a body is the same event as one without.
+    assert any(
+        c.args and c.args[0] == "/api/human-step-complete"
+        for c in mock_bridge.notify.call_args_list
+    ), "human-step-complete non e' stato notificato"
     mock_bridge.notify.assert_any_call(
         "/api/notify", {"description": "after the human action"}
     )

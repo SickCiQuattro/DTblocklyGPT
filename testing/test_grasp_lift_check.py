@@ -94,11 +94,17 @@ def test_the_check_runs_after_the_lift_and_aborts():
 def test_the_pose_reader_takes_the_model_pose_not_a_link_pose():
     """`gz model -m` prints the model pose first and link poses after it, and
     the link poses are relative to the model — reading one of those would
-    compare a height against a different origin."""
+    compare a height against a different origin.
+
+    The parsing lives in `get_object_world_pose` since the hold check needed
+    X and Y as well; `get_object_world_z` is now a thin wrapper on it, so this
+    follows the regex rather than the name it used to sit under.
+    """
     body = re.search(
-        r"def get_object_world_z\(\):.*?\n(?=\ndef )", open(SIMULATE, encoding="utf-8").read(), re.S
+        r"def get_object_world_pose\(\):.*?\n(?=\ndef )",
+        open(SIMULATE, encoding="utf-8").read(), re.S
     )
-    assert body, "get_object_world_z e' sparito"
+    assert body, "get_object_world_pose e' sparito"
     assert "re.search(" in body.group(0), (
         "il lettore di posa non estrae piu' la prima corrispondenza: "
         "re.search prende la posa del MODELLO, findall prenderebbe anche "

@@ -159,7 +159,13 @@ def test_when_block_live_condition_sends_human_step_start_and_complete(monkeypat
         {"condition": "gesture", "value": "THUMBS_UP", "description": "",
          "timeout": simulate.CONDITION_TIMEOUT_S},
     )
-    mock_bridge.notify.assert_any_call("/api/human-step-complete")
+    # The endpoint, not the exact argument list: the completion now carries an
+    # optional description (a simulated object detection names what it found),
+    # so a call with a body is the same event as one without.
+    assert any(
+        c.args and c.args[0] == "/api/human-step-complete"
+        for c in mock_bridge.notify.call_args_list
+    ), "human-step-complete non e' stato notificato"
 
 
 def test_when_block_auto_mode_does_not_send_human_step_events(monkeypatch):

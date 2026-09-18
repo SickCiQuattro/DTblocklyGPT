@@ -139,14 +139,34 @@ def _setup(context, *args, **kwargs):
         proj_root = os.path.dirname(os.path.dirname(COB_DIR))  # ros2_ws/Cobotta -> repo root
         vision_py = os.path.join(
             proj_root, "ros2_ws", "src", "cobotta_rest_api", "cobotta_rest_api", "vision_node.py")
+        # Only the parameters that actually have a value.
+        #
+        # Every `-p` used to be appended unconditionally, and two of them are
+        # empty by default. That killed vision_node at startup, twice over,
+        # before it read a single frame:
+        #
+        #   camera_fallback default "0"  -> rclpy parses a bare 0 as INTEGER
+        #                                   while the node declares a STRING
+        #   yolo_classes    default ""   -> "-p yolo_classes:=" is not a
+        #                                   parseable override rule at all
+        #
+        # Both failed the same way from outside: the launch printed vision=1,
+        # nothing ever published on /vision/object_detected, and a find_object
+        # step aborted mid-run saying the object camera was not running. The
+        # message was true; the cause was here. Found during a live study
+        # session, twice, because fixing only the first one exposed the second.
+        #
+        # An absent parameter is also the RIGHT way to say "no value": the node
+        # declares its own defaults and tests them with plain truthiness
+        # (`if p("camera_fallback")`), so passing nothing means nothing.
+        vision_params = []
+        for name in ("camera_source", "camera_user", "camera_pass",
+                     "camera_fallback", "yolo_model", "yolo_classes"):
+            value = LaunchConfiguration(name).perform(context).strip()
+            if value:
+                vision_params += ["-p", f"{name}:={value}"]
         nodes.append(ExecuteProcess(
-            cmd=["poetry", "run", "python", vision_py, "--ros-args",
-                 "-p", "camera_source:=" + LaunchConfiguration("camera_source").perform(context),
-                 "-p", "camera_user:=" + LaunchConfiguration("camera_user").perform(context),
-                 "-p", "camera_pass:=" + LaunchConfiguration("camera_pass").perform(context),
-                 "-p", "camera_fallback:=" + LaunchConfiguration("camera_fallback").perform(context),
-                 "-p", "yolo_model:=" + LaunchConfiguration("yolo_model").perform(context),
-                 "-p", "yolo_classes:=" + LaunchConfiguration("yolo_classes").perform(context)],
+            cmd=["poetry", "run", "python", vision_py, "--ros-args", *vision_params],
             cwd=proj_root, output="screen"))
     return nodes
 
@@ -166,7 +186,11 @@ def generate_launch_description():
         DeclareLaunchArgument("camera_user", default_value="admin"),
         DeclareLaunchArgument("camera_pass", default_value="password"),
         # Auto-fallback if the Canon keeps failing (e.g. USB webcam "0"); "" disables.
-        DeclareLaunchArgument("camera_fallback", default_value="0"),
+        # Empty, not "0". An unset fallback means "there is no second camera",
+        # and vision_node tests it with `if p("camera_fallback")` — "0" is a
+        # non-empty string, so the old default asked it to open a camera called
+        # "0" whenever the quoting above let it start at all.
+        DeclareLaunchArgument("camera_fallback", default_value=""),
         # Default stays stock YOLOv8n; set yolo_classes to run an open-vocabulary
         # model instead — see docs/vision-object-catalog.md §7.
         DeclareLaunchArgument("yolo_model", default_value="yolov8n.pt"),

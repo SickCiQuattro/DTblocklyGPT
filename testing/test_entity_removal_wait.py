@@ -51,13 +51,20 @@ def test_it_polls_the_world_rather_than_sleeping():
 
 
 def test_every_respawning_path_waits():
-    """The three places that remove an entity the run will recreate.
+    """The places that remove an entity the run will recreate.
+
     A fixed sleep in any of them reopens the window. reset_simulation_world
     runs before every run, delete_spawned_object_and_place between two picks in
-    one run, and _persist_placed_object immediately before spawning placed_N.
+    one run.
+
+    `_persist_placed_object` was the third, and is deliberately no longer here:
+    it PARKS "object" instead of removing it, so there is no recreation to race
+    with. That is a stronger guarantee than waiting correctly, not a weaker one
+    — the entity is never destroyed at all. Guarded by
+    testing/test_object_entity_reuse.py, which fails if that site starts
+    removing again.
     """
-    for fn in ("reset_simulation_world", "delete_spawned_object_and_place",
-               "_persist_placed_object"):
+    for fn in ("reset_simulation_world", "delete_spawned_object_and_place"):
         body = _function_body(fn)
         assert "remove_entity_and_wait" in body, (
             f"{fn} non passa piu' dalla rimozione con attesa"

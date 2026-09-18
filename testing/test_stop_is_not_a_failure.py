@@ -21,7 +21,6 @@ its reason before setting the stop event, so it cannot be mistaken for
 fallout, and a later Stop cannot overwrite it.
 """
 import os
-import re
 import sys
 
 import pytest
@@ -91,23 +90,85 @@ def test_a_stop_is_not_an_internal_server_error():
     )
 
 
-def test_silence_from_the_state_topic_is_not_a_refusal():
-    """That topic publishes on CHANGE. An empty read window means the plugin
-    said nothing, which is not the same as saying 'detached' — and treating it
-    as failure aborted the first pick of a session after ten identical
-    retries. The lift check is the verdict now."""
-    body = open(SIMULATE, encoding="utf-8").read()
-    fn = body[body.index("def attach_object_to_gripper"):]
-    fn = fn[:fn.index("\ndef ")]
-    fn_code = re.sub(r'"""[\s\S]*?"""', "", fn)
-    assert "if not out.strip():" in fn_code, (
+def _attach_returning(monkeypatch, *outputs):
+    """Drive attach_object_to_gripper with canned state-topic reads.
+
+    Returns the call log, so a test can assert how many times the attach was
+    actually published — which is the whole point below.
+    """
+    from backend.functions import simulate as sim
+    seen = []
+    seq = list(outputs)
+
+    def fake_shell(cmd):
+        seen.append(cmd)
+        return seq.pop(0) if len(seq) > 1 else seq[0]
+
+    monkeypatch.setattr(sim, "_shell_output", fake_shell)
+    monkeypatch.setattr(sim, "_interruptible_sleep", lambda s: None)
+    return seen
+
+
+def test_silence_from_the_state_topic_is_not_a_refusal(monkeypatch):
+    """That topic publishes on CHANGE, so an empty read window means the plugin
+    said nothing — not that it said 'detached'. Treating it as failure aborted
+    the first pick of a session after ten identical retries (2026-09-03).
+
+    Still true, and still asserted: an all-silent budget returns True and lets
+    _verify_sim_grasp decide by watching the object actually rise.
+    """
+    from backend.functions import simulate as sim
+    _attach_returning(monkeypatch, "")
+    assert sim.attach_object_to_gripper() is True, (
         "un silenzio del topic di stato torna a contare come rifiuto: la "
         "prima presa di una sessione abortisce dopo dieci tentativi identici."
     )
-    ok_at = fn_code.index("if not out.strip():")
-    assert "return True" in fn_code[ok_at:ok_at + 300], (
-        "il ramo del silenzio non prosegue piu': serve lasciare decidere "
-        "_verify_sim_grasp, che guarda l'oggetto salire davvero."
+
+
+def test_silence_spends_the_retry_budget(monkeypatch):
+    """The bug that returning True on silence introduced.
+
+    The retry budget exists because a fresh short-lived `gz topic` process
+    either completes gz-transport discovery in time or does not —
+    _ATTACH_MAX_ATTEMPTS' own comment measures 2 attempts at ~53% and 10 at
+    20/20. Silence is what a failed discovery looks like from here: neither
+    the subscribe nor the publish connected. So it is the case that most needs
+    a re-roll, and returning True on the first one skipped every retry.
+
+    Every observed "the grasp didn't hold" abort had "Attach attempt 1: state
+    topic said nothing" directly above it — attempt 1 of 10, with the object
+    verified to be sitting exactly at its commanded pose (2026-09-10).
+    """
+    from backend.functions import simulate as sim
+    seen = _attach_returning(monkeypatch, "")
+    sim.attach_object_to_gripper()
+    assert len(seen) == sim._ATTACH_MAX_ATTEMPTS, (
+        f"il silenzio ha speso {len(seen)} tentativi su "
+        f"{sim._ATTACH_MAX_ATTEMPTS}: il budget di retry non viene usato, ed "
+        "e' l'unica cosa che rende affidabile questa saldatura."
+    )
+
+
+def test_a_late_attached_stops_the_retries(monkeypatch):
+    """A re-roll that lands must not keep publishing."""
+    from backend.functions import simulate as sim
+    seen = _attach_returning(monkeypatch, "", "", 'data: "attached"')
+    assert sim.attach_object_to_gripper() is True
+    assert len(seen) == 3, "ha continuato a riprovare dopo un 'attached'"
+
+
+def test_an_explicit_detached_budget_still_fails(monkeypatch):
+    """Silence is inconclusive; an explicit refusal is not.
+
+    A plugin that keeps answering "detached" is actively refusing, and the
+    caller has to abort before the arm carries nothing to the destination.
+    Collapsing this into the silent case would delete a real gate.
+    """
+    from backend.functions import simulate as sim
+    _attach_returning(monkeypatch, 'data: "detached"')
+    assert sim.attach_object_to_gripper() is False, (
+        "un rifiuto esplicito ripetuto non fallisce piu': il pick prosegue "
+        "e il braccio trasporta il vuoto fino al deposito."
     )
 
 
