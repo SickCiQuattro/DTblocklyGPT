@@ -9,7 +9,7 @@
     "serve": "vite serve",
     "lint": "eslint -c ./frontend/eslint.config.js ./frontend/src",
     "lintfix": "eslint -c ./frontend/eslint.config.js ./frontend/src --fix",
-    "pretty": "prettier --write \"frontend/src/**/*.{ts,tsx}\""
+    "pretty": "prettier --write \"frontend/src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
