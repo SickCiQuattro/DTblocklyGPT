@@ -434,9 +434,20 @@
       "name": "when_otherwise_it",
       "category": "core",
       "lang": "it",
-      "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 272242.2409799183
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4535.327175995917,
+      "prompt_tokens": 6347,
+      "completion_tokens": 155,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "when_and_gesture_it",
@@ -684,9 +695,20 @@
       "name": "unknown_action_processing",
       "category": "hallucination_guard",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 328923.8748839125
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2699.421942990739,
+      "prompt_tokens": 6335,
+      "completion_tokens": 89,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "unknown_object_it",
@@ -793,7 +815,7 @@
       "lang": "it",
       "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 327791.4741759887
+      "latency_ms": 272145.0156850042
     },
     {
       "name": "codeswitch_pick",
@@ -888,9 +910,20 @@
       "name": "explain_place_it",
       "category": "core",
       "lang": "it",
-      "error": "Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 16000, model: gemma-4-26b\\nPlease retry in 17.65349173s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemma-4-26b'}, 'quotaValue': '16000'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '17s'}]}}]",
-      "pass": false,
-      "latency_ms": 41149.64110404253
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 3336.536975009949,
+      "prompt_tokens": 6339,
+      "completion_tokens": 102,
+      "cost_usd": null,
+      "got_intent": "explain",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "timer_condition",
@@ -939,9 +972,24 @@
       "name": "notify_human_combo",
       "category": "combo",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 330245.10717205703
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4842.37114500138,
+      "prompt_tokens": 6350,
+      "completion_tokens": 184,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action",
+        "pick"
+      ],
+      "warnings": []
     },
     {
       "name": "pick_place",
@@ -1366,9 +1414,20 @@
       "name": "when_otherwise_it",
       "category": "core",
       "lang": "it",
-      "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 324910.5510340305
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4145.777519996045,
+      "prompt_tokens": 6347,
+      "completion_tokens": 155,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "when_and_gesture_it",
@@ -1616,9 +1675,20 @@
       "name": "unknown_action_processing",
       "category": "hallucination_guard",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 271952.66977895517
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2778.427451994503,
+      "prompt_tokens": 6335,
+      "completion_tokens": 89,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "unknown_object_it",
@@ -1725,7 +1795,7 @@
       "lang": "it",
       "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 324602.2577340482
+      "latency_ms": 272075.0493450032
     },
     {
       "name": "codeswitch_pick",
@@ -1882,9 +1952,24 @@
       "name": "notify_human_combo",
       "category": "combo",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 271900.2916419413
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 5767.308035006863,
+      "prompt_tokens": 6350,
+      "completion_tokens": 184,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action",
+        "pick"
+      ],
+      "warnings": []
     },
     {
       "name": "pick_place",
@@ -2309,9 +2394,20 @@
       "name": "when_otherwise_it",
       "category": "core",
       "lang": "it",
-      "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 271788.97171409335
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4129.010877994006,
+      "prompt_tokens": 6347,
+      "completion_tokens": 155,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "when_and_gesture_it",
@@ -2559,9 +2655,20 @@
       "name": "unknown_action_processing",
       "category": "hallucination_guard",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 326920.8018959034
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2783.6596990091493,
+      "prompt_tokens": 6335,
+      "completion_tokens": 89,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "unknown_object_it",
@@ -2668,7 +2775,7 @@
       "lang": "it",
       "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 277476.00740299094
+      "latency_ms": 272165.8963539958
     },
     {
       "name": "codeswitch_pick",
@@ -2825,9 +2932,24 @@
       "name": "notify_human_combo",
       "category": "combo",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 325590.470990981
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4815.162783008418,
+      "prompt_tokens": 6350,
+      "completion_tokens": 184,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action",
+        "pick"
+      ],
+      "warnings": []
     },
     {
       "name": "pick_place",
@@ -3252,9 +3374,20 @@
       "name": "when_otherwise_it",
       "category": "core",
       "lang": "it",
-      "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 271864.8825120181
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4044.6583419980016,
+      "prompt_tokens": 6347,
+      "completion_tokens": 155,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "when_and_gesture_it",
@@ -3502,9 +3635,20 @@
       "name": "unknown_action_processing",
       "category": "hallucination_guard",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 271759.7320000641
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2690.164701998583,
+      "prompt_tokens": 6335,
+      "completion_tokens": 89,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "unknown_object_it",
@@ -3611,7 +3755,7 @@
       "lang": "it",
       "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 324866.21763999574
+      "latency_ms": 271681.60857200564
     },
     {
       "name": "codeswitch_pick",
@@ -3768,9 +3912,24 @@
       "name": "notify_human_combo",
       "category": "combo",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 271877.05534300767
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4805.632254996453,
+      "prompt_tokens": 6350,
+      "completion_tokens": 184,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action",
+        "pick"
+      ],
+      "warnings": []
     },
     {
       "name": "pick_place",
@@ -4195,9 +4354,20 @@
       "name": "when_otherwise_it",
       "category": "core",
       "lang": "it",
-      "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 325408.9756370522
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": false,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 4116.774730006,
+      "prompt_tokens": 6347,
+      "completion_tokens": 155,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "when_and_gesture_it",
@@ -4445,9 +4615,20 @@
       "name": "unknown_action_processing",
       "category": "hallucination_guard",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 271667.1837050235
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2697.6192650035955,
+      "prompt_tokens": 6335,
+      "completion_tokens": 89,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": false,
+      "got_types": [],
+      "warnings": []
     },
     {
       "name": "unknown_object_it",
@@ -4554,7 +4735,7 @@
       "lang": "it",
       "error": "Request timed out.",
       "pass": false,
-      "latency_ms": 325243.8664790243
+      "latency_ms": 272043.38518800796
     },
     {
       "name": "codeswitch_pick",
@@ -4711,9 +4892,24 @@
       "name": "notify_human_combo",
       "category": "combo",
       "lang": "en",
-      "error": "Request timed out.",
-      "pass": false,
-      "latency_ms": 326548.2127110008
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 5065.858443995239,
+      "prompt_tokens": 6350,
+      "completion_tokens": 184,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "notify_action",
+        "human_action",
+        "pick"
+      ],
+      "warnings": []
     }
   ]
 }

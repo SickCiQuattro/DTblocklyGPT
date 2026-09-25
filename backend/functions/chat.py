@@ -129,12 +129,13 @@ class LLMProvider:
         # omit the param entirely rather than pass a value that always 400s.
         if not self.model.startswith("gpt-5"):
             request_kwargs["temperature"] = temperature
-        # gpt-5.6-luna additionally rejects function tools outright unless
+        # The luna models additionally reject function tools outright unless
         # reasoning_effort is explicitly "none" (400 "Function tools with
         # reasoning_effort are not supported for gpt-5.6-luna in
-        # /v1/chat/completions... or set reasoning_effort to 'none'").
-        # Scoped to this one model; other gpt-5.x models are unaffected.
-        if self.model == "gpt-5.6-luna":
+        # /v1/chat/completions... or set reasoning_effort to 'none'"). gpt-6-luna
+        # answers identically, and accepts temperature=0 alongside it.
+        # Scoped to these two models; other gpt-5.x models are unaffected.
+        if self.model in ("gpt-5.6-luna", "gpt-6-luna"):
             request_kwargs["reasoning_effort"] = "none"
         response = self.client.chat.completions.create(**request_kwargs)
         latency_ms = (time.monotonic() - started_at) * 1000

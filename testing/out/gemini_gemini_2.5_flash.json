@@ -4458,9 +4458,23 @@
       "name": "pick_place_it",
       "category": "core",
       "lang": "it",
-      "error": "Error code: 503 - [{'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}]",
-      "pass": false,
-      "latency_ms": 61290.44377000537
+      "pass": true,
+      "intent_ok": true,
+      "task_modified_ok": true,
+      "types_ok": true,
+      "no_errors": true,
+      "lang_ok": true,
+      "latency_ms": 2330.481899000006,
+      "prompt_tokens": 6301,
+      "completion_tokens": 98,
+      "cost_usd": null,
+      "got_intent": "modify",
+      "got_task_modified": true,
+      "got_types": [
+        "pick",
+        "place"
+      ],
+      "warnings": []
     },
     {
       "name": "move_gripper_it",
