@@ -51,7 +51,7 @@ if [ -n "$BUSY" ]; then
         pkill -f flask_node || true
         pkill -f parameter_bridge || true
         pkill -f robot_state_publisher || true
-        pkill -f "gz sim -s -r" || true
+        pkill -f "gz sim" || true
         pkill -f "ros2 launch.*cobotta_ros2_control" || true
 
         # Wait for the ports to actually free, rather than sleeping and hoping.
@@ -80,4 +80,9 @@ if [ -n "$BUSY" ]; then
     fi
 fi
 
-exec ros2 launch "$SCRIPT_DIR/launch/cobotta_ros2_control.launch.py"
+LAUNCH_ARGS=()
+if [ "$GUI" = "1" ] || [ "$GUI" = "true" ]; then
+    LAUNCH_ARGS+=("gui:=true")
+fi
+
+exec ros2 launch "$SCRIPT_DIR/launch/cobotta_ros2_control.launch.py" "${LAUNCH_ARGS[@]}" "$@"

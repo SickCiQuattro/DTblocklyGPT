@@ -90,9 +90,14 @@ def _setup(context, *args, **kwargs):
     # earlier attempt to fix this by pointing cwd at .gen instead broke every
     # other bare-relative asset lookup (confirmed empirically 2026-07-07: objects/
     # locations spawn "Could not resolve file [texture.png]" once cwd left COB_DIR).
+    gui_enabled = LaunchConfiguration("gui").perform(context).lower() in ("1", "true", "yes")
+    gz_cmd = ["gz", "sim", "-r"]
+    if not gui_enabled:
+        gz_cmd.extend(["-s", "--headless-rendering"])
+    gz_cmd.append(os.path.join(COB_DIR, "worldCobotta.sdf"))
+
     gz = ExecuteProcess(
-        cmd=["gz", "sim", "-s", "-r", "--headless-rendering",
-             os.path.join(COB_DIR, "worldCobotta.sdf")],
+        cmd=gz_cmd,
         additional_env=gz_env, cwd=COB_DIR, output="screen")
 
     rsp = Node(
@@ -173,6 +178,7 @@ def _setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument("gui", default_value="false"),
         DeclareLaunchArgument("hardware", default_value="false"),
         DeclareLaunchArgument("bcap_host", default_value="192.168.0.1"),
         DeclareLaunchArgument("bcap_port", default_value="5007"),

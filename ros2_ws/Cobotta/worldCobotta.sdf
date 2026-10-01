@@ -299,8 +299,32 @@
 
     <model name="overhead_camera">
       <static>true</static>
-      <!-- Side view of the Cobotta arm (looking toward +Y, slight downward tilt). -->
-      <pose>-9.0 -2.6 1.5 0 0.15 1.5708</pose>
+      <!-- Side view of the Cobotta arm, framed on the work area rather than on
+           the room. Moved in from 1.29 m to 0.84 m of slant range on 2026-09-17
+           after watching participants lean toward the screen to see the twin:
+           the arm was ~29% of the frame height and is now ~45%, a 1.53x
+           magnification.
+
+           The distance is not a taste value. It is the closest the camera can
+           sit while still holding everything the operator has to see, with
+           margin, at this 60-degree horizontal FOV and 4:3 frame:
+
+             pick point (tube rack)   x -9.05      frame covers -9.41 .. -8.44
+             place point (cup)        x -8.80
+             table top                z 1.0134     frame covers  0.87 ..  1.60
+             arm at rest              z ~1.45
+             gripper at CARRY_Z_MAX   z  1.28      (1.05 base + 0.23)
+
+           Pitch and yaw are derived, not chosen: they aim the axis at the
+           centre of that box, (-8.925, -1.34, 1.23). The old yaw left the work
+           area right-of-centre with empty floor on the left, which is frame
+           spent on nothing.
+
+           Resolution and rate are untouched: 640x480 is what the vision
+           pipeline needs (see the sensor's own note) and 5 Hz is the
+           simulation's speed budget. Moving the camera only makes the objects
+           larger in those same pixels, which detection prefers. -->
+      <pose>-9.0 -2.15 1.45 0 0.262 1.4785</pose>
       <link name="camera_link">
         <sensor name="overhead_cam" type="camera">
           <camera>
