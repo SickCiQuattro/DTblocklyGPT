@@ -8,5 +8,11 @@ export const RandomUserIcon = () => {
   const numbersArray = sessionId.match(/[1-9]/g) || [1]
   const randomIndex = Number(numbersArray[numbersArray.length - 1])
 
-  return <img src={`/robots/${randomIndex}.png`} alt="icon" width="100%" />
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}robots/${randomIndex}.png`}
+      alt="icon"
+      width="100%"
+    />
+  )
 }

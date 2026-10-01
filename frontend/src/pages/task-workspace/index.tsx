@@ -92,6 +92,10 @@ export const UnifiedWorkspace = () => {
     autoOpenRobot?: boolean
     executionTarget?: 'sim' | 'real'
   } | null
+  // Set when this page created the task row itself. The blocks on screen are
+  // then the source of truth, not what the server echoes back a moment later.
+  const [createdHereId, setCreatedHereId] = useState<string | null>(null)
+  const isCreatedHere = createdHereId !== null && createdHereId === id
   const initialExecutionTarget = navState?.executionTarget
 
   // Redux layout/sync states
@@ -292,6 +296,20 @@ export const UnifiedWorkspace = () => {
 
   // Set active task info in Redux on load
   useEffect(() => {
+    if (taskData && isCreatedHere) {
+      // Just created by this page: the canvas already holds these blocks.
+      // Re-deriving the structure from the server's copy would replace what
+      // the operator typed during the round trip, and is the same clobbering
+      // the autosave path avoids by not refetching (see saveTaskToBackend).
+      dispatch(
+        setActiveTask({
+          id: taskData.id.toString(),
+          name: taskData.name,
+          status: taskData.status,
+        }),
+      )
+      return
+    }
     if (taskData) {
       // Read is legitimate for owner-or-shared (task_detail's GET), but every
       // write endpoint is owner-only — a task that loaded fine can still be
@@ -358,7 +376,7 @@ export const UnifiedWorkspace = () => {
       dispatch(setHasUnsavedEdits(false))
       setTaskStructure([])
     }
-  }, [taskData, id, dispatch, currentUserId])
+  }, [taskData, id, dispatch, currentUserId, isCreatedHere])
 
   // Convert initial backend structure to Blockly block structure
   const initialDataTask = useMemo(() => {
@@ -380,10 +398,14 @@ export const UnifiedWorkspace = () => {
   const [editorDataTask, setEditorDataTask] = useState<State | null>(null)
 
   useEffect(() => {
-    if (initialDataTask && !editorDataTask) {
+    // Not for a task this page just created: BlocklyWorkspace disposes and
+    // re-injects the canvas whenever this prop changes identity, and the
+    // canvas already shows those blocks. Filling it in now would rebuild the
+    // workspace a second after the first save, undo history included.
+    if (initialDataTask && !editorDataTask && !isCreatedHere) {
       setEditorDataTask(initialDataTask)
     }
-  }, [initialDataTask, editorDataTask])
+  }, [initialDataTask, editorDataTask, isCreatedHere])
 
   // Conformance tracking
   const { isReady, issues, formattedIssues } = useConformance(
@@ -441,6 +463,7 @@ export const UnifiedWorkspace = () => {
 
           if (res && res.id) {
             targetId = res.id
+            setCreatedHereId(String(res.id))
             dispatch(
               setActiveTask({
                 id: res.id.toString(),
@@ -807,6 +830,9 @@ export const UnifiedWorkspace = () => {
               )
             }
             dispatch(setHasUnsavedEdits(false))
+            // From here the server's copy is the truth again, so the guards
+            // that protect a freshly created task must let go.
+            setCreatedHereId(null)
             setEditorDataTask(null) // Force workspace reload from the newly fetched published state
             void mutate({ url: endpoints.home.libraries.tasks })
           })
@@ -826,7 +852,7 @@ export const UnifiedWorkspace = () => {
     isLoadingObjects ||
     isLoadingActions ||
     isLoadingLocations ||
-    (id && isTaskLoading && !taskData)
+    (id && isTaskLoading && !taskData && !isCreatedHere)
 
   if (isLoading) {
     return (

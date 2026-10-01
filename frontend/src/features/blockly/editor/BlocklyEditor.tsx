@@ -1566,10 +1566,28 @@ export const BlocklyEditor = ({
         // behaviour — so it has to be the conservative one.
         if (isTypingContext()) return
 
+        // Where the DOM focus is, and where the SELECTION is, are two different
+        // things in Blockly, and this used to require the first.
+        //
+        // Clicking a block selects it without moving focus: the pointer gesture
+        // ends on an SVG element that is not focusable, so activeElement stays
+        // on whatever had it — very often <body>, and after a drag from the
+        // palette the palette pill, which is a React element outside the
+        // injection div. The block was visibly selected, the participant
+        // pressed Delete, and nothing happened. Reported after P06's session as
+        // "the delete key often does not work"; Blockly's own Delete shortcut
+        // needs workspace focus too, so there was no fallback behind it.
+        //
+        // `document.body` (or nothing focused) is the case that has to pass:
+        // there is no focused control to steal the key from, and the selected
+        // block below is the only thing the key could mean. A focused control
+        // OUTSIDE the workspace still wins — isTypingContext above has already
+        // let every text field through, and this keeps the rest.
+        const nothingFocused = active === document.body
         const isInsideWorkspace = Array.from(
           document.querySelectorAll('.injectionDiv'),
         ).some((div) => div === active || div.contains(active))
-        if (!isInsideWorkspace) return
+        if (!isInsideWorkspace && !nothingFocused) return
         const selected = Blockly.common.getSelected?.()
         if (!selected || !(selected instanceof Blockly.BlockSvg)) return
         if (selected.isShadow()) return

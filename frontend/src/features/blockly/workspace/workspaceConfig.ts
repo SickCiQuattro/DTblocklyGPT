@@ -50,7 +50,7 @@ export const INTERACTIVE_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   renderer: 'thrasos_boolean',
   readOnly: false,
   trashcan: false,
-  media: '/blocklyMedia',
+  media: `${import.meta.env.BASE_URL}blocklyMedia`,
   move: { scrollbars: true, drag: true, wheel: true },
   zoom: { startScale: 1.5, controls: false, wheel: true, pinch: true },
   grid: {
@@ -70,7 +70,7 @@ export const READONLY_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   renderer: 'thrasos_boolean',
   readOnly: true,
   trashcan: false,
-  media: '/blocklyMedia',
+  media: `${import.meta.env.BASE_URL}blocklyMedia`,
   move: { drag: true, wheel: true, scrollbars: true },
   zoom: {
     controls: true,
@@ -89,7 +89,7 @@ export const PREVIEW_WORKSPACE_CONFIG: Blockly.BlocklyOptions = {
   renderer: 'thrasos_boolean',
   readOnly: true,
   trashcan: false,
-  media: '/blocklyMedia',
+  media: `${import.meta.env.BASE_URL}blocklyMedia`,
   move: { drag: false, wheel: false, scrollbars: false },
   zoom: {
     controls: false,

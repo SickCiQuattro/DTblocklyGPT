@@ -505,7 +505,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
           text={msg.text}
           timestamp={msg.timestamp}
           user={userName}
-          avatarUrl="/pages/user.png"
+          avatarUrl={`${import.meta.env.BASE_URL}pages/user.png`}
         />
       )
     } else {
@@ -515,7 +515,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
             text={msg.text}
             lang={msg.lang}
             timestamp={msg.timestamp}
-            avatarUrl="/pages/robot.png"
+            avatarUrl={`${import.meta.env.BASE_URL}pages/robot.png`}
             parts={msg.parts}
             onSuggestionClick={(text) => void sendText(text)}
             suggestionsDisabled={isProcessing}
