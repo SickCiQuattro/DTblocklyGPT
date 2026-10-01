@@ -119,15 +119,31 @@ def test_engine_ok_true_when_no_hand_in_frame(monkeypatch):
 # ── simulate._wait_for_condition (gesture) ──────────────────────────────────
 
 def test_gesture_fresh_match_returns_true(monkeypatch):
-    """A gesture reported during the wait (not before it) must satisfy it."""
+    """A gesture reported during the wait (not before it) must satisfy it.
+
+    The hand starts empty and the gesture arrives while the wait is running,
+    which is what "reported during the wait" means. It used to be enough for
+    the mock to report THUMBS_UP from the first poll, but that is a hand
+    already raised when the wait began — a leftover, which _wait_for_condition
+    now rejects (see test_gesture_edge_trigger.py). The intent of this test is
+    unchanged; only the mock now expresses an arrival rather than a level.
+    """
 
     class _FreshState:
         def __init__(self):
             self._report_time = None
+            self._polls = 0
 
         def __call__(self):
+            self._polls += 1
+            # Two empty polls: the first is eaten by the bridge-reachability
+            # probe that runs before the wait loop, the second is the loop
+            # seeing an empty hand — which is what makes the later THUMBS_UP
+            # an arrival rather than a leftover.
+            if self._polls <= 2:
+                return {"gesture": "NONE", "gesture_age_s": 0.0}
             if self._report_time is None:
-                self._report_time = time.monotonic()  # "reported" on first poll
+                self._report_time = time.monotonic()  # arrives on a later poll
             return {
                 "gesture": "THUMBS_UP",
                 "gesture_age_s": time.monotonic() - self._report_time,
@@ -177,9 +193,17 @@ def test_gesture_stale_replay_does_not_satisfy_new_step(monkeypatch):
 
 def test_gesture_missing_age_field_is_permissive(monkeypatch):
     """An older bridge that doesn't report gesture_age_s must not regress —
-    fall back to matching on value alone."""
+    fall back to matching on value alone.
+
+    Still needs the gesture to ARRIVE: the transition requirement is
+    independent of the age field, and a hand already raised is a leftover
+    whether or not the bridge can date it.
+    """
     mock_bridge = MagicMock()
-    mock_bridge.get_vision_state.return_value = {"gesture": "THUMBS_UP"}
+    mock_bridge.get_vision_state.side_effect = [
+        {"gesture": "NONE"},        # reachability probe
+        {"gesture": "NONE"},        # hand still empty
+    ] + [{"gesture": "THUMBS_UP"}] * 50
     monkeypatch.setattr(simulate, "_bridge", mock_bridge)
 
     condition_block = {
