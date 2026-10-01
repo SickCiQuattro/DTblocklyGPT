@@ -212,6 +212,25 @@ def _hw_drive_active() -> bool:
     return DRIVE_HARDWARE and _HW_DRIVE_REQUESTED
 
 
+def _strict_conditions() -> bool:
+    """True when a human/vision confirmation must be REAL, never assumed.
+
+    STRICT_CONDITIONS is off by default so a developer with no camera can run
+    a task end-to-end in the twin: an unreachable vision bridge, a stopped
+    vision_node or an object already in frame all resolve the step and the
+    run goes on. That is harmless when nothing physical moves, and the log
+    marks every such step "bypassed".
+
+    It is not harmless on the real arm. With the flag off, a stopped
+    vision_node turned a "find the tube" step into a simulated success and the
+    physical arm carried on to the next move — the step existed to hold it
+    until an operator had acted, and nobody had. So driving hardware forces
+    the strict policy regardless of the env var: the twin stays permissive,
+    the arm never moves on a confirmation nobody gave.
+    """
+    return STRICT_CONDITIONS or _hw_drive_active()
+
+
 def convert_hand_gazebo_cobotta(gazebo_hand_value):
     """Convert a Gazebo gripper joint value (metres, per finger, joint_left/
     joint_right) to the Cobotta hand aperture scale (0-30). Must stay the exact
@@ -1469,6 +1488,30 @@ def _parse_hand_mm(message: str):
         return None
 
 
+def _log_hw_arrival(target_joints, deltas, tol_deg, polls, started, ok) -> None:
+    """One line per real-arm arrival, pass or fail.
+
+    The check computes the encoder-vs-command gap on every move and used to
+    write it down only when it aborted. A run where nothing went wrong left no
+    trace, so the margin the 2 degree threshold actually has — how far the
+    arm typically lands from where it was sent — was unmeasurable exactly when
+    it mattered: on the runs that passed. No-op unless STUDY_LOG_PATH is set.
+    `deltas` is the closest reading seen, per joint (None if the encoders
+    never answered).
+    """
+    study_log.log_event(
+        "hw_arrival",
+        step=getattr(simulation_recursive_blockly_parser, "current_step", None),
+        ok=ok,
+        tol_deg=tol_deg,
+        max_delta_deg=None if deltas is None else round(max(deltas), 3),
+        deltas_deg=None if deltas is None else [round(x, 3) for x in deltas],
+        polls=polls,
+        wait_s=round(time.monotonic() - started, 3),
+        target_deg=[round(x, 3) for x in target_joints],
+    )
+
+
 def _verify_hw_arrival(target_joints, tol_deg=HW_VERIFY_TOL_DEG, timeout_s=HW_VERIFY_TIMEOUT_S) -> bool:
     """Poll the real arm's encoders until they match the commanded pose or timeout.
 
@@ -1478,20 +1521,27 @@ def _verify_hw_arrival(target_joints, tol_deg=HW_VERIFY_TOL_DEG, timeout_s=HW_VE
     here — so a fresh CurJnt sample lands within one or two 100 ms ticks; the
     poll window absorbs that instead of trusting the first read.
     """
-    deadline = time.monotonic() + timeout_s
+    started = time.monotonic()
+    deadline = started + timeout_s
     last_seen = None
+    polls = 0
+    best = None
     while time.monotonic() < deadline:
         try:
             real = _bridge.get_actual_joints_real()
         except Exception:
             real = []
         if len(real) >= 6:
+            polls += 1
             last_seen = real[:6]
             deltas = [abs(t - a) for t, a in zip(target_joints, last_seen)]
+            best = deltas if best is None or max(deltas) < max(best) else best
             if max(deltas) <= tol_deg:
+                _log_hw_arrival(target_joints, deltas, tol_deg, polls, started, True)
                 return True
         time.sleep(0.2)
 
+    _log_hw_arrival(target_joints, best, tol_deg, polls, started, False)
     _abort_task(
         "The robot arm didn't reach the position it was commanded to — stopped for safety.",
         detail=f"twin divergence: commanded {list(target_joints)} but encoders read "
@@ -1507,7 +1557,30 @@ def _verify_hw_grasp(commanded_close_mm) -> bool:
     purpose. If the real fingers reached (close to) that fully-closed value,
     nothing was between them — the object was missed.
     """
-    if not _hw_drive_active() or _LAST_HW_HAND_MM is None:
+    if not _hw_drive_active():
+        return True
+    # Logged before the decision and whether or not a width came back: the
+    # separation between a grasp that held and one that closed on air is the
+    # threshold's whole claim, and it can only be checked against the widths of
+    # grasps that PASSED, which this function never used to record.
+    study_log.log_event(
+        "hw_grasp",
+        # An operator Stop lands mid-pick, the pick handler still reaches this
+        # check, and _LAST_HW_HAND_MM is then the width from the PREVIOUS move —
+        # the gripper still open, 30 mm. Those rows look like a 16 mm margin and
+        # pass the check, and the first pass at the statistics counted seven of
+        # them as good grasps. The flag lets a reader drop them by name instead
+        # of guessing from the number.
+        stopping=SIMULATION_STOP_EVENT.is_set(),
+        hand_mm=_LAST_HW_HAND_MM,
+        commanded_mm=commanded_close_mm,
+        tol_mm=HW_GRASP_SLIP_TOL_MM,
+        margin_mm=None if _LAST_HW_HAND_MM is None
+        else round(_LAST_HW_HAND_MM - commanded_close_mm, 3),
+        empty=None if _LAST_HW_HAND_MM is None
+        else _LAST_HW_HAND_MM <= commanded_close_mm + HW_GRASP_SLIP_TOL_MM,
+    )
+    if _LAST_HW_HAND_MM is None:
         return True  # no data — don't block the sim on a readout we don't have
     if _LAST_HW_HAND_MM <= commanded_close_mm + HW_GRASP_SLIP_TOL_MM:
         _abort_task(
@@ -1542,9 +1615,29 @@ def _send_hw_target(joints, hand, hand_only=False) -> bool:
         _abort_task("Lost connection to the robot arm.", detail=f"move-target request failed: {e}")
         return False
 
+    if not result.get("ok") and result.get("message") == "emergency_stop":
+        # cobotta_node saw the controller's emergency-stop code on its last
+        # reconnect. Worded "pressed or not reset" because the same code shows
+        # after the button is released, until the controller is reset.
+        _abort_task(
+            "The robot's emergency stop is pressed, or has not been reset yet. Release "
+            "the red button and re-enable the robot from the teach pendant, then run the "
+            "task again.",
+            detail="move-target response: emergency_stop (b-CAP 0x83501024 on reconnect)",
+        )
+        return False
+
     if not result.get("ok"):
         _abort_task(
-            "The robot arm rejected the last move command.",
+            # The arm refuses moves for more than one reason, and the controller
+            # error is not read here, so this cannot claim the red button was
+            # pressed. It names the likeliest cause and the way out instead: an
+            # operator who pressed it learns the arm now needs re-enabling, and
+            # one who did not is pointed at the pendant. The old text said only
+            # "rejected", which after an emergency stop read as a software fault.
+            "The robot arm rejected the last move command. If the red emergency-stop "
+            "button was pressed, release it and re-enable the robot from the teach "
+            "pendant before running again; otherwise check the pendant for an error.",
             detail=f"move-target response: {result.get('message', 'unknown')}",
         )
         return False
@@ -3199,7 +3292,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             _bridge.get_vision_state()
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                 requests.exceptions.HTTPError):
-            if STRICT_CONDITIONS:
+            if _strict_conditions():
                 logger.warning("condition_failed", extra={"reason": "bridge_unreachable", "block": "gesture_block"})
                 _abort_task(
                     "The task stopped because the camera isn't reachable.",
@@ -3336,7 +3429,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             # not start reporting every detector as absent.
             object_age = state.get("object_age_s")
             if object_age is not None and object_age > VISION_STALE_AFTER_S:
-                if STRICT_CONDITIONS:
+                if _strict_conditions():
                     logger.warning("condition_failed",
                                    extra={"reason": "vision_node_absent", "block": "find_object_block"})
                     _abort_task(
@@ -3386,7 +3479,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                 )
                 return True
             if _detections_match(state, coco_class, color):
-                if not STRICT_CONDITIONS:
+                if not _strict_conditions():
                     print(f"[CONDITION] Object '{obj_name}' detected immediately!")
                     # Already in frame at step entry: nothing the operator did.
                     _mark_condition_bypass("object_already_in_frame")
@@ -3396,7 +3489,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
             else:
                 seen_absent = True
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            if STRICT_CONDITIONS:
+            if _strict_conditions():
                 logger.warning("condition_failed", extra={"reason": "bridge_unreachable", "block": "find_object_block"})
                 _abort_task(
                     "The task stopped because the camera isn't reachable.",
@@ -3447,7 +3540,7 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                     # object has been observed absent, so what is measured is
                     # the operator putting it there, not the fact that it
                     # happened to already be in view.
-                    if seen_absent or not STRICT_CONDITIONS:
+                    if seen_absent or not _strict_conditions():
                         detected = True
                         break
                 else:
@@ -3568,7 +3661,7 @@ def _move_to_scan_pose():
 
     In simulation the pose changes nothing about what is seen — the only
     camera sensor in `worldCobotta.sdf` is a `<static>true</static>`
-    `overhead_camera` fixed 1.4 m to the side, and the camera on the arm
+    `overhead_camera` fixed 0.8 m to the side, and the camera on the arm
     (`camera_link` in cobotta_ik.urdf, parented to link_j5) is a mesh and a
     collision box with no sensor in it at all. The move happens there anyway,
     and deliberately: it is the visible half of the simulated detection below.
@@ -4661,6 +4754,21 @@ def simulation_recursive_blockly_parser(
             emit_end = emit_highlight and block_type != MacroItems.MACRO_TASK.value
             if emit_highlight:
                 _notify_block_step(block_id, block_type, "start")
+            # Which block the arm is moving for, so a logged arrival can say so.
+            # Steps run continuation-style (a handler ends by calling _next()),
+            # so this is the block whose own motion is in progress, not the
+            # one that will run last.
+            simulation_recursive_blockly_parser.current_step = block_type
+            # One line per executed block, so a run can be replayed as a
+            # sequence. The log used to hold run boundaries and human steps
+            # only, which made "did the twin and the real arm do the same
+            # steps in the same order" unanswerable from the record: the only
+            # place the order existed was the frontend's highlight stream.
+            study_log.log_event(
+                "step", block=block_type, block_id=block_id,
+                target="real" if _hw_drive_active() else "sim",
+                depth=_macro_depth,
+            )
             try:
                 handler()
             finally:
@@ -4717,6 +4825,15 @@ def simulate_task(request: HttpRequest) -> HttpResponse:
                 if drive_hardware and not DRIVE_HARDWARE:
                     return error_response(
                         "Hardware not armed on this server (DRIVE_HARDWARE unset) — run refused."
+                    )
+                # simulateEvent resolves every human/vision step by itself. The
+                # panel forces 'live' on the real-robot target, but that is the
+                # client's promise, and this is the trust boundary: a request
+                # carrying both would move the physical arm through every
+                # confirmation with nobody confirming.
+                if drive_hardware and simulate_event:
+                    return error_response(
+                        "Automatic confirmations are not allowed on the real robot — run refused."
                     )
 
                 if not _SIM_RUN_LOCK.acquire(blocking=False):
@@ -4886,6 +5003,11 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
     try:
         if request.user.is_authenticated:
             if request.method == HttpMethod.POST.value:
+                # First thing, before any work: the clock for "how long from the
+                # click to a halted arm" starts here, and the run's own end
+                # line is written later by a different thread.
+                stop_t0 = time.monotonic()
+                study_log.log_event("stop_requested", hardware=_hw_drive_active())
                 SIMULATION_STOP_EVENT.set()
                 # Claim a generation: this retires the running run, so its own
                 # end-of-run pause becomes a no-op instead of landing on
@@ -4902,6 +5024,7 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                 # operator needs from this endpoint, because the correct action
                 # is to reach for the teach-pendant e-stop.
                 halt_warning = None
+                hardware_halt = None
                 try:
                     stop_body = _bridge.stop()
                     hardware_halt = (stop_body or {}).get("hardware_halt")
@@ -4925,6 +5048,16 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                             "the robot — it may still be moving. Use the teach-pendant "
                             "e-stop now."
                         )
+                # `hardware_halt_ok` is None when no hardware node answered, True
+                # when the arm confirmed the halt, False when it did not. The
+                # elapsed time is software latency to that confirmation; how long
+                # the arm takes to actually come to rest is only on the video.
+                study_log.log_event(
+                    "stop_done",
+                    elapsed_s=round(time.monotonic() - stop_t0, 3),
+                    hardware_halt_ok=(None if hardware_halt is None else bool(hardware_halt.get("ok"))),
+                    warning=bool(halt_warning),
+                )
                 # Same guard, for the same reason, on the other thread: an
                 # operator who stops and immediately restarts would otherwise
                 # get a world paused by the PREVIOUS run's Stop, and a new run

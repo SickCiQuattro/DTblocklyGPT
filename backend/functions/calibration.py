@@ -27,9 +27,10 @@ they need a physical measurement session, not a guess):
   ``_REAL_PROFILE["LOCATION_PROFILES"]`` vs 22.23mm in
   ``_REAL_PROFILE["PICK_RACK_PROFILE"]``, on what is physically the same
   rack. See the ``UNRESOLVED`` note on ``LOCATION_PROFILES`` below.
-* ``HW_VERIFY_TOL_DEG`` / ``HW_VERIFY_TIMEOUT_S`` / ``HW_GRASP_SLIP_TOL_MM``
-  are still the original guessed values — never measured against real
-  encoder jitter or gripper-slip behaviour.
+* ``HW_VERIFY_TOL_DEG`` / ``HW_VERIFY_TIMEOUT_S`` are still the original
+  guessed values — never measured against real encoder jitter.
+  ``HW_GRASP_SLIP_TOL_MM`` was measured on 2026-09-29 and the real profile
+  overrides it (see ``_REAL_PROFILE``); the sim value is still a guess.
 """
 
 import math
@@ -90,17 +91,56 @@ _SIM_PROFILE = {
             ],
             "grasp_yaw": 0.0,
         },
+        # A location with no entry here gets DEFAULT_PLACE_X_REL/Y_REL for
+        # EVERY place, so a repeat() that fills a container drops every object
+        # on the same point. In the twin the objects interpenetrate and the
+        # solver flings them apart; on the bench they jam. The cup was the
+        # only multi-object location still missing its slots, and it is the
+        # one the pharma tasks fill.
+        #
+        # Ring of 3, derived from locations/cup/model.sdf rather than jogged.
+        # The floor's inner radius is 26.5mm: the walls sit at 33.75mm at mid-
+        # height and flare outward by 0.10379 rad, so they close to 27.5mm at
+        # the floor, less 1mm of wall thickness. A 13mm ring leaves an 18mm
+        # tube 4.5mm from its neighbours and 4.5mm from the wall.
+        #
+        # Three and not four on purpose. Four fits geometrically (a 15.5mm
+        # ring) but only with 2.0mm of wall clearance, and neither profile has
+        # ever jogged DEFAULT_PLACE_X_REL/Y_REL against the physical cup — so
+        # 2mm of clearance is thinner than the centring error it sits on. At
+        # 13mm both clearances beat the 4.2mm the rack already picks and
+        # places at with grasp_yaw 0, which is the only such figure this
+        # project has observed working. A 4th place wraps to slot 0 and warns
+        # (see the wrap branch in simulate_ros_place).
+        #
+        # Slot 0 is the corner furthest from the arm, then 120 deg around, so
+        # the arm never crosses an occupied slot to reach a free one.
+        "cup": {
+            "slot_xy_offsets": [
+                (0.00897, -0.00941),
+                (0.00367, 0.01247),
+                (-0.01264, -0.00306),
+            ],
+            "grasp_yaw": 0.0,
+        },
     },
     # Pick has no "location" block (it's always the rack) so it can't share
     # LOCATION_PROFILES by name — and on the real cell its offsets are NOT the
     # same as the place rack's (see _REAL_PROFILE override), so it needs its
     # own profile rather than reusing "tube_rack".
     "PICK_RACK_PROFILE": {
+        # Pure X: the static rack in worldCobotta.sdf has zero yaw and its
+        # walls sit at y=0, so a slot centre has no Y component here. The
+        # -0.4/-0.8/-1.2mm drift this carried until 2026-09-18 was the real
+        # cell's skew interpolation copied into the sim baseline, which left
+        # slots 1-3 off their own model's slot centre by up to 1.2mm.
+        # test_rack_sdf_slot_count_and_pitch_match_the_sim_profile checks the
+        # X centres against the SDF; nothing checked Y.
         "slot_xy_offsets": [
             (0.0, 0.0),
-            (0.02223, -0.00040),
-            (0.04447, -0.00080),
-            (0.06670, -0.00120),
+            (0.02223, 0.0),
+            (0.04447, 0.0),
+            (0.06670, 0.0),
         ],
         "grasp_yaw": 0.0,
     },
@@ -133,6 +173,24 @@ _REAL_PROFILE = {
     # picks still miss.
     "DEFAULT_PICK_X_REL": -0.0430,
     "DEFAULT_PICK_Y_REL": -0.2985,
+    # Gripper-closure tolerance on the REAL arm, in mm above the commanded close.
+    #
+    # The sim value (1.5) assumes the tube is well wider than the command: the
+    # grasp planner commands `model width - 4`, and the model says 18 mm. The
+    # real tube is about 14 mm at the grasp height (caliper, 2026-09-30), so the
+    # command (14) lands on it: measured 2026-09-29 with HandCurPos read from the controller, a tube
+    # between the fingers closes to 14.143 / 14.150 / 14.195 mm and an empty
+    # gripper to 14.002 mm. At 1.5 every good grasp read as "closed on air" and
+    # every real pick aborted.
+    #
+    # 0.07 sits between the two groups, 0.068 above the empty reading and 0.073
+    # below the smallest held one. That is 70 micrometres either side, from ONE
+    # empty grasp and THREE held ones: provisional. It separates what was
+    # measured; it has not been shown to survive a different tube, a worn pad or
+    # a warm gripper. The durable fix is a tighter close on the real arm (about
+    # 8 mm under the real width instead of 4), which makes the gap millimetres
+    # instead of tenths — not done because it changes the grip force.
+    "HW_GRASP_SLIP_TOL_MM": 0.07,
     # Real-cell only: the wrist-mounted Canon camera looks straight down at
     # the sim SCAN_POSE's J5=80 (near-vertical wrist pitch), so YOLO only
     # ever sees the top face of an object (e.g. a tube reads as a circle,
@@ -201,6 +259,29 @@ _REAL_PROFILE = {
                 (-0.00053, 0.02017),
                 (-0.00107, 0.04033),
                 (-0.00160, 0.06050),
+            ],
+            "grasp_yaw": 0.0,
+        },
+        # Repeated from _SIM_PROFILE, not inherited: this key REPLACES the sim
+        # dict wholesale rather than merging into it, so a location added
+        # there and not here is silently absent whenever DRIVE_HARDWARE=1 —
+        # which is how the user-study sessions run. The cup slots were added
+        # in the sim profile first and would have changed nothing in a single
+        # measured session. Add any new location to BOTH dicts.
+        #
+        # Same 13mm ring as the sim, and the 13mm was chosen for this profile:
+        # DEFAULT_PLACE_X_REL/Y_REL have never been jogged against the real
+        # cup, so a slot offset has to survive an unmeasured centring error.
+        # 4.5mm of wall clearance is that margin. Verify with
+        # testing/calibrate_rack.py `goto-place` before the next session; if a
+        # release lands on the rim, delete this entry rather than shrinking it
+        # — every place then goes back to the cup centre, which is what the
+        # cell did up to 2026-09-18.
+        "cup": {
+            "slot_xy_offsets": [
+                (0.00897, -0.00941),
+                (0.00367, 0.01247),
+                (-0.01264, -0.00306),
             ],
             "grasp_yaw": 0.0,
         },

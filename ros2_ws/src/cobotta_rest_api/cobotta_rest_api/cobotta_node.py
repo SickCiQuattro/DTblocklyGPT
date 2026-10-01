@@ -11,7 +11,7 @@ from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
 
 from .orin.bcapclient import BCAPClient as bcapclient
-from .cobotta_utils import convert_grad_to_rad, JOINT_LIMITS_DEG
+from .cobotta_utils import convert_grad_to_rad, is_estop_error, ESTOP_MESSAGE, JOINT_LIMITS_DEG
 
 from my_robot_interfaces.srv import MoveTarget
 
@@ -94,6 +94,10 @@ class HardwareControl(Node):
         # failures into _hw_ok going False, instead of the timer just logging
         # a warning and ticking forever with a dead link.
         self._encoder_fail_count = 0
+        # True while the last connect failed with the emergency-stop code, so a
+        # refused move can say WHY instead of "robot arm error". Cleared by any
+        # successful connect.
+        self._estop_suspected = False
         # Rate-limits the timer's reconnect attempts once _hw_ok goes False —
         # without this, a link drop disables the arm permanently:
         # _move_target_cb refuses to even try a move while _hw_ok is False,
@@ -203,10 +207,12 @@ class HardwareControl(Node):
                 self.HRobot, "ExtSpeed", [self._ext_speed, self._ext_speed, self._ext_speed]
             )
             self._hw_ok = True
+            self._estop_suspected = False
             self.get_logger().info(
                 f"cobotta_node: B-CAP connected (ExtSpeed={self._ext_speed})"
             )
         except Exception as exc:
+            self._estop_suspected = is_estop_error(exc)
             self.get_logger().fatal(
                 f"cobotta_node: B-CAP connection failed — hardware disabled: {exc}"
             )
@@ -332,7 +338,7 @@ class HardwareControl(Node):
         """
         if not self._hw_ok:
             response.ok = False
-            response.message = "hardware disabled"
+            response.message = ESTOP_MESSAGE if self._estop_suspected else "hardware disabled"
             return response
 
         if not request.hand_only and len(request.joints) < 6:
@@ -399,7 +405,9 @@ class HardwareControl(Node):
         # Return a generic message — raw B-CAP error strings can leak internal info.
         self.get_logger().error(f"cobotta_node: move_target giving up: {last_exc}")
         response.ok = False
-        response.message = "robot arm error — see cobotta_node log"
+        # The reconnect above is what reveals an emergency stop: the move itself
+        # fails with an opaque error, and only TakeArm names the state.
+        response.message = ESTOP_MESSAGE if self._estop_suspected else "robot arm error — see cobotta_node log"
         return response
 
     def _read_hand_pos_json(self) -> str:
@@ -409,7 +417,15 @@ class HardwareControl(Node):
         never fail the move itself. Caller MUST hold self._bcap_lock.
         """
         try:
-            hand_pos = self.m_bcapclient.robot_execute(self.HRobot, "HandCurPos")
+            # A CONTROLLER command, like HandMoveA that moves the same gripper.
+            # It was called on the robot handle for as long as this readout
+            # existed, and the robot-level call fails with 0x80070057
+            # (E_INVALIDARG) every time — so hand_mm was never delivered and
+            # simulate.py's missed-grasp check ("gripper closed on air") fell
+            # into its "no data" branch on every real pick. Confirmed on the
+            # cell 2026-09-29: controller-level returns 29.985 mm with the
+            # gripper open, robot-level raises.
+            hand_pos = self.m_bcapclient.controller_execute(self.hCtrl, "HandCurPos")
             return json.dumps({"hand_mm": float(hand_pos)})
         except Exception as exc:
             self.get_logger().warning(f"cobotta_node: HandCurPos read failed: {exc}")

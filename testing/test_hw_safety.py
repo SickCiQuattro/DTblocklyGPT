@@ -334,3 +334,378 @@ def test_sim_run_lock_rejects_concurrent_run():
         assert simulate._SIM_RUN_LOCK.acquire(blocking=False) is False
     finally:
         simulate._SIM_RUN_LOCK.release()
+
+
+# ── No confirmation is ever assumed on the real arm ───────────────────────────
+# With STRICT_CONDITIONS off (the default), an unreachable vision bridge, a
+# stopped vision_node or an object already in frame all resolve a human step by
+# themselves, so a developer without a camera can run a task in the twin. On
+# the real arm that meant the physical robot carried on to the next move on a
+# confirmation nobody gave. Driving hardware now forces the strict policy.
+
+def _gesture():
+    from backend.block_types import EventsItems
+    return {"type": EventsItems.GESTURE.value, "fields": {"GESTURE_TYPE": "THUMBS_UP"}}
+
+
+def _find():
+    from backend.block_types import EventsItems
+    return {"type": EventsItems.FIND.value,
+            "inputs": {"OBJECT": {"block": {"data": json.dumps({"name": "tube"})}}}}
+
+
+@pytest.fixture
+def real_arm_not_strict(monkeypatch):
+    monkeypatch.setattr(simulate, "STRICT_CONDITIONS", False)
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda *_a, **_k: None)
+    monkeypatch.setattr(simulate, "_abort_task",
+                        lambda msg, detail=None: setattr(simulate, "_TASK_ABORT_REASON", msg))
+    simulate.SIMULATION_STOP_EVENT.clear()
+    simulate._TASK_ABORT_REASON = None
+    yield
+    simulate.SIMULATION_STOP_EVENT.clear()
+    simulate._TASK_ABORT_REASON = None
+
+
+def test_real_arm_does_not_bypass_a_gesture_when_the_bridge_is_down(real_arm_not_strict, monkeypatch):
+    bridge = MagicMock()
+    bridge.get_vision_state.side_effect = requests.exceptions.ConnectionError()
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+
+    assert simulate._wait_for_condition(_gesture(), timeout=1) is False
+    assert simulate._TASK_ABORT_REASON, "must abort, not resume on an assumed gesture"
+
+
+def test_real_arm_does_not_simulate_a_detection_when_vision_node_is_stopped(real_arm_not_strict, monkeypatch):
+    """The realistic case: bridge and arm alive, object detector dead. In the
+    twin this is a "simulated" success; on the real arm it must stop."""
+    bridge = MagicMock()
+    bridge.get_vision_state.return_value = {
+        "detections": [], "object_age_s": simulate.VISION_STALE_AFTER_S + 60}
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+
+    assert simulate._wait_for_condition(_find(), timeout=1) is False
+    assert simulate._TASK_ABORT_REASON
+
+
+def test_real_arm_ignores_an_object_already_in_frame(real_arm_not_strict, monkeypatch):
+    """Presence is continuous: only absent-then-present proves someone acted."""
+    bridge = MagicMock()
+    bridge.get_vision_state.return_value = {"detections": [{"class": "bottle"}]}
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+    monkeypatch.setattr(simulate, "_detections_match", lambda *a, **k: True)
+
+    assert simulate._wait_for_condition(_find(), timeout=1) is False
+
+
+def test_the_twin_alone_stays_permissive(monkeypatch):
+    """Unchanged on purpose: without the arm nothing physical moves, and a
+    developer with no camera must still be able to run a task end to end."""
+    monkeypatch.setattr(simulate, "STRICT_CONDITIONS", False)
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", False)
+    simulate.SIMULATION_STOP_EVENT.clear()
+    bridge = MagicMock()
+    bridge.get_vision_state.side_effect = requests.exceptions.ConnectionError()
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+
+    assert simulate._strict_conditions() is False
+    assert simulate._wait_for_condition(_gesture(), timeout=1) is True
+
+
+def test_server_refuses_automatic_confirmations_on_the_real_arm(monkeypatch):
+    """The panel forces 'live' on the real-robot target, but the server is the
+    trust boundary: simulateEvent + driveHardware would carry the physical arm
+    through every human step with nobody confirming."""
+    from django.test import RequestFactory
+
+    class _User:
+        is_authenticated = True
+        id = 1
+
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    request = RequestFactory().post(
+        "/api/task/simulate/",
+        data=json.dumps({"id": 1, "simulateEvent": True, "driveHardware": True}),
+        content_type="application/json",
+    )
+    request.user = _User()
+
+    response = simulate.simulate_task(request)
+
+    # 500, like the "Hardware not armed" refusal next to it, and on purpose:
+    # fetchApi RESOLVES 202/400/409, so a 400 here could reach the panel as a
+    # run that went fine. A 500 rejects and raises the error banner.
+    assert response.status_code == 500
+    assert b"not allowed on the real robot" in response.content
+    assert simulate._SIM_RUN_LOCK.acquire(blocking=False), "refused before taking the run lock"
+    simulate._SIM_RUN_LOCK.release()
+
+
+# ── The verification numbers are recorded when nothing goes wrong ──────────────
+# _verify_hw_arrival and _verify_hw_grasp compute the encoder gap and the gripper
+# width on every move and used to write them down only when they aborted. A
+# passing run left no trace, so the margin behind the 2 degree and 1.5 mm
+# thresholds could not be measured on the runs that passed.
+
+@pytest.fixture
+def robot_log(monkeypatch, tmp_path):
+    from backend.functions import study_log
+    path = tmp_path / "misure-robot.jsonl"
+    monkeypatch.setattr(study_log, "_LOG_PATH", str(path))
+    monkeypatch.setattr(simulate, "_interruptible_sleep", lambda *_a, **_k: None)
+    monkeypatch.setattr(simulate.time, "sleep", lambda *_a, **_k: None)
+    monkeypatch.setattr(simulate, "_abort_task",
+                        lambda msg, detail=None: setattr(simulate, "_TASK_ABORT_REASON", msg))
+    simulate._TASK_ABORT_REASON = None
+
+    def eventi(kind):
+        if not path.exists():
+            return []
+        rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+        return [r for r in rows if r["kind"] == kind]
+    yield eventi
+    simulate._TASK_ABORT_REASON = None
+
+
+def _bridge_reads(monkeypatch, joints):
+    bridge = MagicMock()
+    bridge.get_actual_joints_real.return_value = joints
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+
+
+def test_a_passing_arrival_leaves_its_gap_in_the_log(robot_log, monkeypatch):
+    _bridge_reads(monkeypatch, [10.4, 20.0, 30.0, 40.0, 50.0, 60.0])
+    monkeypatch.setattr(simulate.simulation_recursive_blockly_parser, "current_step", "pick_block",
+                        raising=False)
+
+    assert simulate._verify_hw_arrival([10.0, 20.0, 30.0, 40.0, 50.0, 60.0]) is True
+
+    (ev,) = robot_log("hw_arrival")
+    assert ev["ok"] is True and ev["step"] == "pick_block"
+    assert ev["max_delta_deg"] == 0.4 and ev["deltas_deg"][0] == 0.4
+    assert ev["tol_deg"] == simulate.HW_VERIFY_TOL_DEG and ev["polls"] == 1
+    assert simulate._TASK_ABORT_REASON is None
+
+
+def test_a_failed_arrival_is_logged_and_still_aborts(robot_log, monkeypatch):
+    _bridge_reads(monkeypatch, [15.0, 20.0, 30.0, 40.0, 50.0, 60.0])
+    # a clock that runs out after the first poll, so the window closes
+    ticks = iter([0.0, 0.0, 99.0, 99.0, 99.0])
+    monkeypatch.setattr(simulate.time, "monotonic", lambda: next(ticks, 99.0))
+
+    assert simulate._verify_hw_arrival([10.0, 20.0, 30.0, 40.0, 50.0, 60.0], timeout_s=1) is False
+
+    (ev,) = robot_log("hw_arrival")
+    assert ev["ok"] is False and ev["max_delta_deg"] == 5.0
+    assert simulate._TASK_ABORT_REASON, "logging must not replace the safety abort"
+
+
+def test_a_grasp_that_held_records_its_width_and_margin(robot_log, monkeypatch):
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    # A tube stops the fingers well above the commanded close value.
+    monkeypatch.setattr(simulate, "_LAST_HW_HAND_MM", 17.8)
+
+    assert simulate._verify_hw_grasp(14.0) is True
+    (ev,) = robot_log("hw_grasp")
+    assert ev["hand_mm"] == 17.8 and ev["commanded_mm"] == 14.0
+    assert ev["margin_mm"] == 3.8 and ev["empty"] is False
+
+
+def test_an_empty_grasp_is_logged_as_empty_and_aborts(robot_log, monkeypatch):
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    monkeypatch.setattr(simulate, "_LAST_HW_HAND_MM", 14.5)
+
+    assert simulate._verify_hw_grasp(14.0) is False
+
+    (ev,) = robot_log("hw_grasp")
+    assert ev["empty"] is True
+    assert simulate._TASK_ABORT_REASON
+
+
+def test_a_grasp_with_no_width_is_logged_and_does_not_block(robot_log, monkeypatch):
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    monkeypatch.setattr(simulate, "_LAST_HW_HAND_MM", None)
+
+    assert simulate._verify_hw_grasp(14.0) is True
+
+    (ev,) = robot_log("hw_grasp")
+    assert ev["hand_mm"] is None and ev["empty"] is None
+
+
+def test_no_grasp_line_in_a_simulation_only_run(robot_log, monkeypatch):
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", False)
+    monkeypatch.setattr(simulate, "_LAST_HW_HAND_MM", 14.5)
+
+    assert simulate._verify_hw_grasp(14.0) is True
+    assert robot_log("hw_grasp") == []
+
+
+def test_every_executed_block_leaves_a_step_line(robot_log, monkeypatch):
+    """The twin-vs-real comparison needs the order the blocks ran in, and the
+    log had only run boundaries and human steps. Each block now writes one
+    `step` line with its target, so the same task can be replayed as a sequence
+    from a simulation run and from a real-arm run and the two compared."""
+    monkeypatch.setattr(simulate, "_bridge", MagicMock())
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", False)
+
+    def notify(t):
+        return {"type": "notify_action_block", "fields": {"TASK_DESC": t}}
+
+    code = {**notify("a"), "next": {"block": {**notify("b"), "next": {"block": notify("c")}}}}
+    simulate.simulation_recursive_blockly_parser(code, [], [], [], simulate_event=True)
+
+    passi = robot_log("step")
+    assert [p["block"] for p in passi] == ["notify_action_block"] * 3
+    assert {p["target"] for p in passi} == {"sim"}
+
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    simulate.simulation_recursive_blockly_parser(notify("d"), [], [], [], simulate_event=True)
+    assert robot_log("step")[-1]["target"] == "real"
+
+
+def test_a_stop_request_leaves_its_latency_and_the_halt_result_in_the_log(robot_log, monkeypatch):
+    """The chapter on safety has no number for the time from the Stop click to a
+    halt the arm confirmed. Two lines bracket it: `stop_requested` on entry and
+    `stop_done` with the elapsed time and the arm's own answer."""
+    from django.test import RequestFactory
+
+    class _User:
+        is_authenticated = True
+
+    bridge = MagicMock()
+    bridge.stop.return_value = {"hardware_halt": {"ok": True, "message": ""}}
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+    monkeypatch.setattr(simulate, "_delete_placed_objects", lambda: None)
+    monkeypatch.setattr(simulate, "_set_world_paused", lambda *_a, **_k: None)
+    request = RequestFactory().post("/api/task/stop/")
+    request.user = _User()
+
+    response = simulate.stop_simulation(request)
+
+    assert response.status_code == 200
+    (req,) = robot_log("stop_requested")
+    (done,) = robot_log("stop_done")
+    assert done["hardware_halt_ok"] is True and done["warning"] is False
+    assert 0 <= done["elapsed_s"] < 5
+
+
+def test_a_stop_whose_halt_failed_is_logged_as_failed(robot_log, monkeypatch):
+    from django.test import RequestFactory
+
+    class _User:
+        is_authenticated = True
+
+    bridge = MagicMock()
+    bridge.stop.return_value = {"hardware_halt": {"ok": False, "message": "no"}}
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+    monkeypatch.setattr(simulate, "_delete_placed_objects", lambda: None)
+    monkeypatch.setattr(simulate, "_set_world_paused", lambda *_a, **_k: None)
+    request = RequestFactory().post("/api/task/stop/")
+    request.user = _User()
+
+    simulate.stop_simulation(request)
+
+    (done,) = robot_log("stop_done")
+    assert done["hardware_halt_ok"] is False and done["warning"] is True
+
+
+# ── The emergency stop is named, not reported as "rejected" ───────────────────
+# 2026-09-29: the red button pressed during a pick ended the run with "The robot
+# arm rejected the last move command", which read as a software fault. The
+# controller does say what happened — but only on the reconnect, where TakeArm
+# fails with 0x83501024 every 2 s until the state is reset.
+
+def _cobotta_utils():
+    import importlib
+    sys.path.insert(0, os.path.abspath(os.path.join(
+        os.path.dirname(__file__), "..", "ros2_ws", "src", "cobotta_rest_api")))
+    return importlib.import_module("cobotta_rest_api.cobotta_utils")
+
+
+def test_the_logged_decimal_error_is_recognised_as_the_emergency_stop():
+    utils = _cobotta_utils()
+    assert utils.is_estop_error(-2091904988)                      # how the T1 log printed it
+    assert utils.is_estop_error(Exception("-2091904988"))
+    assert utils.is_estop_error(Exception("controller error 0x83501024"))
+    assert utils.is_estop_error(Exception("0x83501024"))
+
+
+def test_other_bcap_errors_are_not_taken_for_an_emergency_stop():
+    utils = _cobotta_utils()
+    for other in ("0x81501025", "0x83501029", "0x80070057", "timeout", "", "-2147024809"):
+        assert not utils.is_estop_error(Exception(other)), other
+
+
+def test_an_emergency_stop_answer_from_the_arm_reaches_the_operator_in_words(monkeypatch):
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    monkeypatch.setattr(simulate, "_abort_task",
+                        lambda msg, detail=None: setattr(simulate, "_TASK_ABORT_REASON", msg))
+    simulate._TASK_ABORT_REASON = None
+    bridge = MagicMock()
+    bridge.move_target.return_value = {"ok": False, "message": "emergency_stop"}
+    monkeypatch.setattr(simulate, "_bridge", bridge)
+
+    assert simulate._send_hw_target([0.0] * 6, 30.0) is False
+
+    assert "emergency stop" in simulate._TASK_ABORT_REASON
+    assert "teach pendant" in simulate._TASK_ABORT_REASON
+    simulate._TASK_ABORT_REASON = None
+
+
+# ── Real-arm gripper tolerance, from the cell (2026-09-29) ────────────────────
+# Measured with the width finally readable: tube in the fingers -> 14.143, 14.150,
+# 14.195 mm; empty gripper -> 14.002 mm; command 14 mm in every case.
+_HELD_MM = (14.143, 14.150, 14.195)
+_EMPTY_MM = (14.002,)
+_COMMANDED_MM = 14.0
+
+
+def _real_tol(monkeypatch):
+    import importlib
+
+    from backend.functions import calibration
+
+    monkeypatch.setenv("DRIVE_HARDWARE", "1")
+    real = importlib.reload(calibration)
+    tol = real.HW_GRASP_SLIP_TOL_MM
+    monkeypatch.delenv("DRIVE_HARDWARE", raising=False)
+    importlib.reload(calibration)
+    return tol
+
+
+def test_the_real_tolerance_separates_the_measured_held_and_empty_grasps(monkeypatch):
+    tol = _real_tol(monkeypatch)
+    for w in _HELD_MM:
+        assert w - _COMMANDED_MM > tol, f"a held grasp at {w} mm would abort at tol {tol}"
+    for w in _EMPTY_MM:
+        assert w - _COMMANDED_MM <= tol, f"an empty grasp at {w} mm would pass at tol {tol}"
+
+
+def test_the_sim_tolerance_is_unchanged():
+    from backend.functions import calibration
+    assert calibration._SIM_PROFILE["HW_GRASP_SLIP_TOL_MM"] == 1.5
+
+
+def test_a_grasp_row_written_after_a_stop_is_marked_as_such(robot_log, monkeypatch):
+    """After an operator Stop the pick handler still reaches the grasp check, with
+    the width left over from the previous move (gripper open, 30 mm). That row is
+    not a grasp, and it used to pass as a good one with a 16 mm margin."""
+    monkeypatch.setattr(simulate, "DRIVE_HARDWARE", True)
+    monkeypatch.setattr(simulate, "_HW_DRIVE_REQUESTED", True)
+    monkeypatch.setattr(simulate, "_LAST_HW_HAND_MM", 30.0)
+    simulate.SIMULATION_STOP_EVENT.set()
+    try:
+        simulate._verify_hw_grasp(14.0)
+    finally:
+        simulate.SIMULATION_STOP_EVENT.clear()
+    (ev,) = robot_log("hw_grasp")
+    assert ev["stopping"] is True

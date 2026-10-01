@@ -95,7 +95,7 @@ def test_fresh_move_clears_stale_halt_flag(node):
     """A halt from an earlier, already-finished move must not poison the next one."""
     node._halt_requested.set()  # stale flag from a previous halt
     node.m_bcapclient.robot_move.return_value = None
-    node.m_bcapclient.robot_execute.return_value = 10.0  # HandCurPos read
+    node.m_bcapclient.controller_execute.return_value = 10.0  # HandCurPos read (controller-level)
 
     request = SimpleNamespace(hand_only=False, joints=[0.0, 0.0, 90.0, 0.0, 0.0, 0.0], hand=30.0)
     response = SimpleNamespace()
@@ -159,3 +159,20 @@ def test_halt_reconnects_when_the_channel_is_down_and_main_is_too(node, monkeypa
 
     assert response.success is True
     node._halt_bcap.robot_halt.assert_called_once()
+
+
+def test_the_gripper_width_is_read_from_the_controller_not_the_robot(node):
+    """HandCurPos is a controller command. Called on the robot handle it raises
+    0x80070057 on the real arm, the node swallowed that as a warning, and the
+    missed-grasp check never had a width to look at — on any real pick."""
+    node.m_bcapclient.controller_execute.return_value = 17.8
+    node.m_bcapclient.robot_execute.side_effect = RuntimeError("-2147024809")
+
+    assert node._read_hand_pos_json() == '{"hand_mm": 17.8}'
+    node.m_bcapclient.controller_execute.assert_called_once_with(node.hCtrl, "HandCurPos")
+    node.m_bcapclient.robot_execute.assert_not_called()
+
+
+def test_a_failed_width_read_is_still_non_fatal(node):
+    node.m_bcapclient.controller_execute.side_effect = RuntimeError("-2147024809")
+    assert node._read_hand_pos_json() == ""

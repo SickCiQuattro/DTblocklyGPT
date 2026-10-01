@@ -14,6 +14,7 @@ calibration.py reads it at import time):
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-pick --slot 0
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-place --slot 1
     DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-guide
+    DRIVE_HARDWARE=1 poetry run python testing/calibrate_rack.py goto-scan
     poetry run python testing/calibrate_rack.py verify-coords          # read-only, no hardware needed
     poetry run python testing/calibrate_rack.py --selftest   # offline, no hardware
 
@@ -132,8 +133,14 @@ def cmd_goto_pick(args):
 
 
 def cmd_goto_place(args):
-    rack = calibration.LOCATION_PROFILES.get("tube_rack", {})
-    dx, dy, grasp_yaw = _slot_offset(args.slot, rack, "LOCATION_PROFILES['tube_rack']")
+    # `--location` exists because this used to be hard-wired to the rack: a
+    # `goto-place --slot 1` meant for the cup went to the RACK's slot 1 at the
+    # rack's release height, which is a different point and a much lower z —
+    # an open gripper hovering where the cup wall is. Nothing about the cup
+    # was ever checked by it.
+    loc = args.location
+    rack = calibration.LOCATION_PROFILES.get(loc, {})
+    dx, dy, grasp_yaw = _slot_offset(args.slot, rack, f"LOCATION_PROFILES['{loc}']")
     x_rel = calibration.DEFAULT_PLACE_X_REL + dx
     y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
     # Same formula simulate_ros_place uses (container detection + the
@@ -141,7 +148,8 @@ def cmd_goto_place(args):
     # simpler, separately-derived approximation that didn't match what a
     # real place actually targets (found 2026-07-29). --height lets you
     # check a different object than the default tube (0.10m).
-    z_place = sim.resolve_place_z("tube_rack", args.height)
+    z_place = sim.resolve_place_z(loc, args.height)
+    print(f"-> {loc} slot {args.slot}: x_rel={x_rel:.4f} y_rel={y_rel:.4f} release z={z_place:.3f}")
     _goto_hover(x_rel, y_rel, z_place, args.z_hover, grasp_yaw)
 
 
@@ -180,16 +188,16 @@ def cmd_verify_coords(args):
             continue
         _verify_row(slot, x_rel, y_rel, plan.z_pick, pick_yaw)
 
-    print(f"\n-- PLACE (tube_rack, height={args.height}m) — same formula as simulate_ros_place --")
-    print(header)
-    rack = calibration.LOCATION_PROFILES.get("tube_rack", {})
-    place_offsets = rack.get("slot_xy_offsets", [(0.0, 0.0)])
-    place_yaw = rack.get("grasp_yaw", 0.0)
-    z_place = sim.resolve_place_z("tube_rack", args.height)
-    for slot, (dx, dy) in enumerate(place_offsets):
-        x_rel = calibration.DEFAULT_PLACE_X_REL + dx
-        y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
-        _verify_row(slot, x_rel, y_rel, z_place, place_yaw)
+    for loc in sorted(calibration.LOCATION_PROFILES):
+        print(f"\n-- PLACE ({loc}, height={args.height}m) — same formula as simulate_ros_place --")
+        print(header)
+        prof = calibration.LOCATION_PROFILES[loc]
+        place_yaw = prof.get("grasp_yaw", 0.0)
+        z_place = sim.resolve_place_z(loc, args.height)
+        for slot, (dx, dy) in enumerate(prof.get("slot_xy_offsets", [(0.0, 0.0)])):
+            x_rel = calibration.DEFAULT_PLACE_X_REL + dx
+            y_rel = calibration.DEFAULT_PLACE_Y_REL + dy
+            _verify_row(slot, x_rel, y_rel, z_place, place_yaw)
 
     if calibration.DEFAULT_PLACE_X_REL == calibration._SIM_PROFILE["DEFAULT_PLACE_X_REL"] and calibration.DRIVE_HARDWARE:
         print("\n!! DRIVE_HARDWARE=1 but DEFAULT_PLACE_X_REL/Y_REL still equal the sim profile's "
@@ -207,6 +215,24 @@ def cmd_goto_guide(args):
     print(f"-> transit via SAFE_INTERMEDIATE_POSE, then GUIDE_POSE={guide_pose}")
     sim.smooth_move(list(calibration.SAFE_INTERMEDIATE_POSE), sim.ROS_OPEN_GRIPPER, duration_s=2.0)
     sim.smooth_move(list(guide_pose), sim.ROS_OPEN_GRIPPER, duration_s=2.0)
+
+
+def cmd_goto_scan(args):
+    """Bring the arm to SCAN_POSE, the pose the wrist camera recognises from.
+
+    Goes through SAFE_INTERMEDIATE_POSE first, like goto-guide, instead of
+    interpolating straight from wherever the arm happens to be: the real scan
+    pose has J2 at -58 and J3 at 138 against limits of -60 and 140, so a
+    joint-space line from a hover above the cup can swing the wrist through the
+    table. The gripper is left open — this is for photographing and for
+    scan_recognition_check.py, with nothing in the fingers.
+    """
+    scan = list(calibration.SCAN_POSE)
+    print(f"-> transit via SAFE_INTERMEDIATE_POSE, then SCAN_POSE={scan}")
+    sim.sync_current_state_from_ros()
+    sim.smooth_move(list(calibration.SAFE_INTERMEDIATE_POSE), sim.ROS_OPEN_GRIPPER, duration_s=3.0)
+    sim.smooth_move(scan, sim.ROS_OPEN_GRIPPER, duration_s=3.0)
+    print("-> at scan pose. Now: poetry run python testing/scan_recognition_check.py")
 
 
 def selftest():
@@ -238,8 +264,14 @@ def main():
     p_place.add_argument(
         "--height", type=float, default=0.10,
         help="object height in metres, for the place Z formula (default: plain tube, 0.10m)")
+    p_place.add_argument(
+        "--location", default="tube_rack", choices=sorted(calibration.LOCATION_PROFILES),
+        help="which location's slots to hover over (default: tube_rack). For the cup start with "
+             "a large --z-hover (0.10) and lower it in steps: the open fingers are 13 mm off "
+             "centre inside a 53 mm cup.")
 
     sub.add_parser("goto-guide", help="replay the saved near-table rack-alignment pose")
+    sub.add_parser("goto-scan", help="move to SCAN_POSE (recognition pose), via the safe intermediate pose")
 
     p_verify = sub.add_parser(
         "verify-coords",
@@ -274,6 +306,8 @@ def main():
         cmd_goto_place(args)
     elif args.command == "goto-guide":
         cmd_goto_guide(args)
+    elif args.command == "goto-scan":
+        cmd_goto_scan(args)
     else:
         parser.print_help()
 

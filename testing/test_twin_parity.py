@@ -603,3 +603,127 @@ def test_wait_for_sim_arrival_still_honours_the_nominal_without_a_feed(monkeypat
         f"senza feed ha atteso {slept}: l'attesa nominale non e' piu' "
         "garantita, e il movimento successivo parte sopra questo."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cup slot profile vs the cup SDF (W: 2026-09-18)
+# ─────────────────────────────────────────────────────────────────────────────
+# The cup had no LOCATION_PROFILES entry, so every place in it resolved to the
+# identical DEFAULT_PLACE_X_REL/Y_REL. A repeat() filling the cup teleported
+# each tube onto the previous one; the solver then flung them apart, which is
+# what an operator saw as "le provette impazziscono". Same class of bug as the
+# rack tests above: a profile that must agree with a model nobody re-checks.
+
+def _cup_floor_inner_radius():
+    """Inner radius at the cup floor, from locations/cup/model.sdf.
+
+    The walls are boxes placed at mid-height and pitched outward, so their
+    radius at the floor is the pose radius minus the outward run over half
+    the wall length — not the pose radius itself.
+    """
+    import math
+    import xml.etree.ElementTree as ET
+
+    sdf = os.path.join(os.path.dirname(__file__), "..", "ros2_ws", "Cobotta",
+                       "locations", "cup", "model.sdf")
+    root = ET.parse(sdf).getroot()
+    radii = []
+    for col in root.findall(".//collision"):
+        if not col.get("name", "").startswith("col_wall_"):
+            continue
+        px, py, _pz, _r, pitch, _y = (float(v) for v in col.find("pose").text.split())
+        size = col.find(".//box/size").text.split()
+        thick, length = float(size[0]), float(size[2])
+        # Pose radius, walked back down half the wall to the floor.
+        radii.append(math.hypot(px, py) - (length / 2.0) * math.sin(pitch) - thick / 2.0)
+    assert radii, "cup model has no col_wall_* collisions"
+    return min(radii)
+
+
+@pytest.mark.parametrize("profile_name", ["_SIM_PROFILE", "_REAL_PROFILE"])
+def test_cup_slots_fit_inside_the_cup_and_do_not_overlap(profile_name):
+    import math
+
+    from backend.functions import calibration
+
+    profile = getattr(calibration, profile_name)
+    # _REAL_PROFILE REPLACES LOCATION_PROFILES rather than merging, so a
+    # location present only in the sim dict is absent under DRIVE_HARDWARE=1 —
+    # which is how the user-study sessions run. Both must carry the cup.
+    assert "cup" in profile["LOCATION_PROFILES"], (
+        f"{profile_name} has no cup slots, so every place there lands on the "
+        "same point; LOCATION_PROFILES does not inherit between profiles"
+    )
+    offsets = profile["LOCATION_PROFILES"]["cup"]["slot_xy_offsets"]
+
+    tube_r = 0.018 / 2.0          # narrowest catalogue tube, the one that fits a rack slot
+    floor_r = _cup_floor_inner_radius()
+
+    for i, (dx, dy) in enumerate(offsets):
+        assert math.hypot(dx, dy) + tube_r <= floor_r, (
+            f"slot {i} puts a tube's edge at "
+            f"{(math.hypot(dx, dy) + tube_r) * 1000:.1f}mm against a "
+            f"{floor_r * 1000:.1f}mm floor — it lands on the wall"
+        )
+
+    for i in range(len(offsets)):
+        for j in range(i + 1, len(offsets)):
+            gap = math.dist(offsets[i], offsets[j]) - 2 * tube_r
+            assert gap > 0, f"slots {i} and {j} overlap by {-gap * 1000:.1f}mm"
+            # The rack picks and places at 4.2mm of finger clearance; that is
+            # the only such figure this project has observed working.
+            assert gap >= 0.0042, (
+                f"slots {i} and {j} leave {gap * 1000:.1f}mm for the fingers, "
+                "below the 4.2mm the rack is known to work at"
+            )
+
+
+def test_cup_slot_zero_is_the_corner_furthest_from_the_arm():
+    """So the arm never crosses an occupied slot to reach a free one."""
+    import math
+
+    from backend.functions import calibration
+
+    offsets = calibration.LOCATION_PROFILES["cup"]["slot_xy_offsets"]
+    # Direction from the robot base to the cup centre, in robot-relative terms.
+    away = math.atan2(calibration.DEFAULT_PLACE_Y_REL, calibration.DEFAULT_PLACE_X_REL)
+    misalignment = [
+        abs((math.atan2(dy, dx) - away + math.pi) % (2 * math.pi) - math.pi)
+        for dx, dy in offsets
+    ]
+    assert misalignment[0] == min(misalignment), (
+        "slot 0 is not the furthest-out slot; fill order should run away-first"
+    )
+
+
+def test_calibrate_rack_can_check_the_cup_and_verify_coords_lists_it(capsys):
+    """`goto-place` was wired to the rack: `--slot 1` meant for the cup went to
+    the rack's slot 1, at the rack's release height (about 21 mm lower than the
+    cup's). It never checked anything about the cup, and an open gripper sent
+    there hovers where the cup wall is. `--location` fixes the command; the
+    offline `verify-coords` now prints every location's slots so the numbers can
+    be read before the arm moves."""
+    import argparse
+    import importlib.util
+
+    from backend.functions import calibration
+
+    path = os.path.join(os.path.dirname(__file__), "calibrate_rack.py")
+    spec = importlib.util.spec_from_file_location("calibrate_rack_under_test", path)
+    cal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cal)
+
+    cal.cmd_verify_coords(argparse.Namespace(pick_object="tube", height=0.10))
+    out = capsys.readouterr().out
+
+    assert "PLACE (cup" in out and "PLACE (tube_rack" in out
+    # one section per "-- PLACE (...)" header; the header itself ends in "--" too
+    cup_rows = out.split("-- PLACE (cup")[1].split("\n-- ")[0].strip().splitlines()
+    assert sum(1 for r in cup_rows if r.strip()[:1].isdigit()) == len(
+        calibration.LOCATION_PROFILES["cup"]["slot_xy_offsets"]), "one row per cup slot"
+    assert all("FAIL" not in r for r in cup_rows), "every cup slot must be reachable by IK"
+
+    from backend.functions import simulate
+    assert simulate.resolve_place_z("cup", 0.10) - simulate.resolve_place_z("tube_rack", 0.10) > 0.015, (
+        "the cup releases higher than the rack; a shared height is the bug this guards"
+    )

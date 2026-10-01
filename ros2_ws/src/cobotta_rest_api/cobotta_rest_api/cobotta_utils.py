@@ -1,4 +1,37 @@
 import math
+import re
+
+# b-CAP error the controller returns from TakeArm while the emergency stop is
+# latched. Read from a real session, not from documentation (the DENSO table in
+# docs/cobotta-physical-testing.md does not list it): 2026-09-29, red button
+# pressed during a pick; cobotta_node's reconnect then failed at "[5/8] TakeArm"
+# with this code every 2 s until the node was stopped. It is the code of the
+# latched-stop STATE, so it also shows after the button is released until the
+# controller is reset — which is why callers word it "pressed or not reset".
+BCAP_ESTOP_CODE = 0x83501024
+
+# What move_target answers instead of a free-text error when that state is the cause.
+# A token, not a sentence: the wording the operator reads lives in simulate.py.
+ESTOP_MESSAGE = "emergency_stop"
+
+
+def is_estop_error(exc) -> bool:
+    """True if a b-CAP exception carries the emergency-stop code.
+
+    The error reaches us as the exception's text, sometimes signed decimal
+    (-2091904988, as the log printed it), sometimes hex. Compare as unsigned
+    32-bit so both spellings match.
+    """
+    texts = [str(exc)] + [str(a) for a in getattr(exc, "args", ())]
+    for text in texts:
+        for tok in re.findall(r"-?0x[0-9a-fA-F]+|-?\d+", text):
+            try:
+                if int(tok, 0) & 0xFFFFFFFF == BCAP_ESTOP_CODE:
+                    return True
+            except ValueError:
+                continue
+    return False
+
 
 # Joint limits in degrees — from cobotta_description/urdf/cobotta.urdf (converted
 # rad→deg). Shared by the Flask edge (clamps/UX) and the /cobotta/move_target ROS
