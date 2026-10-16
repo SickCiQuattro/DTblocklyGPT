@@ -76,7 +76,7 @@ const isBlockState = (value: unknown): value is State =>
  */
 const NO_ROWS: never[] = Object.freeze([]) as never[]
 
-export const UnifiedWorkspace = () => {
+const UnifiedWorkspace = () => {
   const theme = useTheme()
   const { id } = useParams()
   const navigate = useNavigate()
@@ -194,19 +194,13 @@ export const UnifiedWorkspace = () => {
       if (!viewSettings.toolboxCollapsed) {
         updateViewSettings({ toolboxCollapsed: true })
       }
-      // Copilot joins the other two, and it is the one that matters most.
-      //
-      // The robot panel used to float over everything, so starting a run put
-      // the live view on top of whatever was open and nothing had to move.
-      // Once the panel became a column with room reserved for it, an open
-      // Copilot stopped being covered and started competing: three surfaces
-      // dividing a viewport, with the workspace — the one showing which block
-      // is running — squeezed between them.
-      //
-      // Nothing an operator does with Copilot happens DURING a run: it writes
-      // blocks into a workspace that is executing and cannot be edited. So it
-      // is the safest of the three to fold away, and the one whose absence
-      // gives the run the most room.
+      // Copilot joins the other two, and it is the one that matters most. With the
+      // robot panel a column with room reserved for it, an open Copilot competes with
+      // it: three surfaces divide the viewport and the workspace, the one showing which
+      // block is running, is squeezed between them. Nothing an operator does with
+      // Copilot happens DURING a run (it writes blocks into a workspace that is
+      // executing and cannot be edited), so it is the safest to fold away and the one
+      // whose absence gives the run the most room.
       if (chatOpen) dispatch(toggleChat())
     } else if (!isSimulationRunning && preRunLayoutRef.current) {
       const snapshot = preRunLayoutRef.current
@@ -439,10 +433,10 @@ export const UnifiedWorkspace = () => {
         if (!targetId) {
           // If we don't have an ID, we must FIRST create the task row via metadata POST endpoint.
           // rethrowOn: [400] — a name collision (e.g. the default "New Task"
-          // reused by a second untitled task) otherwise resolved here with
+          // reused by a second untitled task) otherwise resolves here with
           // the backend's {nameAlreadyExists: true} payload instead of an
-          // id, which the check below couldn't tell apart from any other
-          // failure and reported as a generic connection problem.
+          // id, which the check below cannot tell apart from any other
+          // failure and would report as a generic connection problem.
           const res = await fetchApi<any, any>({
             url: endpoints.home.libraries.task,
             method: MethodHTTP.POST,
@@ -450,11 +444,9 @@ export const UnifiedWorkspace = () => {
             body: {
               id: -1,
               name: currentName,
-              // No canned description — every task used to get the literal
-              // text "Visual task program" as its subtitle everywhere
-              // (task list, Check for problems). Leaving it unset (backend
-              // defaults to null) lets the card omit the subtitle entirely
-              // until the operator writes a real one.
+              // No canned description: a literal "Visual task program" subtitle would show
+              // everywhere (task list, Check for problems). Leaving it unset (backend defaults
+              // to null) lets the card omit the subtitle until the operator writes a real one.
               shared: false,
               task_type: 'task',
               status: 'draft',
@@ -623,18 +615,15 @@ export const UnifiedWorkspace = () => {
     }, 2000)
   }
 
-  // A pending autosave must survive leaving the page.
+  // A pending autosave must survive leaving the page. The unmount cleanup flushes
+  // instead of clearing the timer: cancelling silently drops any edit made in the
+  // last 2 seconds while the status bar still reads "Saved at HH:mm" (a timestamp
+  // of the previous save, see StatusBar).
   //
-  // The unmount cleanup used to clear the timer, which silently dropped any
-  // edit made in the last 2 seconds — while the status bar still read
-  // "Saved at HH:mm", because that is a timestamp of the previous save (see
-  // StatusBar). Delete a block, click the Tasks breadcrumb, and the block was
-  // back when you reopened the task, with nothing having said so.
-  //
-  // Flushing instead of cancelling is safe: saveTaskToBackend closes over
-  // module-level fetchApi and Redux dispatch, neither of which needs this
-  // component to still be mounted. Refs, not state, because the cleanup runs
-  // after the last render and must see the values as they were then.
+  // Flushing is safe: saveTaskToBackend closes over module-level fetchApi and Redux
+  // dispatch, neither of which needs this component to still be mounted. Refs, not
+  // state, because the cleanup runs after the last render and must see the values
+  // as they were then.
   const flushPendingSaveRef = useRef<(() => void) | null>(null)
   flushPendingSaveRef.current = () => {
     if (!saveTimeoutRef.current) return
@@ -699,14 +688,13 @@ export const UnifiedWorkspace = () => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault()
-        // A modal on top owns the keyboard. The Header's "Discard these
-        // unpublished changes?" confirm, the robot panel's real-run confirm
-        // and the editor's own dialogs all sit over this workspace, and this
-        // listener used to save/publish the workspace underneath one of them
-        // — silently, while the user was being asked whether to throw those
-        // very changes away. Same shape as DigitalTwinPanel's Escape guard,
-        // read from the DOM because none of those dialogs' open-state lives
-        // in this component (see utils/keyboardGuards.ts).
+        // A modal on top owns the keyboard. The Header's "Discard these unpublished
+        // changes?" confirm, the robot panel's real-run confirm and the editor's own
+        // dialogs all sit over this workspace, and this listener must not save/publish
+        // underneath one of them while the user is being asked whether to throw those
+        // very changes away. Same shape as DigitalTwinPanel's Escape guard, read from the
+        // DOM because none of those dialogs' open-state lives in this component (see
+        // utils/keyboardGuards.ts).
         if (isModalOpen()) return
         // Focus in a text field means the keystroke belongs to that field.
         // The header's rename input is the one exception, and it handles
@@ -746,13 +734,11 @@ export const UnifiedWorkspace = () => {
           },
         })
           .then(async (res) => {
-            // The endpoint answers a taken name with 400 + nameAlreadyExists,
-            // and fetchApi RESOLVES on 400 (services/api.ts) — so this branch
-            // runs for a rename that did not happen. It used to flash "Saved
-            // at HH:mm" next to the red error toast fetchApi had just fired.
-            // The refetch still runs: it puts the real, unchanged name back in
-            // the header, which is the honest thing to show once the rename
-            // was refused.
+            // The endpoint answers a taken name with 400 + nameAlreadyExists, and fetchApi
+            // RESOLVES on 400 (services/api.ts), so this branch also runs for a rename that
+            // did not happen: it must not flash "Saved at HH:mm" next to the red error
+            // toast. The refetch still runs: it puts the real, unchanged name back in the
+            // header, which is the honest thing to show once the rename was refused.
             const renamed = !res?.nameAlreadyExists
             const updatedTask = await mutateTask()
             if (updatedTask) {
@@ -895,39 +881,27 @@ export const UnifiedWorkspace = () => {
           p: 'var(--layout-gutter)',
           // Room for the robot panel, reserved HERE and not on the workspace.
           //
-          // The panel is `position: fixed`, so it covers whatever is under it.
-          // The workspace child used to carry `width: calc(100% - 35vw)` to
-          // make space — and that never did anything: the child is `flex: 1`,
-          // which sets flex-basis 0 and grow 1, and in a flex row the flex
-          // sizing wins over `width`. So the canvas always spanned the full row
-          // and everything anchored to its right edge went under the panel,
-          // which is where the zoom and fit-to-screen controls live. The
-          // controls appeared to move only when the Copilot panel opened,
-          // because that one is a real flex sibling.
+          // The panel is `position: fixed`, so it covers whatever is under it. A
+          // `width: calc(100% - 35vw)` on the workspace child does nothing: the child is
+          // `flex: 1` (flex-basis 0, grow 1) and in a flex row flex sizing wins over
+          // `width`, so the canvas spans the full row and everything anchored to its right
+          // edge (the zoom and fit-to-screen controls) goes under the panel.
           //
-          // Padding on the container is the fix that keeps working: it shrinks
-          // the row's content box, flex then distributes what is left, and it
-          // stays correct whichever side Copilot is on and whatever width it
-          // has been dragged to.
+          // Padding on the container works: it shrinks the row's content box, flex then
+          // distributes what is left, and it stays correct whichever side Copilot is on and
+          // whatever width it has been dragged to.
           //
-          // TWO gutters, not one, and getting this wrong is what removed the
-          // space between Copilot and the robot panel entirely. The panel's own
-          // 12px inset is the distance from it to the VIEWPORT EDGE — it is not
-          // the gap between the panel and whatever sits to its left. Reserving
-          // only `width + inset` put the row's content boundary exactly on the
-          // panel's left edge, so the two cards touched.
+          // TWO gutters, not one. The panel's own 12px inset is the distance from it to the
+          // VIEWPORT EDGE, not the gap between the panel and whatever sits to its left;
+          // reserving only `width + inset` puts the content boundary exactly on the panel's
+          // left edge and the two cards touch. width + inset + gutter leaves the same 12px
+          // here as the `gap` above leaves between Copilot and the workspace.
           //
-          // width + inset + gutter is what leaves the same 12px here as the
-          // `gap` above leaves between Copilot and the workspace.
-          //
-          // Mirrors the panel's own clamp: it never takes more than what is
-          // left over the workspace's minimum, so this can follow the request
-          // without repeating the arithmetic.
-          // Reads the SAME custom property the panel sizes itself from, so the
-          // two move in the same frame. It used to read `robotPanelWidth` out
-          // of Redux, which is only written when a drag ends — so mid-drag the
-          // panel moved and the workspace did not, and everything caught up in
-          // one jump on release.
+          // Mirrors the panel's own clamp (it never takes more than what is left over the
+          // workspace's minimum), so this can follow the request without repeating the
+          // arithmetic. Reads the SAME custom property the panel sizes itself from, so the
+          // two move in the same frame; reading `robotPanelWidth` from Redux, written only
+          // when a drag ends, would leave the workspace behind mid-drag.
           paddingRight: simOpen
             ? `calc(min(var(--robot-panel-width, 520px), calc(64vh + 32px), calc(100vw - 584px - var(--copilot-width, 0px))) + var(--layout-gutter) * 2)`
             : 'var(--layout-gutter)',
@@ -1040,12 +1014,10 @@ export const UnifiedWorkspace = () => {
               setPendingChatTask(converted)
               setNewChatResponse(true)
             } else {
-              // abstractToBlockly returns `{}` (no `type`) when every step in
-              // the proposal used a type it doesn't recognize — previously
-              // this fell through silently: setNewChatResponse(true) still
-              // fired, but with no valid pendingExternalTask the apply effect
-              // in BlocklyWorkspace.tsx no-ops, so Replace looked like it did
-              // nothing with zero console error.
+              // abstractToBlockly returns `{}` (no `type`) when every step in the proposal used
+              // a type it doesn't recognize. Unhandled, setNewChatResponse(true) still fires
+              // but with no valid pendingExternalTask the apply effect in BlocklyWorkspace.tsx
+              // no-ops, so Replace looks like it did nothing, with zero console error.
               console.error(
                 'Chat proposal could not be converted to blocks',
                 proposed,

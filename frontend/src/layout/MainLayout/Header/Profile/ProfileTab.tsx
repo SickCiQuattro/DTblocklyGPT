@@ -31,13 +31,11 @@ export const ProfileTab = ({ setOpen }: ProfileTabProps) => {
 
   const handleLogout = async () => {
     setSelectedIndex(1)
-    // The success toast and the redirect used to fire OUTSIDE this promise,
-    // with the failure going only to console.error — so an offline or
-    // restarting backend produced a green "logged out" over a Django session
-    // cookie that was still valid. Pressing Back, or opening any app URL,
-    // re-authenticated through ProtectedRoute straight back into the account.
-    // On a shared workstation that is the next person landing in the previous
-    // one's data, which is what this waits for the answer before claiming.
+    // The success toast and the redirect wait for the logout response: firing them
+    // outside the promise gives a green "logged out" over a Django session cookie
+    // that is still valid when the backend is offline or restarting, and Back (or any
+    // app URL) re-authenticates through ProtectedRoute into the account. On a shared
+    // workstation that is the next person landing in the previous one's data.
     let serverSessionEnded = true
     try {
       await fetchApi({ url: endpoints.auth.logout, method: MethodHTTP.POST })

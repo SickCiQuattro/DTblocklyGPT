@@ -4,28 +4,20 @@
  * One table describing every keyboard shortcut the editor answers to, and the
  * helpers that install the ones this app owns.
  *
- * Why this exists: the shortcut list used to be typed by hand inside
- * KeyboardHelpDialog, with no link to the code that implements anything. It
- * drifted, and the drift was invisible — the dialog documented `T` ("jump to
- * the toolbox") and `H` ("next heading"), both of which were dead in this
- * integration because it registers no native Blockly toolbox, so those
- * shortcuts' preconditions could never be satisfied. A user following the
- * dialog pressed keys that did nothing, which reads as "the shortcuts are
- * broken" rather than "the documentation is wrong".
- *
- * So the dialog now renders from this table, and every Blockly shortcut a row
- * documents is checked against the live ShortcutRegistry in development
- * (see warnOnShortcutDrift). That catches a Blockly upgrade removing or
- * renaming something we document — package.json pins `^13.0.0`, so the bundled
- * version can move on a plain `npm install`.
+ * KeyboardHelpDialog renders from this table instead of keeping its own list: a
+ * hand-typed list drifts invisibly (it once documented `T` and `H`, dead here
+ * because this integration registers no native Blockly toolbox). Every Blockly
+ * shortcut a row documents is checked against the live ShortcutRegistry in
+ * development (see warnOnShortcutDrift), which catches a Blockly upgrade removing
+ * or renaming one — package.json pins `^13.0.0`, so the bundled version can move
+ * on a plain `npm install`.
  *
  * The check verifies EXISTENCE, not the key label. Blockly's own key formatter
- * (`getShortcutKeysShort` in core/utils/shortcut_formatting.ts) would render the
- * labels for us, but it is not reachable: the package's `exports` map publishes
- * only `.`, `./core`, `./blocks`, the generators and `./msg/*` — no
- * `./core/utils/*` subpath — so importing it would break module resolution.
- * Labels stay hand-written; the check makes sure they still describe something
- * that exists.
+ * (`getShortcutKeysShort` in core/utils/shortcut_formatting.ts) is not reachable:
+ * the package's `exports` map publishes only `.`, `./core`, `./blocks`, the
+ * generators and `./msg/*`, so importing it would break module resolution. Labels
+ * stay hand-written; the check makes sure they still describe something that
+ * exists.
  */
 import * as Blockly from 'blockly/core'
 
@@ -34,9 +26,9 @@ import * as Blockly from 'blockly/core'
 // the wrong OS. Reusing Blockly's flag also keeps these labels agreeing with
 // the shortcut hints Blockly itself renders, which format modifiers from it.
 const IS_APPLE = Blockly.utils.userAgent.APPLE
-export const MOD = IS_APPLE ? 'Cmd' : 'Ctrl'
+const MOD = IS_APPLE ? 'Cmd' : 'Ctrl'
 /** macOS has no Alt key: the same physical key is Option (⌥). */
-export const ALT = IS_APPLE ? 'Option' : 'Alt'
+const ALT = IS_APPLE ? 'Option' : 'Alt'
 
 export interface ShortcutRow {
   /** Key label as shown to the user. Hand-written; see the module comment. */

@@ -32,7 +32,7 @@ export const UI_TEXT = {
   // robot" and then pressed "Run on robot", with no way to tell a setting from
   // an action. Nouns for the setting fixed that without inventing a word.
   //
-  // "Test recognition" stays exactly as it is — testing/recognition_plan.py
+  // "Test recognition" stays exactly as it is — testing/tools/recognition_plan.py
   // instructs an observer to count trials "off the app's own 'Test
   // recognition' panel", so renaming it would silently break the study
   // protocol's own reference.
@@ -83,12 +83,9 @@ export const UI_TEXT = {
 
   // The left blocks panel is always "Toolbox" — never "blocks sidebar".
   toolbox: 'Toolbox',
-  // Copilot panel. "Copilot" is the product name and never varies; the rest
-  // is what the operator reads around it.
-  //
-  // The panel used to carry a subtitle, "Ask for help with your task", one
-  // line under a title that said COPILOT. It restated the title and cost the
-  // header a row in a 360px column whose scarcest axis is vertical.
+  // Copilot panel. "Copilot" is the product name and never varies; the rest is what
+  // the operator reads around it. No subtitle: it would restate the title and cost
+  // the header a row in a 360px column whose scarcest axis is vertical.
   copilot: 'Copilot',
 
   // Opening state. An operator who does not program reads "tell me what the
@@ -98,9 +95,8 @@ export const UI_TEXT = {
   // something to compose.
   copilotStarters: 'Or start from one of these',
 
-  // The automatic-review toggle. Its tooltip used to end "(uses tokens)" —
-  // a billing concern belonging to whoever runs the server, written into the
-  // one surface that belongs to the operator.
+  // The automatic-review toggle. Its tooltip must not mention tokens: that is a
+  // billing concern belonging to whoever runs the server, not the operator.
   copilotAutoCheckOn:
     'Automatic review is on — Copilot checks your task and points out what is missing',
   copilotAutoCheckOff:

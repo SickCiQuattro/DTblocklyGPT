@@ -106,10 +106,9 @@ def change_password(request: HttpRequest) -> HttpResponse:
                 if not request.user.check_password(old_password):
                     return success_response({"wrongPassword": True})
 
-                # The id used to come from the request body — verifying the
-                # caller's own old password, then changing whichever user id
-                # was passed, let any authenticated user take over any
-                # account. Always operate on the caller.
+                # Always operate on the caller: taking the id from the request body
+                # would let any authenticated user take over any account after
+                # verifying only their own old password.
                 user = request.user
                 user.set_password(new_password)
                 user.save()

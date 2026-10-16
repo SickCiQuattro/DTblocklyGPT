@@ -88,15 +88,12 @@ export const fetchApi = async <
         : (response.payload as TResponse),
     )
     .catch((error: AxiosError<{ message?: string; payload?: TResponse }>) => {
-      // A request the CALLER aborted is not a failure and must not be
-      // reported as one. Stop aborts the in-flight /api/task/simulate/ POST
-      // on purpose; axios then rejects with no `error.response`, which used to
-      // fall through to the network branch at the bottom and toast "server
-      // connection problem" — so pressing Stop, the one control an operator
-      // reaches for when something looks wrong, answered with a scary message
-      // about the server while the stop had in fact succeeded.
-      // Rethrown with a recognisable name so a caller that cares can tell an
-      // abort from a real error; runTask already checks signal.aborted.
+      // A request the CALLER aborted is not a failure and must not be reported as one.
+      // Stop aborts the in-flight /api/task/simulate/ POST on purpose; axios then
+      // rejects with no `error.response`, which would fall through to the network
+      // branch at the bottom and toast "server connection problem" while the stop had
+      // in fact succeeded. Rethrown with a recognisable name so a caller that cares can
+      // tell an abort from a real error; runTask already checks signal.aborted.
       if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
         const cancelled = new Error('Request cancelled by the caller')
         cancelled.name = 'ERR_CANCELED'

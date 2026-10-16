@@ -22,9 +22,8 @@ export const LogoSection = ({ open = true }: LogoSectionProps) => {
     >
       <img
         src={`${import.meta.env.BASE_URL}logo.svg`}
-        // Decorative: the wordmark below renders "DTblocklyGPT" right beside
-        // it, so a description here makes a screen reader announce the brand
-        // twice — it used to say "logo, DTblocklyGPT".
+        // Decorative: the wordmark below renders "DTblocklyGPT" right beside it, so a
+        // description here would make a screen reader announce the brand twice.
         alt=""
         width="28"
         height="28"

@@ -1124,26 +1124,18 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
         pass
 
     elif step_type == "macro_task":
-        # Checked against the real catalogue, like every other entity.
+        # Checked against the real catalogue, like every other entity. A presence check
+        # on `macroId` alone let the model invent a saved task (it appended
+        # `macroName: "dispose"` for one that does not exist and reported success), so
+        # the prompt lists the user's saved tasks and this validates against them.
         #
-        # This used to be a presence check on `macroId` and nothing more, with
-        # a comment explaining that the macro list was not available here. It
-        # was not available because nobody passed it, and the same gap ran the
-        # other way: the prompt never listed the user's saved tasks either. So
-        # a user asking to reuse one left the model with a request it could not
-        # satisfy from data it did not have, and it obliged — observed
-        # 2026-09-02, the assistant appended `macroName: "dispose"` for a saved
-        # task that does not exist and replied "Ho aggiunto l'esecuzione del
-        # task salvato 'dispose'".
-        #
-        # `error`, not `warning`, and deliberately: severity here decides
-        # whether the WHOLE proposal is discarded (see `is_valid` in
-        # new_message_multimodal). A hallucinated entity is the case CLAUDE.md
-        # already reserves that for — an invented object is an error, and an
-        # invented saved task is worse, because a macro is a whole sub-program.
-        # Left as a warning it would be dropped silently and the rest of the
-        # proposal applied, so the operator would accept a task that quietly
-        # lost the step they asked for.
+        # `error`, not `warning`, deliberately: severity here decides whether the WHOLE
+        # proposal is discarded (see `is_valid` in new_message_multimodal). A
+        # hallucinated entity is the case CLAUDE.md reserves that for, and an invented
+        # saved task is worse than an invented object because a macro is a whole
+        # sub-program. As a warning it would be dropped silently and the rest of the
+        # proposal applied, so the operator would accept a task that quietly lost the
+        # step they asked for.
         macro_id = step.get("macroId")
         macro_name = step.get("macroName")
         macro = None
@@ -1230,20 +1222,17 @@ def validate_step(step, step_index, warnings, data_objects, data_locations, data
             step_copy["otherwise"] = validated_otherwise
 
     else:
-        # A step with no recognizable type is a malformed LLM output, not a
-        # real step to show the user — drop it instead of passing a phantom
-        # entry through to the proposed-task preview (callers must filter the
-        # None out, see the recursive validate_step(...) call sites above).
-        # Warning, not error: dropping it already keeps garbage out of the
-        # workspace, so the rest of an otherwise-valid proposal shouldn't be
-        # discarded wholesale over one malformed step (is_valid only looks at
-        # "error"-severity entries — see requires_confirmation below).
+        # A step with no recognizable type is a malformed LLM output, not a real step to
+        # show the user: drop it instead of passing a phantom entry through to the
+        # proposed-task preview (callers must filter the None out, see the recursive
+        # validate_step(...) call sites above). Warning, not error: dropping it already
+        # keeps garbage out of the workspace, so the rest of an otherwise-valid proposal
+        # shouldn't be discarded wholesale over one malformed step (is_valid only looks
+        # at "error"-severity entries; see requires_confirmation below).
         #
-        # This branch catches two different failures that used to report
-        # identically as "no type": a genuinely missing key, and a type the
-        # LLM invented or copied from a UI label ("Repeat times") instead of
-        # the internal type ("repeat"). Naming the offending value is what
-        # tells those apart — without it the message actively misleads.
+        # The branch catches two failures: a genuinely missing key, and a type the LLM
+        # invented or copied from a UI label ("Repeat times") instead of the internal
+        # type ("repeat"). Naming the offending value tells them apart.
         if step_type:
             detail = f"unsupported step type '{step_type}'"
         else:
@@ -1272,13 +1261,9 @@ def new_message_multimodal(request: HttpRequest) -> HttpResponse:
                 data_locations = data.get("dataLocations")
                 data_objects = data.get("dataObjects")
                 data_actions = data.get("dataActions")
-                # Saved Tasks. Absent until 2026-09-02, which is how the
-                # assistant came to invent one: the prompt said the "Saved
-                # Tasks" category exists and never listed its contents, so a
-                # user asking to reuse a saved task left the model with a
-                # request it could not satisfy from data it did not have. It
-                # authored `{"type": "macro_task", "macroName": "dispose"}`
-                # with a made-up id and reported success.
+                # Saved Tasks. Without this list the prompt only said the "Saved Tasks"
+                # category exists, and a user asking to reuse one made the model invent
+                # `{"type": "macro_task", "macroName": "dispose"}` with a made-up id.
                 data_macros = data.get("dataMacros") or []
                 data_blocks = data.get("dataBlocks")
 

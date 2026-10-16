@@ -132,10 +132,9 @@ def stopPath():
     # None when no hardware node is running — sim-only stop is enough in that case.
     halt = flask_pub.call_halt()
     # "stopped" is a claim about the ARM, so it must not be made when the halt
-    # channel reported failure. It used to be hardcoded, so a refused or timed
-    # out halt reached Django as a 200 saying "stopped": the operator's panel
-    # showed the run ended and the banner telling them the arm might still be
-    # moving — the one message that matters here — could never fire.
+    # channel reported failure: a refused or timed-out halt would otherwise reach
+    # Django as a 200 "stopped", and the banner telling the operator the arm may
+    # still be moving could never fire.
     halt_failed = halt is not None and not halt.get("ok")
     return jsonify({
         "status": "halt-failed" if halt_failed else "stopped",

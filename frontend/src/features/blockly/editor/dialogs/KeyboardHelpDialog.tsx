@@ -2,10 +2,8 @@
  * KeyboardHelpDialog.tsx
  *
  * Renders the shortcut list so keyboard-only and screen-reader users can
- * discover it. The list itself lives in `../appShortcuts` — this file used to
- * own a hand-maintained copy, which is how it came to document two shortcuts
- * (`T`, `H`) that do nothing in this integration. Add or change entries there,
- * not here.
+ * discover it. The list itself lives in `../appShortcuts`: add or change
+ * entries there, not here.
  *
  * This list is the project's WCAG 2.1.4 evidence: single-character shortcuts DO
  * exist (mostly Blockly's, and keyboard navigation is force-enabled in

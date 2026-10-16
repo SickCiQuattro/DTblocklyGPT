@@ -145,7 +145,7 @@ class BridgeNodeROS(Node):
         Returns False (and publishes nothing) when the command can't possibly do
         anything useful: no controller subscribed to the trajectory topics (e.g.
         Gazebo/controller_manager died) or a /stop was issued in the last
-        STOP_WINDOW_S. Both used to be silent no-ops that still reported success
+        STOP_WINDOW_S. Both are refused explicitly rather than reported as success
         to the caller.
         """
         if not waypoints:
@@ -350,21 +350,16 @@ class BridgeNodeROS(Node):
         with self._object_lock:
             detections = list(self._latest_detections)
             object_age = time.monotonic() - self._latest_object_time
-        # object_age_s is what tells "vision_node is running and sees nothing"
-        # apart from "vision_node is not running at all". Both used to arrive
-        # here as detections: [], and a find_object step then waited out its
-        # whole timeout before reporting that the OPERATOR had not confirmed —
-        # blaming a person for a detector that was never listening.
+        # object_age_s tells "vision_node is running and sees nothing" apart from
+        # "vision_node is not running at all"; both arrive as detections: [], and a
+        # find_object step would wait out its whole timeout and blame the operator.
         #
-        # The age is meaningful because vision_node publishes on every cycle
-        # (~2 Hz) whether or not it found anything, including an empty list
-        # when the camera itself fails. A recent message therefore proves the
-        # node is alive, which is the only claim the caller needs.
+        # The age is meaningful because vision_node publishes on every cycle (~2 Hz)
+        # whether or not it found anything, including an empty list when the camera
+        # itself fails: a recent message proves the node is alive.
         #
-        # Never-seen reports as a very large age rather than None: the
-        # timestamp starts at 0.0 and monotonic() does not, so "no message
-        # ever" already reads as "extremely stale". Same shape as gesture_age_s
-        # above, which has always worked that way.
+        # Never-seen reports as a very large age rather than None: the timestamp starts
+        # at 0.0 and monotonic() does not. Same shape as gesture_age_s above.
         return {
             "gesture": gesture,
             "detections": detections,

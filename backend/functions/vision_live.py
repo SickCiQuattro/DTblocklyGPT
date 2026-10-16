@@ -293,12 +293,11 @@ def set_expected_voice(word: str | None) -> None:
 
     Only the waiting side knows that, and only this module sees the operator's
     utterances — so without it the `accepted` field on a voice `attempt` could
-    not mean what it means on the other two channels. It used to be set from
-    "the word is in the vocabulary", while gesture's is `observed == expected`
-    and the button's is a hardcoded True. Three meanings under one name, and
-    the study's headline measure (`primo_tentativo`) reads it as the strictest
-    of the three: a participant saying "sì" to a step waiting for DONE was
-    recorded as a first-try success on a step that then timed out.
+    not mean what it means on the other two channels. It must mean "this resolved the step",
+    as gesture's `observed == expected` does. A looser meaning (word in the
+    vocabulary) would record a participant saying "sì" to a step waiting for
+    DONE as a first-try success, and the study's headline measure
+    (`primo_tentativo`) reads it that way.
 
     Set at step entry alongside reset_voice(); cleared when the step ends.
     """
@@ -349,9 +348,8 @@ def process_voice_command(request: HttpRequest) -> JsonResponse:
 
     # accepted = "this resolved the step", the same meaning the gesture channel
     # gives it (simulate.py: observed == expected). `in_vocabulary` keeps the
-    # older, weaker fact available separately: a recognised word that is simply
-    # not the one this step wants is a different event from noise the browser
-    # could not classify, and the two used to be indistinguishable.
+    # weaker fact separately: a recognised word that is simply not the one this
+    # step wants is a different event from noise the browser could not classify.
     study_log.log_event(
         "attempt", channel="voice", value=word,
         accepted=(expected is not None and word == expected),

@@ -125,16 +125,15 @@ const LABEL_MAP: Record<string, string> = {
  * Returns the user-friendly label for a given raw Blockly option text.
  * Unrecognised labels are returned as-is.
  */
-export const rewriteLabel = (raw: string): string => {
+const rewriteLabel = (raw: string): string => {
   const key = raw.toLowerCase().trim()
   return LABEL_MAP[key] ?? raw
 }
 
 const NEUTRAL = '#475569'
-// Same terracotta as every other destructive affordance in the app
-// (ConfirmDialog's "danger" tone) — this used to be a plain red (#DC2626)
-// that belonged to no other surface, so "Delete" in this menu looked like
-// a different, unrelated kind of warning than the confirm dialog it opens.
+// Same terracotta as every other destructive affordance in the app (ConfirmDialog's
+// "danger" tone), so "Delete" in this menu reads as the same kind of warning as
+// the confirm dialog it opens.
 const DESTRUCTIVE = accent.dark
 const ADDITIVE = '#15803D'
 

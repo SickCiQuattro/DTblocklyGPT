@@ -73,16 +73,11 @@ _bridge = FlaskRosClient(FLASK_BRIDGE_URL)
 DRIVE_HARDWARE = get_bool_env("DRIVE_HARDWARE")
 # Refuse to satisfy a human-confirm condition by any route other than a real,
 # observed operator action taken during the step. Off by default: the bypasses
-# it disables exist so a developer without a camera can still run a task
-# end-to-end. On, they become failures.
-#
-# Required for user-study sessions, where each bypass silently fabricates a
-# successful confirmation that is indistinguishable in the recording from one
-# the participant actually made:
-#   - a dead vision bridge returns success for gesture and find_object (but
-#     never for voice or button, so it biases two conditions out of four);
-#   - an object already in frame, or already spawned in the Gazebo world,
-#     satisfies find_object with no operator involvement at all.
+# it disables let a developer without a camera run a task end-to-end.
+# Required for user-study sessions, where a bypass fabricates a confirmation
+# indistinguishable from a real one in the recording: a dead vision bridge
+# succeeds for gesture and find_object (never voice or button), and an object
+# already in frame or spawned in Gazebo satisfies find_object on its own.
 STRICT_CONDITIONS = get_bool_env("STRICT_CONDITIONS")
 # Age past which the object detector counts as absent rather than merely
 # quiet. vision_node publishes on every cycle at ~2 Hz whether or not it found
@@ -97,32 +92,21 @@ VISION_STALE_AFTER_S = float(os.getenv("VISION_STALE_AFTER_S", "5"))
 # connecting the two. This is the beat in which the robot is looking.
 SIMULATED_DETECTION_DWELL_S = float(os.getenv("SIMULATED_DETECTION_DWELL_S", "2"))
 MAX_LOOP_ITERATIONS = int(os.getenv("MAX_LOOP_ITERATIONS", "10"))
-# How many of a ramp's IK waypoints reach the real arm, at most (Gazebo always
-# gets the full path). Each waypoint sent to hardware is a discrete b-CAP PTP
-# that decelerates to a full stop, so a straight dense ramp (10-15 points)
-# played waypoint-by-waypoint reads as visibly stepped/jerky motion on the
-# physical robot — confirmed on physical hardware 2026-07-29. This is a CAP,
-# not a stride: a ramp of any length is thinned to at most this many hardware
-# calls, so "2" always means 2 stops regardless of how dense the Gazebo path
-# is (a stride would give a different stop count per ramp length — tried
-# first, replaced after the same hardware session showed 2-6 stops depending
-# on the segment instead of a consistent number). 1 = only the final point
-# (smoothest, least path tracking); raise toward the ramp's full length if a
-# rack/table clearance needs tighter tracking. The final waypoint of every
-# ramp is always included regardless (see _send_hw_path) — it is the one
-# FK/precision-critical point of the segment.
+# Max IK waypoints of a ramp sent to the real arm (Gazebo always gets the full
+# path). Each hardware waypoint is a b-CAP PTP that decelerates to a stop, so a
+# dense ramp reads as jerky. This is a cap, not a stride: any ramp is thinned to
+# at most this many calls, so the stop count is the same for every segment.
+# 1 = final point only; raise it if rack/table clearance needs tighter tracking.
+# The final waypoint is always sent (see _send_hw_path): it is the
+# FK/precision-critical point.
 HW_MAX_WAYPOINTS_PER_SEGMENT = int(os.getenv("HW_MAX_WAYPOINTS_PER_SEGMENT", "2"))
 
-# Gazebo's controllers run on sim time (use_sim_time: true in controllers.yaml)
-# while this process sleeps in wall time. The two only agree at real-time
-# factor 1.0 — with software rendering (kms_swrast, i.e. any machine without
-# working GPU acceleration) the RTF drops well below that, so sleeping a
-# trajectory's nominal duration returns while the twin is still animating. The
-# parser then starts the next block against an arm that has not arrived:
-# confirmed live 2026-07-30 as an operator-confirm prompt appearing while the
-# robot was visibly still moving through a pick. After the nominal sleep, the
-# move helpers now poll the twin's real joint feed until it reaches the
-# commanded pose.
+# Gazebo's controllers run on sim time while this process sleeps in wall time.
+# They only agree at real-time factor 1.0; with software rendering the RTF is
+# lower, so sleeping a trajectory's nominal duration returns while the twin is
+# still moving and the next block starts against an arm that has not arrived.
+# After the nominal sleep, the move helpers poll the twin's joint feed until it
+# reaches the commanded pose.
 SIM_ARRIVAL_TOL_DEG = float(os.getenv("SIM_ARRIVAL_TOL_DEG", "1.5"))
 # Cap on the EXTRA wait beyond the nominal duration, so a stalled/absent joint
 # feed can never hang a run.
@@ -140,17 +124,11 @@ SIM_ARRIVAL_STILL_SAMPLES = int(os.getenv("SIM_ARRIVAL_STILL_SAMPLES", "5"))
 # instead.
 MAX_MACRO_DEPTH = int(os.getenv("MAX_MACRO_DEPTH", "10"))
 
-# Tolerance on the gesture stale-replay check (_wait_for_condition): the
-# bridge reports how long ago (in seconds) a gesture was seen, and this
-# process reconstructs "reported_at" from its own clock read taken just
-# before the request — two different clock reads of the same monotonic
-# clock, with real (if normally sub-millisecond) skew between them from
-# request/response overhead. A hard `>=` with zero tolerance occasionally
-# misclassified a gesture reported right at the start of the wait as stale
-# by a few milliseconds (confirmed flaky in test_gesture_recognition.py
-# under load, 2026-07-29). Kept well under 100ms on purpose — real stale
-# replays this exists to reject are seconds old, from a previous run/step,
-# so there is a wide safety margin without weakening that check.
+# Tolerance on the gesture stale-replay check (_wait_for_condition). The bridge
+# reports how long ago a gesture was seen and "reported_at" is rebuilt from this
+# process's clock, so the two reads skew by request overhead; a hard `>=`
+# misclassified a gesture seen at the start of the wait as stale. Kept well under
+# 100ms: the replays this rejects are seconds old, from a previous run or step.
 GESTURE_FRESHNESS_SLOP_S = 0.02
 
 # How long a human step waits, for THIS run only. None = use the configured
@@ -241,9 +219,8 @@ def convert_hand_gazebo_cobotta(gazebo_hand_value):
     Gazebo actually loads for physics. Do NOT re-derive it from the
     joint_left/joint_right <limit> in cobotta_ik.urdf ([0, 0.01]): that file
     only feeds robot_description/ikpy and its gripper limits do not describe
-    this joint. 2026-07-30: both conversions were rescaled to that URDF range
-    and the gripper stopped closing in the twin entirely (every command
-    clamped to the same end of the real range). Reverted."""
+    this joint: rescaling both conversions to it stops the gripper closing in
+    the twin entirely."""
     return (gazebo_hand_value + 0.015) * 2000
 
 
@@ -277,23 +254,16 @@ _SIM_RUN_LOCK = threading.Lock()
 
 # ── Run generations ──────────────────────────────────────────────────────────
 #
-# Teardown work outlives the run that asked for it. `_set_world_paused(True)`
-# and the placed-object sweep are `gz` subprocesses with their own latency, and
-# they are issued from TWO threads: the Stop request, and the run thread as it
-# unwinds. Stop a run and start another one a second later and those calls can
-# land after the new run has already begun.
+# Teardown outlives the run that asked for it. `_set_world_paused(True)` and the
+# placed-object sweep are `gz` subprocesses issued from two threads (the Stop
+# request and the unwinding run thread), so they can land after a new run has
+# started. Worst case: Stop's pause arriving after the new run's unpause leaves
+# the world paused for the whole run, with no visible cause.
 #
-# The worst of them is silent: Stop's pause arriving after the new run's
-# unpause leaves the world PAUSED for the whole new run. The arm never moves
-# and nothing says why — reported 2026-09-03 as "l'ho riavviata dopo 1-2s e ci
-# sono stati dei problemi".
-#
-# So teardown is not ordered, it is made irrelevant once superseded. Every run
-# and every Stop takes a generation; anything that could land late checks
-# whether its generation is still the current one first. Same shape as the
-# epoch guard in useWebcamVision, and for the same reason: with two threads and
-# subprocess latency between them, ordering is a wish and a generation counter
-# is a fact.
+# So teardown is made irrelevant once superseded, not ordered: every run and
+# every Stop takes a generation, and anything that could land late checks its
+# generation is still current first (same shape as the epoch guard in
+# useWebcamVision).
 _RUN_GENERATION = 0
 _RUN_GEN_LOCK = threading.Lock()
 
@@ -408,27 +378,20 @@ def _abort_task(reason: str, detail: str | None = None):
     Idempotent: only the first reason is kept if called more than once.
     """
     global _TASK_ABORT_REASON
-    # An operator Stop is already in progress and nothing has claimed a
-    # failure: whatever is calling here is FALLOUT from that Stop, not a fault.
-    # Stopping mid-motion means the arm does not reach where it was told, the
-    # object does not rise with it, and the twin diverges from its target —
-    # every gate in this file then fires, and the operator was shown a
-    # technical failure for doing exactly what the Stop button is for.
-    # Reported 2026-09-03: "giustamente il braccio non è arrivato alla
-    # provetta perchè ho terminato simulazione, ma proprio per questo non
-    # dovrebbe uscirmi un errore".
+    # An operator Stop is already in progress and nothing has claimed a failure:
+    # the caller is fallout from that Stop, not a fault. Stopping mid-motion makes
+    # the arm miss its target and the twin diverge, so every gate in this file fires,
+    # and the operator would see a technical failure for pressing Stop.
     #
-    # A genuine fault that fires FIRST still wins, because the event is clear
-    # at that moment (simulate_task clears it at the start of every run): it
-    # takes the branch below, claims the reason, and sets the event itself.
-    # Everything that fires afterwards — its own fallout, or a Stop the
-    # operator presses in reaction — is suppressed here, which is also the
+    # A genuine fault that fires FIRST still wins: the event is clear at that moment
+    # (simulate_task clears it at the start of every run), so it takes the branch
+    # below, claims the reason and sets the event itself. Everything after it,
+    # including a Stop pressed in reaction, is suppressed here; that is the
     # idempotency the docstring promises.
     #
-    # One condition, not two. Checking `_TASK_ABORT_REASON is None` as well
-    # reads like it guards something, and does not: whenever the event is set
-    # a reason is either already claimed (so the call is redundant) or the
-    # Stop came from the operator (so the call is fallout). Both are skipped.
+    # Check the event alone, not also `_TASK_ABORT_REASON is None`: whenever the
+    # event is set the reason is either already claimed or the Stop came from the
+    # operator, and both cases skip.
     if SIMULATION_STOP_EVENT.is_set():
         print(f"[ABORT] suppressed (run already stopping): {detail or reason}")
         return
@@ -672,8 +635,8 @@ def _heuristic_seed_j235(z_rel: float) -> tuple:
 
     A single fixed seed (45/70/45) converges reliably near its own height but
     drifts into rejected local minima as the target height moves away from it
-    (ikpy's IK is a local solve from the seed) — this is why the gantry-transit
-    height band used to fail non-monotonically on the physical arm.
+    (ikpy's IK is a local solve from the seed) — which made the gantry-transit
+    height band fail non-monotonically on the physical arm.
 
     Anchors are empirically verified (offline grid search over j2/j3/j5, both
     the default pick and place XY sites), not hand-picked from first
@@ -1066,7 +1029,7 @@ def rack_lift_for_width(width_m: float) -> float:
     0.0 for anything that fits in a rack slot. For anything wider — the
     medicine bottle at 23mm against a 20.63mm slot — it's the rack's rim
     height: it can't go *in* a hole, so it sits *on top of* the rack, which is
-    what the operator does with it on the real cell. Since 2026-07-30 the pick
+    what the operator does with it on the real cell. The pick
     rack is a static model in worldCobotta.sdf, so this isn't cosmetic: an
     object placed at slot coordinates without this lift is spawned inside the
     rack walls and gets flung out by the physics engine on the first tick.
@@ -1106,16 +1069,10 @@ def plan_pick_for_object(model: ObjectModel, pick_x_rel: float, pick_y_rel: floa
 
 
 def resolve_location_metrics(sdf_name: str) -> float:
-    # Fallback heights (m), one per catalog location (seed_library.py
-    # LOCATIONS). Every one of them is now built from primitives, so
-    # get_sdf_dimensions answers for all four and none of these is reached in
-    # practice — they stay as a backstop for a location folder whose SDF has
-    # no usable collision geometry.
-    #
-    # The pot/pulvis/divider/pillbox entries that used to sit here described
-    # model folders that no DB row pointed at; the folders went in the same
-    # sweep, and a fallback height for a location that cannot be selected is
-    # a lookup nothing can perform.
+    # Fallback heights (m), one per catalog location (seed_library.py LOCATIONS).
+    # All four are built from primitives, so get_sdf_dimensions answers for them and
+    # none of these is reached in practice; they back up a location folder whose SDF
+    # has no usable collision geometry.
     location_heights = {
         "cup": 0.12,
         "tube_rack": 0.045,
@@ -1198,13 +1155,11 @@ def get_location_profile(sdf_name: str):
 def resolve_place_z(location_name: str, height_m: float) -> float:
     """Compute the place-descent target Z (robot-frame) for an object of
     `height_m` at `location_name` — the exact formula simulate_ros_place uses,
-    factored out so testing/calibrate_rack.py's `goto-place` measures the
+    factored out so testing/tools/calibrate_rack.py's `goto-place` measures the
     same Z a real place actually targets instead of a separately-derived
-    approximation. The two diverged before this: calibrate_rack.py computed
-    a flat `PICK_Z_REF_OFFSET + loc_height + 0.02` hover height with no
-    container detection and no object-height-dependent grip offset, so an
-    operator's hover-height measurement was not the height a real place
-    would descend to (found 2026-07-29 after a hardware place mismatch).
+    approximation. A separately derived flat hover height has no container detection or
+    object-height-dependent grip offset, so it is not the height a real place
+    descends to.
     """
     safe_loc_name = location_name.replace(" ", "_").lower()
     loc_height = resolve_location_metrics(location_name)
@@ -1254,20 +1209,14 @@ def _safe_gz_entity_name(name: str) -> str | None:
     return safe if _SAFE_GZ_NAME_RE.match(safe) else None
 
 
-# A `gz service` RPC that answers nothing gets this many extra tries.
+# Extra tries for a `gz service` RPC that answers nothing.
 #
-# Same lottery as the attach topic, and for the same reason: every `gz` call
-# here is a fresh short-lived process, and gz-transport's peer discovery either
-# completes inside the call or does not. When it does not, the CLI exits 0 and
-# prints NOTHING — which is indistinguishable from success by exit code and
-# looks like a refusal to a caller checking for "data: true".
-#
-# The attach path already knew this and carried a retry budget
-# (_ATTACH_MAX_ATTEMPTS' comment measures 2 attempts at ~53%, 10 at 20/20).
-# Nothing else did, so a place could abort with "Lost track of 'blue tube'
-# after releasing it" on a snap-to-slot whose stdout was simply empty —
-# observed 2026-09-10, one call after two picks in the same run had both
-# needed an attach re-roll.
+# Every `gz` call is a fresh short-lived process and gz-transport peer discovery
+# either completes inside the call or does not. When it does not, the CLI exits 0
+# and prints nothing, which looks like a refusal to a caller checking for
+# "data: true". The attach path has its own retry budget (_ATTACH_MAX_ATTEMPTS);
+# without one here a place could abort with "Lost track of ..." on a
+# snap-to-slot whose stdout was simply empty.
 _GZ_EMPTY_REPLY_RETRIES = 4
 _GZ_RETRY_DELAY_S = 0.3
 
@@ -1393,55 +1342,6 @@ def _set_world_paused(paused: bool):
     launch_wsl_ros_command(cmd, expect_reply_true=True)
 
 
-def start_ros_architecture():
-    try:
-        subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-c",
-                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api flask_node",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-c",
-                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws && source install/setup.bash && ros2 run cobotta_rest_api cobotta_node",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-c",
-                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws/Cobotta && ign gazebo -v 4 worldCobottaDensoLimitsOptimised2.sdf",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-c",
-                "cd /mnt/c/repos/DTblocklyGPT/ros2_ws/Cobotta && ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=../Cobotta/map.yaml",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-    except Exception as e:
-        print(str(e))
-
-
 def simulate_ros_move(
     joint_1: float,
     joint_2: float,
@@ -1491,11 +1391,9 @@ def _parse_hand_mm(message: str):
 def _log_hw_arrival(target_joints, deltas, tol_deg, polls, started, ok) -> None:
     """One line per real-arm arrival, pass or fail.
 
-    The check computes the encoder-vs-command gap on every move and used to
-    write it down only when it aborted. A run where nothing went wrong left no
-    trace, so the margin the 2 degree threshold actually has — how far the
-    arm typically lands from where it was sent — was unmeasurable exactly when
-    it mattered: on the runs that passed. No-op unless STUDY_LOG_PATH is set.
+    The check computes the encoder-vs-command gap on every move; logging it for
+    passing runs too is what shows the margin the 2 degree threshold actually
+    has (how far the arm typically lands from where it was sent). No-op unless STUDY_LOG_PATH is set.
     `deltas` is the closest reading seen, per joint (None if the encoders
     never answered).
     """
@@ -1559,10 +1457,8 @@ def _verify_hw_grasp(commanded_close_mm) -> bool:
     """
     if not _hw_drive_active():
         return True
-    # Logged before the decision and whether or not a width came back: the
-    # separation between a grasp that held and one that closed on air is the
-    # threshold's whole claim, and it can only be checked against the widths of
-    # grasps that PASSED, which this function never used to record.
+    # Logged before the decision, whether or not a width came back: the threshold
+    # is only checkable against the widths of grasps that PASSED.
     study_log.log_event(
         "hw_grasp",
         # An operator Stop lands mid-pick, the pick handler still reaches this
@@ -1701,12 +1597,10 @@ def _wait_for_sim_arrival(target_joints, nominal_s):
         last_seen = list(actual[:6])
         if max(abs(t - a) for t, a in zip(target_joints, last_seen)) <= SIM_ARRIVAL_TOL_DEG:
             return
-        # Settled-but-short: the controller can stop just outside the tolerance
-        # (or the pose is simply unreachable), in which case waiting out the
-        # whole budget buys nothing — the arm is no longer moving, which is the
-        # only thing the caller actually needs to know. Without this the run
-        # stalls for the full SIM_ARRIVAL_MAX_EXTRA_S per segment; seen live
-        # 2026-07-30 as two sim_arrival_timeouts adding ~20s to one pick.
+        # Settled-but-short: the controller can stop just outside the tolerance (or the
+        # pose is unreachable). The arm is no longer moving, which is all the caller
+        # needs; waiting out the whole budget would stall the run for the full
+        # SIM_ARRIVAL_MAX_EXTRA_S per segment.
         if prev is not None and max(abs(p - a) for p, a in zip(prev, last_seen)) <= SIM_ARRIVAL_STILL_TOL_DEG:
             still_samples += 1
             if still_samples >= SIM_ARRIVAL_STILL_SAMPLES:
@@ -1936,7 +1830,6 @@ def _reachable_place_carry_z(x_rel, y_rel, z_carry, z_floor, grasp_yaw, seed_joi
 
 
 ROS_OPEN_GRIPPER = 30
-ROS_GRIPPER_GENTLE_CLOSE = 10
 ROS_CLOSE_GRIPPER_WITH_OBJECT = 10  # Default safe close gap (10mm) for generic blocks
 
 CARRY_Z_MIN = 0.15    # minimum carry height above robot base (Gazebo relative, m)
@@ -1975,19 +1868,14 @@ ATTACH_AND_VERIFY_CMD = (
 )
 
 
-# Empirically measured on this dev VM (2026-07-10), replaying the real pick
-# cadence: each `gz topic -t/-e` CLI call is a fresh short-lived process, and
-# gz-transport's peer discovery either completes in time or doesn't — waiting
-# longer before a single publish doesn't move that floor (tested up to 1.5s
-# pre-publish). What works is re-rolling on a fresh publish+subscribe pair.
-# 2 attempts (the original figure) measured 8/15 (~53%). With the harness
-# mirroring production's detach-BEFORE-delete ordering (delete_spawned_
-# object_and_place always detaches first — see its docstring), 10 attempts
-# at 0.4s spacing measured 20/20; the one hard failure seen in an earlier,
-# less faithful harness run (delete without a prior detach) reproduced the
-# known gz-sim8 re-attach quirk this whole gate exists to catch, not a false
-# negative — so that case is correctly an abort, not evidence of an
-# unreliable retry budget.
+# Measured on the dev VM: each `gz topic -t/-e` call is a fresh short-lived
+# process and gz-transport peer discovery either completes in time or does not;
+# waiting longer before a publish does not change that. What works is re-rolling
+# on a fresh publish+subscribe pair. 2 attempts succeeded 8/15; 10 attempts at
+# 0.4s spacing, with the harness mirroring production's detach-BEFORE-delete
+# ordering (see delete_spawned_object_and_place), 20/20. A failure without a
+# prior detach is the known gz-sim8 re-attach quirk this gate exists to catch,
+# so it is correctly an abort.
 _ATTACH_MAX_ATTEMPTS = 10
 _ATTACH_RETRY_DELAY_S = 0.4
 
@@ -2000,45 +1888,27 @@ def attach_object_to_gripper() -> bool:
     leaving the object behind on lift — so this reads the state back instead of
     trusting the publish's own exit code.
 
-    SILENCE IS NOT A NO — but it is not a YES either, and for a while this
-    function said it was.
+    SILENCE IS NOT A NO, and it is not a YES either.
 
     The topic publishes on CHANGE, so a read window that catches no message
-    means "the plugin said nothing", which is different from "the plugin said
-    detached". Treating silence as failure aborted the very first pick of a
-    session after ten identical retries (reported 2026-09-03), so it stopped
-    being a failure. What it became instead was a SUCCESS that returned
-    immediately — and that quietly disabled the retry budget above, which is
-    the only thing that makes this reliable at all.
+    means "the plugin said nothing", not "the plugin said detached". Treating
+    silence as failure aborted the first pick of a session after ten identical
+    retries; treating it as success skipped the retry budget above, which is
+    what makes this reliable at all. Peer discovery for a short-lived
+    `gz topic` process either completes or does not, and silence is exactly
+    what a failed discovery looks like, so it is the case that most needs the
+    re-roll (2 attempts ~53%, 10 attempts 20/20).
 
-    Read the measurement in that comment again: peer discovery for a fresh
-    short-lived `gz topic` process either completes in time or does not, and
-    the fix is re-rolling on a NEW publish+subscribe pair. 2 attempts measured
-    ~53%, 10 attempts measured 20/20. Silence is exactly what a failed
-    discovery looks like from here — neither the subscribe nor the publish
-    connected — so it is the case that most needs the re-roll, and it was the
-    one case that skipped it. Every observed "the grasp didn't hold" abort has
-    `Attach attempt 1: state topic said nothing` directly above it: attempt 1
-    of 10, and no attempt 2. Confirmed 2026-09-10 with the object verified to
-    be sitting exactly at its commanded pose, so nothing was wrong with the
-    world — only with how few times we asked.
-
-    So silence now RETRIES, and only the exhausted budget falls through as
-    inconclusive. Falling through rather than failing is deliberate and keeps
-    the 2026-09-03 fix intact: the pick does not depend on this answer.
+    So silence RETRIES, and only an exhausted budget falls through as
+    inconclusive and returns True: the pick does not depend on this answer.
     `_verify_sim_grasp` watches the object actually rise with the arm a moment
     later, and THAT is the verdict. The plugin's self-report is a hint that can
-    save a lift; it was never evidence.
+    save a lift, not evidence. Re-sending an attach that already landed is a
+    no-op, so a spurious retry costs 0.4s.
 
-    Re-sending an attach that already landed is a no-op, so a spurious retry
-    costs 0.4s and nothing else.
-
-    The two ways of not succeeding stay distinct on the way out. A budget spent
-    entirely on SILENCE is inconclusive and returns True, deferring to the lift
-    check — that is the 2026-09-03 case, where the world was fine and only the
-    transport was not. A budget that ended on an explicit "detached" is the
-    plugin actively refusing, and returns False so the caller aborts before the
-    arm carries nothing to the destination.
+    A budget that ended on an explicit "detached" is the plugin actively
+    refusing, and returns False so the caller aborts before the arm carries
+    nothing to the destination.
     """
     last_said_detached = False
     for attempt in range(1, _ATTACH_MAX_ATTEMPTS + 1):
@@ -2116,9 +1986,8 @@ def hold_object_at(x: float, y: float, z: float, yaw: float = 0.0) -> bool:
     forever, and set_pose moves it without clearing the velocity it picked up —
     it lands at the commanded pose for an instant and keeps going. The gripper
     then closes on nothing, the DetachableJoint has nothing to weld, and the
-    run aborts blaming the grasp. Observed 2026-09-10 on the second run of a
-    Gazebo session, with the world listing showing a perfectly healthy
-    "object".
+    run aborts blaming the grasp, while the world listing shows a perfectly
+    healthy "object".
 
     Reads the pose back rather than trusting the reply, and retries once before
     giving up — a single miss can be a sample taken mid-settle, but two says
@@ -2157,9 +2026,9 @@ def _verify_sim_grasp(z_before, z_after, commanded_rise: float) -> bool:
     the tube rides up on friction between the closing fingers, and it drops
     somewhere later: on the transit, or partway down the place descent, before
     the gripper has opened. Which is exactly what an operator sees.
-    Reported 2026-09-03, on the second pick of a run and never the first —
-    the shape you would predict from a stale child entity, since the first
-    pick is the only one whose "object" the plugin resolved fresh.
+    It shows on the second pick of a run and never the first, as a stale child
+    entity predicts: the first pick is the only one whose "object" the plugin
+    resolved fresh.
 
     So this asks the world instead of the plugin. Deltas, not absolutes,
     deliberately: the commanded lift is robot-relative and the model pose is
@@ -2487,9 +2356,8 @@ def simulate_ros_initial_position(gripper_open: bool = True, hand_value: int = N
 
 
 # No defaults: every parameter is always supplied by the one production caller
-# and by the tests. location_name in particular used to default to a catalog
-# entry ("collection rack") that has since been replaced — a default naming a
-# location folder is a silent trap the moment the catalog changes under it.
+# and by the tests. A default naming a catalog location folder is a silent trap
+# once the catalog changes under it.
 def simulate_ros_place(picked_obj_name: str, objectsOfUser, location_name: str):
     try:
         # Sync state from ROS. Abort if it fails — a stale IK seed risks
@@ -2543,7 +2411,7 @@ def simulate_ros_place(picked_obj_name: str, objectsOfUser, location_name: str):
             x_rel = DEFAULT_PLACE_X_REL
             y_rel = DEFAULT_PLACE_Y_REL
 
-        # Z target — shared with testing/calibrate_rack.py's `goto-place` so
+        # Z target — shared with testing/tools/calibrate_rack.py's `goto-place` so
         # the two can never diverge again (see resolve_place_z docstring).
         # loc_height/floor_height/is_container are still needed below too,
         # for the world-frame snap-to-slot Z (a separate computation from
@@ -2816,22 +2684,17 @@ def reset_simulation_world():
         simulation_recursive_blockly_parser.last_pick_carry_joints = None
         simulation_recursive_blockly_parser.last_picked_object = None
 
-        # The two removals below are waited on, not slept at. A missing entity
-        # is fine (first run of the session); an entity that is STILL THERE
-        # afterwards is not, and used to be indistinguishable — both printed
-        # nothing and the next spawn landed on top.
+        # The two removals below are waited on, not slept at. A missing entity is fine
+        # (first run of the session); one that is STILL THERE afterwards is not.
         #
-        # Reported, not aborted, and the asymmetry with the between-picks call
-        # site is deliberate. This runs before a run starts, where the world may
-        # still be settling from the previous one; the abort belongs where a
-        # spawn follows immediately. But an entity that outlived a 4s wait HERE
-        # is the same corrupted world, and it explains a Physics.cc:2967 storm
-        # that starts at second zero and never stops — so it has to reach the
-        # console rather than be swallowed.
+        # Reported, not aborted: this runs before a run starts, while the world may still
+        # be settling from the previous one, and the abort belongs where a spawn follows
+        # immediately. But an entity that outlived a 4s wait here is the same corrupted
+        # world and explains a Physics.cc:2967 storm that never stops, so it must reach
+        # the console.
         #
-        # Written out rather than looped: test_weld_before_remove.py finds every
-        # removal site by matching the literal call, and a loop variable hides
-        # both of them from it.
+        # Written out rather than looped: test_weld_before_remove.py finds every removal
+        # site by matching the literal call, and a loop variable hides them from it.
 
         # Detach before delete: removing a welded child without detaching first
         # can leave the plugin in a stale attached state across the next spawn.
@@ -2864,39 +2727,24 @@ def delete_spawned_object_and_place():
     deliberately left alone here so they survive across repeat() iterations;
     they're swept only on reset_simulation_world()/stop_simulation().
 
-    It does NOT touch "location" any more, and that is the point.
+    It does NOT touch "location", and that is the point. A pick never spawns a
+    location; only _h_place does. Removing the container at the start of every
+    pick made the cup blink out for the whole pick and transit, and dropped any
+    tube already placed in it onto the table. The place path persists each
+    placed object precisely so it survives the next pick.
 
-    It used to remove both, from all three call sites — the start of a pick and
-    the end of each repeat/repeat-until iteration. But a pick never spawns a
-    location; only _h_place does. So the destination container was being
-    deleted at the start of every pick and only reappearing when the next place
-    recreated it, which an operator sees as the cup blinking out for the whole
-    pick and transit.
-
-    Worse than cosmetic: a tube already placed inside it was resting on it.
-    Removing the container mid-run dropped that tube onto the table (reported
-    2026-09-03: "cup riapparso con però provetta gialla ormai a terra"). The
-    place path persists each placed object precisely so it survives the next
-    pick — and then this deleted the thing holding it up.
-
-    The stale location is now cleared where it is actually about to be
-    replaced: in _h_place, right before the spawn, and only when the
-    destination has changed.
+    The stale location is cleared where it is actually about to be replaced:
+    in _h_place, right before the spawn, and only when the destination has
+    changed.
     """
-    # The removal below READS its answer, which it did not until 2026-09-04.
-    # The contract on remove_entity_and_wait is explicit — False means the model
-    # is still there and the caller must not spawn over it — but this call site,
-    # the one its own comment calls the narrowest window, discarded it.
+    # The removal below READS its answer. remove_entity_and_wait returns False when
+    # the model is still there, and the caller must not spawn over it: a spawn that
+    # lands on the old entity binds the plugin to it and the weld is silently
+    # refused, and the abort then blames a grasp that was fine.
     #
-    # What that cost, in the log of a three-pick run: picks 1 and 2 welded and
-    # lifted, pick 3's spawn landed on a corpse, the plugin bound to it, and the
-    # weld silently refused. The abort blamed the grasp. The grasp was fine; the
-    # world had been broken two picks earlier and nothing said so.
-    #
-    # Aborting does not make the weld succeed — nothing at this layer can, since
-    # <child_model>object</child_model> is fixed in Cobotta.sdf.template and
-    # gz-sim8 refuses the re-attach on a duplicate name. It makes the failure
-    # arrive where it happens and name the remedy.
+    # Aborting does not make the weld succeed (<child_model>object</child_model> is
+    # fixed in Cobotta.sdf.template and gz-sim8 refuses the re-attach on a duplicate
+    # name). It makes the failure arrive where it happens and name the remedy.
     global _live_object_sdf
     # Cleared BEFORE the removal, not after. Every path out of this function
     # below — the abort, an exception — leaves no live entity worth reusing,
@@ -2954,29 +2802,22 @@ def _persist_placed_object(sdf_name: str, x: float, y: float, z: float, yaw: flo
         print(f"[SIMULATOR] persist-placed: unsafe object name '{sdf_name}' — skipping persistence")
         return False
     # Detach before touching the entity, like the two sites that still remove
-    # "object" (reset_simulation_world and delete_spawned_object_and_place,
-    # both of which say so in their own comments). This site no longer removes
-    # anything, but the detach stays: moving a model the joint still holds
-    # drags the arm's weld along with it.
+    # "object" (reset_simulation_world and delete_spawned_object_and_place). This
+    # site no longer removes anything, but the detach stays: moving a model the
+    # joint still holds drags the arm's weld along with it.
     #
-    # Removing a model while the DetachableJoint still holds it strands a
-    # physics entity, and gz-sim then prints
-    #     [Err] [Physics.cc:2967] Internal error: a physics entity ptr with an
-    #     ID of [N] does not exist.
-    # once per physics step for the rest of the session. Reproduced
-    # deliberately on the live twin on 2026-09-03: spawn "object", attach,
-    # then remove WITHOUT detaching — the storm starts immediately and does
-    # not stop. The id in the message is the physics engine's own numbering,
-    # not an ECM entity id, so it identifies nothing lookupable and changes
-    # between runs; that is why the message is so hard to act on.
+    # Removing a model while the DetachableJoint still holds it strands a physics
+    # entity, and gz-sim then prints
+    #     [Err] [Physics.cc:2967] Internal error: a physics entity ptr with an ID of
+    #     [N] does not exist.
+    # once per physics step for the rest of the session. The id is the physics
+    # engine's own numbering, not an ECM entity id, so it identifies nothing
+    # lookupable.
     #
-    # This site relied on simulate_ros_place having detached ~2.6s earlier
-    # (release, open gripper, retreat, then persist). That is true on the
-    # happy path, but the plugin carries a PENDING AUTO-ATTACH — the reason
-    # _h_pick detaches twice right after every spawn — so "nothing re-welded
-    # it in the meantime" is an assumption this function was making about
-    # code several steps away. A second detach on an already-released joint
-    # is a no-op, which is why _h_pick can afford to send two.
+    # simulate_ros_place has normally detached ~2.6s earlier, but the plugin carries
+    # a PENDING AUTO-ATTACH (why _h_pick detaches twice right after every spawn), so
+    # relying on that is an assumption about code several steps away. A second
+    # detach on an already-released joint is a no-op.
     print("[GRASP] persist-placed: detaching before parking 'object'")
     detach_object_from_gripper()
     _interruptible_sleep(0.2)
@@ -3169,19 +3010,14 @@ def _delete_placed_objects(location: str = None):
     if location is None:
         # Ask the WORLD as well, not only this process's memory.
         #
-        # The registry is cleared before the deletes are even sent, and a
-        # delete that does not take is only printed — so an entity that
-        # survives becomes one nobody can name again, and the next run's sweep
-        # finds an empty list. `stop_simulation` makes that likely rather than
-        # theoretical: it requests these deletes and then pauses the world,
-        # and gz-sim applies entity removals at the END of an update cycle,
+        # The registry is cleared before the deletes are sent, and a delete that does
+        # not take is only printed, so a surviving entity becomes one nobody can name
+        # again. stop_simulation makes that likely: it requests the deletes and then
+        # pauses the world, and gz-sim applies removals at the END of an update cycle,
         # which a paused world does not run.
         #
-        # Reported 2026-09-03: "se annullo una simulazione e poi ne avvio una
-        # successiva restano oggetti della prova precedente".
-        #
-        # Listing by name covers the same gap for a Django restart, where the
-        # registry starts empty while the world does not.
+        # Listing by name also covers a Django restart, where the registry starts empty
+        # while the world does not.
         listing = _shell_output("gz model --list") or ""
         if "Available models" in listing:
             for line in listing.splitlines():
@@ -3254,12 +3090,10 @@ def _detections_match(state: dict, coco_class: str, color: str = None) -> bool:
     if coco_class in ("bottle", "cup"):
         accepted.add("cap")
     if coco_class == "test tube":
-        # YOLOE labels the uncapped tube "beaker", not "test tube" — same
-        # object, no cap silhouette to key off (2026-07-27 live camera test).
-        # This is a VISION VOCABULARY alias, unrelated to the "beaker"
-        # catalog object removed 2026-07-29 (seed_library.py) — keep this
-        # even though no object is literally named "beaker" anymore, or
-        # find_object on an uncapped tube stops matching real detections.
+        # YOLOE labels the uncapped tube "beaker", not "test tube": same object, no cap
+        # silhouette to key off. This is a VISION VOCABULARY alias, unrelated to the
+        # "beaker" catalog object (removed from seed_library.py); keep it or find_object
+        # on an uncapped tube stops matching real detections.
         accepted.add("beaker")
     for detection in state.get("detections", []):
         if detection.get("class") not in accepted:
@@ -3404,29 +3238,22 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         seen_absent = False
         try:
             state = _bridge.get_vision_state()
-            # Is anything actually LOOKING? The bridge answers happily with
-            # detections: [] whether the detector is running and sees nothing
-            # or was never started at all — and `launch_sim.sh` forwards no
-            # arguments, so `vision:=false` is the default and a plain
-            # simulation has no detector at all.
+            # Is anything actually LOOKING? The bridge answers with detections: [] whether
+            # the detector is running and sees nothing or was never started, and
+            # `launch_sim.sh` defaults to `vision:=false`, so a plain simulation has no
+            # detector at all.
             #
-            # Told apart, this is the difference between "keep waiting, the
-            # object may still appear" and "nothing will ever appear". Without
-            # it the step burned its whole CONDITION_TIMEOUT_S and then
-            # reported that the OPERATOR had failed to confirm in time, which
-            # is how a missing node became a person's fault. Reported from a
-            # pilot run: the confirmation never arrives.
+            # Told apart, this is "keep waiting, the object may still appear" versus
+            # "nothing will ever appear". Without it the step burned its whole
+            # CONDITION_TIMEOUT_S and reported that the OPERATOR had failed to confirm.
             #
-            # Treated exactly like an unreachable bridge, because it is the
-            # same fact — the system cannot observe — and reusing that policy
-            # keeps one rule instead of two: abort honestly under
-            # STRICT_CONDITIONS (what a study session runs), otherwise bypass
-            # and record why, so the run continues and the log still says the
-            # confirmation was not the operator's.
+            # Treated like an unreachable bridge, since the system cannot observe in either
+            # case: abort under STRICT_CONDITIONS (what a study session runs), otherwise
+            # bypass and record why, so the log still says the confirmation was not the
+            # operator's.
             #
-            # `.get()` with a permissive default, not a required key: an older
-            # bridge that predates object_age_s must keep behaving as before,
-            # not start reporting every detector as absent.
+            # `.get()` with a permissive default: an older bridge that predates object_age_s
+            # must keep behaving as before, not report every detector as absent.
             object_age = state.get("object_age_s")
             if object_age is not None and object_age > VISION_STALE_AFTER_S:
                 if _strict_conditions():
@@ -3441,31 +3268,18 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
                     return False
                 # Simulated detection, and it reports SUCCESS.
                 #
-                # There is no camera to have this run: a plain simulation has
-                # no detector, and the object camera is a fact of the physical
-                # cell. But an operator who built a "find the tube" step and
-                # pressed Run has to see that step resolve, or the one block
-                # this system exists to teach reads as broken. So the arm goes
-                # to the scan pose, holds there long enough for the panel's
-                # "Waiting to find X" to be read, and the step completes.
+                # A plain simulation has no detector; the object camera is a fact of the
+                # physical cell. But an operator who built a "find the tube" step and pressed
+                # Run has to see it resolve. So the arm goes to the scan pose, holds long enough
+                # for the panel's "Waiting to find X" to be read, and the step completes.
                 #
-                # Announced as a completion rather than down the timeout
-                # channel, because that is what it is — the previous version
-                # reported it as "object not detected" while returning True,
-                # which is the opposite of what happened.
+                # Announced as a completion, not down the timeout channel, because that is what
+                # it is. The message says "simulated" on purpose: it keeps the feedback positive
+                # and true, and stops a participant forming a belief about the camera.
                 #
-                # The message says "simulated" on purpose. It keeps the
-                # feedback positive and true at once, and it stops a
-                # participant forming a belief about the camera that the study
-                # then measures: the trust probe in 04-compiti.md runs on C2
-                # precisely because it does NOT depend on the camera.
-                #
-                # The log is not fooled either. _mark_condition_bypass records
-                # this as a confirmation the system produced, so analisi.py can
-                # still tell it from one an operator caused — a fabricated
-                # confirmation that reads as genuine is the one thing
-                # STRICT_CONDITIONS exists to prevent, and that branch is
-                # right above, untouched, for the sessions that measure this.
+                # The log is not fooled: _mark_condition_bypass records this as a confirmation
+                # the system produced, so analisi.py can tell it from one an operator caused.
+                # STRICT_CONDITIONS, right above, covers the sessions that must not allow it.
                 logger.warning("condition_bypassed",
                                extra={"reason": "vision_node_absent", "block": "find_object_block"})
                 _mark_condition_bypass("vision_node_absent")
@@ -3728,9 +3542,8 @@ def _notify_condition_wait_start(condition_block: dict, simulate_event: bool):
     _eval_condition_tree with their own human-step-start/-complete) drove the
     countdown/self-view UI and the STATUS line; a bare `when(gesture, ...)`
     left the operator's webcam running with nothing shown and no feedback
-    for the whole timeout (confirmed live, 2026-07-30 — the browser camera
-    turned on but the panel showed nothing, and the STATUS line never left
-    "Starting simulation"). Best-effort, like every other bridge notify here.
+    for the whole timeout (the browser camera turned on but the panel
+    showed nothing, and the STATUS line never left "Starting simulation"). Best-effort, like every other bridge notify here.
 
     No-op in auto mode (simulate_event=True): _resolve_condition routes that
     straight to _log_condition, which resolves synchronously with no real
@@ -3960,18 +3773,11 @@ def simulation_recursive_blockly_parser(
                     break
                 print(f"[LOGIC]   iteration {i + 1}/{times}")
                 _recurse("DO")
-                # No end-of-iteration cleanup. This used to remove "object"
-                # here, which put a remove-then-create cycle on EVERY loop
-                # iteration — the one gz-sim8 operation that binds the
-                # DetachableJoint to a corpse, so a Repeat x3 failed on its
-                # third pick with "didn't come up with the gripper". Observed
-                # 2026-09-10.
-                #
-                # Nothing replaces it because nothing has to: the pick decides
-                # for itself whether the live entity is reusable, and removes
-                # it only when it is not (see _object_entity_is_reusable). This
-                # call was duplicating that decision and always answering
-                # "remove".
+                # No end-of-iteration cleanup. Removing "object" here put a remove-then-create
+                # cycle on EVERY loop iteration, the one gz-sim8 operation that binds the
+                # DetachableJoint to a corpse, so a Repeat x3 failed on its third pick. The pick
+                # decides for itself whether the live entity is reusable and removes it only
+                # when it is not (see _object_entity_is_reusable).
             _interruptible_sleep(3)
             _next()
 
@@ -4136,11 +3942,8 @@ def simulation_recursive_blockly_parser(
                 confirmed = _eval_condition_tree(confirm_event, simulate_event)
                 bypass = _take_condition_bypass()
                 if not confirmed:
-                    # "timeout" used to cover three different things: a real
-                    # timeout, an operator Stop, and a STRICT_CONDITIONS abort
-                    # on an unreachable camera. They mean opposite things in
-                    # the analysis — a Stop is not a failure of the channel —
-                    # and the study log had no way to tell them apart.
+                    # An operator Stop and a real timeout mean opposite things in the analysis (a
+                    # Stop is not a failure of the channel), so the outcome tells them apart.
                     study_log.log_event(
                         "human_step_end",
                         description=task_desc,
@@ -4234,20 +4037,13 @@ def simulation_recursive_blockly_parser(
             # approached from different headings and do NOT share offsets),
             # so consecutive picks in one run take from different holes.
             pick_grasp_yaw = None
-            # Arm IK target — profile-aware (DEFAULT_PICK_X_REL/Y_REL switches
-            # sim vs real-cell calibration, see calibration.py). Deliberately
-            # NOT derived from spawn_x/spawn_y below: those are Gazebo-world
-            # coordinates for the twin's visual object only. Before this fix,
-            # pick_x_rel/pick_y_rel were computed as spawn_x/y - ROBOT_BASE_X/Y
-            # (module-level constants here, never switched by DRIVE_HARDWARE),
-            # which silently ignored a real-cell recalibration of
-            # DEFAULT_PICK_X_REL/Y_REL — confirmed on physical hardware
-            # 2026-07-29 (calibrate_rack.py's calibrated target vs. the arm's
-            # actual pick point differed by ~17mm). In the sim profile these
-            # coincide exactly by construction (OBJECT_SPAWN_X/Y - ROBOT_BASE_X/Y
-            # == _SIM_PROFILE's DEFAULT_PICK_X_REL/Y_REL), so this changes
-            # nothing in Gazebo-only runs — only real hardware now reaches the
-            # calibrated point.
+            # Arm IK target, profile-aware (DEFAULT_PICK_X_REL/Y_REL switches sim vs
+            # real-cell calibration, see calibration.py). Deliberately NOT derived from
+            # spawn_x/spawn_y below: those are Gazebo-world coordinates for the twin's visual
+            # object only, and deriving from them would ignore a real-cell recalibration.
+            # In the sim profile the two coincide by construction (OBJECT_SPAWN_X/Y -
+            # ROBOT_BASE_X/Y == _SIM_PROFILE's DEFAULT_PICK_X_REL/Y_REL), so Gazebo-only
+            # runs are unaffected.
             pick_x_rel, pick_y_rel = DEFAULT_PICK_X_REL, DEFAULT_PICK_Y_REL
             spawn_x, spawn_y = OBJECT_SPAWN_X, OBJECT_SPAWN_Y
             rack_cfg = PICK_RACK_PROFILE
@@ -4280,11 +4076,10 @@ def simulation_recursive_blockly_parser(
                 )
                 spawn_ok = launch_wsl_ros_command(cmd, expect_reply_true=True)
                 if not spawn_ok:
-                    # Used to be a warning that let the pick continue with the
-                    # attach skipped — the arm then closed on empty space (or,
-                    # on hardware, on a real object the twin never showed),
-                    # and a later gate aborted with an unrelated diagnosis.
-                    # Same "never fake a success" rule as every other gate here.
+                    # A failed spawn aborts rather than warns: continuing would skip the attach and
+                    # close the gripper on empty space (or, on hardware, on a real object the twin
+                    # never showed), and a later gate would abort with an unrelated diagnosis. Same
+                    # "never fake a success" rule as every other gate here.
                     _abort_task(
                         f"Couldn't pick up '{sdf_name}' — it didn't spawn in the simulator.",
                         detail=f"object spawn failed for '{sdf_name}' (gz create returned false)",
@@ -4342,11 +4137,9 @@ def simulation_recursive_blockly_parser(
                 )
                 return
             print(f"[ROBOT] PLACE: {sdf_name}")
-            # Respawn the destination only when it actually changes. Placing
-            # three tubes into the same cup used to delete and recreate that
-            # cup three times, and every recreate is a window in which anything
-            # resting in it falls. Same destination twice in a row: leave the
-            # one that is already there, holding what is already in it.
+            # Respawn the destination only when it actually changes: every recreate is a
+            # window in which anything resting in it falls. Same destination twice in a row
+            # leaves the existing one, holding what is already in it.
             global _spawned_location_name
             if _spawned_location_name == safe_loc_sdf_name:
                 print(f"[SIMULATOR] Location '{sdf_name}' already in world — reusing")
@@ -4660,28 +4453,21 @@ def simulation_recursive_blockly_parser(
                 _next()
                 return
 
-            # Nothing to run. Aborting rather than continuing: the operator put
-            # this block in the program deliberately, and skipping it silently
-            # produces a run that reports success while doing less than the
-            # program says — the same failure the pick/place gates exist to
-            # prevent. A deleted or never-published macro is exactly the case
-            # CLAUDE.md flags as unprotected at publish time.
+            # Nothing to run. Abort rather than continue: the operator put this block in the
+            # program deliberately, and skipping it silently yields a run that reports
+            # success while doing less than the program says, the same failure the
+            # pick/place gates exist to prevent. A deleted or never-published macro is the
+            # case CLAUDE.md flags as unprotected at publish time.
             #
-            # Two causes, two remedies, and they were sharing one sentence.
-            # The print already said "not found OR has no published version";
-            # the operator's message only ever said the second. Observed on
-            # 2026-09-02: a Saved Task block held id 101, a task deleted and
-            # later recreated as id 130, and the run told the operator to go
-            # publish a task that was already published. They opened it, saw
-            # "published", and had nowhere to go — the message named a remedy
-            # that could not work, for a fault it had not diagnosed.
+            # Two causes, two remedies: the print says "not found OR has no published
+            # version" and the operator message must keep them apart, or it names a remedy
+            # that cannot work (a block holding the id of a deleted task that was recreated
+            # under a new id, which is already published).
             #
-            # A dangling id is NOT resolved by falling back to the name stored
-            # alongside it. The name matched here, case aside, and matching it
-            # would have run the recreated task — but "the reference is stale,
-            # so use whatever is called something similar" is how a robot ends
-            # up running a program its author did not choose. Say what is
-            # wrong; let the author re-pick.
+            # A dangling id is NOT resolved by falling back to the stored name: "the
+            # reference is stale, so use whatever is called something similar" is how a
+            # robot ends up running a program its author did not choose. Say what is wrong;
+            # let the author re-pick.
             if macro_task is None:
                 print(f"[MACRO] ABORT: macro id {macro_id} ('{macro_name}') not found "
                       f"for owner {_RUN_OWNER_ID} (deleted, or not shared with them)")
@@ -4759,11 +4545,9 @@ def simulation_recursive_blockly_parser(
             # so this is the block whose own motion is in progress, not the
             # one that will run last.
             simulation_recursive_blockly_parser.current_step = block_type
-            # One line per executed block, so a run can be replayed as a
-            # sequence. The log used to hold run boundaries and human steps
-            # only, which made "did the twin and the real arm do the same
-            # steps in the same order" unanswerable from the record: the only
-            # place the order existed was the frontend's highlight stream.
+            # One line per executed block, so a run can be replayed as a sequence and the
+            # twin and the real arm compared step by step; the frontend's highlight stream
+            # was the only other place the order existed.
             study_log.log_event(
                 "step", block=block_type, block_id=block_id,
                 target="real" if _hw_drive_active() else "sim",
@@ -5017,12 +4801,9 @@ def stop_simulation(request: HttpRequest) -> HttpResponse:
                 global _live_object_sdf
                 _live_object_sdf = None
                 _delete_placed_objects()
-                # Three things can go wrong here and only one of them used to
-                # be visible: the bridge being unreachable was printed, and the
-                # arm refusing to halt was discarded entirely — the response
-                # said success either way. That is the single message an
-                # operator needs from this endpoint, because the correct action
-                # is to reach for the teach-pendant e-stop.
+                # The stop result is read, not assumed: an unreachable bridge is logged, and an
+                # arm that refuses to halt must reach the operator, because the correct action
+                # is then the teach-pendant e-stop.
                 halt_warning = None
                 hardware_halt = None
                 try:

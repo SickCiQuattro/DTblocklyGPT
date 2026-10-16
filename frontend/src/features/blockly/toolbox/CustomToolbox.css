@@ -224,13 +224,12 @@
 /* No height cap by default: an open category renders at its natural size and
    the palette around it is the one thing that scrolls.
 
-   It used to cap every category at 260px and scroll inside. That was already
-   wrong for one of them before anything changed — Robot Actions holds seven
-   pills, which is 16px of padding + 7x32 + 6x6 = 276px, so the category that
-   is open when the editor loads has always been clipping its last pill and
-   scrolling a sixteen-pixel window to reach it.
+   A 260px cap with an inner scroll is wrong even for one category: Robot
+   Actions holds seven pills, which is 16px of padding + 7x32 + 6x6 = 276px, so
+   the category open on load would clip its last pill and scroll a sixteen-pixel
+   window to reach it.
 
-   Capping every panel became worse once several can be open at once: each one
+   Capping every panel is worse once several can be open at once: each one
    is then a scroll region nested inside the palette's own, and the wheel does
    something different depending on which of them the pointer happens to be
    over. */

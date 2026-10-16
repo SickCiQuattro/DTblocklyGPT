@@ -242,9 +242,8 @@ const BlockPill: React.FC<{
           onActivate(item)
         }}
         role="button"
-        // Roving tabindex. Every pill used to be its own Tab stop, so reaching
-        // the last category meant pressing Tab dozens of times; now the whole
-        // list is one stop and the arrows move inside it.
+        // Roving tabindex: the whole category list is one Tab stop and the arrows move
+        // inside it, so reaching the last category does not take dozens of Tabs.
         tabIndex={isTabStop ? 0 : -1}
         aria-label={`Add ${item.label} to the task`}
       >
@@ -521,16 +520,15 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
   macroDetailsById,
 }) => {
   const theme = useTheme()
-  // Robot Actions (pick/place/gripper), not Task Flow (loops/conditionals) —
-  // a brand-new task is more likely to start with a physical action than a
+  // Robot Actions (pick/place/gripper), not Task Flow (loops/conditionals) — a
+  // brand-new task is more likely to start with a physical action than a
   // control-flow construct.
   //
-  // A SET, not one key. Opening a category used to close whatever was open,
-  // which is right for an accordion whose panels are alternatives and wrong
-  // here: a program is built by taking a robot action, then a condition, then
-  // a human step, and the palette made every one of those a round trip that
-  // put away what the operator had just been reading. Reported from a pilot
-  // run. Nothing about these categories is exclusive, so nothing has to close.
+  // A SET, not one key. Closing whatever was open suits an accordion whose panels
+  // are alternatives, and is wrong here: a program is built by taking a robot
+  // action, then a condition, then a human step, and closing on open would make
+  // every one of those a round trip that puts away what the operator was reading.
+  // Nothing about these categories is exclusive, so nothing has to close.
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
     () => new Set(['robot-actions']),
   )
@@ -566,12 +564,10 @@ export const CustomToolbox: React.FC<CustomToolboxProps> = ({
     e.preventDefault()
     const step = e.shiftKey ? -1 : 1
     const count = TOOLBOX_CATEGORIES.length
-    // Where H is now, read from FOCUS rather than from what is expanded.
-    //
-    // It used to be read from the single expanded key, which no longer names
-    // one category — several can be open at once. Focus is the better source
-    // anyway: it is what the operator moved last, and it stays correct
-    // whether they arrived by H, by Tab or by clicking a heading.
+    // Where H is now, read from FOCUS rather than from what is expanded: several
+    // categories can be open at once, so the expanded set names none of them. Focus
+    // is what the operator moved last, and it stays correct whether they arrived by
+    // H, by Tab or by clicking a heading.
     const activeId = active instanceof HTMLElement ? active.id : ''
     const current = TOOLBOX_CATEGORIES.findIndex(
       (c) => `toolbox-category-${c.key}` === activeId,

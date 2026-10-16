@@ -417,14 +417,11 @@ class HardwareControl(Node):
         never fail the move itself. Caller MUST hold self._bcap_lock.
         """
         try:
-            # A CONTROLLER command, like HandMoveA that moves the same gripper.
-            # It was called on the robot handle for as long as this readout
-            # existed, and the robot-level call fails with 0x80070057
-            # (E_INVALIDARG) every time — so hand_mm was never delivered and
-            # simulate.py's missed-grasp check ("gripper closed on air") fell
-            # into its "no data" branch on every real pick. Confirmed on the
-            # cell 2026-09-29: controller-level returns 29.985 mm with the
-            # gripper open, robot-level raises.
+            # A CONTROLLER command, like HandMoveA that moves the same gripper. The
+            # robot-level call fails with 0x80070057 (E_INVALIDARG) every time, which would
+            # leave hand_mm undelivered and send simulate.py's missed-grasp check ("gripper
+            # closed on air") into its "no data" branch on every real pick. Controller-level
+            # returns 29.985 mm with the gripper open (measured on the cell).
             hand_pos = self.m_bcapclient.controller_execute(self.hCtrl, "HandCurPos")
             return json.dumps({"hand_mm": float(hand_pos)})
         except Exception as exc:

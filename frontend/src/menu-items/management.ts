@@ -10,17 +10,11 @@ import { MenuItem } from 'menu-items/types'
 // - Internal child ID: robots ➔ External item label: Robot Fleet
 
 /**
- * The operator's own robot. Every role sees it, under this heading.
- *
- * It used to live inside the manager's "Administration" group and inside a
- * separate "Operations" group for everyone else — the same destination, filed
- * under two different words depending on who was looking. It is also not
- * administration: it is the arm assigned to you, sitting beside User Accounts
- * and the fleet, which are.
- *
- * Splitting it out makes the operator's menu a subset of the manager's instead
- * of a different shape, and leaves "Administration" meaning only what is
- * actually manager-only.
+ * The operator's own robot. Every role sees it, under this heading. It is not
+ * administration: it is the arm assigned to you, sitting beside User Accounts and
+ * the fleet, which are. Splitting it out makes the operator's menu a subset of
+ * the manager's instead of a different shape, and leaves "Administration"
+ * meaning only what is actually manager-only.
  */
 export const operations: MenuItem = {
   id: 'operations',

@@ -11,7 +11,7 @@ export interface RecognitionOption {
   code: string
 }
 
-// Three fingers / Pinch / Pointing removed from the recognized set (2026-07-14).
+// Three fingers / Pinch / Pointing are not in the recognized set.
 export const RECOGNIZED_GESTURES: RecognitionOption[] = [
   { label: 'Thumbs up', code: 'THUMBS_UP' },
   { label: 'Thumbs down', code: 'THUMBS_DOWN' },
@@ -29,26 +29,21 @@ export const RECOGNIZED_VOICE_COMMANDS: RecognitionOption[] = [
 ]
 
 /**
- * Language the browser's speech recognizer listens in — a BCP-47 tag, pinned
- * here rather than read from `navigator.language`.
- *
- * It used to follow the browser locale, which made a study result depend on
- * which laptop the session ran on: the same task, the same spoken word, and a
- * different outcome on an en-US machine than on an it-IT one, with nothing
- * saying so. The Web Speech API takes one language, so this is a choice, not a
- * default that can be avoided.
+ * Language the browser's speech recognizer listens in — a BCP-47 tag, pinned here
+ * rather than read from `navigator.language`: following the browser locale makes
+ * a study result depend on which laptop the session ran on. The Web Speech API
+ * takes one language, so this is a choice, not a default that can be avoided.
  *
  * it-IT because the operators speak Italian. The interface is in English and
- * stays that way; what a recognizer needs is the language coming out of the
- * speaker's mouth, which is a different question from the language on screen.
- * Asking an Italian speaker for a clean en-US "proceed" would fold their
- * English pronunciation into the study's headline measure — attempts before
- * resolution — where it does not belong.
+ * stays that way; the recognizer needs the language coming out of the speaker's
+ * mouth, a different question from the language on screen. Asking an Italian
+ * speaker for a clean en-US "proceed" would fold their English pronunciation into
+ * the study's headline measure (attempts before resolution).
  *
- * Override with VITE_SPEECH_LANG (e.g. "en-US") in frontend/.env.
- * Both consumers — the voice-command block and the chat composer — must read
- * THIS constant: the browser allows one recognition session, so they share a
- * single instance and whichever starts last decides its language for both.
+ * Override with VITE_SPEECH_LANG (e.g. "en-US") in frontend/.env. Both consumers
+ * — the voice-command block and the chat composer — must read THIS constant: the
+ * browser allows one recognition session, so they share a single instance and
+ * whichever starts last decides its language for both.
  */
 export const SPEECH_LANG: string = import.meta.env.VITE_SPEECH_LANG || 'it-IT'
 
@@ -61,7 +56,7 @@ export const SPEECH_LANG: string = import.meta.env.VITE_SPEECH_LANG || 'it-IT'
  * (see SPEECH_LANG) — the list costs nothing and keeps flipping the language
  * to a one-line change instead of a vocabulary rewrite.
  */
-export const VOICE_KEYWORDS: Record<string, string[]> = {
+const VOICE_KEYWORDS: Record<string, string[]> = {
   YES: ['yes', 'yeah', 'yep', 'sì', 'si'],
   NO: ['no', 'nope'],
   DONE: ['done', 'finished', 'complete', 'fatto', 'completato'],
@@ -106,9 +101,7 @@ const ITALIAN_FORMS = new Set([
 /**
  * What to tell the operator to actually say, in the language the recognizer is
  * listening in. The block's label ("Done") names the step; it is not a
- * pronounceable instruction once the recognizer expects Italian, and a
- * participant reading "Done" to an it-IT recognizer is the failure this
- * exists to prevent.
+ * pronounceable instruction once the recognizer expects Italian.
  */
 export const spokenExample = (code: string | null | undefined): string => {
   const words = VOICE_KEYWORDS[String(code ?? '').toUpperCase()] ?? []
@@ -120,14 +113,8 @@ export const GESTURE_DROPDOWN_OPTIONS: [string, string][] =
   RECOGNIZED_GESTURES.map((g) => [g.label, g.code])
 
 /**
- * The command's name plus the word to actually say, when the two differ.
- *
- * "Done" is the name of the step; "fatto" is what an it-IT recognizer will
- * accept. Only the first was ever on screen — in the block's own dropdown, in
- * the Test recognition legend, on the card that previews a task — so a
- * participant read "Done", said "done", and the recognizer heard nothing it
- * knew. "Yes" was the one that happened to work anyway, because "sì" is the
- * obvious guess and nothing else was.
+ * The command's name plus the word to actually say, when the two differ. "Done"
+ * is the name of the step; "fatto" is what an it-IT recognizer will accept.
  *
  * The suffix appears only when the spoken form is not the label itself, so
  * flipping VITE_SPEECH_LANG to en-US collapses these back to plain "Yes" and
@@ -145,10 +132,9 @@ export const VOICE_DROPDOWN_OPTIONS: [string, string][] =
 
 /**
  * The value both pipelines report for "nothing recognized right now": the ROS
- * gesture topic publishes the string "NONE", the voice hook uses "". Neither
- * is a code in the sets above, so both used to fall through to the raw-code
- * branch and surface verbatim — the panel's Events list read "NONE" next to a
- * hard-coded "none" and an "idle", three spellings of one state.
+ * gesture topic publishes the string "NONE", the voice hook uses "". Neither is a
+ * code in the sets above, so both would fall through to the raw-code branch and
+ * surface verbatim (three spellings of one state in the panel's Events list).
  */
 export const NOTHING_RECOGNIZED = 'None'
 

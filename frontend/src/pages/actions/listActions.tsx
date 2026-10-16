@@ -8,8 +8,8 @@
  *   raises a toast for the failure; the handler exists only so the rejection is
  *   not unhandled. Adding error UI there would double-report it.
  * - **The page index is clamped, not trusted.** A result set that shrinks under
- *   a stale page — a search, a filter, another tab deleting a row — used to
- *   render the "nothing found" empty state while rows existed on an earlier
+ *   a stale page — a search, a filter, another tab deleting a row — would
+ *   render the "nothing found" empty state while rows exist on an earlier
  *   page. The effect below clamps the index instead of misreporting.
  *
  * `listTasks.tsx` is the exception: it carries the task lifecycle (draft /

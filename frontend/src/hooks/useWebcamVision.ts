@@ -61,11 +61,10 @@ export function useWebcamVision(): WebcamVisionState {
   const [devices, setDevices] = useState<WebcamDevice[]>([])
 
   const captureAndSend = useCallback(async () => {
-    // Always re-arm while active, even on the skip paths below — the <video>
-    // element may not be mounted yet (e.g. the run-time self-view only mounts
-    // once the gesture step starts, seconds after the webcam itself started).
-    // Returning without rescheduling used to kill the capture loop permanently
-    // in exactly that window, so no frames were ever sent for the gesture step.
+    // Always re-arm while active, even on the skip paths below — the <video> element
+    // may not be mounted yet (e.g. the run-time self-view only mounts once the gesture
+    // step starts, seconds after the webcam itself started). Returning without
+    // rescheduling would kill the capture loop permanently in exactly that window.
     const rearm = () => {
       if (activeRef.current) setTimeout(captureAndSend, CAPTURE_INTERVAL_MS)
     }
@@ -232,14 +231,12 @@ export function useWebcamVision(): WebcamVisionState {
   )
 
   const stop = useCallback(() => {
-    // Invalidate any start() still waiting on getUserMedia. Without this the
-    // camera survives a Stop: getUserMedia can take seconds (permission
-    // prompt, sensor warm-up), and a start() that resolves AFTER a stop used
-    // to assign its brand-new live stream to streamRef and set active — with
-    // nothing left to switch it off, because `cameraActive` had already gone
-    // false and the effect that calls stop() will not fire again. The camera
-    // light stayed on with the run finished. Reported 2026-09-03, and it hits
-    // a hardware run exactly the same way.
+    // Invalidate any start() still waiting on getUserMedia. getUserMedia can take
+    // seconds (permission prompt, sensor warm-up), and a start() that resolves AFTER
+    // a stop would assign its brand-new live stream to streamRef and set active with
+    // nothing left to switch it off, because `cameraActive` is already false and the
+    // effect that calls stop() will not fire again: the camera light stays on with
+    // the run finished, on a hardware run exactly the same.
     startEpochRef.current += 1
     activeRef.current = false
     setActive(false)

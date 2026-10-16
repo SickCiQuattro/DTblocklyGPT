@@ -401,8 +401,8 @@
 /* White stroke, indigo glow — two colours because there are two backgrounds
    to separate from, and no single colour clears both.
 
-   The outline used to be indigo (#6366F1) and measured 1.01–1.42:1 against
-   EVERY block fill in the palette. Not a poor choice of hue: palette.ts is
+   An indigo (#6366F1) outline measures 1.01–1.42:1 against EVERY block fill in
+   the palette. Not a poor choice of hue: palette.ts is
    tuned so all eight colours clear 4.5:1 against white LABEL text, which puts
    them all at roughly the same relative luminance (0.115–0.183). Two colours
    of equal luminance contrast at ~1:1 whatever their hue, so no palette colour
@@ -413,8 +413,8 @@
    indigo glow against the canvas (#FAFAFB, 4.28:1) where white would vanish
    at 1.04:1. Each colour does the job it is actually good at.
 
-   The glow never reaches zero. It used to animate 0 → 0.7 → 0, so even a
-   perfect colour was invisible for half of every cycle. */
+   The glow never reaches zero: animating 0 → 0.7 → 0 would make even a perfect
+   colour invisible for half of every cycle. */
 .block--executing > .blocklyPath,
 .block--executing-entity > .blocklyPath {
   stroke: #ffffff !important;
@@ -524,9 +524,9 @@
    icon (useConformance sets it via setWarningText). That icon sits ON the
    shadow block, and the shadow block's own click is what opens the picker
    that fills the slot and removes the warning — so the marker occupied part
-   of the target you have to hit to make it go away. Reported after a pilot
-   run: once an operator has understood the dashed slots and moves quickly,
-   they keep landing on the triangle instead of the slot.
+   of the target you have to hit to make it go away: once an operator has
+   understood the dashed slots and moves quickly, they keep landing on the
+   triangle instead of the slot.
 
    Click-through rather than removal: the triangle still marks the block, it
    just stops being a control. No text is lost either, because the bubble it

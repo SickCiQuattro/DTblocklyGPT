@@ -307,10 +307,9 @@ export const BottomPanel: React.FC<BottomPanelProps> = ({ data, open }) => {
           it is closed — so it sits outside the `inert` box above.
 
           It is the dark line along the bottom edge, kept because it reads as a
-          closed drawer and is the one hint that the code view exists at all.
-          It used to be an accident: a semi-transparent border-top on a
-          zero-height box, letting the panel's own background through. Now it
-          is the panel's own rail, and it does what it looks like it does. */}
+          closed drawer and is the one hint that the code view exists at all. A
+          real rail rather than a semi-transparent border-top on a zero-height
+          box, so it does what it looks like it does. */}
       {!open && (
         <Box
           component="button"

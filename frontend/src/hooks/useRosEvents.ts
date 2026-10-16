@@ -142,12 +142,11 @@ export function useRosEvents() {
     }
   }, [])
 
-  // A macro's context is cleared by its own 'end' event, which never arrives
-  // when a run is stopped or aborted partway through a Saved Task. It then
-  // survived into the NEXT run, where the consumer highlights whatever block
-  // id it names and ignores every real event — so the run after a stopped
-  // macro lit the wrong block and reported the old macro's step count for its
-  // whole duration. The consumer resets this when a run ends.
+  // A macro's context is cleared by its own 'end' event, which never arrives when a
+  // run is stopped or aborted partway through a Saved Task. Left set, it survives
+  // into the NEXT run, where the consumer highlights whatever block id it names and
+  // ignores every real event: the next run lights the wrong block and reports the
+  // old macro's step count. The consumer resets this when a run ends.
   const resetMacroContext = useCallback(() => setMacroContext(null), [])
 
   return {

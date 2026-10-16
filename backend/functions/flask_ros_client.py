@@ -113,11 +113,9 @@ class FlaskRosClient:
         ``None`` when no hardware node is running (a sim-only stop is the whole
         story there), otherwise ``{"ok": bool, "message": str}``.
 
-        This used to return None and discard the body. The halt result was
-        therefore thrown away at the one layer that could act on it, and a
-        refused halt was indistinguishable from a successful one all the way up
-        to the operator's screen — which is the only place it matters, because
-        the answer is "use the teach-pendant e-stop now".
+        The body is returned, not discarded: a refused halt must reach the
+        operator's screen, because the answer is "use the teach-pendant e-stop
+        now".
         """
         resp = self._session.post(self._url("/api/stop"), timeout=_STOP_TIMEOUT)
         resp.raise_for_status()

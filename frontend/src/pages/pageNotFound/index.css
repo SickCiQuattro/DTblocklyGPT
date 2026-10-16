@@ -1,7 +1,6 @@
-/* Scoped under #pageNotFoundBody — every selector here used to be global
-   (a:visited, #title, .circles, .circle...), so once this chunk loaded it
-   stayed in the document and leaked into the rest of the app (e.g. every
-   visited link app-wide turned white). */
+/* Scoped under #pageNotFoundBody: global selectors (a:visited, #title,
+   .circles, .circle...) would stay in the document once this chunk loaded
+   and leak into the rest of the app (e.g. every visited link turning white). */
 #pageNotFoundBody {
   width: 100%;
   height: 100vh;

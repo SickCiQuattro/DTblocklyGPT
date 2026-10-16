@@ -1,30 +1,25 @@
 /**
  * A picture for every gesture the operator can be asked to make.
  *
- * The panel named its gestures and never showed them: "Peace sign", "OK sign",
- * "Fist" as bare English words, to first-time study participants reading a
- * second language. The hand shape is the whole instruction — MediaPipe rejects
- * a wrong guess — so a participant who guessed wrong produced a recognition
- * failure that the study then recorded as a recognition failure. It was a
- * labelling failure.
+ * The hand shape is the whole instruction — MediaPipe rejects a wrong guess — so
+ * a bare English word ("Peace sign", "OK sign", "Fist") to a first-time
+ * participant reading a second language turns a labelling failure into a
+ * recognition failure.
  *
- * Four come straight from lucide, which happens to ship the exact gesture:
- * ThumbsUp, ThumbsDown, Hand (open palm) and HandFist. Note what is NOT used:
- * lucide's `HandMetal` is the horns 🤘, and reaching for it as "close enough"
- * to a peace sign would teach the operator a hand shape the recognizer will
- * reject — worse than no icon.
+ * Four come straight from lucide, which ships the exact gesture: ThumbsUp,
+ * ThumbsDown, Hand (open palm) and HandFist. Note what is NOT used: lucide's
+ * `HandMetal` is the horns 🤘, and using it as "close enough" to a peace sign
+ * would teach a hand shape the recognizer will reject, worse than no icon.
  *
- * Peace and OK do not exist in the set, so they are drawn here, in lucide's own
+ * Peace and OK do not exist in the set, so they are drawn here in lucide's own
  * construction: 24×24 viewBox, `fill: none`, `stroke: currentColor`, width 2,
- * round caps and joins, fingers built as capsules from a vertical pair and an
- * arc pair exactly the way `hand.mjs` and `hand-metal.mjs` build theirs. The
- * palm outline is lucide's own `hand` palm, reused rather than reinvented, so
- * the two authored icons sit in a row with the four real ones without reading
- * as guests.
+ * round caps and joins, fingers built as capsules from a vertical pair and an arc
+ * pair the way `hand.mjs` and `hand-metal.mjs` build theirs, on lucide's own
+ * `hand` palm, so the two authored icons sit in a row with the four real ones.
  *
- * `currentColor` throughout: these are tinted by whatever renders them (muted
- * in a legend, success green when the gesture matches), and a hard-coded fill
- * would break that at the one moment it matters.
+ * `currentColor` throughout: these are tinted by whatever renders them (muted in
+ * a legend, success green when the gesture matches), and a hard-coded fill would
+ * break that.
  */
 import { Hand, HandFist, ThumbsDown, ThumbsUp } from 'lucide-react'
 import type { LucideProps } from 'lucide-react'
@@ -47,7 +42,7 @@ const svgProps = (props: LucideProps) => ({
 })
 
 /** Index and middle extended into a V, ring and little folded. */
-export const PeaceSignIcon = (props: LucideProps) => (
+const PeaceSignIcon = (props: LucideProps) => (
   <svg {...svgProps(props)} aria-hidden>
     {/* The splay is a rotation about each finger's own base rather than baked
         into the coordinates: a V that is only two parallel fingers reads as
@@ -66,7 +61,7 @@ export const PeaceSignIcon = (props: LucideProps) => (
 )
 
 /** Thumb and index closed into a ring, the other three fingers up. */
-export const OkSignIcon = (props: LucideProps) => (
+const OkSignIcon = (props: LucideProps) => (
   <svg {...svgProps(props)} aria-hidden>
     {/* THREE fingers, not two, and a ring big enough to be the subject.
         An earlier version drew a small ring beside two fingers, which read as
@@ -97,7 +92,7 @@ export const OkSignIcon = (props: LucideProps) => (
  */
 export type GestureIcon = React.ComponentType<LucideProps>
 
-export const GESTURE_ICONS: Record<string, GestureIcon> = {
+const GESTURE_ICONS: Record<string, GestureIcon> = {
   THUMBS_UP: ThumbsUp,
   THUMBS_DOWN: ThumbsDown,
   OPEN_HAND: Hand,

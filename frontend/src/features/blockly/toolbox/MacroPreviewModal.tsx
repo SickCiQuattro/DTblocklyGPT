@@ -87,7 +87,7 @@ const hasTopLevelBlocksArray = (
  * @param macroCode Serialised task code string stored in `TaskType.code`.
  * @returns         A `BlockState` ready for `BlocklyViewer`, or `null` on failure.
  */
-export const toMacroRootState = (macroCode: string): State | State[] | null => {
+const toMacroRootState = (macroCode: string): State | State[] | null => {
   try {
     const parsed = parseJson<unknown>(macroCode)
     if (!parsed) return null

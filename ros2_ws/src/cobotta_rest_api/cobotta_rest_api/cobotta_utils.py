@@ -3,11 +3,10 @@ import re
 
 # b-CAP error the controller returns from TakeArm while the emergency stop is
 # latched. Read from a real session, not from documentation (the DENSO table in
-# docs/cobotta-physical-testing.md does not list it): 2026-09-29, red button
-# pressed during a pick; cobotta_node's reconnect then failed at "[5/8] TakeArm"
-# with this code every 2 s until the node was stopped. It is the code of the
+# docs/cobotta-physical-testing.md does not list it): cobotta_node's reconnect
+# fails at "[5/8] TakeArm" with this code every 2 s. It is the code of the
 # latched-stop STATE, so it also shows after the button is released until the
-# controller is reset — which is why callers word it "pressed or not reset".
+# controller is reset, which is why callers word it "pressed or not reset".
 BCAP_ESTOP_CODE = 0x83501024
 
 # What move_target answers instead of a free-text error when that state is the cause.

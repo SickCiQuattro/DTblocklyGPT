@@ -649,9 +649,8 @@ export const BlocklyEditor = ({
   // state it has to check (see anyDialogOpenRef).
 
   // a11y: when the user opts into keyboard mode, force Blockly's keyboard-nav
-  // visuals always-on; turning it off deactivates them again (previously the
-  // off-state was only applied on reload). When off, Blockly still auto-activates
-  // keyboard nav on key use (v13).
+  // visuals always-on; turning it off deactivates them again. When off, Blockly
+  // still auto-activates keyboard nav on key use (v13).
   useEffect(() => {
     Blockly.keyboardNavigationController.setIsActive(
       !!viewSettings?.keyboardMode,
@@ -1325,27 +1324,24 @@ export const BlocklyEditor = ({
         return
       }
 
-      // Blockly draws TWO keyboard-nav focus rings from two separate CSS
-      // variables: --blockly-active-node-color outlines the focused
-      // block/field, --blockly-active-tree-color outlines the whole focused
-      // region (workspace or toolbox). Both are live at once, which is why the
-      // canvas showed two boxes rather than one.
+      // Blockly draws TWO keyboard-nav focus rings from two separate CSS variables:
+      // --blockly-active-node-color outlines the focused block/field,
+      // --blockly-active-tree-color outlines the whole focused region (workspace or
+      // toolbox). Both are live at once, which shows two boxes rather than one.
       //
-      // The region ring is switched off. Once the node ring says which block
-      // you are on, a second box around the entire workspace adds no
-      // information and reads as a rendering fault — which is exactly how it
-      // was reported.
+      // The region ring is switched off: once the node ring says which block you are
+      // on, a second box around the entire workspace adds no information and reads as a
+      // rendering fault.
       //
-      // The node ring is the selection amber, not the brand indigo: indigo
-      // means "the robot is executing this block" (block--executing) and must
-      // not also mean "you are here". Amber matches the stroke Blockly
-      // hardcodes for `.blocklySelected > .blocklyPath`, which no theme option
-      // reaches — matching it is what makes the mouse and the arrow keys agree
-      // on one colour.
+      // The node ring is the selection amber, not the brand indigo: indigo means "the
+      // robot is executing this block" (block--executing) and must not also mean "you
+      // are here". Amber matches the stroke Blockly hardcodes for
+      // `.blocklySelected > .blocklyPath`, which no theme option reaches — matching it
+      // makes the mouse and the arrow keys agree on one colour.
       //
       // Set inline on the injection div rather than in editor.css: a stylesheet
-      // override raced against Blockly's own injected <style> and lost, while
-      // an inline style wins regardless of injection order.
+      // override races against Blockly's own injected <style> and loses, while an
+      // inline style wins regardless of injection order.
       workspace
         .getInjectionDiv()
         .style.setProperty('--blockly-active-node-color', editorState.selection)
@@ -1566,23 +1562,19 @@ export const BlocklyEditor = ({
         // behaviour — so it has to be the conservative one.
         if (isTypingContext()) return
 
-        // Where the DOM focus is, and where the SELECTION is, are two different
-        // things in Blockly, and this used to require the first.
+        // Where the DOM focus is and where the SELECTION is are different things in
+        // Blockly. Clicking a block selects it without moving focus: the pointer gesture
+        // ends on an SVG element that is not focusable, so activeElement stays on
+        // whatever had it — often <body>, or after a drag from the palette the palette
+        // pill, a React element outside the injection div. The block is visibly
+        // selected, Delete is pressed, and nothing happens; Blockly's own Delete shortcut
+        // needs workspace focus too, so there is no fallback behind it.
         //
-        // Clicking a block selects it without moving focus: the pointer gesture
-        // ends on an SVG element that is not focusable, so activeElement stays
-        // on whatever had it — very often <body>, and after a drag from the
-        // palette the palette pill, which is a React element outside the
-        // injection div. The block was visibly selected, the participant
-        // pressed Delete, and nothing happened. Reported after P06's session as
-        // "the delete key often does not work"; Blockly's own Delete shortcut
-        // needs workspace focus too, so there was no fallback behind it.
-        //
-        // `document.body` (or nothing focused) is the case that has to pass:
-        // there is no focused control to steal the key from, and the selected
-        // block below is the only thing the key could mean. A focused control
-        // OUTSIDE the workspace still wins — isTypingContext above has already
-        // let every text field through, and this keeps the rest.
+        // `document.body` (or nothing focused) is the case that has to pass: there is no
+        // focused control to steal the key from, and the selected block below is the only
+        // thing the key could mean. A focused control OUTSIDE the workspace still wins —
+        // isTypingContext above has already let every text field through, and this keeps
+        // the rest.
         const nothingFocused = active === document.body
         const isInsideWorkspace = Array.from(
           document.querySelectorAll('.injectionDiv'),
@@ -1595,12 +1587,11 @@ export const BlocklyEditor = ({
         // getOwnBodyDescendants already drops shadows and insertion markers.
         const totalCount = 1 + getOwnBodyDescendants(selected).length
 
-        // Always take the deletion over from Blockly, whether or not we ask
-        // first. Blockly's own Delete shortcut runs checkAndDelete(), the
-        // cascade that orphans value-input children (see disposeBlockWithBody).
-        // Gating this on shouldConfirmDelete — as it used to be — meant the
-        // default single-block case ran Blockly's buggy path in silence.
-        // Whether to ASK is a separate question, answered just below.
+        // Always take the deletion over from Blockly, whether or not we ask first.
+        // Blockly's own Delete shortcut runs checkAndDelete(), the cascade that orphans
+        // value-input children (see disposeBlockWithBody); gating the takeover on
+        // shouldConfirmDelete would run that buggy path in silence in the default
+        // single-block case. Whether to ASK is a separate question, answered just below.
         e.preventDefault()
         e.stopImmediatePropagation()
 
@@ -1669,12 +1660,9 @@ export const BlocklyEditor = ({
       const stack = redo ? workspace.getRedoStack() : workspace.getUndoStack()
       if (stack.length === 0) return
 
-      // One call is enough: Blockly's own Workspace.undo() already drains the
-      // whole event group in a single step (it pops while the next event shares
-      // the group id of the first). This used to loop afterwards, re-reading
-      // the stack and undoing again while the top still matched — a loop whose
-      // body could never run, because the group it was matching had already
-      // been consumed.
+      // One call is enough: Blockly's own Workspace.undo() already drains the whole
+      // event group in a single step (it pops while the next event shares the group id
+      // of the first), so no follow-up loop is needed.
       workspace.undo(redo)
       syncHistoryState(workspace)
     },

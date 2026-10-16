@@ -162,13 +162,12 @@ class VisionNode(Node):
     # ------------------------------------------------------------------
     def _run_yolo(self, frame):
         try:
-            # 0.5 was never clearing real detections on this rig (dim, warm-
-            # cast wrist camera): live YOLOE test 2026-07-27 measured true
-            # tube/bottle detections at 0.15-0.50 confidence, with the one
-            # false positive seen at 0.11 — 0.20 passes most real objects
-            # (red tube's cap still borderline at 0.15, a separate contrast
-            # problem, not a threshold one) while staying above that noise
-            # floor. Based on ~8 samples; revisit if false positives show up.
+            # 0.5 never cleared real detections on this rig (dim, warm-cast wrist camera):
+            # a live YOLOE test measured true tube/bottle detections at 0.15-0.50
+            # confidence, with the one false positive seen at 0.11. 0.20 passes most real
+            # objects (the red tube's cap is still borderline at 0.15, a separate contrast
+            # problem) while staying above that noise floor. Based on ~8 samples; revisit if
+            # false positives show up.
             results = self._yolo(frame, conf=0.20, verbose=False)
             h_img, w_img = frame.shape[:2]
             # Cap-colour crops all come from this whitened copy — gray-world

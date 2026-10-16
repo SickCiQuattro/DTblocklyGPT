@@ -255,8 +255,7 @@ const EXPLODE_FAIL = (reason: string): ExplodeMacroResult => ({
  *
  * Returns `{ ok: false, reason }` (and leaves the workspace untouched) if
  * the macro could not be expanded — callers should surface `reason` to the
- * user instead of treating a no-op as success (every early-return path
- * here used to fail silently: no toast, only a `console.warn`/nothing at all).
+ * user instead of treating a no-op as success.
  */
 export const explodeMacro = ({
   block,
@@ -310,13 +309,12 @@ export const explodeMacro = ({
     )
   }
 
-  // Resolved and null-checked BEFORE any mutation below — a macro published
-  // with no real steps (only a when_start/shadow-start scaffold) strips down
-  // to null here. Checking this only *after* disposing the macro block (as
-  // this used to do) meant an empty macro vanished from the workspace
-  // permanently: the removal is a plain `return`, not a `throw`, so the
-  // try/catch snapshot-restore below never sees it and never fires the
-  // undo-tracked WorkspaceSnapshotEvent — irrecoverable even with Ctrl+Z.
+  // Resolved and null-checked BEFORE any mutation below — a macro published with no
+  // real steps (only a when_start/shadow-start scaffold) strips down to null here.
+  // Checking only *after* disposing the macro block would make an empty macro
+  // vanish from the workspace permanently: the removal is a plain `return`, not a
+  // `throw`, so the try/catch snapshot-restore below never sees it and never fires
+  // the undo-tracked WorkspaceSnapshotEvent — irrecoverable even with Ctrl+Z.
   const cleanedState = stripStartBlock(blockState)
   if (!cleanedState) {
     return EXPLODE_FAIL(`"${macro.name}" has no steps to expand — it's empty.`)

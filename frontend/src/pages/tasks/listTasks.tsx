@@ -658,21 +658,18 @@ const TaskCard = ({
 /**
  * What this program touches, in one mono row.
  *
- * The signature element of this page, and the reason it is here rather than a
- * decorative flourish: an operator standing next to the arm is choosing what to
- * open, and the fact that decides whether they clear the bench first — does
- * this one move the robot — was previously visible only after opening it. The
- * list already showed name, status and date; it showed nothing about
- * consequence.
+ * The page's signature element: an operator standing next to the arm is choosing
+ * what to open, and the fact that decides whether they clear the bench first —
+ * does this one move the robot — is otherwise visible only after opening it.
  *
  * Amber is not a highlight colour here. It carries the meaning the robot panel
  * already gave it — "this reaches the physical arm" — so the same colour means
- * the same thing on the card, in the run button, and in the live-hardware
- * banner. Everything else stays slate: one loud thing per card, and it is the
- * one with a physical consequence.
+ * the same thing on the card, in the run button, and in the live-hardware banner.
+ * Everything else stays slate: one loud thing per card, and it is the one with a
+ * physical consequence.
  *
- * Geist Mono, matching the robot panel's STATUS readout. It is what makes the
- * home page read as a control surface rather than a list of documents.
+ * Geist Mono, matching the robot panel's STATUS readout, so the home page reads
+ * as a control surface rather than a list of documents.
  */
 const UsesStrip = ({ uses }: { uses?: TaskUses }) => {
   const theme = useTheme()
@@ -838,11 +835,9 @@ const ListTasks = () => {
     currentUserId !== null && String(owner) === currentUserId
 
   // Opening a shared task is legitimate (task_detail's GET already allows
-  // owner-or-shared reads, and the workspace itself now renders a read-only
-  // mode for it) — canManage alone used to block the card entirely for any
-  // shared-not-owned task, while the separate Run icon (status-only, no
-  // ownership check) opened it anyway. canView is the real "can this row be
-  // opened at all" gate; canManage stays owner-only for Edit/Discard/Delete.
+  // owner-or-shared reads, and the workspace renders a read-only mode for it).
+  // canView is the "can this row be opened at all" gate; canManage stays
+  // owner-only for Edit/Discard/Delete.
   const canView = (row: TaskType) => canManage(row.owner) || row.shared
 
   const handleOpenWorkspace = (id: number) => {
@@ -955,11 +950,11 @@ const ListTasks = () => {
       return `Showing ${draftCount} draft${plural(draftCount)} waiting`
     }
     const statusParts: string[] = []
-    // With the simulator down, report the total and let the banner below say
-    // why nothing runs. The claim used to stand anyway, directly above a line
-    // denying it. The neutral figure is rows.length so it matches the "All"
-    // chip exactly — printing a second number also called "published" next to
-    // the chip's would trade one contradiction for another.
+    // With the simulator down, report the total and let the banner below say why
+    // nothing runs, rather than a "published" claim directly above a line denying it.
+    // The neutral figure is rows.length so it matches the "All" chip exactly:
+    // printing a second number also called "published" next to the chip's would trade
+    // one contradiction for another.
     if (simulatorDown) {
       statusParts.push(`${rows.length} task${plural(rows.length)}`)
     } else if (runnableCount > 0) {

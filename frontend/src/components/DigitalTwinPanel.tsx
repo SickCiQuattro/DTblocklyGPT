@@ -239,18 +239,14 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   // 'live': the task's own gesture/voice conditions must really happen —
   // permissions requested at Run, scoped to only what the task uses.
   //
-  // STUDY_MODE forces 'live' and hides the toggle. During a user study an
-  // accidental auto run is unrecoverable: every confirmation channel reports
-  // success without the participant doing anything, and the resulting data is
-  // indistinguishable from real data after the fact.
+  // STUDY_MODE forces 'live' and hides the toggle: an accidental auto run is
+  // unrecoverable, since every confirmation channel then reports success without
+  // the participant doing anything and the data is indistinguishable from real.
   //
-  // 'live' is also the default everywhere else, not just under STUDY_MODE. The
-  // old 'auto' default meant a task built with "resume on a thumbs up" did not
-  // wait for one: the simulation quietly answered on the operator's behalf and
-  // ran straight past the step they had just programmed. That teaches the wrong
-  // model of what the robot does, and it is precisely the prediction the study
-  // asks participants to make about the physical arm. Skipping the wait is a
-  // deliberate shortcut for working without a camera, so it is opt-IN.
+  // 'live' is also the default everywhere else. An 'auto' default made a task built
+  // with "resume on a thumbs up" run straight past the step, which teaches the
+  // wrong model of what the robot does. Skipping the wait is a deliberate shortcut
+  // for working without a camera, so it is opt-IN.
   const [runMode, setRunMode] = useState<'auto' | 'live'>('live')
   const [liveView, setLiveView] = useState<'simulation' | 'camera'>(
     'simulation',
@@ -471,15 +467,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }, [blockStep, macroContext, workspace, followRunningBlock])
 
-  // Live STATUS feedback — block_step events already exist server-side
-  // (_notify_block_step in simulate.py) but nothing consumed them before, so
-  // the line sat frozen on "Starting…" for the whole run, which can
-  // legitimately take minutes.
+  // Live STATUS feedback from block_step events (_notify_block_step in
+  // simulate.py); a run can legitimately take minutes.
   //
-  // Driven by ANY block_step, not only 'end'. Requiring 'end' meant a run
-  // whose events all arrived as 'start' (or whose only surviving event in a
-  // polled burst was a 'start') never moved off "Starting simulation…" —
-  // indistinguishable from a run that never began (confirmed live 2026-07-30).
+  // Driven by ANY block_step, not only 'end': a run whose events all arrive as
+  // 'start' (or whose only surviving event in a polled burst is a 'start') would
+  // otherwise never leave "Starting simulation…", indistinguishable from a run
+  // that never began.
   useEffect(() => {
     if (!simulation.isRunning || !blockStep) return
 
@@ -556,24 +550,19 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     }
   }, [simulation.isRunning, workspace, resetMacroContext])
 
-  // What this task's own blocks actually need — drives which permission a
-  // live run asks for (never both by default) and which preflight note to
-  // show. find_object is deliberately excluded: it's always the robot
-  // camera (vision_node), never the operator's browser webcam.
-  // Memoized on [workspace, simulation.isRunning] rather than recomputed
-  // every render: this component re-renders at several Hz during a live run
-  // (socket events, webcam polling, countdown ticks), and each recompute was
-  // a full tree walk. isRunning is in the key so the value is still fresh
-  // exactly when runNeedsRef below freezes it — that effect fires on the
-  // same dependency.
+  // What this task's own blocks actually need — drives which permission a live run
+  // asks for (never both by default) and which preflight note to show. find_object
+  // is deliberately excluded: it's always the robot camera (vision_node), never the
+  // operator's browser webcam. Memoized on [workspace, simulation.isRunning]: this
+  // component re-renders at several Hz during a live run (socket events, webcam
+  // polling, countdown ticks) and each recompute is a full tree walk. isRunning is
+  // in the key so the value is fresh exactly when runNeedsRef below freezes it.
   //
-  // Saved Tasks are followed, not just the blocks on this canvas. Their steps
-  // live in another task's workspace, so scanning the canvas alone reported
-  // "needs nothing" for a task whose only gesture step sits inside a macro:
-  // the webcam never started and the step waited its whole timeout while the
-  // operator gestured at a camera that was off. Same for voice.
-  //
-  // The macro workspaces come from the same SWR key the editor already holds
+  // Saved Tasks are followed, not just the blocks on this canvas: their steps live
+  // in another task's workspace, and scanning the canvas alone reports "needs
+  // nothing" for a task whose only gesture step sits inside a macro (the webcam
+  // never starts and the step waits its whole timeout). Same for voice. The macro
+  // workspaces come from the same SWR key the editor already holds
   // (graphic.macroList returns published_workspace), so this costs no request.
   const { data: dataMacros = [] } = useSWR<
     { id: number; published_workspace?: unknown }[],
@@ -705,37 +694,29 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     return () => clearTimeout(t)
   }, [humanStep])
 
-  // "Show message" — authored text, shown over the live view (slot 1), because
-  // that is where the operator is looking during a run. It used to be a banner
-  // at the top of the scroll body: a plain flex child with no sticky and no
-  // scroll-into-view, so it could appear off-screen and delete itself four
-  // seconds later, and mounting it shoved the whole video down ~44px mid-run.
-  // It lasts until something makes it stale, and it used to last four seconds.
+  // "Show message": authored text, shown over the live view (slot 1), because that
+  // is where the operator is looking during a run (a banner at the top of the
+  // scroll body can sit off-screen and shoves the video down ~44px mid-run).
   //
-  // MESSAGE_TTL_MS is the lifetime the panel's duration rule gives to "an
-  // event with nothing left to handle" — a step completing, a run finishing.
-  // This is the other case in that same rule, and it always was: the entire
-  // reason the block exists is that a PERSON has to read something, and
-  // "and continue" means the program will not wait while they do. So the thing
-  // left to handle is the reading, and nothing on screen could know it had
-  // happened. Four seconds is about what it takes to notice a pill has
-  // appeared, look up from a moving arm, and find it already gone.
+  // It does NOT expire on MESSAGE_TTL_MS, the panel's lifetime for "an event with
+  // nothing left to handle" (a step completing, a run finishing). This is the other
+  // case of the duration rule: a PERSON has to read something, and "and continue"
+  // means the program will not wait while they do, so nothing on screen could know
+  // it had been read. A few seconds is about what it takes to notice a pill, look
+  // up from a moving arm and find it already gone.
   //
-  // Three things end it now, and each one is a real reason the text stopped
-  // being what the operator needs to see:
+  // Three things end it, each a real reason the text stopped being needed:
   //
   //   1. they dismiss it — the only positive evidence it was read;
-  //   2. a newer authored message takes the slot. Another Show message
-  //      overwrites this state; a waiting human step clears it (below), and
-  //      that one also outranks it in `videoPill` so the two can never fight
-  //      over the same 40 pixels of video;
+  //   2. a newer authored message takes the slot. Another Show message overwrites
+  //      this state; a waiting human step clears it (below) and outranks it in
+  //      `videoPill`, so the two never fight over the same 40 pixels of video;
   //   3. the run ends (below). A message about a run that is over is not a
-  //      message, and leaving it there would carry it into the next run.
+  //      message, and would carry into the next run.
   //
-  // Deliberately NOT a longer timeout. Any number picked here is a guess about
-  // how long someone needs to walk to a bench and back, and the failure it
-  // produces is silent: the instruction disappears while they are away from
-  // the screen, which is the case the block exists for.
+  // Deliberately NOT a longer timeout: any number is a guess about how long someone
+  // needs to walk to a bench and back, and the failure is silent — the instruction
+  // disappears while they are away from the screen, the case the block exists for.
   useEffect(() => {
     if (humanStep?.status !== 'notify') return
     setNotifyPill(humanStep.description || 'Notification')
@@ -1002,21 +983,17 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     // since the teach-pendant e-stop is the operator's real fallback here.
     fetchApi({ url: endpoints.task.stop, method: MethodHTTP.POST })
       .then(() => {
-        // Say it succeeded, in the same place the failure lands. This used to
-        // be a global toast while the failure was an in-panel banner: the two
-        // halves of one button press arrived in two different parts of the
-        // screen, and the operator who just pressed Stop is looking at one.
+        // Say it succeeded, in the same place the failure lands (an in-panel banner, not
+        // a global toast): the operator who just pressed Stop is looking there.
         //
-        // The STATUS line reads "stopped" the moment the button is pressed —
-        // optimistically, before the round trip — so on its own it cannot tell
-        // the operator whether the robot actually got the message. On a
-        // hardware run that difference is the whole point, and the sentence
-        // names what the arm is still doing: a halt stops motion, it does not
-        // open the gripper, so anything held stays held.
+        // The STATUS line reads "stopped" the moment the button is pressed, before the
+        // round trip, so on its own it cannot say whether the robot got the message. On
+        // a hardware run that is the whole point, and the sentence names what the arm is
+        // still doing: a halt stops motion, it does not open the gripper, so anything
+        // held stays held.
         //
-        // Sticky on hardware, transient on the twin — the duration rule: an
-        // arm still gripping something is an open consequence, a stopped
-        // simulation is not.
+        // Sticky on hardware, transient on the twin — the duration rule: an arm still
+        // gripping something is an open consequence, a stopped simulation is not.
         setRunResult(
           executionTarget === 'real'
             ? {
@@ -1148,28 +1125,23 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
       ? humanStep.value
       : null
   const gestureMatch = !!(expectedGesture && activeGesture === expectedGesture)
-  // The mark on the human-step overlay: the channel this step is waiting on,
-  // never a hand.
+  // The mark on the human-step overlay: the channel this step is waiting on, never
+  // a hand. `Hand` is also the icon for the OPEN_HAND gesture, so using it for a
+  // button step would show an open palm, which in this panel reads as "make this
+  // hand shape": the wrong instruction, in the place the operator is under a
+  // deadline.
   //
-  // It WAS a hand, harmlessly, until `Hand` was given a second job as the icon
-  // for the OPEN_HAND gesture. After that, a step asking the operator to press
-  // a button showed them an open palm — which in this panel's own vocabulary
-  // now reads as "make this hand shape". The wrong instruction, in the one
-  // place the operator is under a deadline.
+  // All FOUR channels reach it, because the instruction rides on the video (see
+  // videoPill) and gesture and object steps are excluded from the overlay so the
+  // camera stays visible.
   //
-  // All FOUR channels reach it now. It used to serve only the overlay, which
-  // gesture and object steps are excluded from so the camera stays visible —
-  // and that exclusion silently took the operator's own instruction with it
-  // (see videoPill). The instruction moved onto the video, so this mark rides
-  // along and has to answer for every channel.
-  //
-  // Mic and Clock are the marks this panel and the chat preview already use
-  // for voice and time. A gesture step draws THE GESTURE it is asking for, the
-  // same rule the REQUIRED readout follows — `Hand` only as the fallback,
-  // where there is no named gesture to misread. `ScanEye` is the Conditions
-  // category's own mark for "an object is detected". `User` is the "Pause and
-  // show message" block's icon in the toolbox, which ties the runtime moment
-  // back to the block on the canvas.
+  // Mic and Clock are the marks this panel and the chat preview already use for
+  // voice and time. A gesture step draws THE GESTURE it is asking for, the same
+  // rule the REQUIRED readout follows — `Hand` only as the fallback, where there
+  // is no named gesture to misread. `ScanEye` is the Conditions category's own
+  // mark for "an object is detected". `User` is the "Pause and show message"
+  // block's icon in the toolbox, which ties the runtime moment back to the block
+  // on the canvas.
   const WaitIcon =
     humanStep?.condition === 'voice'
       ? Mic
@@ -1348,28 +1320,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
     onDismiss?: () => void
   } | null =
     [
-      // The operator's own instruction, and it outranks everything because it
-      // is the only text here they wrote themselves.
+      // The operator's own instruction, and it outranks everything because it is the
+      // only text here they wrote themselves.
       //
-      // It used to render in one place only — the dark overlay that replaces
-      // the video — and gesture and object steps are deliberately excluded
-      // from that overlay so the camera stays visible. Correct reason, unclosed
-      // consequence: for those two channels the instruction was rendered
-      // NOWHERE. "Show the camera a blue tube" ran with the screen saying only
-      // "Waiting to find tube".
+      // It lives over the video, where Show message puts its own text, not only in the
+      // dark overlay that replaces the video: gesture and object steps are excluded
+      // from that overlay so the camera stays visible, and for those two channels the
+      // instruction would otherwise be rendered NOWHERE.
       //
-      // That is a measurement problem, not only a usability one.
-      // seed_partb_tasks.py gives all four Part-B tasks a single shared
-      // _TASK_DESC precisely so the on-screen instruction is identical across
-      // the four conditions — "anything else that differed between them would
-      // be a second explanation for any difference in the measurements". The
-      // constant made the DATA identical while two of the four screens showed
-      // no instruction at all.
-      //
-      // So the instruction lives over the video, where Show message already
-      // puts its own text. The camera stays visible for every channel, and the
-      // difference between the two blocks stops being WHERE the message
-      // appears and becomes how long it stays and what accompanies it.
+      // That is a measurement problem as much as a usability one. seed_partb_tasks.py
+      // gives all four Part-B tasks a single shared _TASK_DESC so the on-screen
+      // instruction is identical across the four conditions; anything else that
+      // differed would be a second explanation for any difference in the measurements.
+      // The difference between the two blocks is how long the message stays and what
+      // accompanies it, not where it appears.
       isHumanStepActive &&
         humanStep?.description && {
           tone: 'info' as const,
@@ -1433,22 +1397,18 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
   }
   const preflightIssues: PreflightIssue[] = []
 
-  // The event channel, checked FIRST, because without it this panel is blind
-  // for the whole run.
+  // The event channel, checked FIRST, because without it this panel is blind for
+  // the whole run.
   //
-  // `connected` is the SocketIO stream on :5001 — block_step, human_step,
-  // gestures, detections. It is not the arm and not the HTTP bridge: a run can
-  // start over :5000 while this is down, and then the operator watches a still
-  // picture with no highlighted block, no "waiting for a gesture", and no
-  // countdown, which looks exactly like a run frozen at step zero.
+  // `connected` is the SocketIO stream on :5001 — block_step, human_step, gestures,
+  // detections. It is not the arm and not the HTTP bridge: a run can start over
+  // :5000 while this is down, and then the operator watches a still picture with no
+  // highlighted block, no "waiting for a gesture" and no countdown, which looks
+  // exactly like a run frozen at step zero.
   //
-  // It was missing from this list, and that produced the contradiction an
-  // operator reported: an amber "Offline" pill in the header above a green
-  // "Ready to run" at the foot of the same column. Both were true — the pill is
-  // about the channel, the checkmark about the task — but nothing said so, and
-  // the reassuring one was the one next to the button. Listing it here makes
-  // them agree by construction: "Ready to run" is the empty state of this list,
-  // so it can no longer appear while the panel cannot see the run.
+  // It must be in this list so the header's "Offline" pill and the footer's "Ready
+  // to run" cannot contradict each other: "Ready to run" is the empty state of this
+  // list, so it cannot appear while the panel cannot see the run.
   if (!connected) {
     preflightIssues.push({
       // Not "from the simulator". The stream is the same on both targets, but
@@ -1665,76 +1625,40 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           >
             Robot
           </Typography>
-          {/* One indicator, one shape, one hue per state.
-              ── shape ──
-              The pill used to appear only in the bad state while the good one
-              was bare text, so the two halves of a single two-state control
-              were built out of different components: a border and a fill
-              arrived from nowhere, and the title beside it shifted sideways
-              every time the stream dropped or came back.
+          {/* One indicator, one shape, one hue per state: fill, border, dot and text take
+              the same tone at the same 0.12 / 0.4 intensities as the hardware chip below, so
+              the chips are one component where hue is the only variable, and the title beside
+              it does not shift sideways when the stream drops or returns.
 
-              ── hue ──
-              Then the two states still did not agree, because one was
-              monochrome and the other was not: neutral pill, grey text, green
-              dot — three families in the "on" state against amber-everything
-              in the "off" one. Here each state takes exactly one tone and
-              applies it to fill, border, dot and text alike, at the same 0.12 /
-              0.4 intensities as the hardware chip below. Three chips, one
-              component, hue is the only variable.
-
-              ── why not amber, which is what "off" used to be ──
-              Amber is reserved across this panel for one meaning — the
-              physical arm is involved — and PanelMessage enforces it in the
-              type system. `connected` is the SocketIO event stream: not the
-              arm, not the HTTP bridge. The preflight list twenty lines up
-              already reports this exact fact, and reports it as `info`,
-              because that is what it is. The header said the same thing in
-              amber, so one fact wore two colours in one column, and the amber
-              one competed with the "Real robot" chip beside it — which is the
-              only thing in this header that IS about the arm. Guarded by
-              test_panel_chrome.py. */}
-          {/* The connection indicator used to live here and no longer does.
-              It said the same thing in three places at once: this pill, the
-              "· events offline" annotation on the STATUS card, and the
-              pre-flight row in the footer — which is outside the scroll region,
-              so it is the copy the operator always sees, and it is the only one
-              that says what BREAKS ("this panel could not show which block is
-              running or when it needs you") rather than naming a transport.
-
-              Keeping it here also cost the header's last free width, which the
-              execution target now needs, and it invited the misreading a novice
-              actually makes: "Live updates on" read as "the robot is connected". */}
-          {/* The panel reserves amber for one meaning — the physical arm is
-              involved — and enforces it in the type system. Then it put every
-              amber cue inside the `!simulation.isRunning` gate, so all of them
-              unmounted at the exact moment the arm started moving. The one
-              period the meaning applies was the one period it was not on
-              screen; what survived was a 10.5px grey caption.
-
-              This chip lives in the header, outside every gate, and intensifies
-              rather than disappears once the run starts. */}
+              Not amber: amber is reserved across this panel for one meaning — the physical
+              arm is involved — and PanelMessage enforces it in the type system. `connected`
+              is the SocketIO event stream, not the arm or the HTTP bridge, and the
+              preflight list already reports this fact as `info`. Amber here would compete
+              with the "Real robot" chip, the only thing in this header that IS about the
+              arm. Guarded by test_panel_chrome.py. */}
+          {/* No connection indicator here: the pre-flight row in the footer already says it,
+              outside the scroll region so it is the copy the operator always sees, and the
+              only one that says what BREAKS ("this panel could not show which block is
+              running or when it needs you") rather than naming a transport. Keeping it here
+              would also cost the header's last free width, which the execution target needs,
+              and invites the misreading "Live updates on" = "the robot is connected". */}
+          {/* The panel reserves amber for one meaning — the physical arm is involved — and
+              enforces it in the type system. Every amber cue inside the
+              `!simulation.isRunning` gate unmounts the moment the arm starts moving, which is
+              the one period the meaning applies. This chip lives in the header, outside every
+              gate, and intensifies rather than disappears once the run starts. */}
           {/* THE TARGET LIVES HERE, and it is a control rather than a badge.
-              Reported by users as "it is not obvious how to move from the twin
-              to the physical robot", and the code explains why: setExecutionTarget
-              has exactly ONE call site in the whole application, and it used to
-              be a row inside the Run section, behind a ~370px video. Measured on
-              a 900px viewport it ended at ~573px — below the fold — and widening
-              the panel pushed it FURTHER down, because the 4:3 video grows 0.75px
-              of height per px of width. The gesture meaning "show me more" hid
-              the control they were hunting for.
+              setExecutionTarget has exactly ONE call site in the whole application. In the
+              Run section, behind a ~370px video, it ended at ~573px on a 900px viewport
+              (below the fold), and widening the panel pushed it further down, because the
+              4:3 video grows 0.75px of height per px of width. Nowhere else could be found
+              instead: the task list deliberately sends 'sim' (a one-click action must not
+              move a physical arm), and a header chip shown only when the target was ALREADY
+              'real' never told a novice a second mode existed.
 
-              Nowhere else could be found instead: the task list deliberately
-              sends 'sim' (a one-click action must not move a physical arm), and
-              this header previously rendered a chip only when the target was
-              ALREADY 'real', so a novice could not even learn that a second mode
-              existed. The search always failed.
-
-              The header never scrolls, so this is the one place the choice is
-              reachable at every viewport and every panel width.
-
-              Amber still means exactly one thing and still intensifies once the
-              run starts — the reason the old chip lived outside every gate. What
-              changes is that it now also answers "how do I get there". */}
+              The header never scrolls, so this is the one place the choice is reachable at
+              every viewport and every panel width. Amber still means exactly one thing and
+              intensifies once the run starts. */}
           <SegmentedControl
             dark
             size="small"
@@ -1795,34 +1719,20 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
-          // The bottom step is breathing room above the footer's border, and
-          // nothing more. An earlier comment here claimed it was clearance for
-          // a pinned button overlapping the scroll — that was wrong: the
-          // run/stop footer is a flex SIBLING with flexShrink 0, so this box
-          // ends above it and nothing ever comes to rest underneath.
+          // The bottom step is breathing room above the footer's border, nothing more: the
+          // run/stop footer is a flex SIBLING with flexShrink 0, so this box ends above it
+          // and nothing rests underneath. Content "cut off" below the fold is a scroll
+          // region working; the fix is upstream (cap the video, clip the Run section while
+          // a step is waiting), not padding here.
           //
-          // What was actually reported as "cut off" was content below the
-          // scroll fold, which is a scroll region working. The fix for that is
-          // upstream — cap the video, and clip the Run section while a step is
-          // waiting, both done — not padding down here.
-          // Top / right / bottom / LEFT — and the right is 10, not 16, on
-          // purpose. This is the panel's only scroll region and it had no
-          // scrollbar styling at all, so it took the platform's, which is
-          // about 15px wide and takes that width out of the CONTENT box. The
-          // header and the footer are not scroll containers and lose nothing,
-          // so every heading, card and the video sat 16px from the left edge
-          // and ~31px from the right, under a Run button that spanned the full
-          // 16/16. Reported as the panel not being centred, which is exactly
-          // what it was.
-          //
-          // 10 + a 6px scrollbar is 16, so the content's right inset matches
-          // its left one and both match the footer. `scrollbar-gutter: stable`
-          // reserves that 6px whether or not the content currently overflows,
-          // so nothing shifts sideways as the panel fills up.
-          //
-          // 6px, styled, is also what every other scroll surface in the app
-          // already uses (Copilot, the toolbox, the task-code panel). This was
-          // the only one left on the platform default.
+          // Top / right / bottom / LEFT — the right is 10, not 16, on purpose. This is the
+          // panel's only scroll region, and the platform scrollbar (~15px) takes its width
+          // out of the CONTENT box, which left the content ~31px from the right edge under
+          // a Run button spanning the full 16/16. 10 + a 6px scrollbar is 16, so the right
+          // inset matches the left and the footer. `scrollbar-gutter: stable` reserves the
+          // 6px whether or not the content overflows, so nothing shifts sideways as the
+          // panel fills up. 6px, styled, is what every other scroll surface in the app
+          // uses (Copilot, the toolbox, the task-code panel).
           padding: '14px 10px 20px 16px',
           overflowY: 'auto',
           // Stops the gesture reaching the document when this body is already at
@@ -1948,42 +1858,26 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   // element that grew is the one an operator waiting on a step
                   // looks at least: during a wait they are watching their hands.
                   //
-                  // Why not max-height, which is what this was first: with
-                  // `width: 100%` and `aspect-ratio`, a max-height clamps the
-                  // height and leaves the width alone, so the USED box stops
-                  // being 4:3 and becomes wider. The Gazebo camera is 640×480 —
-                  // exactly 4:3 — and the feed is fitted with `contain`, so a
-                  // wider box pillarboxes it: black bars down both sides, and a
-                  // picture smaller than before. Reported within the hour.
+                  // Cap the width, not max-height: with `width: 100%` and `aspect-ratio`, a
+                  // max-height clamps the height and leaves the width alone, so the USED box stops
+                  // being 4:3. The Gazebo camera is 640×480 and the feed is fitted with `contain`,
+                  // so a wider box pillarboxes it (black bars, smaller picture). Capping the width
+                  // keeps the box 4:3 and the feed fills it edge to edge.
                   //
-                  // Capping the width keeps the box at 4:3, so the feed fills
-                  // it edge to edge as it always did.
+                  // The cap is in vh, not vw, because what limits this box is the VERTICAL budget:
+                  // the readouts, the countdown, Confirm and Stop need about 180px under the video,
+                  // and a 4:3 box spends 0.75px of height for every px of width. A vw cap left the
+                  // wide panel with empty surface either side of a video that had not grown.
                   //
-                  // The cap is in vh, not vw, because what actually limits this
-                  // box is the VERTICAL budget: the readouts, the countdown,
-                  // Confirm and Stop need about 180px under the video, and a
-                  // 4:3 box spends 0.75px of height for every px of width. A vw
-                  // cap ignored that and left the wide panel with 15vw of empty
-                  // surface either side of a video that had not grown — an
-                  // "enlarge" button that enlarged nothing, which is the state
-                  // this replaces.
-                  //
-                  // 64vh, and that is the ceiling rather than a preference.
-                  // Measured on the reported layout: the body is ~625px, and
-                  // what has to sit under the video during a wait — the
-                  // Required/Detected readout, the countdown, Confirm, Stop —
-                  // is ~165px once the Run section is clipped away while a step
-                  // is waiting (it repeated the pill and the readout). That
-                  // leaves ~460px of height, which at 4:3 is ~613px of width.
-                  // 64vh lands just inside it.
-                  //
-                  // Past this the readouts start to scroll, and the whole point
-                  // of capping was that they must not. The remaining lever is
-                  // not a bigger number: the wide panel is 719x625, ratio 1.15,
-                  // while the video is 1.33 — it is WIDER than the box holding
-                  // it, so filling the width costs 539px of height and leaves
-                  // 86px for everything else. Two columns are worse, not
-                  // better: at 65/35 the video gets 467px, less than it has now.
+                  // 64vh is the ceiling rather than a preference. Measured: the body is ~625px, and
+                  // what sits under the video during a wait (Required/Detected readout, countdown,
+                  // Confirm, Stop) is ~165px once the Run section is clipped away while a step is
+                  // waiting. That leaves ~460px of height, which at 4:3 is ~613px of width; 64vh
+                  // lands just inside it. Past this the readouts start to scroll, which is what
+                  // capping was meant to prevent. A bigger number is not the lever: the wide panel
+                  // is 719x625 (ratio 1.15) and the video is 1.33, so filling the width costs 539px
+                  // of height and leaves 86px for everything else. Two columns are worse: at 65/35
+                  // the video gets 467px, less than it has now.
                   maxWidth: 'min(100%, 64vh)',
                   marginInline: 'auto',
                   background: panel.videoBg,
@@ -2123,12 +2017,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                               size={20}
                               sx={{ color: panel.primary }}
                             />
-                            {/* This overlay tracks the CAMERA STREAM, not the
-                                run — it sits here until the first MJPEG frame
-                                arrives. It used to read "Starting
-                                simulation...", which made a camera that never
-                                connected look like a run stuck at step zero
-                                (misread live as a frozen STATUS, 2026-07-30). */}
+                            {/* This overlay tracks the CAMERA STREAM, not the run — it sits here until the
+                                first MJPEG frame arrives. Its text must not read as a run state: "Starting
+                                simulation..." made a camera that never connected look like a run stuck at
+                                step zero. */}
                             <Typography
                               sx={{
                                 fontSize: panelType.small,
@@ -2163,19 +2055,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Box>
                 )}
 
-                {/* The dark overlay that used to sit here is gone.
-                    It replaced the video with the step's message and, for a
-                    button-confirmed step, the Confirm button. Two problems, one
-                    cause: it could not be shown for gesture or object steps
-                    (the operator has to SEE the camera to aim), so for those
-                    two channels the instruction rendered nowhere at all — and
-                    where it did show, it cost ~140px of vertical stack that
-                    pushed STATUS and CONDITIONS below the fold, worse the wider
-                    the panel got.
+                {/* No dark overlay replaces the video. It could not be shown for gesture or object
+                    steps (the operator has to SEE the camera to aim), so the instruction would
+                    render nowhere for those channels, and it cost ~140px of vertical stack that
+                    pushed STATUS and CONDITIONS below the fold.
 
-                    The instruction now rides in the pill over the video, the
-                    same place Show message uses, for all four channels. Confirm
-                    moved down next to the countdown, which is where the
+                    The instruction rides in the pill over the video, the same place Show message
+                    uses, for all four channels. Confirm sits next to the countdown, where the
                     operator is already looking to see how long they have. */}
 
                 {/* ── Slot 1: NOW — one pill, over the live view ──
@@ -2523,12 +2409,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                     </Box>
                   )}
 
-                  {/* Time remaining — for every confirmation channel, not just
-                  gesture. This used to be nested inside the gesture card
-                  above, so an operator confirming by button, voice or object
-                  detection got a spinner with no indication that the step was
-                  on a deadline at all: the four channels differed in the
-                  feedback they gave, not only in how they were answered. */}
+                  {/* Time remaining — for every confirmation channel, not just gesture, so an
+                      operator confirming by button, voice or object detection also sees the step is
+                      on a deadline. */}
                   {isHumanStepActive && countdown !== null && (
                     <Box sx={{ mt: 1.5 }}>
                       {/* Two colours, not three. Amber is taken: across this panel
@@ -2597,15 +2480,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                         {countdownIsCritical ? 'Time is almost up' : ''}
                       </Box>
 
-                      {/* Confirm, directly under the clock it is racing.
-                      It used to live inside the dark overlay, which meant it
-                      only existed for channels that got an overlay — and it sat
-                      mid-panel at 200px wide while Stop ran full width against
-                      the bottom edge. By Fitts that made the destructive,
-                      rare action the easiest target on the screen and the
-                      frequent one harder, for an operator whose hands are full
-                      of test tubes. Full width here, immediately below the
-                      countdown, where they are already looking. */}
+                      {/* Confirm, directly under the clock it is racing and full width. A mid-panel
+                          button would make the destructive, rare action (Stop, full width against the
+                          bottom edge) the easiest target on the screen and the frequent one harder
+                          (Fitts), for an operator whose hands are full of test tubes. */}
                       {humanStep?.condition === 'human_feedback' && (
                         <Button
                           ref={confirmButtonRef}
@@ -3344,11 +3222,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                 }}
               >
                 STATUS
-                {/* Live-event link state. A dead SocketIO connection and a run
-                    that simply isn't progressing look identical on this line
-                    otherwise — that ambiguity cost two debugging rounds on
-                    2026-07-30, since block_step events reaching the bridge
-                    says nothing about them reaching the browser. */}
+                {/* Live-event link state. A dead SocketIO connection and a run that simply isn't
+                    progressing look identical on this line otherwise: block_step events reaching
+                    the bridge says nothing about them reaching the browser. */}
                 {simulation.isRunning && !connected && (
                   <Box
                     component="span"
@@ -3688,22 +3564,13 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   </Box>
                 ) : (
                   <Box sx={{ mb: 1 }}>
-                    {/* One sentence, and it used to be two. The second —
-                        "Gestures and voice commands must be performed live" —
-                        is what the camera/microphone notice directly below
-                        says, and that one says it only on a task that has
-                        gestures or voice, names which permission Run will ask
-                        for, and cannot go stale: on this target `runMode` is
-                        forced to 'live', so it appears whenever the fact
-                        applies. Here it was unconditional, so a task with no
-                        human step at all carried a warning about gestures it
-                        does not use.
-
-                        It also cost the sentence that matters. Real robot
-                        stacks more into the same body than Simulation does —
-                        a longer notice, the e-stop line, an extra pre-flight
-                        issue — and this banner is what the scroll fold cut in
-                        half, mid-word, directly above the run button. */}
+                    {/* One sentence. "Gestures and voice commands must be performed live" is what the
+                        camera/microphone notice directly below says, and that one appears only on a
+                        task that has gestures or voice, names which permission Run will ask for, and
+                        cannot go stale (on this target `runMode` is forced to 'live'). Repeating it
+                        here warned a task with no human step about gestures it does not use, and made
+                        the banner long enough for the scroll fold to cut it in half, mid-word,
+                        directly above the run button. */}
                     <PanelMessage tone="hardware" dense>
                       Live hardware — the real robot will move.
                     </PanelMessage>
@@ -3936,10 +3803,9 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
           <Button
             fullWidth
             onClick={simulation.isRunning ? stopSimulation : handleRun}
-            // `stopping` holds Run down until the server confirms the previous
-            // run let go. Pressing it a second earlier used to return 409 and
-            // surface as a red error, or — worse and silently — start a run
-            // into a world the previous Stop was still tearing down.
+            // `stopping` holds Run down until the server confirms the previous run let go:
+            // pressed earlier it returns 409, or silently starts a run into a world the
+            // previous Stop is still tearing down.
             disabled={
               !simulation.isRunning &&
               (stopping ||
@@ -4005,13 +3871,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                   ? UI_TEXT.runOnRobot
                   : UI_TEXT.startSimulation}
           </Button>
-          {/* Blockers first, standing advice last, and that order is the point.
-              These two groups answer different questions in different tenses:
-              the pre-flight list says what stops the run NOW and is what
-              explains a disabled button directly above it; the e-stop line is
-              what to do once the arm is moving. They used to be interleaved,
-              so the footer read amber, blue, amber and the operator sorted
-              three messages by hand to find the one holding them up. */}
+          {/* Blockers first, standing advice last. The pre-flight list says what stops the
+              run NOW and explains a disabled button directly above it; the e-stop line is
+              what to do once the arm is moving. Interleaved, the operator sorts three
+              messages by hand to find the one holding them up. */}
           {!simulation.isRunning &&
             (preflightIssues.length > 0 ? (
               <Stack spacing={0.6} sx={{ mt: 0.8 }}>
@@ -4032,14 +3895,10 @@ export const DigitalTwinPanel: React.FC<DigitalTwinPanelProps> = ({
                       flexWrap: 'nowrap',
                     }}
                   >
-                    {/* Amber only when the arm is the problem. The other
-                        pre-flight issues — a draft task, auto-answered human
-                        steps, a browser without speech — are things to know,
-                        not things the arm is doing, and they used to sit here
-                        in the same amber as the hardware ones. What makes them
-                        read as blockers is where they are (directly under a
-                        disabled Run) and that they carry a fix, not the
-                        colour. */}
+                    {/* Amber only when the arm is the problem. The other pre-flight issues — a draft
+                        task, auto-answered human steps, a browser without speech — are things to know,
+                        not things the arm is doing. What makes them read as blockers is where they are
+                        (directly under a disabled Run) and that they carry a fix, not the colour. */}
                     {issue.tone === 'hardware' ? (
                       <AlertTriangle
                         size={12}

@@ -31,24 +31,23 @@ import numpy as np
 
 # OpenCV hue range is 0-179; red wraps around the origin.
 #
-# Boundaries measured on this rig, not taken from a textbook hue wheel. The
-# caps were sampled across the seven frames in testing/out/vision_check
-# (Rob_test*), post-white-balance, and the classes separate cleanly:
+# Boundaries measured on this rig, not taken from a textbook hue wheel. The caps
+# were sampled across the seven frames in testing/out/vision_check (Rob_test*),
+# post-white-balance, and the classes separate cleanly:
 #
 #     orange   6- 15      yellow  24- 51
 #     green   68- 96      blue   108-116
 #
-# The textbook values that used to sit here put the yellow/green boundary at
-# 35/40, which cuts the yellow class in half: this cell's yellow cap is a
-# fluorescent yellow-green that measures 24-51, so roughly three frames in
-# five it landed in `green` and a "provetta gialla" step never matched. The
-# boundaries below sit in the gaps between the measured clusters (19, 57, 99),
-# which leaves every class at least six hue units of margin.
+# Textbook boundaries (yellow/green at 35/40) cut the yellow class in half: this
+# cell's yellow cap is a fluorescent yellow-green measuring 24-51, so it would
+# land in `green` and a "provetta gialla" step would not match. The boundaries
+# sit in the gaps between the measured clusters (19, 57, 99), leaving every class
+# at least six hue units of margin.
 #
-# `red` is deliberately narrow. No red object exists in the catalogue any more
-# (seed_library.REMOVED_OBJECTS), so the only thing a wide red band can do here
-# is capture the orange caps, which measure 6-15 — and the red tube rack, which
-# is background. Widen it again only alongside a red object that needs it.
+# `red` is deliberately narrow. No red object exists in the catalogue
+# (seed_library.REMOVED_OBJECTS), so a wide red band can only capture the orange
+# caps (6-15) and the red tube rack, which is background. Widen it only alongside
+# a red object that needs it.
 COLOR_BINS = {
     "red": ((0, 4), (170, 179)),
     "orange": ((5, 19),),
@@ -89,16 +88,14 @@ BACKGROUND_HUE_TOLERANCE = 4
 # a background with almost no saturated pixels has nothing worth excluding.
 MIN_BACKGROUND_SATURATED_PX = 10
 
-# normalize_white_balance: pixels this saturated or more are excluded from
-# the grey-mean estimate. NOT a low number — measured 2026-07-29 against the
-# real camera: the "neutral" wall itself sits at S~80-100 under this rig's
-# warm cast (median 91), while the red rack sits at S~150-220 (median 165).
-# A textbook-low threshold (e.g. 60) excludes the wall too, leaves too
-# little data, and silently falls back to the uncorrected whole-frame
-# estimate — this value is picked to sit between the two clusters instead.
-# If fewer than WB_MIN_NEUTRAL_FRACTION of the frame is left after
-# excluding, fall back to the whole frame rather than estimating from too
-# little data.
+# normalize_white_balance: pixels this saturated or more are excluded from the
+# grey-mean estimate. NOT a low number (measured against the real camera): the
+# "neutral" wall itself sits at S~80-100 under this rig's warm cast (median 91),
+# while the red rack sits at S~150-220 (median 165). A textbook-low threshold
+# (e.g. 60) excludes the wall too, leaves too little data, and silently falls
+# back to the uncorrected whole-frame estimate; this value sits between the two
+# clusters. If fewer than WB_MIN_NEUTRAL_FRACTION of the frame is left after
+# excluding, fall back to the whole frame rather than estimating from too little.
 WB_SAT_THRESHOLD = 110
 WB_MIN_NEUTRAL_FRACTION = 0.05
 

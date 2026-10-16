@@ -184,30 +184,21 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   const { data: dataLocations = [] } = useSWR<LocationListType[], Error>({
     url: endpoints.graphic.locationsGraphic,
   })
-  // The assistant's Saved Task catalogue. Same SWR key the toolbox and the
-  // robot panel already hold, so this costs no request. Without it the prompt
-  // told the model that a "Saved Tasks" category exists and never said what is
-  // in it — and a user asking to reuse one got an invented saved task back,
-  // reported as added.
+  // The assistant's Saved Task catalogue. Same SWR key the toolbox and the robot
+  // panel already hold, so this costs no request. Without it the prompt only said a
+  // "Saved Tasks" category exists, and a user asking to reuse one got an invented
+  // saved task back.
   const { data: dataMacros = [] } = useSWR<
     { id: number; name: string; description?: string }[],
     Error
   >({ url: endpoints.graphic.macroList })
 
-  // Starters for the opening state, built from the operator's own catalogue
-  // rather than written down here.
-  //
-  // The panel opened with one welcome bubble, a composer, and roughly half its
-  // height empty. Its only affordance was a text field, and the welcome's
-  // answer to "what do I type" was a worked example to retype by hand. An
-  // operator who does not program reads that as a blank page — and the
-  // observed behaviour in testing is that they look for something to press,
-  // then look elsewhere when they do not find it.
-  //
-  // Reading the live catalogue rather than hardcoding nouns also means these
-  // cannot go stale: the welcome text in utils/chat.ts carries names that have
-  // to be kept in step with seed_library by hand, and these name whatever this
-  // operator actually has.
+  // Starters for the opening state, built from the operator's own catalogue rather
+  // than written down here. A welcome bubble and a bare composer read as a blank
+  // page to an operator who does not program, and they look for something to press.
+  // Reading the live catalogue also means these cannot go stale: the welcome text in
+  // utils/chat.ts carries names that have to be kept in step with seed_library by
+  // hand, and these name whatever this operator actually has.
   const starterPrompts = React.useMemo(() => {
     const object = dataObjects[0]?.name
     const location = dataLocations[0]?.name
@@ -327,12 +318,11 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     }
   }
 
-  // Discarding a proposal has to leave a trace in the transcript. The
-  // assistant's own message is written before the user has decided anything,
-  // and models phrase it as done ("I updated the pick step…"), so dismissing
-  // the proposal used to leave that claim standing as the last thing said —
-  // the history then read as though the change had been made. Two entry points
-  // reach here: the card's Cancel and the collapsed badge's ✕.
+  // Discarding a proposal has to leave a trace in the transcript. The assistant's
+  // own message is written before the user has decided anything, and models phrase
+  // it as done ("I updated the pick step…"), so without a line here the history
+  // reads as though the change had been made. Two entry points reach here: the
+  // card's Cancel and the collapsed badge's ✕.
   const discardProposal = useCallback(() => {
     dispatch(clearProposedTask())
     setListMessages((prev) => [
@@ -441,9 +431,8 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
       setListMessages([
         ...priorMessages,
         {
-          // Fall back to what conformance already worked out locally. This
-          // used to be a bare apology, which threw away the one thing that
-          // had cost nothing and was known to be true.
+          // Fall back to what conformance already worked out locally: a bare apology would
+          // throw away the one thing that cost nothing and is known to be true.
           text: `${localSummary} I couldn't look at it in more detail just now — tell me what the robot should do and I'll help.`,
           id: (priorMessages[priorMessages.length - 1]?.id ?? 0) + 1,
           user: UserChatEnum.ROBOT,
@@ -457,20 +446,18 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     }
   }
 
-  // Contextual welcome — seeded once per task, when the workspace is
-  // available. Conformance runs locally and costs nothing; if it finds
-  // anything, it kicks off the one proactive LLM call above. A short delay
-  // covers the gap between the workspace becoming available (injection) and
-  // the task's saved blocks finishing their load into it, since conformance
-  // read too early would misreport an existing task as empty.
+  // Contextual welcome — seeded once per task, when the workspace is available.
+  // Conformance runs locally and costs nothing; if it finds anything, it kicks off
+  // the one proactive LLM call above. A short delay covers the gap between the
+  // workspace becoming available (injection) and the task's saved blocks finishing
+  // their load into it, since conformance read too early would misreport an
+  // existing task as empty.
   //
-  // The local summary is NOT posted as its own bubble any more. It used to be,
-  // and the proactive call then appended a second bubble about the same block
-  // one second later — two Copilot messages on the same timestamp, both saying
-  // something was unfinished. The LLM's is strictly the better of the two: it
-  // names which step and offers the fix as a chip. So the local text is held
-  // back and spent only where it is the best available answer, which is when
-  // that call fails.
+  // The local summary is NOT posted as its own bubble: the proactive call would
+  // append a second bubble about the same block one second later. The LLM's is
+  // strictly better (it names which step and offers the fix as a chip), so the
+  // local text is held back and spent only where it is the best available answer,
+  // which is when that call fails.
   const hasSeededWelcomeRef = useRef(false)
   useEffect(() => {
     if (hasSeededWelcomeRef.current) return

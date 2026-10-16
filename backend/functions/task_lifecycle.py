@@ -44,9 +44,9 @@ def save_draft(request: HttpRequest) -> HttpResponse:
         task_id = data.get("id")
         task_structure = data.get("taskStructure")
 
-        # No owner filter here used to mean any authenticated user could
-        # overwrite anyone's draft by id — writes are owner-only, unlike
-        # task_detail's GET which also allows shared=True (read, not write).
+        # Writes are owner-only, unlike task_detail's GET which also allows
+        # shared=True: filtering by id alone would let any authenticated user
+        # overwrite anyone's draft.
         task = Task.objects.filter(id=task_id, owner=request.user).first()
         if task is None:
             return error_response("Task not found")

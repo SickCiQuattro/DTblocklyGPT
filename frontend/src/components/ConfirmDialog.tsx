@@ -30,9 +30,9 @@ interface ConfirmDialogProps {
    *   banner already carry, so one colour means one thing across the app.
    * 'default' — ordinary confirm. Primary indigo.
    *
-   * Starting the real robot used to be 'danger', which was wrong twice: it is
-   * not destructive, and red is already the Stop button during a run — the two
-   * opposite actions shared a colour on a cell with a physical arm in it.
+   * Starting the real robot is 'caution', not 'danger': it is not destructive, and
+   * red is already the Stop button during a run, so the two opposite actions would
+   * share a colour on a cell with a physical arm in it.
    */
   tone?: 'danger' | 'caution' | 'default'
   /** Defaults to true only for the 'default' tone — neither a destructive

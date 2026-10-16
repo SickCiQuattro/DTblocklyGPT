@@ -19,26 +19,22 @@ export const panel = {
 
   // ── Anything drawn ON TOP OF THE VIDEO uses one of these two ─────────────
   //
-  // The rule, learned the expensive way: an overlay on live video must supply
-  // its own ground. It cannot borrow the video's, because the video is not a
-  // surface this design controls — it is a picture that changes.
+  // An overlay on live video must supply its own ground; it cannot borrow the
+  // video's, because the video is a picture that changes.
   //
-  // Every overlay token here used to be calibrated against `bg` (#0c0c1c), and
-  // measured beautifully there. The frame they actually composite over is the
-  // Gazebo render, and `worldCobotta.sdf` declares no <background>, so gz-sim
-  // falls back to its light default sky over a 0.8-diffuse ground plane. The
-  // scene is near-white. Measured on the real thing: the "Show message" pill
-  // read 1.59:1 over the sky and 1.01:1 over the ground — the operator's own
-  // authored instruction, invisible. "Step completed" read 1.22:1, so a person
-  // who performed a gesture correctly got no visible acknowledgement and did
-  // it again. On a hardware run the feed is a real room, which this design
+  // Tokens calibrated against `bg` (#0c0c1c) measure well there but not over
+  // the Gazebo render: `worldCobotta.sdf` declares no <background>, so gz-sim
+  // falls back to its light default sky over a 0.8-diffuse ground plane, and
+  // the scene is near-white. Measured there, the "Show message" pill read
+  // 1.59:1 over the sky and 1.01:1 over the ground, and "Step completed"
+  // 1.22:1. On a hardware run the feed is a real room, which this design
   // controls even less.
   //
-  // 0.92 is not a taste value. It is the point where every foreground token
-  // clears AA against BOTH extremes — white frame and black letterbox — and,
-  // more to the point, where the two stop differing much (body text 13.2:1 vs
-  // 15.8:1). Above it the chip is opaque and stops reading as an overlay;
-  // below it (0.88) primaryLight falls to 4.80 and the margin disappears.
+  // 0.92 is not a taste value. It is where every foreground token clears AA
+  // against BOTH extremes (white frame and black letterbox) and where the two
+  // stop differing much (body text 13.2:1 vs 15.8:1). Above it the chip is
+  // opaque and stops reading as an overlay; below it (0.88) primaryLight falls
+  // to 4.80 and the margin disappears.
   /** Compact overlay (pill, chip, label) sitting directly on video. */
   overlayChip: 'rgba(12, 12, 28, 0.92)',
   /** Full-cover overlay that takes the video for the duration of a wait. */
@@ -96,26 +92,16 @@ export const panel = {
 /**
  * The panel's type scale. Five steps, and a 12px floor.
  *
- * There were fourteen sizes before this: 0.6 / 0.62 / 0.64 / 0.65 / 0.66 /
- * 0.68 / 0.72 / 0.78 / 0.8 / 0.82 / 0.85 / 0.875 / 0.9 / 1.05 rem. Seven of
- * them sat inside a 9.6–11.5px band — `0.64 → 0.65 → 0.66 → 0.68` is four
- * declared values spanning 0.32 of a pixel. Only one matched a step in the
- * app's own ramp (`themes/typography.ts`).
+ * Steps are far enough apart to be *seen* — 12 / 13 / 14 / 18 / 24 — so size
+ * means something: sizes a reader cannot tell apart carry as much information as
+ * one size and cost every future edit a decision with no right answer.
  *
- * That is not a hierarchy with too many levels; it is the absence of one.
- * Fourteen sizes that a reader cannot tell apart carry exactly as much
- * information as one size, while costing every future edit a decision with no
- * right answer. Steps here are far enough apart to be *seen* — 12 / 13 / 14 /
- * 18 / 24 — so size means something again.
- *
- * The floor is 12px because the panel's audience is a study participant who
- * has never used the app, reading English as a second language, on a laptop,
- * next to a robot arm that is moving. 9.6px was the size of the label naming
- * the camera feed.
+ * The floor is 12px because the panel's audience is a study participant who has
+ * never used the app, reading English as a second language, on a laptop, next to
+ * a robot arm that is moving.
  *
  * `display` exists for exactly two things: the seconds left on a step, and the
- * gesture the operator must produce. Both are read under a deadline, at a
- * glance, and both were previously smaller than this paragraph.
+ * gesture the operator must produce. Both are read under a deadline, at a glance.
  */
 export const panelType = {
   /** 12px — captions, section labels, legend chips, units. The floor. */

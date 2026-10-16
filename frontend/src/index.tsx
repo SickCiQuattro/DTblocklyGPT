@@ -16,7 +16,7 @@ import { store } from './store'
 
 // ─── Geist font — Vercel OSS, 2023 (design system primary font) ──────────────
 // Self-hosted via @fontsource, not the render-blocking Google Fonts @import
-// global.css used to also carry — that was loading Geist twice.
+// (which would load Geist twice).
 import '@fontsource/geist/400.css'
 import '@fontsource/geist/500.css'
 import '@fontsource/geist/600.css'
