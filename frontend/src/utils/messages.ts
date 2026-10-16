@@ -33,6 +33,3 @@ export const MessageTextMinLength = (minLength: number) =>
 
 export const MessageTextMaxLength = (maxLength: number) =>
   `Maximum length ${maxLength} characters`
-
-export const MessageTextValueBetween = (minValue: number, maxValue: number) =>
-  `Value must be between ${minValue} - ${maxValue}`

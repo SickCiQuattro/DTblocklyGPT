@@ -258,29 +258,6 @@ class Task(models.Model):
                 response_data[key] = self.dependencies
         return response_data
 
-    @property
-    def effective_workspace(self):
-        """
-        Unified read path: returns the workspace as a dict.
-        Uses workspace if set, otherwise deserializes code (legacy).
-        """
-        if self.workspace is not None:
-            return self.workspace
-        if self.code:
-            try:
-                return json.loads(self.code)
-            except (json.JSONDecodeError, TypeError):
-                return None
-        return None
-
-    @property
-    def is_macro(self):
-        return self.task_type == TASK_TYPE_MACRO
-
-    @property
-    def is_published(self):
-        return self.status in (STATUS_PUBLISHED, STATUS_PUBLISHED_WITH_DRAFT)
-
     class Meta:
         ordering = ["-last_modified"]
 

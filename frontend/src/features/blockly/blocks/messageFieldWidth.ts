@@ -14,7 +14,7 @@ import { blockDescriptionsByType } from './blockTextDictionary'
  * that is already sharing the screen with Copilot and the robot panel.
  *
  * The operator loses sight of the one thing that makes the block a pause
- * rather than a notice. Reported after a pilot run.
+ * rather than a notice.
  *
  * Blockly has no wrapping text field in core here (FieldMultilineInput moved
  * out to a plugin, which this project does not depend on), so the width is
@@ -26,9 +26,6 @@ import { blockDescriptionsByType } from './blockTextDictionary'
 const MAX_DISPLAYED_CHARS = 30
 
 const EXTENSION_NAME = 'human_message_field'
-
-/** Blocks whose TASK_DESC is free text an operator writes. */
-const DESCRIBED_BLOCKS = ['human_action_block', 'notify_action_block'] as const
 
 if (!Blockly.Extensions.isRegistered(EXTENSION_NAME)) {
   Blockly.Extensions.register(EXTENSION_NAME, function (this: Blockly.Block) {
@@ -57,5 +54,3 @@ if (!Blockly.Extensions.isRegistered(EXTENSION_NAME)) {
 }
 
 export const HUMAN_MESSAGE_FIELD_EXTENSION = EXTENSION_NAME
-export const HUMAN_MESSAGE_MAX_DISPLAYED_CHARS = MAX_DISPLAYED_CHARS
-export const HUMAN_MESSAGE_BLOCKS = DESCRIBED_BLOCKS

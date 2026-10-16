@@ -1,22 +1,21 @@
 /**
- * Which recognition channels a run will actually use — including the ones
- * hidden inside Saved Tasks.
+ * Which recognition channels a run will actually use — including the ones hidden
+ * inside Saved Tasks.
  *
  * The camera and the microphone are started before a run, not when the waiting
  * step is reached: acquiring a webcam takes long enough that a gesture step
  * beginning at t=0 of the acquisition sends no frames at all (see the note in
  * useWebcamVision). So the panel has to know in advance what the program needs.
  *
- * "In advance" used to mean scanning the blocks on the canvas, which is wrong
- * for exactly one construct and it is the one the user study leans on: a Saved
- * Task's steps live in ANOTHER task's workspace. A task whose only gesture step
- * sits inside a macro looked like it needed nothing, the webcam never started,
- * and the step waited its full timeout with the operator gesturing at a camera
- * that was never on. Same for voice.
+ * Scanning the blocks on the canvas is wrong for exactly one construct, the one
+ * the user study leans on: a Saved Task's steps live in ANOTHER task's workspace.
+ * A task whose only gesture step sits inside a macro looks like it needs nothing,
+ * the webcam never starts, and the step waits its full timeout with the operator
+ * gesturing at a camera that was never on. Same for voice.
  *
  * find_object is deliberately NOT here: it reads the robot's own camera through
- * vision_node, never the operator's browser webcam, so it needs no permission
- * and no stream from this side.
+ * vision_node, never the operator's browser webcam, so it needs no permission and
+ * no stream from this side.
  */
 import * as Blockly from 'blockly/core'
 

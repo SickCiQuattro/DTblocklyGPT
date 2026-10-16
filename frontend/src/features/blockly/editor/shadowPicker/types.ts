@@ -59,7 +59,6 @@ export type SelectableShadowBlockType =
 
 /**
  * Shadow and real block types that, when clicked, open a specific picker popover.
- * Used as the key set for `SHADOW_POPOVER_BY_BLOCK_TYPE`.
  */
 export type ShadowEntityBlockType =
   | 'object_block'
@@ -119,26 +118,6 @@ export interface ShadowEntitySource {
 }
 
 // ─── LOOKUP MAPS ─────────────────────────────────────────────────────────────
-
-/**
- * Maps each clickable block type to the corresponding picker popover context.
- * Both real and shadow block types are included so the picker can open
- * regardless of whether the user clicks the shadow or its parent.
- */
-export const SHADOW_POPOVER_BY_BLOCK_TYPE: Record<
-  ShadowEntityBlockType,
-  ShadowPopoverType
-> = {
-  object_block: 'object',
-  shadow_object_block: 'object',
-  location_block: 'location',
-  shadow_location_block: 'location',
-  action_block: 'action',
-  shadow_action_block: 'action',
-  shadow_trigger_block: 'trigger',
-  shadow_sequence_block: 'sequence',
-  shadow_start_sequence_block: 'sequence',
-}
 
 /** Header text displayed at the top of the picker menu for each context type. */
 // MAPPING REFERENCE:

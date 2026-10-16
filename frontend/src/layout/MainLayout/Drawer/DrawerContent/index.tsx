@@ -26,10 +26,9 @@ export const DrawerContent = ({ open }: DrawerContentProps) => {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Scrollable navigation items. Native scrolling on purpose: this list
           is a handful of rows and only scrolls on a very short viewport.
-          A JS scrollbar library used to wrap it, but its stylesheet was never
-          imported, so its track rendered as an unstyled block in normal flow —
-          a grey bar under the last nav item that filled in as the library
-          measured and set the scrollbar width inline. */}
+          A JS scrollbar library would need its stylesheet imported, or its track
+          renders as an unstyled block in normal flow — a grey bar under the
+          last nav item. */}
       <Box
         sx={{
           flexGrow: 1,

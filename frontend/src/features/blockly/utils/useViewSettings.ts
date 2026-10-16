@@ -39,7 +39,7 @@ export interface ViewSettings {
   showLogicOperators: boolean
 }
 
-export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
+const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   blockViewMode: 'complete',
   deleteConfirmMode: 'multiple',
   showStartBlock: true,

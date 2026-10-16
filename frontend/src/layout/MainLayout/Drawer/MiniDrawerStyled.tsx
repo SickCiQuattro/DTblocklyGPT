@@ -1,5 +1,4 @@
-import { CSSObject, styled, Theme } from '@mui/material/styles'
-import Drawer from '@mui/material/Drawer'
+import { CSSObject, Theme } from '@mui/material/styles'
 
 import { drawerWidth, LAYOUT } from 'utils/constants'
 
@@ -14,11 +13,10 @@ const COLLAPSED_WIDTH = 56
 export const RAIL_CLOSED_WIDTH = COLLAPSED_WIDTH + LAYOUT.gutter
 
 // Every other animated panel in the shell (chat resize, Digital Twin slide,
-// editor width when the Twin opens) moves on cubic-bezier(0.4,0,0.2,1) @
-// 300ms. The rail used to move on MUI Drawer's default 'sharp' easing +
-// enteringScreen/leavingScreen durations instead — a different curve/timing
-// that read as inconsistent. Rail root, rail paper, and the AppBar (which
-// must stay in lockstep with the rail) all share this one definition.
+// editor width when the Twin opens) moves on cubic-bezier(0.4,0,0.2,1) @ 300ms,
+// so the rail does too rather than MUI Drawer's default 'sharp' easing. Rail
+// root, rail paper, and the AppBar (which must stay in lockstep with the rail)
+// all share this one definition.
 export const railTransition = (
   theme: Theme,
   property: string | string[],
@@ -61,20 +59,3 @@ export const openedPaperMixin = (theme: Theme): CSSObject =>
 
 export const closedPaperMixin = (theme: Theme): CSSObject =>
   floatingPaperStyle(theme, COLLAPSED_WIDTH)
-
-export const MiniDrawerStyled = styled(Drawer, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})<{ open: boolean }>(({ theme, open }) => ({
-  width: drawerWidth,
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-  boxSizing: 'border-box',
-  ...(open && {
-    ...openedMixin(theme),
-    '& .MuiDrawer-paper': openedPaperMixin(theme),
-  }),
-  ...(!open && {
-    ...closedMixin(theme),
-    '& .MuiDrawer-paper': closedPaperMixin(theme),
-  }),
-}))

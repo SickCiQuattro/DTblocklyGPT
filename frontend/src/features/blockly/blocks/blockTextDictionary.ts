@@ -81,27 +81,17 @@ export const blockLabelsByType = {
   close_gripper_block: 'Close gripper',
   wait_block: 'Wait',
 
-  // Human Actions. Each quotes its own canvas text, and the difference lands
-  // at the END of both, where the eye stops.
-  //
-  // The second used to read just "Show message", an ellipsis of its canvas
-  // "Show message and continue:". It dropped the only words that separate it
-  // from its twin, so the palette offered "Pause and show message" and "Show
-  // message" — two message blocks differing by a prefix that is easy to skim
-  // past, with the word that states the difference positively ("continue")
-  // absent altogether.
-  //
-  // Blocking versus non-blocking is the distinction this whole category
-  // exists for. Naming only one of the two for its effect is asymmetric.
+  // Human Actions. Each quotes its own canvas text, and the difference lands at the
+  // END of both, where the eye stops. Blocking versus non-blocking is the
+  // distinction this whole category exists for, so both names state their effect
+  // ("Pause and show message" / "Show message and continue") instead of one being
+  // a bare "Show message".
   human_action_block: 'Pause and show message',
   notify_action_block: 'Show message and continue',
 
-  // Conditions. All four name an EVENT, because that is what a condition is
-  // here — something that happens, not a thing that exists. Three did already;
-  // "Voice command" was a bare noun and the odd one out in a list of four read
-  // top to bottom, while its own block on the canvas says "a voice command is
-  // heard". The verb is what makes the row parallel to its neighbours and to
-  // the block it creates.
+  // Conditions. All four name an EVENT, because that is what a condition is here —
+  // something that happens, not a thing that exists — which also makes each row
+  // parallel to the block it creates ("a voice command is heard").
   find_object_block: 'Object detected',
   gesture_block: 'Gesture detected',
   voice_command_block: 'Voice command heard',
@@ -110,20 +100,20 @@ export const blockLabelsByType = {
   // Deliberately absent, and each for its own reason:
   //
   // timer_block, logic_and/or/not_block — hidden from both the toolbox and the
-  //   picker (relatrice feedback 2026-06-30). They are still reachable, since
-  //   the chat assistant emits them, but nothing renders a NAME for them:
-  //   collapsed blocks go through collapseSummary.ts, which builds its text
-  //   from per-block functions rather than a label. Entries here would have no
-  //   reader, and an unread string drifts silently.
+  //   picker (advisor feedback). They are still reachable, since the chat
+  //   assistant emits them, but nothing renders a NAME for them: collapsed blocks
+  //   go through collapseSummary.ts, which builds its text from per-block functions
+  //   rather than a label. Entries here would have no reader, and an unread string
+  //   drifts silently.
   //
   // macro_task_block — has no single static name. The toolbox pill says
-  //   UI_TEXT.savedTask because it is the category term; every row in the
-  //   picker is named after the task the operator saved. Pinning one label
-  //   would be wrong, not merely redundant.
+  //   UI_TEXT.savedTask because it is the category term; every row in the picker
+  //   is named after the task the operator saved. Pinning one label would be
+  //   wrong, not merely redundant.
   //
   // object_block, location_block, action_block — the toolbox shows plural
-  //   headings ("Objects") that open a picker; the picker's rows are entity
-  //   names from the database.
+  //   headings ("Objects") that open a picker; the picker's rows are entity names
+  //   from the database.
 } as const
 
 export const blockDescriptionsByType = {

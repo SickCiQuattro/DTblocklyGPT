@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly/core'
 
-export function filterRealBlocks<T extends Blockly.Block>(
+function filterRealBlocks<T extends Blockly.Block>(
   blocks: T[],
   excludeType?: string,
 ): T[] {
@@ -64,28 +64,24 @@ export const getOwnBodyDescendants = (
  * Blockly's own deletion (`BlockSvg.checkAndDelete()` → `dispose(healStack)`,
  * which is what its Delete shortcut and its context-menu item both run) cascades
  * from the parent down, and silently leaves a value-input child behind as a
- * floating orphan when the parent occupies a connection that has a default
- * shadow configured — a condition slot, for instance. Reproduced by hand.
+ * floating orphan when the parent occupies a connection that has a default shadow
+ * configured — a condition slot, for instance.
  *
  * Disposing the descendants explicitly first, in reverse order, avoids the
- * cascade entirely. Every deletion path in the editor must route through here:
- * this used to run only when a confirmation dialog was shown, which meant the
- * most common case of all — deleting a single block, where the default
- * `deleteConfirmMode: 'multiple'` asks nothing — fell through to Blockly and hit
- * the very bug this exists to avoid.
+ * cascade entirely. Every deletion path in the editor must route through here,
+ * including the single-block case where the default `deleteConfirmMode:
+ * 'multiple'` asks nothing.
  *
- * `healStack` is the difference between the two gestures, and getting it wrong
- * is visible to the operator:
+ * `healStack` is the difference between the two gestures:
  *
  *  - Delete key and context menu remove ONE block from a stack that is still
- *    assembled. Healing is the whole point — the steps below it close the gap
- *    and the program stays connected. This is the default.
- *  - The delete zone receives a block a drag already detached, and a drag
- *    carries everything below along with it. There is no stack left to heal:
- *    healing there re-parents the trailing steps onto nothing, so they survive
- *    the delete and land back on the canvas as a floating stack — the operator
- *    dropped six blocks on the toolbox and five came back. Hence `false`, plus
- *    the trailing chain in the descendant sweep so those blocks are disposed
+ *    assembled. Healing is the whole point: the steps below it close the gap and
+ *    the program stays connected. This is the default.
+ *  - The delete zone receives a block a drag already detached, and a drag carries
+ *    everything below along with it. There is no stack left to heal: healing
+ *    there re-parents the trailing steps onto nothing, so they survive the delete
+ *    and land back on the canvas as a floating stack. Hence `false`, plus the
+ *    trailing chain in the descendant sweep so those blocks are disposed
  *    leaf-first too rather than by the cascade this helper exists to avoid.
  */
 export const disposeBlockWithBody = (

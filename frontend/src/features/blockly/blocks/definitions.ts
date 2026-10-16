@@ -51,11 +51,6 @@ import {
   VOICE_DROPDOWN_OPTIONS,
 } from 'constants/recognitionRegistry'
 
-// Re-export palette and icons for consumers that import from this file directly.
-// Prefer importing from './palette' or './icons' in new code.
-export { blocksColours } from './palette'
-export { SHADOW_ICON_URIS } from './icons'
-
 // ─── 1. ENTITY BLOCKS (OBJECTS, DESTINATIONS, PROCEDURES) ────────────────────
 // These blocks carry a reference to a user-defined entity (object, location,
 // or robot action). Their `data` field stores a JSON string with { id, name, keywords }.
@@ -418,19 +413,18 @@ Blockly.defineBlocksWithJsonArray([
   {
     type: 'repeat_until_block',
     extensions: ['collapsed_summary'],
-    // Reads in EXECUTION order — steps first, exit check last — because that
-    // is also what the block does: it is a do-until, so the steps always run
-    // at least once before the condition is looked at.
+    // Reads in EXECUTION order — steps first, exit check last — because that is also
+    // what the block does: it is a do-until, so the steps always run at least once
+    // before the condition is looked at.
     //
     // "Repeat until %condition" put the exit test above the body and left the
-    // stopping implicit. With conditions phrased as events ("Confirm button
-    // pressed", "Gesture detected"), operators read it as "repeat each time
-    // they press" just as readily as "repeat until they press" — reported
-    // during workspace testing. "Stop when" states the action instead of
-    // implying it, and cannot carry the other reading.
+    // stopping implicit; with conditions phrased as events ("Confirm button pressed",
+    // "Gesture detected") operators read it as "repeat each time they press" just as
+    // readily as "repeat until they press". "Stop when" states the action instead of
+    // implying it.
     //
-    // Input NAMES are unchanged (CONDITION, DO), so every saved workspace
-    // still loads: this is a rendering change, not a schema one.
+    // Input NAMES are unchanged (CONDITION, DO), so every saved workspace still
+    // loads: this is a rendering change, not a schema one.
     message0: '%1 Repeat',
     args0: [iconConfig(REPEAT2_ICON_URI, 'Repeat')],
     message1: 'Do %1',

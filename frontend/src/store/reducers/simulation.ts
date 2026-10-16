@@ -11,7 +11,7 @@ export interface SimulationState {
   executionTarget: 'sim' | 'real' | null
 }
 
-export const initialState: SimulationState = {
+const initialState: SimulationState = {
   isRunning: false,
   // Mode-neutral — 'Simulation not started' read wrong once executionTarget
   // is 'real' (nothing being simulated on the real robot). The reducers
@@ -20,7 +20,7 @@ export const initialState: SimulationState = {
   executionTarget: null,
 }
 
-export const simulationSlice = createSlice({
+const simulationSlice = createSlice({
   name: 'simulation',
   initialState,
   reducers: {

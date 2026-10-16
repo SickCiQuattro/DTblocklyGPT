@@ -24,7 +24,7 @@ import { blocksColours } from './palette'
  * @param color      Stroke colour applied to all paths. Defaults to white.
  * @returns          A `data:image/svg+xml,…` URI safe to use in `field_image`.
  */
-export const createLucideIconURI = (
+const createLucideIconURI = (
   svgContent: string,
   color: string = 'white',
 ): string => {
@@ -62,11 +62,6 @@ export const BOX_ICON_URI = createLucideIconURI(
 /** Map-pin icon — used on location/destination blocks. */
 export const MAP_PIN_ICON_URI = createLucideIconURI(
   '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
-)
-
-/** ListChecks icon — used on action/routine blocks (a saved list of steps). */
-export const LISTCHECKS_ICON_URI = createLucideIconURI(
-  '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
 )
 
 /** Zap (lightning) icon — used on Skill blocks (Execute skill / Skills entity). */

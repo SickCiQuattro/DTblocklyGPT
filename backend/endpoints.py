@@ -45,7 +45,6 @@ from .functions.graphic import (
     get_macro_list,
 )
 
-from .functions.task import run_task, analyze_task
 from .functions.simulate import simulate_task, stop_simulation, hardware_status, run_state
 from .functions.vision_live import process_vision_frame, process_voice_command, process_human_confirm
 
@@ -137,12 +136,10 @@ urlpatterns = [
         name="get_macro_list",
     ),
     # TASK
-    path(TASK + "run/", run_task, name="run_task"),
     path(TASK + "simulate/", simulate_task, name="simulate_task"),
     path(TASK + "simulate/stop/", stop_simulation, name="stop_simulation"),
     path(TASK + "simulate/state/", run_state, name="run_state"),
     path(TASK + "hardware-status/", hardware_status, name="hardware_status"),
-    path(TASK + "analyze/", analyze_task, name="analyze_task"),
     path(TASK + "save-draft/", save_draft, name="save_draft"),
     path(TASK + "publish/", publish_task, name="publish_task"),
     path(TASK + "discard-draft/", discard_draft, name="discard_draft"),

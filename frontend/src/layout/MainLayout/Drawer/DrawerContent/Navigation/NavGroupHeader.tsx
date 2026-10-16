@@ -3,7 +3,7 @@ import { Box, Divider, Typography } from '@mui/material'
 // Single source for the group-header height. The open-mode label and the
 // collapsed-mode spacer BOTH use it, so a group's first item lands at the same Y
 // in either state — toggling the rail never shifts items vertically.
-export const NAV_GROUP_HEADER_HEIGHT = 28
+const NAV_GROUP_HEADER_HEIGHT = 28
 
 interface NavGroupHeaderProps {
   title?: string

@@ -65,7 +65,6 @@ export const endpoints = {
     stop: `${TASK_API}/simulate/stop/`,
     runState: `${TASK_API}/simulate/state/`,
     hardwareStatus: `${TASK_API}/hardware-status/`,
-    analyze: `${TASK_API}/analyze/`,
     saveDraft: `${TASK_API}/save-draft/`,
     publish: `${TASK_API}/publish/`,
     discardDraft: `${TASK_API}/discard-draft/`,

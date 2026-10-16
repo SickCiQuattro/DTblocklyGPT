@@ -1,5 +1,4 @@
-from numpy import pi, absolute, array
-from math import cos, sin, radians, ceil, sqrt, atan2, degrees, asin
+from numpy import array
 from ..pybcapclient.bcapclient import BCAPClient
 
 import sys
@@ -25,12 +24,10 @@ from backend.utils.response import (
 from django.http import HttpResponse, HttpRequest
 from json import loads
 from backend.models import UserRobot, Robot
-from numpy import zeros, frombuffer, uint8
-from base64 import b64encode, b64decode
+from numpy import zeros
+from base64 import b64encode
 import socket
 
-PIX_MM_RATIO = 9.222
-CAMERA_ROBOT_DISTANCE = 52.38570925983608  # mm
 
 BCAP_MACHINE_NAME = "localhost"
 
@@ -47,9 +44,6 @@ class RobotAction(Enum):
     GIVE_ARM = "GiveArm"
     TAKE_ARM = "TakeArm"
     ARM_0 = "Arm0"
-    HAND_MOVE_A = "HandMoveA"
-    HAND_MOVE_H = "HandMoveH"
-    ROBOT_0 = "robot0"
     CUR_JOINT = "CurJnt"
     HAND_POS = "HandCurPos"
 
@@ -59,129 +53,11 @@ class CameraAction(Enum):
     ONE_SHOT_FOCUS = "OneShotFocus"
 
 
-class CameraResolution(Enum):
-    WIDTH = 1920
-    HEIGHT = 1080
-
-
 INITIAL_POSITION = """@0 P(177.483268825558, -44.478627592948996, 254.99815172770593, -179.98842099994923, 0,
                                     179.99584205147127, 261.0)"""
 CURRENT_POSITION = "@CURRENT_POSITION"
-CURRENT_ANGLE = "@CURRENT_ANGLE"
 DEFAULT_TIMEOUT = 14400
 MAX_SPEED = "SPEED=100"
-HALF_SPEED = "SPEED=50"
-CALIBRATION_HEIGHT = "254.99815172770593"
-
-
-def polar_to_robot_coordinates(angle, robot_x, robot_y, module=CAMERA_ROBOT_DISTANCE):
-    offset_x = module * cos(radians(angle))
-    offset_y = -module * sin(radians(angle))
-    return robot_x + offset_x, robot_y + offset_y
-
-
-def pixels_to_cartesian(
-    img_x,
-    img_y,
-    width=CameraResolution.WIDTH.value,
-    height=CameraResolution.HEIGHT.value,
-):  # for opencv coordinates, not numpy
-    cartesian_x = img_x - width / 2.0
-    cartesian_y = -img_y + height / 2.0
-    return cartesian_x, cartesian_y
-
-
-def find_polar_coordinates(angle, camera_x, camera_y):
-    (x, y) = pixels_to_cartesian(camera_x, camera_y)
-
-    if absolute(x) > ceil(PIX_MM_RATIO):
-        L2 = sqrt(x**2 + y**2) / PIX_MM_RATIO
-
-        alpha2 = atan2(y, x) * (180.0 / pi)
-
-        if x > 0 and y < 0:
-            alpha3 = 90 - absolute(alpha2)
-
-            L3 = sqrt(
-                CAMERA_ROBOT_DISTANCE**2
-                + L2**2
-                - 2 * L2 * CAMERA_ROBOT_DISTANCE * cos(radians(alpha3))
-            )
-
-            alpha4 = degrees(asin((float(L2) / L3) * (sin(radians(alpha3)))))
-
-            alpha5 = angle + alpha4
-
-        if x > 0 and y >= 0:
-            alpha3 = 90 + alpha2
-
-            L3 = sqrt(
-                CAMERA_ROBOT_DISTANCE**2
-                + L2**2
-                - 2 * L2 * CAMERA_ROBOT_DISTANCE * cos(radians(alpha3))
-            )
-
-            alpha4 = degrees(asin((float(L2) / L3) * (sin(radians(alpha3)))))
-
-            alpha5 = angle + alpha4
-
-        if x < 0 and y >= 0:
-            alpha3 = 360 - (absolute(alpha2) + 90)
-
-            L3 = sqrt(
-                CAMERA_ROBOT_DISTANCE**2
-                + L2**2
-                - 2 * L2 * CAMERA_ROBOT_DISTANCE * cos(radians(alpha3))
-            )
-
-            alpha4 = degrees(asin((float(L2) / L3) * (sin(radians(alpha3)))))
-
-            alpha5 = angle - alpha4
-
-        if x < 0 and y < 0:
-            alpha3 = absolute(alpha2 + 90)
-
-            L3 = sqrt(
-                CAMERA_ROBOT_DISTANCE**2
-                + L2**2
-                - 2 * L2 * CAMERA_ROBOT_DISTANCE * cos(radians(alpha3))
-            )
-
-            alpha4 = degrees(asin((float(L2) / L3) * (sin(radians(alpha3)))))
-
-            alpha5 = angle - alpha4
-
-        return (L3, alpha5)
-
-    else:
-        L3 = CAMERA_ROBOT_DISTANCE + (y / PIX_MM_RATIO)
-        return (L3, angle)
-
-
-def find_orientation(contour, robot_angle):
-    (_, _), (_, _), angle = cv2.fitEllipse(contour)
-    new_angle = 0
-
-    if angle <= 90:
-        if robot_angle <= 0:
-            new_angle = robot_angle + angle
-        elif robot_angle > 0 and angle >= 50:
-            beta = 90 - angle
-            gamma = 90 - robot_angle
-            new_angle = -(gamma + beta)
-        elif robot_angle > 0 and angle < 50:
-            new_angle = robot_angle + angle
-    else:
-        if robot_angle > 0:
-            beta = 180 - angle
-            new_angle = robot_angle - beta
-        elif robot_angle <= 0 and angle <= 160:
-            new_angle = robot_angle + angle
-        elif robot_angle <= 0 and angle > 160:
-            beta = 180 - angle
-            new_angle = robot_angle - beta
-
-    return new_angle
 
 
 def robot_take_arm(client, hRobot):
@@ -340,33 +216,6 @@ def get_photo(request: HttpRequest) -> HttpResponse:
         return error_response(str(e))
 
 
-def switch_bcap_to_orin(client, hRobot, caoRobot):
-    robot_give_arm(client, hRobot)
-    robot_take_arm(client, hRobot)
-    robot_motor_cao(caoRobot)
-
-
-def switch_orin_to_bcap(client, hRobot, caoRobot):
-    robot_give_arm_cao(caoRobot)
-    robot_take_arm(client, hRobot)
-    robot_motor(client, hRobot)
-
-
-def list_to_string_position(pos):
-    return "P(" + ", ".join(str(i) for i in pos) + ")"
-
-
-def list_to_string_joints(pos):
-    return "J(" + ", ".join(str(i) for i in pos) + ")"
-
-
-def move_to_new_pos(client, hRobot, new_x, new_y, mode=2):
-    curr_pos = robot_getvar(client, hRobot, CURRENT_POSITION)
-    curr_pos[0] = new_x
-    curr_pos[1] = new_y
-    client.robot_move(hRobot, mode, list_to_string_position(curr_pos), MAX_SPEED)
-
-
 def get_current_joints(client, hRobot):
     return client.robot_execute(hRobot, RobotAction.CUR_JOINT.value)[0:6]
 
@@ -485,24 +334,6 @@ def check_ip_response(ip_address, port=80):
         sock.close()
 
 
-def imread_base64(base64_string):
-    # Remove the header and decode the base64 string
-    encoded_data = base64_string.split(",")
-
-    if len(encoded_data) == 1:
-        decoded_data = b64decode(encoded_data[0])
-    else:
-        decoded_data = b64decode(base64_string[1])
-
-    # Convert the decoded data to a numpy array
-    nparr = frombuffer(decoded_data, uint8)
-
-    # Read the image using OpenCV
-    img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
-
-    return img
-
-
 def move_to_calibration_position(client: BCAPClient, hRobot):
     client.robot_move(
         hRobot,
@@ -510,10 +341,3 @@ def move_to_calibration_position(client: BCAPClient, hRobot):
         INITIAL_POSITION,
         MAX_SPEED,
     )
-
-
-def open_hand(client: BCAPClient, hRobot: any, caoRobot: any, ctrl: any):
-    switch_bcap_to_orin(client, hRobot, caoRobot)
-    # Open hand to release object. HandMoveA (open in mm, speed)
-    ctrl.Execute(RobotAction.HAND_MOVE_A.value, [30, 25])
-    switch_orin_to_bcap(client, hRobot, caoRobot)

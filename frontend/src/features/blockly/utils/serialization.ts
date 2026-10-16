@@ -55,7 +55,7 @@ const ABSTRACT_STEP_TYPES = new Set([
   'wait_for_human',
 ])
 
-export const isAbstractStepLike = (
+const isAbstractStepLike = (
   value: unknown,
 ): value is import('pages/tasks/types').AbstractStep =>
   typeof value === 'object' &&

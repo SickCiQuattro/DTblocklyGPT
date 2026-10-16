@@ -18,20 +18,17 @@ export const ROBOT_PANEL_DEFAULT_PX = 520
 /**
  * Task-code panel resize bounds, in px, and the height of its collapsed rail.
  *
- * The floor is the height at which the JSON is still worth reading — roughly
- * six lines plus the header. Below that the panel costs its own chrome and
- * shows less than the tooltip it replaced.
+ * The floor is the height at which the JSON is still worth reading — roughly six
+ * lines plus the header. Below that the panel costs its own chrome and shows less
+ * than the tooltip it replaced.
  *
- * `CODE_PANEL_RAIL_PX` is the closed state, and it is deliberately not zero.
- * The panel used to collapse to `height: 0` and the dark hairline still visible
- * along the bottom edge was an accident: a semi-transparent `border-top` on a
- * zero-height box, showing the panel's own background through it. It read as a
- * closed drawer, which is exactly right — so it is a real rail now, thick
- * enough to click and to grab, instead of a 1px side effect that could vanish
- * with any change to the border.
+ * `CODE_PANEL_RAIL_PX` is the closed state, and it is deliberately not zero: a
+ * real rail, thick enough to click and to grab, reads as a closed drawer, where a
+ * zero-height box with a semi-transparent `border-top` would leave a 1px side
+ * effect that could vanish with any change to the border.
  */
 export const CODE_PANEL_MIN_PX = 120
-export const CODE_PANEL_DEFAULT_PX = 220
+const CODE_PANEL_DEFAULT_PX = 220
 export const CODE_PANEL_RAIL_PX = 5
 
 export type TaskStatus = 'draft' | 'published' | 'published_with_draft'
@@ -107,7 +104,7 @@ export type TaskState = {
   codePanelHeight: number
 }
 
-export const initialState: TaskState = {
+const initialState: TaskState = {
   task: INITIAL_TASK_STRUCTURE,
   editMode: false,
   activeTaskId: null,
@@ -154,15 +151,6 @@ const taskSlice = createSlice({
   name: 'task',
   initialState,
   reducers: {
-    updateTask(state, action: PayloadAction<TaskChatStructure>) {
-      state.task = action.payload
-    },
-    resetTask() {
-      return initialState
-    },
-    toggleEditMode(state) {
-      state.editMode = !state.editMode
-    },
     setActiveTask(
       state,
       action: PayloadAction<{
@@ -197,9 +185,6 @@ const taskSlice = createSlice({
     },
     setTaskDescription(state, action: PayloadAction<string>) {
       state.activeTaskDescription = action.payload
-    },
-    setTaskStatus(state, action: PayloadAction<TaskStatus>) {
-      state.activeTaskStatus = action.payload
     },
     toggleChat(state) {
       state.chatOpen = !state.chatOpen
@@ -277,13 +262,9 @@ const taskSlice = createSlice({
 })
 
 export const {
-  toggleEditMode,
-  resetTask,
-  updateTask,
   setActiveTask,
   setTaskName,
   setTaskDescription,
-  setTaskStatus,
   toggleChat,
   toggleSim,
   toggleCode,

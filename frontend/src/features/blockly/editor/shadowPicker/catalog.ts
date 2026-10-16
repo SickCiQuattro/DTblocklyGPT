@@ -36,10 +36,8 @@ import {
  * clicks a `shadow_trigger_block` slot (Boolean input inside when/repeat-until).
  *
  * Names and descriptions come from blockTextDictionary, the same source the
- * toolbox pills and the Blockly tooltips read. This list used to carry its own
- * copies, which is how "Worker shows a hand gesture" ended up here while every
- * other surface said "operator" — a third word for the person at the cell, in
- * front of someone learning the app in one session.
+ * toolbox pills and the Blockly tooltips read, so one word names the person at
+ * the cell on every surface.
  *
  * `keywords` stay local: they are search synonyms, not names, and they are the
  * reason a rename does not break search. Typing "until" still finds Repeat.
@@ -80,7 +78,7 @@ export const TRIGGER_PICKER_ITEMS: ShadowPickerItem[] = [
     keywords: ['confirm', 'press', 'button', 'manual', 'operator', 'click'],
     blockType: 'human_feedback_block',
   },
-  // ── Hidden 2026-06-30 per relatrice feedback (kept for re-enable, not removed):
+  // ── Hidden per advisor feedback (kept for re-enable, not removed):
   //    'Time passed' (timer_block) + logic AND/OR/NOT. Block definitions, parser
   //    and backend enums remain intact — only the picker rows are suppressed.
   // {
@@ -377,44 +375,6 @@ export const resolveRealBlockTypeFromShadow = (
   }
 
   return null
-}
-
-/**
- * Return the default shadow inputs for blocks that have sub-slots needing
- * placeholder blocks. Used when building the block state on picker selection.
- *
- * For example, `logic_and_block` needs two `shadow_trigger_block` inputs pre-filled.
- *
- * @param blockType The block type being created.
- * @returns         A partial Blockly state `inputs` object, or `{}` if none needed.
- */
-export const getBlockInputState = (
-  blockType: SelectableShadowBlockType,
-): Record<string, unknown> => {
-  const shadowTrigger = {
-    shadow: {
-      type: 'shadow_trigger_block',
-      fields: { name: 'Select Condition' },
-    },
-  }
-  const shadowObject = {
-    shadow: {
-      type: 'shadow_object_block',
-      fields: { name: 'Select Object' },
-    },
-  }
-
-  switch (blockType) {
-    case 'logic_and_block':
-    case 'logic_or_block':
-      return { inputs: { A: shadowTrigger, B: shadowTrigger } }
-    case 'logic_not_block':
-      return { inputs: { BOOL: shadowTrigger } }
-    case 'find_object_block':
-      return { inputs: { OBJECT: shadowObject } }
-    default:
-      return {}
-  }
 }
 
 /**

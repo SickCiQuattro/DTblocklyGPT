@@ -22,7 +22,7 @@ import { railTransition } from '../../MiniDrawerStyled'
 // icon lives in a fixed-width column whose left edge is the same in both states,
 // so the glyph centers on the 56px rail when collapsed and stays put when open.
 export const NAV_ROW_HEIGHT = 44
-export const ICON_COLUMN = 28
+const ICON_COLUMN = 28
 
 // Height reserved for a footer separator row (hairline + breathing room). The
 // row keeps this height in BOTH states — same rule as NAV_GROUP_HEADER_HEIGHT —

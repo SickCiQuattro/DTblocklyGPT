@@ -31,15 +31,3 @@ export enum USER_GROUP {
 // ─── Table pagination ────────────────────────────────────────────────────────
 export const defaultPageSizeSelection = 25
 export const defaultCurrentPage = 1
-export const defaultPageSizeOptions = [10, 25, 40]
-
-// Compatibility shim for AntD list pages pending migration — plain object, no antd type
-export const defaultPaginationConfig = {
-  pageSizeOptions: defaultPageSizeOptions,
-  showSizeChanger: true,
-  hideOnSinglePage: true,
-}
-
-// ─── Autocomplete ────────────────────────────────────────────────────────────
-export const timerTimeoutAutocomplete = 500
-export const minCharsAutocomplete = 1

@@ -32,26 +32,21 @@ export const isTypingInTextControl = (): boolean => {
  *
  * Read from the DOM rather than from component state on purpose: the dialogs
  * that can cover a page are owned by components the shortcut's host can't see —
- * the Header's discard confirm, the robot panel's real-run confirm, the
- * editor's delete/search dialogs, a row's delete confirm inside the task list.
- * MUI's Dialog is what all of them are built on, and it stamps `role` and
- * `aria-modal` on the same paper element (Dialog.js), so that pair is the one
- * signal they share.
+ * the Header's discard confirm, the robot panel's real-run confirm, the editor's
+ * delete/search dialogs, a row's delete confirm inside the task list. MUI's
+ * Dialog is what all of them are built on, and it stamps `role` and `aria-modal`
+ * on the same paper element (Dialog.js), so that pair is the one signal they
+ * share.
  *
- * Requiring `aria-modal="true"` rather than matching the role alone is the
- * point of the selector: it asks "does something own the keyboard right now",
- * which is a property of modality, not of being a dialog. A non-modal dialog —
- * one that leaves the page usable underneath — must not disable these
- * shortcuts. (DigitalTwinPanel used to be exactly that case, a
- * permanently-mounted slide-in declaring `role="dialog" aria-modal="false"`,
- * which a role-only selector would have read as a modal on the task workspace
- * at all times. It is a `region` landmark now, so it no longer matches either
- * way, but the reasoning is why the attribute pair is the test.)
+ * Requiring `aria-modal="true"` rather than matching the role alone is the point
+ * of the selector: it asks "does something own the keyboard right now", which is
+ * a property of modality, not of being a dialog. A non-modal dialog — one that
+ * leaves the page usable underneath — must not disable these shortcuts.
  *
  * A closed MUI Dialog unmounts, so this can't latch on a dismissed one; the
  * single `keepMounted` in the app is the mobile nav Drawer, whose Modal renders
- * `role="presentation"` and is therefore not matched here. Menus and Popovers
- * are likewise `role="presentation"` — they don't trap focus and don't block.
+ * `role="presentation"` and is therefore not matched here. Menus and Popovers are
+ * likewise `role="presentation"` — they don't trap focus and don't block.
  */
 export const isModalOpen = (): boolean =>
   document.querySelector(

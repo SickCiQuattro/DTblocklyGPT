@@ -201,13 +201,11 @@ export const ShadowPickerMenu = ({
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(event) => {
-              // Arrow keys and Enter drive the list; everything else is typing
-              // and must not reach MUI's MenuList, whose typeahead would
-              // otherwise steal the letters being typed into this field.
-              // This used to stopPropagation() unconditionally, which also
-              // swallowed the arrows — so the list could not be walked at all
-              // and Enter always took the first match, no matter what was
-              // highlighted.
+              // Arrow keys and Enter drive the list; everything else is typing and must not
+              // reach MUI's MenuList, whose typeahead would otherwise steal the letters being
+              // typed into this field. Do not stopPropagation() unconditionally: that also
+              // swallows the arrows, so the list cannot be walked and Enter always takes the
+              // first match.
               if (filteredItems.length === 0) {
                 event.stopPropagation()
                 return

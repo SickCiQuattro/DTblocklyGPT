@@ -101,20 +101,3 @@ AbstractStep = Union[
     AbstractRepeatUntilStep,
     AbstractWhenStep,
 ]
-
-# Expected LLM response structure
-
-
-class LLMResponse(TypedDict):
-    answer: str
-    task: List[AbstractStep]
-    # We might also want to include warnings, but we can compute them separately
-
-# Final API response structure
-
-
-class ChatApiResponse(TypedDict):
-    messageParts: List[MessagePart]
-    proposedTask: Optional[List[AbstractStep]]
-    requiresConfirmation: bool
-    validationWarnings: List[str]

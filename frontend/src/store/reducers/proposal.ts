@@ -11,13 +11,13 @@ export interface ProposalState {
   answer: string
 }
 
-export const initialState: ProposalState = {
+const initialState: ProposalState = {
   proposedTask: null,
   validationWarnings: [],
   answer: '',
 }
 
-export const proposalSlice = createSlice({
+const proposalSlice = createSlice({
   name: 'proposal',
   initialState,
   reducers: {

@@ -376,7 +376,7 @@ export const abstractToBlockly = (
  * Converts a Blockly serialized block tree to the AbstractStep representation
  * used by task APIs and chat workflows.
  */
-export const blocklyToAbstract = (
+const blocklyToAbstract = (
   blocklyRoot: CustomBlock | null,
 ): AbstractStep[] | null => {
   if (!blocklyRoot) return null

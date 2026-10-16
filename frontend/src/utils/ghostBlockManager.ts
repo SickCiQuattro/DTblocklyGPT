@@ -72,7 +72,7 @@ export const GHOST_INPUT_MAP: Record<
  * Set of block types identified as "ghosts".
  * Used to filter them out during serialization.
  */
-export const GHOST_BLOCK_TYPES = new Set([
+const GHOST_BLOCK_TYPES = new Set([
   'shadow_object_block',
   'shadow_location_block',
   'shadow_action_block',
