@@ -1,6 +1,6 @@
 """The colour-check script's pure parts (offline, no camera, no model).
 
-test_vision_color.py anchors each detection to a bench position and builds a
+tools/vision_color_gate.py anchors each detection to a bench position and builds a
 confusion matrix. If a tube goes missing from a frame, "the second detection"
 is the wrong tube — that is the case worth pinning.
 """
@@ -8,7 +8,7 @@ import importlib.util
 import os
 
 _spec = importlib.util.spec_from_file_location(
-    "test_vision_color_script", os.path.join(os.path.dirname(__file__), "test_vision_color.py"))
+    "test_vision_color_script", os.path.join(os.path.dirname(__file__), "tools", "vision_color_gate.py"))
 tvc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(tvc)
 

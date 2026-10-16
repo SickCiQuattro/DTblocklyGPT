@@ -23,7 +23,7 @@ except Exception:
 from backend.functions import study_log  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
-    "report_robot_measures", os.path.join(os.path.dirname(__file__), "report_robot_measures.py"))
+    "report_robot_measures", os.path.join(os.path.dirname(__file__), "tools", "report_robot_measures.py"))
 rep = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(rep)
 

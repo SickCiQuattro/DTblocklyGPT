@@ -3,7 +3,7 @@
  *
  * Why this is a page and not a script: recognition happens in the browser,
  * against Google's Web Speech service. The Django process never sees audio, so
- * there is no Python equivalent of testing/measure_gesture_accuracy.py for this
+ * there is no Python equivalent of testing/tools/measure_gesture_accuracy.py for this
  * channel — a bench has to run here or it measures nothing real.
  *
  * Fidelity is the whole point, so this drives the PRODUCTION path: the shared
@@ -333,8 +333,8 @@ const VoiceBench: React.FC = () => {
         <Stack spacing={2}>
           <Typography>
             Done — {results.length} windows recorded. Download the file and run{' '}
-            <code>poetry run python testing/recognition_report.py</code> over
-            it.
+            <code>poetry run python testing/tools/recognition_report.py</code>{' '}
+            over it.
           </Typography>
           <Button variant="contained" onClick={download}>
             Download results

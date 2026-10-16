@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from testing.recognition_report import wilson, rule_of_three, summarize  # noqa: E402
+from testing.tools.recognition_report import wilson, rule_of_three, summarize  # noqa: E402
 
 
 def test_a_perfect_score_does_not_claim_certainty():

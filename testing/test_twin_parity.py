@@ -272,7 +272,7 @@ def test_send_waypoints_uses_configured_max_points(monkeypatch):
 # derived from OBJECT_SPAWN_X/Y - ROBOT_BASE_X/Y (module constants here that
 # never switch with DRIVE_HARDWARE), so a real-cell recalibration of
 # DEFAULT_PICK_X_REL/Y_REL (calibration.py, done the same day via
-# testing/calibrate_rack.py) was silently ignored by the actual pick — the
+# testing/tools/calibrate_rack.py) was silently ignored by the actual pick — the
 # arm missed the calibrated point by ~17mm. In the sim profile the two
 # formulas coincide exactly by construction, so this is invisible in
 # Gazebo-only runs; only a real-cell recalibration exposes it.
@@ -708,7 +708,7 @@ def test_calibrate_rack_can_check_the_cup_and_verify_coords_lists_it(capsys):
 
     from backend.functions import calibration
 
-    path = os.path.join(os.path.dirname(__file__), "calibrate_rack.py")
+    path = os.path.join(os.path.dirname(__file__), "tools", "calibrate_rack.py")
     spec = importlib.util.spec_from_file_location("calibrate_rack_under_test", path)
     cal = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cal)

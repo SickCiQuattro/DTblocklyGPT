@@ -156,7 +156,7 @@ Each step must pass before the next. Stop on the first failure.
 
 ```bash
 nc -vz 192.168.0.1 5007
-python3 testing/bcap_probe.py 192.168.0.1 5007             # read-only b-CAP link test, no motion
+python3 testing/tools/bcap_probe.py 192.168.0.1 5007             # read-only b-CAP link test, no motion
 curl -s http://localhost:5000/api/actual-joints-pos  | python3 -m json.tool   # twin (Gazebo)
 curl -s http://localhost:5000/api/actual-joints-real | python3 -m json.tool   # real arm (closed loop)
 ```
@@ -311,7 +311,7 @@ variables. Until it is set, the full sequence above runs and only Motor-on is bl
 
 ```bash
 # clears latched error; reads state (no TakeArm, no motion)
-python3 testing/bcap_probe.py 192.168.0.1 5007
+python3 testing/tools/bcap_probe.py 192.168.0.1 5007
 ```
 Or press and release the **FNC** button on the arm → returns to green.
 

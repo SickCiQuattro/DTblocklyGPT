@@ -88,7 +88,7 @@ curl -s -X POST http://localhost:5000/api/stop     # stops Gazebo
 | `[7/8] Motor on 0x83501029` | Token NOT active, check Executable Token = Any/Ethernet+`.100`. |
 | `actual-joints-real available:false` | `cobotta_node` not `_hw_ok` (connect not completed). |
 | `move-target ok:false` | Check the `cobotta_node` log (the real error is logged there). |
-| Robot LED yellow | Error state: press/release FNC, or run `python3 testing/bcap_probe.py 192.168.0.1 5007`. |
+| Robot LED yellow | Error state: press/release FNC, or run `python3 testing/tools/bcap_probe.py 192.168.0.1 5007`. |
 | `provider=CaoProv.DENSO.RC8` in the log / E_INVALIDARG at `[2/8]` | Must be **VRC**; `launch_physical.sh` now defaults to VRC (was RC8). |
 | `ModuleNotFoundError: ultralytics` | `vision_node` must be launched with `poetry run python <file>`, not `ros2 run`. |
 | Camera snapshot `400`/`401` | Use `image.cgi` (not GetOneShot) + `--digest -u admin:password`. |
