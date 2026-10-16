@@ -9,7 +9,7 @@
  * because this integration registers no native Blockly toolbox). Every Blockly
  * shortcut a row documents is checked against the live ShortcutRegistry in
  * development (see warnOnShortcutDrift), which catches a Blockly upgrade removing
- * or renaming one — package.json pins `^13.0.0`, so the bundled version can move
+ * or renaming one — package.json pins `^13.4.0`, so the bundled version can move
  * on a plain `npm install`.
  *
  * The check verifies EXISTENCE, not the key label. Blockly's own key formatter

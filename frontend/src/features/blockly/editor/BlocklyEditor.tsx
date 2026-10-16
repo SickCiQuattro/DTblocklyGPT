@@ -1263,7 +1263,7 @@ export const BlocklyEditor = ({
   }, [])
 
   // Dev-only: warn if the help dialog documents a Blockly shortcut that the
-  // bundled version no longer registers. package.json pins ^13.0.0, so the
+  // bundled version no longer registers. package.json pins ^13.4.0, so the
   // version can move on a plain `npm install`.
   useEffect(() => warnOnShortcutDrift(), [])
 
