@@ -9,6 +9,16 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, `${import.meta.dirname}/frontend`, '')
   const studyMode = env.VITE_STUDY_MODE === '1'
 
+  // Shared by `server` and `preview`: web_video_server streams on :8080 and
+  // the app asks for it same-origin, so both ways of serving the app need it.
+  const cameraProxy = {
+    '/camera': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+      rewrite: (path: string) => path.replace(/^\/camera/, ''),
+    },
+  }
+
   return {
     server: {
       port: 3000,
@@ -34,14 +44,21 @@ export default defineConfig(({ mode }) => {
       // reload anything. See the README's user-study section.
       hmr: studyMode ? false : undefined,
 
-      proxy: {
-        '/camera': {
-          target: 'http://localhost:8080',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/camera/, ''),
-        },
-      },
+      proxy: cameraProxy,
     },
+
+    // `vite preview` does NOT read `server` — neither the port nor the proxy.
+    // A measured session serves the build (the dev server's client reloads the
+    // page on a websocket drop and takes the participant's chat with it; see
+    // the note on `hmr` above), and the robot panel's camera feed is an
+    // ordinary same-origin request to /camera/stream. Without this block that
+    // request 404s and the panel shows a dead frame for the whole session,
+    // with nothing in the app to explain why.
+    preview: {
+      port: 3000,
+      proxy: cameraProxy,
+    },
+
     build: {
       manifest: true,
       chunkSizeWarningLimit: 2000,

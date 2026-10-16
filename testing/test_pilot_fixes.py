@@ -20,6 +20,7 @@ The other three are interaction defects, each reported as a habit the operator
 had to build against the interface rather than with it.
 """
 import os
+import pytest
 import re
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -512,7 +513,10 @@ def test_the_sound_can_be_turned_off_and_the_choice_sticks():
 def test_the_setup_checklist_tells_the_experimenter_to_check_it():
     """A setting that is remembered per browser is a setting that differs
     between workstations unless someone verifies it."""
-    checklist = _read(os.path.join(ROOT, "studio-utenti", "09-checklist-setup.md"))
+    checklist_path = os.path.join(ROOT, "studio-utenti", "09-checklist-setup.md")
+    if not os.path.exists(checklist_path):
+        pytest.skip("studio-utenti/ holds participant material and is not in the repository")
+    checklist = _read(checklist_path)
     assert "suono di riconoscimento" in checklist, (
         "la checklist di setup non chiede piu' di verificare il suono: acceso "
         "in una sessione e spento in un'altra e' una differenza fra "

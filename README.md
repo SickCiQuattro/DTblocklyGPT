@@ -15,7 +15,7 @@ human to do.
 ![Django](https://img.shields.io/badge/Django-6-092E20?logo=django&logoColor=white)
 ![ROS 2](https://img.shields.io/badge/ROS_2-Jazzy-22314E?logo=ros&logoColor=white)
 ![Gazebo](https://img.shields.io/badge/Gazebo-Harmonic-FF6C00)
-![Tests](https://img.shields.io/badge/tests-675_offline-3fb950)
+![Tests](https://img.shields.io/badge/tests-756_offline-3fb950)
 
 </div>
 
@@ -120,7 +120,7 @@ Open http://localhost:3000 and log in as `operator1` / `Operator_1!`.
 
 ```bash
 # Did the stack actually come up? launch_sim.sh does not verify anything.
-poetry run python testing/preflight.py
+poetry run python testing/tools/preflight.py
 ```
 
 
@@ -233,7 +233,7 @@ npm ci --legacy-peer-deps         # frontend
 
 > [!TIP]
 > Use `npm ci`, not `npm install`. `package-lock.json` is committed and `ci` installs exactly what
-> it pins. `blockly` is declared `^13.0.0`, and the editor's keyboard layer depends on shortcut
+> it pins. `blockly` is declared `^13.4.0`, and the editor's keyboard layer depends on shortcut
 > names a Blockly release can rename, which is why `features/blockly/editor/appShortcuts.ts`
 > carries a drift check. Run `npm install` only when you mean to take updates, then re-run
 > `npm run lint` and try the shortcuts.
@@ -246,7 +246,12 @@ curl -L "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_la
      -o backend/assets/hand_landmarker.task
 ```
 
-`yolov8n.pt` downloads itself on first inference; the first run needs network access.
+`yolov8n.pt` downloads itself on first inference; the first run needs network access. The
+open-vocabulary model used for the physical cell (`yoloe-11s-seg.pt`) does the same and also pulls a
+text encoder of several hundred MB the first time it is given a class list.
+
+Run every command from the repository root: Django reads `./backend/.env` and `./frontend/.env`
+relative to the working directory.
 
 </details>
 
@@ -404,9 +409,9 @@ npm start
 
 `launch_sim.sh` starts Gazebo (headless), `ros_gz_bridge`, the `ros2_control` spawners and the
 `flask_node` / `polling_socket_node` / `web_video_server` nodes. It launches them and returns
-without verifying anything, so check the result with `testing/preflight.py`.
+without verifying anything, so check the result with `testing/tools/preflight.py`.
 
-To see the 3D window, remove `-s` from the `gz sim` line inside the script.
+To see the 3D window, start it with `GUI=1 bash launch_sim.sh`.
 
 <details>
 <summary><strong>Launching nodes individually</strong></summary>
@@ -482,6 +487,10 @@ curl -s http://localhost:5000/api/vision/state       | python3 -m json.tool   # 
 > to the arm over a dedicated b-CAP channel, but it is best-effort and **not safety-rated**. The
 > e-stop is the only certified stop. Start at `EXT_SPEED=20`.
 
+Network setup per platform (Mac + VM, Windows 11, Windows 10): [docs/cobotta-connection.md](docs/cobotta-connection.md).
+First session: follow the graduated test sequence (§5) in
+[docs/cobotta-physical-testing.md](docs/cobotta-physical-testing.md) before running a full task.
+
 Field guide: [docs/cobotta-quickstart.md](docs/cobotta-quickstart.md).
 Camera and detection: [docs/cobotta-camera-object-detection.md](docs/cobotta-camera-object-detection.md).
 
@@ -514,7 +523,7 @@ poetry run python manage.py runserver
 | Variable | Effect |
 |---|---|
 | `VITE_STUDY_MODE=1` | Forces live execution, hides the "simulate event" escape hatch, locks the wait-time field, and disables HMR module updates |
-| `STRICT_CONDITIONS=1` | A condition can only be satisfied by a real signal, so no confirmation can be fabricated |
+| `STRICT_CONDITIONS=1` | A condition can only be satisfied by a real signal, so no confirmation can be fabricated. Off by default so the twin runs without a camera; a run on the **real robot** always applies it, and the server refuses automatic confirmations there |
 | `HUMAN_STEP_TIMEOUT_S` | Seconds a human step waits. In study mode this is the only way to set it |
 | `STUDY_LOG_PATH` | Enables logging. Unset, nothing is written at all |
 
@@ -530,8 +539,8 @@ poetry run python manage.py runserver
 > the flag on. A build has no Vite client in it at all, so it cannot reload itself.
 >
 > ```bash
-> VITE_STUDY_MODE=1 npx vite build     # once, before the session
-> npx vite preview --port 3000         # serves at http://localhost:3000/static/
+> npx vite build       # once, before the session
+> npx vite preview     # serves at http://localhost:3000/static/
 > ```
 >
 > The `/camera` proxy works in preview exactly as in dev. Rebuild after any code change; preview
@@ -553,12 +562,15 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 poetry run python -m pytest testing/ -q
 poetry run python testing/test_ik_regression.py
 
 # Stack health
-poetry run python testing/preflight.py
+poetry run python testing/tools/preflight.py
 ```
 
-675 tests guard the properties where a defect moves a mechanical arm in space shared with a
+756 tests guard the properties where a defect moves a mechanical arm in space shared with a
 person: the two-key hardware consent, inverse-kinematics discipline, twin-versus-encoder
 agreement, grasp verification, and the human-step wait semantics.
+
+A fresh clone skips some tests on purpose: the ones that read participant material
+(`studio-utenti/`) or real camera frames (`testing/out/vision_check/`) are not in the repository.
 
 > [!NOTE]
 > `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` is required. Without it, pytest picks up ROS Jazzy's

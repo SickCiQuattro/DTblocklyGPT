@@ -22,6 +22,7 @@ the environment alone.
 import importlib
 import json
 import os
+import re
 import sys
 import tempfile
 from unittest.mock import MagicMock
@@ -66,18 +67,92 @@ def test_get_int_env_falls_back_on_unusable_value(monkeypatch, raw):
 # ─── T1.1 timeout unification ────────────────────────────────────────────────
 
 
-def test_human_step_start_timeout_matches_enforced_deadline():
-    """The countdown the operator sees and the deadline the backend enforces
-    must be the same number. They were 60 and 30."""
-    source = open(
+def _simulate_source() -> str:
+    return open(
         os.path.join(os.path.dirname(__file__), "..", "backend", "functions", "simulate.py"),
         encoding="utf-8",
     ).read()
+
+
+def test_human_step_start_timeout_matches_enforced_deadline():
+    """The countdown the operator sees and the deadline the backend enforces
+    must be the same number. They were 60 and 30.
+
+    Asserted through the resolver rather than the constant. Since the wait
+    budget became settable per run, "both read CONDITION_TIMEOUT_S" is no
+    longer the property — a site left reading the constant directly would show
+    the operator the DEFAULT while the interpreter enforced the chosen value,
+    which is the same 60-vs-30 bug wearing different numbers.
+    """
+    source = _simulate_source()
     assert '"timeout": 60' not in source, (
-        "hardcoded 60 reintroduced in the human-step-start payload — it must "
-        "carry CONDITION_TIMEOUT_S, the value _wait_for_condition enforces"
+        "hardcoded 60 reintroduced in the human-step-start payload"
     )
-    assert '"timeout": CONDITION_TIMEOUT_S' in source
+    assert '"timeout": _effective_condition_timeout()' in source, (
+        "il payload human-step-start non passa piu' dal resolver: mostrerebbe "
+        "il default mentre l'interprete applica il valore scelto per la run."
+    )
+
+
+def test_nothing_reads_the_default_timeout_behind_the_resolver():
+    """One source for the budget, or it drifts.
+
+    The only place CONDITION_TIMEOUT_S may be read is the resolver itself
+    (and the import). Anywhere else is a site that ignores the per-run value.
+    """
+    source = _simulate_source()
+    uses = [
+        line.strip() for line in source.split("\n")
+        if "CONDITION_TIMEOUT_S" in line
+        and not line.strip().startswith("#")
+        and "MIN_HUMAN" not in line and "MAX_HUMAN" not in line
+    ]
+    # The import line and the single read inside _effective_condition_timeout.
+    unexpected = [u for u in uses
+                  if not u.startswith("CONDITION_TIMEOUT_S,")
+                  and "return _RUN_HUMAN_TIMEOUT_S or CONDITION_TIMEOUT_S" not in u]
+    assert not unexpected, (
+        f"CONDITION_TIMEOUT_S letta fuori dal resolver: {unexpected}.\n"
+        "Ogni sito che la legge direttamente ignora il valore scelto per la "
+        "run, e countdown e scadenza tornano a essere due numeri diversi."
+    )
+
+
+def test_the_per_run_budget_wins_when_set(monkeypatch):
+    from backend.functions import simulate as sim
+    monkeypatch.setattr(sim, "_RUN_HUMAN_TIMEOUT_S", 12)
+    assert sim._effective_condition_timeout() == 12
+
+
+def test_the_default_applies_when_no_budget_was_chosen(monkeypatch):
+    from backend.functions import simulate as sim
+    monkeypatch.setattr(sim, "_RUN_HUMAN_TIMEOUT_S", None)
+    assert sim._effective_condition_timeout() == sim.CONDITION_TIMEOUT_S
+
+
+def test_the_request_value_is_clamped_server_side():
+    """A request body is a trust boundary whatever the input does.
+
+    Clamped rather than rejected: an out-of-range value is a stale or
+    malformed client, and refusing the run over it trades a wrong budget for
+    no run at all. The floor is not cosmetic — a 1-second budget expires
+    before the panel has finished drawing what it is asking for, and every
+    step then fails in a way that reads as the operator's fault.
+    """
+    source = _simulate_source()
+    assert "max(MIN_HUMAN_TIMEOUT_S," in source and "min(MAX_HUMAN_TIMEOUT_S," in source, (
+        "humanStepTimeout non e' piu' limitato lato server."
+    )
+
+
+def test_the_per_run_budget_is_cleared_with_the_rest_of_the_run_state():
+    """Or the next run inherits a budget nobody chose for it."""
+    source = _simulate_source()
+    tail = source[source.index("_HW_DRIVE_REQUESTED = False"):]
+    assert "_RUN_HUMAN_TIMEOUT_S = None" in tail[:400], (
+        "il timeout per-run non viene azzerato insieme allo stato della run: "
+        "la run successiva eredita il budget di quella precedente."
+    )
 
 
 def test_condition_timeout_is_env_overridable(monkeypatch):
@@ -321,6 +396,8 @@ def _load_analisi():
     path = os.path.join(
         os.path.dirname(__file__), "..", "studio-utenti", "analisi.py"
     )
+    if not os.path.exists(path):
+        pytest.skip("studio-utenti/ holds participant material and is not in the repository")
     spec = importlib.util.spec_from_file_location("analisi", path)
     assert spec is not None and spec.loader is not None, f"non caricabile: {path}"
     module = importlib.util.module_from_spec(spec)
@@ -371,7 +448,7 @@ def test_analisi_ignores_attempts_outside_the_waiting_window(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
 
     assert conditions[0]["tentativi"] == 1, "solo il tentativo dentro la finestra"
     assert conditions[0]["primo_tentativo"] == "SI"
@@ -390,7 +467,7 @@ def test_analisi_attributes_nothing_without_step_boundaries(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
 
     assert conditions[0]["tentativi"] == 0
     assert conditions[0]["tempo_s"] is None
@@ -409,7 +486,7 @@ def test_analisi_leaves_find_object_attempts_undefined(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
 
     assert len(conditions) == 1
     assert conditions[0]["condizione"] == "D_oggetto"
@@ -431,7 +508,8 @@ def test_analisi_flags_auto_mode_runs(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, runs, *_ = analisi.analyse_participant(path)
+    rows = analisi.analyse_participant(path)
+    conditions, runs = rows.conditions, rows.runs
 
     assert conditions[0]["AUTO_DA_SCARTARE"] == "SI"
     assert runs[0]["AUTO_DA_SCARTARE"] == "SI"
@@ -447,7 +525,7 @@ def test_analisi_survives_truncated_line(tmp_path, capsys):
         encoding="utf-8",
     )
 
-    _, runs, *_ = analisi.analyse_participant(path)
+    runs = analisi.analyse_participant(path).runs
 
     assert len(runs) == 1  # the good line still parsed
     assert "illeggibile" in capsys.readouterr().err
@@ -493,7 +571,7 @@ def test_analisi_counts_republications_as_revisions(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    *_, publish = analisi.analyse_participant(path)
+    publish = analisi.analyse_participant(path).publish
 
     assert [r["pubblicazione_n"] for r in publish] == [1, 2, 1]
     assert [r["firma"] for r in publish] == ["aaa", "bbb", "ccc"]
@@ -536,7 +614,7 @@ def test_analisi_marks_a_bypassed_step_for_exclusion(tmp_path):
     path = tmp_path / "P01.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
 
     assert conditions[0]["esito_passo"] == "bypassed"
     assert conditions[0]["motivo_bypass"] == "bridge_unreachable"
@@ -560,7 +638,7 @@ def test_analisi_does_not_count_a_stop_as_a_timeout(tmp_path):
     path = tmp_path / "P02.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
 
     assert conditions[0]["esito_passo"] == "stopped"
     assert conditions[0]["scaduto"] == "NO", "uno Stop non è una scadenza"
@@ -586,10 +664,248 @@ def test_analisi_keeps_one_observation_per_participant_and_condition(tmp_path, c
     path = tmp_path / "P03.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
-    conditions, *_ = analisi.analyse_participant(path)
+    conditions = analisi.analyse_participant(path).conditions
     assert len(conditions) == 2, "il CSV resta per esecuzione"
 
     analisi.summarise(conditions)
     out = capsys.readouterr().out
     assert "n= 1" in out or "n=1" in out, f"una sola osservazione attesa:\n{out}"
     assert "ripetute ignorate" in out
+
+
+# ─── The wait budget is settable from the panel, except during a session ─────
+
+PANEL_TSX = os.path.join(
+    os.path.dirname(__file__), "..", "frontend", "src", "components",
+    "DigitalTwinPanel.tsx",
+)
+
+
+def _panel_code() -> str:
+    src = open(PANEL_TSX, encoding="utf-8").read()
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.DOTALL)
+    return "\n".join(
+        line for line in src.split("\n")
+        if line.strip() and not line.strip().startswith("//")
+    )
+
+
+def test_the_panel_sends_its_wait_budget_with_the_run():
+    code = _panel_code()
+    assert "humanStepTimeout: humanTimeout" in code, (
+        "il pannello non manda piu' il budget di attesa con la run: il "
+        "controllo esiste ma non ha effetto, che e' peggio di non averlo."
+    )
+
+
+def test_the_panel_sends_nothing_during_a_study_session():
+    """A locked control must not still be steering.
+
+    The field is disabled under STUDY_MODE, but a disabled field still holds a
+    value — and sending it made the panel's default silently override the
+    HUMAN_STEP_TIMEOUT_S the protocol had set on the server. The session would
+    have run to a budget nobody chose, with a lock on screen saying otherwise.
+    Omitting the key means "the server decides", which is what the lock claims.
+    """
+    code = _panel_code()
+    assert "...(STUDY_MODE ? {} : { humanStepTimeout: humanTimeout })" in code, (
+        "il pannello manda di nuovo il proprio timeout anche in study mode: "
+        "sovrascrive HUMAN_STEP_TIMEOUT_S e la sessione gira a un budget "
+        "diverso da quello del protocollo, senza che nulla lo segnali."
+    )
+
+
+def test_the_wait_field_is_absent_during_a_study_session():
+    """Hidden, not disabled — because a disabled field still shows a number.
+
+    Part B measures time to resolution against a FIXED budget, and in study
+    mode that budget comes from HUMAN_STEP_TIMEOUT_S on the server. The panel
+    never learns it: it only knows the value it remembers locally. A locked
+    field therefore displayed 30 next to a session actually running at 60,
+    which is worse than showing nothing at all.
+    """
+    code = _panel_code()
+    assert "{!STUDY_MODE && (" in code, (
+        "il campo del timeout non e' piu' nascosto in study mode: mostrerebbe "
+        "il valore locale del pannello al posto di HUMAN_STEP_TIMEOUT_S, cioe' "
+        "un numero diverso da quello che la sessione applica davvero."
+    )
+    field_at = code.index("Seconds to wait for the operator")
+    guard_at = code.index("{!STUDY_MODE && (")
+    assert guard_at < field_at, (
+        "la guardia non racchiude piu' il campo."
+    )
+
+
+def test_the_panel_bounds_match_the_server_bounds():
+    """Two copies of a bound is one too many unless they agree.
+
+    The server clamps because a request body is a trust boundary; the panel
+    clamps so the operator sees what will happen. If they disagree, a value
+    the input accepts is silently changed by the server and the countdown
+    disagrees with the deadline again.
+    """
+    from backend.functions import simulate as sim
+    code = _panel_code()
+    assert f"const MIN_HUMAN_TIMEOUT_S = {sim.MIN_HUMAN_TIMEOUT_S}" in code, (
+        f"il minimo del pannello non e' piu' {sim.MIN_HUMAN_TIMEOUT_S} come sul server."
+    )
+    assert f"const MAX_HUMAN_TIMEOUT_S = {sim.MAX_HUMAN_TIMEOUT_S}" in code, (
+        f"il massimo del pannello non e' piu' {sim.MAX_HUMAN_TIMEOUT_S} come sul server."
+    )
+    assert f"const DEFAULT_HUMAN_TIMEOUT_S = {sim.CONDITION_TIMEOUT_S}" in code, (
+        "il default del pannello non coincide piu' con CONDITION_TIMEOUT_S: "
+        "il campo mostrerebbe un numero e il backend ne applicherebbe un altro."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Setup chat turns vs the participant's own (W: 2026-09-23)
+# ─────────────────────────────────────────────────────────────────────────────
+# mark_setup_runs finds the experimenter's bench-check RUNS positionally, but no
+# positional rule finds their chat turns: the participant's first task is built —
+# and asked about — before it is ever run or published, so both kinds of turn
+# fall before every event a rule could use as a boundary. On P06 the four turns
+# before the first publication are C1; on P07 the ten before 07:43 are a task the
+# experimenter created and deleted. Hence the declared cut in sessioni.csv.
+
+def _chat(t_wall, message="ciao"):
+    return {"kind": "chat_turn", "participant": "P01", "t_mono": 1.0,
+            "t_wall": f"2026-09-23T{t_wall}+00:00", "message": message,
+            "intent": "explain", "proposed_steps": 0, "offered": False,
+            "is_valid": True, "warnings": []}
+
+
+def test_analisi_marks_only_the_chat_turns_before_the_declared_start(tmp_path):
+    analisi = _load_analisi()
+    path = tmp_path / "P01.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in [
+        _chat("07:31:02", "prova dello sperimentatore"),
+        _chat("07:43:49", "ancora lo sperimentatore"),
+        _chat("07:51:35", "il partecipante costruisce C1"),
+    ]) + "\n", encoding="utf-8")
+
+    chat = analisi.analyse_participant(path, "07:47:00").chat
+
+    assert [r["SPERIMENTATORE"] for r in chat] == ["SI", "SI", ""]
+
+
+def test_analisi_marks_no_chat_turn_when_no_start_is_declared(tmp_path):
+    """An empty cell must mean "nothing to exclude", not "exclude everything"
+    and not "guess". Only the person in the room can tell the two kinds of turn
+    apart, so an undeclared session keeps every turn."""
+    analisi = _load_analisi()
+    path = tmp_path / "P01.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in [
+        _chat("09:17:16"), _chat("09:35:49"),
+    ]) + "\n", encoding="utf-8")
+
+    for inizio in ("", None):
+        chat = analisi.analyse_participant(path, inizio or "").chat
+        assert not any(r["SPERIMENTATORE"] for r in chat)
+
+
+def test_analisi_reads_the_declared_start_from_sessioni_csv():
+    """The column has to survive being added in the middle of the file: the
+    reader keys by name, so a new column cannot shift what the others mean."""
+    import csv
+    import os
+
+    path = os.path.join(os.path.dirname(__file__), "..", "studio-utenti",
+                        "dati", "sessioni.csv")
+    if not os.path.isfile(path):
+        pytest.skip("studio-utenti/dati non presente (dati sotto consenso)")
+    rows = [r for r in csv.DictReader(
+        line for line in open(path, encoding="utf-8") if not line.startswith("#"))]
+    assert rows, "sessioni.csv vuoto"
+    assert "inizio_parte_a" in rows[0], "colonna inizio_parte_a assente"
+    for r in rows:
+        valore = (r["inizio_parte_a"] or "").strip()
+        assert valore == "" or re.fullmatch(r"\d{2}:\d{2}:\d{2}", valore), (
+            f"{r['partecipante']}: inizio_parte_a = {valore!r}, "
+            "atteso hh:mm:ss o vuoto"
+        )
+
+
+def test_every_session_declares_which_model_answered():
+    """The model that answered is nowhere in the telemetry: log_event("chat_turn")
+    in chat.py carries no such field, and chat.py is frozen until the evaluation
+    campaign closes (its SHA is recorded in every result file's _meta). So
+    sessioni.csv's modello_llm column is the only trace there is.
+
+    It was assumed constant — the column's own comment said "fissato prima del
+    pilota, non cambia fra sessioni" — until Gemini was unreachable on
+    2026-09-23 and P09's session ran on another provider. A chat-turn count
+    compared across participants silently mixes two models unless every session
+    says which one it used.
+    """
+    import csv
+    import os
+
+    path = os.path.join(os.path.dirname(__file__), "..", "studio-utenti",
+                        "dati", "sessioni.csv")
+    if not os.path.isfile(path):
+        pytest.skip("studio-utenti/dati non presente (dati sotto consenso)")
+    rows = [r for r in csv.DictReader(
+        line for line in open(path, encoding="utf-8") if not line.startswith("#"))]
+    assert rows, "sessioni.csv vuoto"
+    assert "modello_llm" in rows[0], "colonna modello_llm assente"
+    vuote = [r["partecipante"] for r in rows if not (r["modello_llm"] or "").strip()]
+    assert not vuote, (
+        f"sessioni senza modello_llm: {vuote}. Nessun registro lo annota, quindi "
+        "una volta chiusa la sessione il dato non e' piu' recuperabile."
+    )
+
+
+def _run(t_wall, name, user="study2", **extra):
+    base = {"participant": "P01", "t_mono": 1.0, "t_wall": f"2026-09-24T{t_wall}+00:00"}
+    return [
+        {**base, "kind": "run_start", "task_id": 1, "task_name": name,
+         "target": "sim", "simulate_event": False, "user": user},
+        {**base, "kind": "human_step_start", "condition": "gesture", "value": "THUMBS_UP"},
+        {**base, "kind": "attempt", "channel": "gesture", "value": "THUMBS_UP", "accepted": True},
+        {**base, "kind": "human_step_end", "condition": "gesture", "outcome": "confirmed"},
+        {**base, "kind": "run_end", "task_id": 1, "task_name": name, "outcome": "completed"},
+    ]
+
+
+def test_analisi_excludes_a_phase3_task_rerun_after_the_declared_end(tmp_path):
+    """On P10 the experimenter used the station for photos and video after Part B,
+    and the log kept writing under the participant's id — with real waits and
+    attempts, including a rejected gesture. Those runs happened to be a Part-A
+    task, so nothing reached Phase 3. A PB-* task rerun for a take would have:
+    the "keep the first run per condition" rule only saves the day when the
+    participant's own run exists and was not itself excluded."""
+    analisi = _load_analisi()
+    path = tmp_path / "P01.jsonl"
+    righe = (_run("09:08:31", "PB-C-gesto")
+             + _run("09:28:06", "PB-C-gesto", user="operator1"))
+    path.write_text("\n".join(json.dumps(r) for r in righe) + "\n", encoding="utf-8")
+
+    rows = analisi.analyse_participant(path, "", "09:11:00")
+
+    assert [r["SPERIMENTATORE"] for r in rows.runs] == ["", "SI"]
+    assert [r["AUTO_DA_SCARTARE"] for r in rows.conditions] == ["", "SI"], (
+        "the rerun after the end must not be usable as a Phase-3 measurement"
+    )
+
+
+def test_analisi_window_cuts_chat_and_publications_on_both_sides(tmp_path):
+    analisi = _load_analisi()
+    base = {"participant": "P01", "t_mono": 1.0}
+    righe = [
+        _chat("08:00:00", "prova dello sperimentatore"),
+        _chat("08:30:00", "il partecipante"),
+        _chat("09:34:05", "foto dello sperimentatore"),
+        {**base, "kind": "task_published", "t_wall": "2026-09-24T08:31:00+00:00",
+         "task_id": 1, "task_name": "task1", "signature": "a", "workspace": []},
+        {**base, "kind": "task_published", "t_wall": "2026-09-24T09:34:12+00:00",
+         "task_id": 2, "task_name": "New Task", "signature": "b", "workspace": []},
+    ]
+    path = tmp_path / "P01.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in righe) + "\n", encoding="utf-8")
+
+    rows = analisi.analyse_participant(path, "08:10:00", "09:11:00")
+
+    assert [r["SPERIMENTATORE"] for r in rows.chat] == ["SI", "", "SI"]
+    assert [r["SPERIMENTATORE"] for r in rows.publish] == ["", "SI"]
