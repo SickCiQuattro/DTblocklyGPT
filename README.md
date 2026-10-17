@@ -41,19 +41,15 @@ says so.
 > The same program runs in simulation and on the physical arm. Which one moves is decided by two
 > independent keys, a server flag and a per-request flag. Neither alone moves anything.
 
-<!--
-  SCREENSHOTS. Drop images into docs/images/ and uncomment.
-  Suggested set, in this order:
-    1. workspace.png  the three-pane editor: chat, blocks, robot panel
-    2. waiting.png    a run paused on "Pause and show", countdown visible
-    3. twin.png       the Gazebo twin mid-pick with the running block highlighted
-
 ## Screenshots
 
-| Composing a task | Waiting for the operator |
+| Composing a task | A step waiting for the operator |
 |---|---|
-| ![The workspace](docs/images/workspace.png) | ![A step waiting for a human](docs/images/waiting.png) |
--->
+| ![The workspace: toolbox, blocks and the Copilot chat](docs/images/workspace.jpg) | ![A run paused on "Pause and show", with countdown and Confirm button](docs/images/waiting.jpg) |
+
+Left: the task is built from blocks, or described to the Copilot in chat. Right: the run is paused on
+the human step; the arm holds its pose, the panel shows the message and the countdown, and the program
+resumes on **Confirm** (or on voice, gesture or object).
 
 
 ## Architecture
