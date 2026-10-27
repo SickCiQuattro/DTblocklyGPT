@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "DTblocklyGPT"
 version = "1.0.0"
-description = "Pharmaceutical Robotic and AI System for End"
-authors = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
-maintainers = ["Luigi Gargioni <luigi.gargioni@gmail.com>"]
+description = "End-user development of collaborative robot tasks: Blockly editor, LLM assistant and Gazebo digital twin for the Denso COBOTTA"
+authors = ["Filippo Camossi", "Luigi Gargioni <luigi.gargioni@gmail.com>"]
+maintainers = ["Filippo Camossi"]
 readme = "README.md"
 homepage = "http://localhost:3000/"
-repository = "https://github.com/luigigargioni/DTblocklyGPT"
-documentation = "https://github.com/luigigargioni/DTblocklyGPT#readme"
+repository = "https://github.com/SickCiQuattro/DTblocklyGPT"
+documentation = "https://github.com/SickCiQuattro/DTblocklyGPT#readme"
 packages = [
     { include="poetry_scripts", from="./backend" },
 ]
@@ -29,10 +29,7 @@ opencv-python = "^4.11.0.86"
 pillow = "^12.2.0"
 python = ">=3.12,<3.14"
 python-dotenv = "^1.1.0"
-pytz = "^2026.1.post1"
 pywin32 = {version = "^311", markers = "sys_platform == 'win32'"}
-rapidfuzz = "^3.13.0"
-pydantic-core = "^2.45.0"
 hand-gesture-engine = "^0.1.1"
 ultralytics = "^8.4.62"
 pyyaml = "^6.0.3"
@@ -58,7 +55,3 @@ pytest-django = "^4.12.0"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.pyrefly]
-# Pin Pyrefly (Antigravity's Python LSP) to the Poetry virtualenv so imports resolve.
-python-interpreter = "/home/filippo/.cache/pypoetry/virtualenvs/dtblocklygpt-Ryf0IepQ-py3.12/bin/python"

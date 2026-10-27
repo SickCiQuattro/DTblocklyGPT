@@ -16,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer='matteo',
     maintainer_email='m.rizzo009@studenti.unibs.it',
-    description='Example of publisher/subscriber',
+    description='ROS 2 nodes bridging Django, Gazebo and the COBOTTA',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={

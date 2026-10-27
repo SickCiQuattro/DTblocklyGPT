@@ -1,6 +1,8 @@
 {
   "name": "blockly-gpt-frontend",
   "version": "1.0.0",
+  "author": "Filippo Camossi",
+  "license": "MIT",
   "homepage": "/",
   "type": "module",
   "scripts": {

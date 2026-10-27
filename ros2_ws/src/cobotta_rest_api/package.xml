@@ -3,7 +3,7 @@
 <package format="3">
   <name>cobotta_rest_api</name>
   <version>0.0.0</version>
-  <description>cobotta rest api</description>
+  <description>ROS 2 nodes bridging Django, Gazebo and the COBOTTA</description>
   <maintainer email="unibs@gmail.com">unibs</maintainer>
   <license>Apache-2.0</license>
 
