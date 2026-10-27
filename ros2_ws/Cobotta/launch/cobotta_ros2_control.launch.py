@@ -17,31 +17,14 @@ COB_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))  # ros2_w
 
 
 def _spawner(names, timeout=40):
-    # --activate-as-group: one switch_controller call for all of them, instead
-    # of one spawner process per controller each racing its own switch call —
-    # on a slow VM the gripper_controller's switch could time out (10s) while
-    # already active underneath, so its spawner exited 1 on a harmless retry
-    # and looked like a crash even though the stack came up fine.
-    #
-    # --service-call-timeout / --switch-timeout: the same race came back in a
-    # worse shape on 2026-09-03, because grouping the switch did not make the
-    # CALL any less likely to time out — it only made one call carry all three
-    # controllers. Observed:
-    #
-    #   [WARN] Failed getting a result from calling switch_controller in 10.0
-    #   [WARN] Controller 'joint_state_broadcaster' is already active.
-    #   [ERROR] Aborting, no controller is switched! (::STRICT switch)
-    #
-    # The first call SUCCEEDED server-side and only its reply was late. The
-    # retry then found one controller already active, and a STRICT group switch
-    # refuses the whole group if any member is — so arm_controller and
-    # gripper_controller were left inactive and the arm silently ignored every
-    # move-joints for the rest of the session, answering "ok" to each one.
-    #
-    # `--controller-manager-timeout` does NOT cover this: it governs waiting
-    # for the controller_manager service to appear, not the switch call, whose
-    # own default is 10s. Both are raised here because on this VM a cold start
-    # under Gazebo load routinely takes longer than that.
+    # --activate-as-group: one switch_controller call for all controllers.
+    # The call can still time out (default 10s) with the switch already done
+    # server-side. The retry then finds a controller active, and a STRICT group
+    # switch refuses the whole group, which leaves arm_controller and
+    # gripper_controller inactive and every move-joints answered "ok" but
+    # ignored. So --service-call-timeout and --switch-timeout are raised too:
+    # --controller-manager-timeout only covers the service appearing, not the
+    # switch call, and a cold start under Gazebo load can exceed 10s.
     return Node(
         package="controller_manager",
         executable="spawner",

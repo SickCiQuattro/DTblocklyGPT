@@ -112,9 +112,8 @@ def _estimate_gemini_cost(spec, results):
     ct = sum(r.get("completion_tokens") or 0 for r in results)
     return pt / 1e6 * price_in + ct / 1e6 * price_out
 
-# Canonical category order (matches the golden-set description in
-# EVAL_HANDOFF.md / LLM_Local.md) so every categorical chart reads in the
-# same order instead of alphabetical.
+# Canonical category order of the golden set, so every categorical chart reads
+# in the same order instead of alphabetical.
 _CATEGORY_ORDER = [
     "core", "hallucination_guard", "nested_logic", "codeswitch",
     "long_sequence", "condition_variant", "combo",

@@ -16,10 +16,8 @@ Catalog (owner-scoped, shared=True):
     (Ø22x80mm, YOLO 'bottle'). Renamed in place from
     'test tube'/'blue test tube'/etc — RENAME_OBJECTS keeps referencing
     task workspaces (they store the object id, name is a display fallback).
-    `red tube`/`beaker`/`sample bowl` were removed 2026-07-29 (unused/
-    redundant demo props, and `sample bowl` existed only to demonstrate an
-    infeasible-width object — see REMOVED_OBJECTS for DB cleanup of rows
-    seeded by an older version of this command).
+    `red tube`/`beaker`/`sample bowl` are no longer seeded — see
+    REMOVED_OBJECTS for the DB cleanup of rows an older version created.
   Locations (4): tube rack (4-slot rack), cup (taught pose,
     ex 'collector' — renamed in place on --reset to keep the pose),
     waste bin (ex 'box'), sample tray (ex 'plate').
@@ -64,29 +62,22 @@ OBJECTS = [
     {"name": "yellow tube", **_TUBE_DIMS,
      "keywords": ["provetta gialla", "yellow tube", "yellow cap"]},
     # obj_width 23 matches object.meta.json's max_grasp_width (0.023) — the
-    # value pick planning actually uses; was 22 (a stale, never-fixed
-    # mismatch, predating the 2026-07-29 render change below).
+    # value pick planning actually uses.
     {"name": "medicine bottle", "height": 0.08, "obj_width": 23, "obj_length": 23,
      "weight": 20, "force": 1, "keywords": ["flacone", "bottle", "vial"]},
 ]
 
-# Objects removed from the catalog 2026-07-29 (red tube: redundant demo prop
-# once yellow tube covers the same "waits for a coloured tube" task; beaker:
-# redundant demo prop, replaced by medicine bottle in "Dispose after voice
-# approval"; sample bowl: existed only to demonstrate an infeasible-width
-# object, and no other object in the catalog is wide enough to replace it —
-# "Report oversized sample" was removed rather than reassigned). --reset
-# deletes any owner row still seeded under these names by an older run of
-# this command, and warns (does not silently drop) about tasks that
-# referenced them.
+# Objects no longer in the catalog: red tube (yellow tube covers the same
+# "waits for a coloured tube" task), beaker (replaced by medicine bottle) and
+# sample bowl (only demonstrated an infeasible-width object). --reset deletes
+# any owner row still seeded under these names and warns, instead of silently
+# dropping, about tasks that referenced them.
 REMOVED_OBJECTS = ["red tube", "beaker", "sample bowl"]
 
 LOCATIONS = [
     {"name": "tube rack", "keywords": ["portaprovette", "rack", "tube rack"]},
-    # Replaced the mesh-based "collection rack" 2026-09-01: that rack does not
-    # exist in the physical cell, and its Gazebo model used a concave collision
-    # mesh that made the physics engine log an entity error on every spawn. The
-    # cup is a real object on the bench, and its model is built from primitives.
+    # The cup is a real object on the bench, and its Gazebo model is built from
+    # primitives (a concave collision mesh logged a physics error on every spawn).
     {"name": "cup", "keywords": ["bicchiere", "cup", "beaker"]},
     {"name": "waste bin", "keywords": ["cestino", "bin", "trash"]},
     {"name": "sample tray", "keywords": ["vassoio", "tray"]},
