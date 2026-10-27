@@ -112,8 +112,7 @@ export const fetchApi = async <
             // is indistinguishable from success to the caller (and to the
             // user: a toast.success can fire right after). The current
             // task-publish path (task-workspace/index.tsx) doesn't opt in,
-            // but no backend path returns 202/409 for it today either — see
-            // docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5.5.
+            // but no backend path returns 202/409 for it today either.
             // If that ever changes, add rethrowOn there before relying on it.
             if (rethrow) break
             return error.response.data.payload as TResponse

@@ -26,7 +26,7 @@ export interface TaskStatusVisual {
    * but it can't run: a newer edit sits unpublished on top of it, so the
    * task must be published or discarded first. Render this as a small
    * secondary note next to the chip, never as a separate "Draft"-prefixed
-   * status — see docs/internal on the "three axes called draft" fix.
+   * status.
    */
   secondaryLabel?: string
   secondaryColor?: string

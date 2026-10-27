@@ -16,7 +16,7 @@ import { useDocumentTitle } from 'hooks/useDocumentTitle'
  *
  * It does not say what happens if the operator does nothing while the robot
  * waits. That is the third of the three prediction questions in the user study
- * (studio-utenti/04-compiti.md), and this page is reachable during a session:
+ * (the study's task sheets), and this page is reachable during a session:
  * answering it here would answer the question for the participant and the
  * measurement would be of this paragraph rather than of the system.
  *

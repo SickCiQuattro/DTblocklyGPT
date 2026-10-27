@@ -3333,10 +3333,9 @@ def _wait_for_condition(condition_block: dict, timeout: int = None) -> bool:
         # bridge-unreachable branch above still answers True when the vision
         # bridge is down (development without the ROS stack, vision:=false).
         # What is gone is answering True while the bridge is UP and the camera
-        # is looking at nothing — and the study checklist requires the camera
-        # to be up (studio-utenti/09-checklist-setup.md: "ENABLE_VISION=1 non e'
-        # opzionale"), so during a session this only ever spoke over a camera
-        # that was deliberately switched on.
+        # is looking at nothing. A study session requires the camera
+        # (ENABLE_VISION=1), so there it only ever spoke over a camera that
+        # was deliberately switched on.
         #
         # The set itself stays: _h_pick reads it to clean up a previous pick's
         # entity before spawning the next one.

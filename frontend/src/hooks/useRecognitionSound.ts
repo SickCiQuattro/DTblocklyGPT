@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *
  * So a screen-only acknowledgement penalises two channels of four, unequally.
  * That matters here beyond comfort: Part B measures attempts before resolution
- * and time to resolution (studio-utenti/07-parteB.md), and an operator who did
+ * and time to resolution in the user study's Part B, and an operator who did
  * the right thing and could not tell that it landed does it again. The extra
  * attempt and the extra seconds are recorded against the channel while they
  * belong to the feedback.

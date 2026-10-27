@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Every number collected in a robot-measurement session, in one markdown file.
 
-    poetry run python testing/tools/export_robot_data.py docs/internal/misure-robot/misure-robot.jsonl \
-        --out docs/internal/misure-robot/DATI.md
+    poetry run python testing/tools/export_robot_data.py measures.jsonl --out DATA.md
 
 Complements report_robot_measures.py, which SUMMARISES: this lists the rows the
 summaries are computed from (every run, every arrival, every grasp, every stop),

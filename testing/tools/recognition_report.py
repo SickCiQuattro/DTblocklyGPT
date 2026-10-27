@@ -34,7 +34,7 @@ Two conventions worth knowing before quoting anything from here:
   by side, but do not attribute a difference between them to the design of
   this system.
 
-Standard library only, same constraint as studio-utenti/analisi.py.
+Standard library only, same constraint as the study's analysis script.
 """
 
 import os

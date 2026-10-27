@@ -401,8 +401,7 @@ const buildResult = (
  * Rules 5-6 are warnings, not errors, by design: the runtime already
  * survives both (a deleted macro no-ops at execution, a cycle is capped by
  * MAX_MACRO_DEPTH in simulate.py) — this is an early, non-blocking signal,
- * not a new gate on Save/Publish. See
- * docs/internal/analisi-sistema/p2-2-ciclo-vita-task.md §5 for why.
+ * not a new gate on Save/Publish.
  *
  * Works identically regardless of whether the when_start block is present
  * (Detailed/Essential mode) or absent (Minimal mode). The start block is

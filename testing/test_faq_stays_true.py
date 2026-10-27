@@ -86,8 +86,7 @@ def test_it_does_not_answer_the_third_prediction_question():
     happens?" — it exists to find out whether the operator has worked out on
     their own that the wait can end without them. A sentence here saying so
     would answer it, and the measurement would be of this paragraph rather than
-    of the system. studio-utenti/03-script-sessione.md keeps the whole session
-    silent on it for the same reason.
+    of the system. The session script stays silent on it for the same reason.
     """
     page = _body(_read(FAQ)).lower()
     for leak in ("time limit", "times out", "timeout", "expires", "seconds to"):

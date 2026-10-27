@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timezone
 
 # Set to a writable path to enable logging, e.g.
-#   STUDY_LOG_PATH=studio-utenti/dati/P07.jsonl
+#   STUDY_LOG_PATH=study-logs/P07.jsonl  (the directory must already exist)
 _LOG_PATH = os.getenv("STUDY_LOG_PATH")
 
 # Free-form participant tag copied onto every event so a file can be re-checked

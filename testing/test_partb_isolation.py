@@ -83,7 +83,7 @@ def test_the_familiarisation_task_exists_and_is_not_a_condition():
     fam = [n for n in names if n.startswith("PB-FAM")]
     assert len(fam) == 1, f"expected one familiarisation task, found {fam}"
 
-    # The Williams square in studio-utenti/07-parteB.md indexes the conditions
+    # The study's Williams square indexes the conditions
     # by these exact names; PB-FAM must not collide with one of them.
     conditions = [n for n in names if not n.startswith("PB-FAM")]
     assert conditions == [

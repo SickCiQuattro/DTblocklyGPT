@@ -144,9 +144,8 @@ def _workspace(channel: str, obj: Object | None) -> list:
 # that is supposed to be identical across conditions is exactly the confound the
 # pre-building avoids. PB-FAM absorbs the editing.
 #
-# Order of the remaining four matches the A/B/C/D labels used by the Williams
-# square in studio-utenti/07-parteB.md. Do not renumber without updating that
-# table.
+# Order of the remaining four matches the A/B/C/D labels of the study's
+# Williams square. Do not renumber without updating that table.
 _TASKS = [
     ("PB-FAM-familiarizzazione", "human_feedback",
      "Parte B — prova di familiarizzazione, il canale si cambia dal vivo"),
