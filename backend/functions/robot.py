@@ -68,16 +68,8 @@ def robot_give_arm(client, hRobot):
     client.robot_execute(hRobot, RobotAction.GIVE_ARM.value)
 
 
-def robot_give_arm_cao(caoRobot):
-    caoRobot.Execute(RobotAction.GIVE_ARM.value)
-
-
 def robot_motor(client, hRobot):
     client.robot_execute(hRobot, RobotAction.MOTOR.value, [1, 0])
-
-
-def robot_motor_cao(caoRobot):
-    caoRobot.Execute(RobotAction.MOTOR.value, [1, 0])
 
 
 def connect(host, port, timeout, provider=CaoParams.VRC.value):

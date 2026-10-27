@@ -203,7 +203,7 @@ Future work: slave-mode 50 Hz streaming via `slvMove` for exact synchronization.
 
 ## CAO/win32com path (Windows-host only)
 
-`backend/functions/robot.py` and `task.py` contain a `win32com`-based CAO path, guarded
+`backend/functions/robot.py` contains a `win32com`-based CAO path, guarded
 by `if sys.platform == 'win32'`. It is inert on Linux/Mac VM and inside WSL (there
 `Dispatch is None`, so `get_photo` returns a clear "requires Windows" error).
 
