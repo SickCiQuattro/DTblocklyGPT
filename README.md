@@ -97,6 +97,23 @@ to live inside the ROS environment and inherit its dependencies.
 > Conversion table: [docs/ui-naming-map.md](docs/ui-naming-map.md).
 
 
+## Repository layout
+
+```
+backend/            Django app: REST API, LLM chat, simulation/IK, vision, seed commands
+django_project_conf/ Django settings and URLs
+frontend/           React + Blockly UI (src/, public/, .env.example)
+ros2_ws/
+  src/              ROS 2 packages: cobotta_rest_api, my_robot_interfaces
+  Cobotta/          Gazebo world, URDF/SDF models, launch_sim.sh, launch_physical.sh
+testing/            Offline pytest suite (test_*.py)
+  tools/            Live and hardware scripts: preflight, calibration, recognition benches
+  eval/             LLM evaluation harness and golden set
+  out/              Evaluation result files
+docs/               Hardware setup guides and the UI naming map
+db.sqlite3          Seeded database (users, robots, locations, example tasks)
+```
+
 ## Quick start
 
 Already set up? Three terminals, in this order.
@@ -135,7 +152,7 @@ poetry run python testing/tools/preflight.py
 ```bash
 sudo apt update && sudo apt install -y \
     ros-jazzy-ros-gz python3-colcon-common-extensions python3-rosdep \
-    python3-virtualenv curl psmisc build-essential cmake \
+    python3-virtualenv git curl psmisc build-essential cmake \
     libboost-dev libboost-filesystem-dev libboost-thread-dev \
     libopencv-dev libasio-dev
 
@@ -507,11 +524,12 @@ VITE_STUDY_MODE=1
 
 ```bash
 # backend — one participant per run, both IDs updated together
+mkdir -p study-logs          # the log never creates its directory
 VISION_MODEL=yoloe \
 DRIVE_HARDWARE=1 \
 HUMAN_STEP_TIMEOUT_S=60 \
 STRICT_CONDITIONS=1 \
-STUDY_LOG_PATH=studio-utenti/dati/P03.jsonl \
+STUDY_LOG_PATH=study-logs/P03.jsonl \
 STUDY_PARTICIPANT_ID=P03 \
 poetry run python manage.py runserver
 ```
@@ -565,8 +583,9 @@ poetry run python testing/tools/preflight.py
 person: the two-key hardware consent, inverse-kinematics discipline, twin-versus-encoder
 agreement, grasp verification, and the human-step wait semantics.
 
-A fresh clone skips some tests on purpose: the ones that read participant material
-(`studio-utenti/`) or real camera frames (`testing/out/vision_check/`) are not in the repository.
+A fresh clone passes 717 and skips 39 on purpose: the skipped ones read participant material
+(`studio-utenti/`) or real camera frames (`testing/out/vision_check/`), neither of which is in the
+repository.
 
 > [!NOTE]
 > `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` is required. Without it, pytest picks up ROS Jazzy's
